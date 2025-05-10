@@ -137,8 +137,12 @@ SecuLite ist Open Source, MIT-Lizenz.
 
 All scan results (ZAP, Semgrep, Trivy) are written to `/seculite/results` inside the container. This directory is mounted to `./results` on the host. You will find all reports (XML, HTML, JSON, TXT) in the `results/` directory after a run.
 
-## Troubleshooting: ZAP Report Path
+## ZAP Report Robustness (Docker/CI)
 
-**Previous Issue:** ZAP reports were not appearing in the host's `results/` directory due to inconsistent output paths and Docker volume mounts. The script and Dockerfile previously used `/zap/results` and relative paths, which did not always map to the host.
+ZAP's automation framework sometimes writes reports to unexpected locations or ignores the requested output path, especially in Dockerized or CI environments. To ensure the ZAP report is always available:
 
-**Solution:** All ZAP output is now forced to `/seculite/results` (absolute path), which is always mounted to the host's `./results`. This ensures all reports are persisted and accessible after a scan.
+- The script now searches the entire container for any `zap-report*` files after the scan and copies them to `/seculite/results` (host: `./results`).
+- This guarantees that the ZAP report (typically `zap-report.xml.html`) is always persisted, regardless of ZAP's internal path handling quirks.
+- If you add custom ZAP automation or change the report name, the fallback logic will still collect any file matching `zap-report*`.
+
+This approach is robust for CI/CD and local use, and is recommended for all-in-one security toolkits.

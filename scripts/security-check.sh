@@ -70,6 +70,7 @@ fi
 
 echo "[DEBUG] Testing write permissions in $RESULTS_DIR"
 touch "$RESULTS_DIR/test-write.txt" && echo "[DEBUG] Write test succeeded" || echo "[DEBUG] Write test FAILED"
+rm -f "$RESULTS_DIR/test-write.txt"
 
 # Run ZAP Baseline Scan
 if command -v zap-baseline.py &>/dev/null; then

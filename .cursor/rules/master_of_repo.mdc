@@ -3,6 +3,11 @@ description:
 globs: 
 alwaysApply: true
 ---
+# master_of_repo.mdc
+
+**See also:** [roles/README.md](mdc:../roles/README.md), core_critical_rules.mdc, role_analysis_planning.mdc, role_coding_phase.mdc, role_task_manager.mdc
+**Last updated:** 2024-05-10
+
 # Role: master_of_repo
 
 **Activation:**
