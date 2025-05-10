@@ -2,7 +2,8 @@ FROM ubuntu:22.04
 
 # Install dependencies
 RUN apt-get update && \
-    apt-get install -y python3-pip wget curl jq git
+    apt-get install -y python3-pip wget curl jq git && \
+    ln -s /usr/bin/python3 /usr/bin/python
 
 # Upgrade pip and install Semgrep
 RUN pip3 install --upgrade pip
