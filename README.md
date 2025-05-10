@@ -22,7 +22,12 @@ SecuLite ist ein All-in-One-Security-Toolkit für moderne Softwareprojekte. Es v
 
 1. **Build & Run All-in-One-Scan (Headless/CLI):**
    ```sh
+   # Standard-Ziel (localhost:8000)
    docker compose up --build seculite
+   # Mit eigener Ziel-URL (z.B. für Web-App im Container/Netzwerk)
+   ZAP_TARGET="http://dein-ziel:port" docker compose up seculite
+   # Oder als Argument:
+   docker compose run seculite ./scripts/security-check.sh http://dein-ziel:port
    ```
    → Führt ZAP (Web), Semgrep (Code), Trivy (Dependencies) sequenziell aus.
 
@@ -41,7 +46,10 @@ SecuLite ist ein All-in-One-Security-Toolkit für moderne Softwareprojekte. Es v
 
 ## ⚙️ Konfiguration & Erweiterung
 
-- **Ziel-URL für ZAP:** Standard: `http://localhost:8000` (anpassbar im Script oder per ENV)
+- **Ziel-URL für ZAP:**
+  - Standard: `http://localhost:8000`
+  - Per ENV: `ZAP_TARGET="http://dein-ziel:port" docker compose up seculite`
+  - Oder als Argument: `docker compose run seculite ./scripts/security-check.sh http://dein-ziel:port`
 - **Eigene Regeln:** YAML-Files in `rules/` (Semgrep), `zap/`, `trivy/`
 - **Erweiterung:** Siehe `doc/EXTENDING.md`
 

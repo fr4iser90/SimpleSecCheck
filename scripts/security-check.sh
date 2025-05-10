@@ -1,6 +1,10 @@
 #!/bin/bash
 # SecuLite Security Check Script
-# Make sure this script is executable: chmod +x scripts/security-check.sh
+# Usage:
+#   ZAP_TARGET="http://dein-ziel:port" HTML_REPORT=1 ./scripts/security-check.sh
+#   oder
+#   ./scripts/security-check.sh [ZAP_TARGET_URL]
+# Default: http://localhost:8000
 set -euo pipefail
 
 # === DEBUG: Print environment and ZAP script status ===
@@ -10,6 +14,10 @@ ls -l /usr/local/bin/
 echo "[DEBUG] ls -l /opt/ZAP_2.16.1/"
 ls -l /opt/ZAP_2.16.1/ || echo "/opt/ZAP_2.16.1/ not found"
 echo "[DEBUG] command -v zap-baseline.py: $(command -v zap-baseline.py || echo not found)"
+
+# Ziel-URL für ZAP bestimmen
+ZAP_TARGET="${ZAP_TARGET:-${1:-http://localhost:8000}}"
+HTML_REPORT="${HTML_REPORT:-0}"
 
 # Usage: ./scripts/security-check.sh [TARGET_PATH]
 TARGET_PATH="${1:-..}"
@@ -53,8 +61,17 @@ fi
 
 # Run ZAP Baseline Scan
 if command -v zap-baseline.py &>/dev/null; then
-  echo "[ZAP] Running baseline scan..." | tee -a "$LOG_FILE"
-  zap-baseline.py -t "http://localhost:8000" -c zap/baseline.conf -r "$RESULTS_DIR/zap-report.xml" 2>>"$LOG_FILE" || echo "[ZAP] Scan failed" >> "$LOG_FILE"
+  export ZAP_PATH=/opt/ZAP_2.16.1
+  export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+  echo "[ZAP] ENV: ZAP_PATH=$ZAP_PATH JAVA_HOME=$JAVA_HOME" | tee -a "$LOG_FILE"
+  echo "[ZAP] Running baseline scan on $ZAP_TARGET..." | tee -a "$LOG_FILE"
+  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -r "$RESULTS_DIR/zap-report.xml" 2>>"$LOG_FILE" || echo "[ZAP] Scan failed" >> "$LOG_FILE"
+  if [ "$HTML_REPORT" = "1" ]; then
+    export ZAP_PATH=/opt/ZAP_2.16.1
+    export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+    echo "[ZAP] ENV: ZAP_PATH=$ZAP_PATH JAVA_HOME=$JAVA_HOME (HTML)" | tee -a "$LOG_FILE"
+    python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -f html -o "$RESULTS_DIR/zap-report.html" 2>>"$LOG_FILE" || echo "[ZAP] HTML report failed" >> "$LOG_FILE"
+  fi
   echo "[ZAP] Baseline scan complete." | tee -a "$SUMMARY_TXT"
 else
   echo "[ZAP] zap-baseline.py not found, skipping ZAP scan." | tee -a "$LOG_FILE"
@@ -75,6 +92,9 @@ if command -v trivy &>/dev/null; then
   echo "[Trivy] Running dependency/container scan..." | tee -a "$LOG_FILE"
   trivy fs --config trivy/config.yaml "$TARGET_PATH" --format json > "$RESULTS_DIR/trivy.json" 2>>"$LOG_FILE" || echo "[Trivy] Scan failed" >> "$LOG_FILE"
   trivy fs --config trivy/config.yaml "$TARGET_PATH" --format table > "$RESULTS_DIR/trivy.txt" 2>>"$LOG_FILE"
+  if [ "$HTML_REPORT" = "1" ]; then
+    trivy fs --config trivy/config.yaml "$TARGET_PATH" --format template --template "@/usr/local/share/trivy/templates/html.tpl" > "$RESULTS_DIR/trivy.html" 2>>"$LOG_FILE" || echo "[Trivy] HTML report failed" >> "$LOG_FILE"
+  fi
   echo "[Trivy] Dependency/container scan complete." | tee -a "$SUMMARY_TXT"
 else
   echo "[Trivy] trivy not found, skipping dependency/container scan." | tee -a "$LOG_FILE"
