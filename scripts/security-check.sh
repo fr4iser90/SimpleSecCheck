@@ -84,9 +84,19 @@ if command -v zap-baseline.py &>/dev/null; then
   REL_ZAP_REPORT_XML="zap-report.xml"
   REL_ZAP_REPORT_HTML="zap-report.html"
   echo "[DEBUG] Running ZAP with absolute path: $ZAP_REPORT_XML"
-  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -r "$ZAP_REPORT_XML" 2>>"$LOG_FILE" || {
+  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -x "$ZAP_REPORT_XML" 2>>"$LOG_FILE" || {
     echo "[ZAP] Scan failed (absolute path)" >> "$LOG_FILE"
   }
+  # Fallback: search for zap-report.xml anywhere and copy to results if missing
+  if [ ! -f "$ZAP_REPORT_XML" ]; then
+    FOUND_XML=$(find / -type f -name 'zap-report.xml' 2>/dev/null | head -n 1)
+    if [ -n "$FOUND_XML" ]; then
+      cp "$FOUND_XML" "$ZAP_REPORT_XML"
+      echo "[DEBUG] Copied fallback zap-report.xml from $FOUND_XML to $ZAP_REPORT_XML" >> "$LOG_FILE"
+    else
+      echo "[DEBUG] No zap-report.xml found anywhere in container." >> "$LOG_FILE"
+    fi
+  fi
   echo "[DEBUG] Running ZAP with relative path: $REL_ZAP_REPORT_XML"
   python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -r "$REL_ZAP_REPORT_XML" 2>>"$LOG_FILE" || {
     echo "[ZAP] Scan failed (relative path)" >> "$LOG_FILE"

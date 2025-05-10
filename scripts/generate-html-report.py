@@ -5,6 +5,7 @@ import datetime
 import sys
 from pathlib import Path
 from xml.etree import ElementTree as ET
+from bs4 import BeautifulSoup
 
 RESULTS_DIR = os.environ.get('RESULTS_DIR', '/seculite/results')
 OUTPUT_FILE = '/seculite/results/security-summary.html'
@@ -24,21 +25,50 @@ def read_json(path):
         return None
 
 def zap_summary(zap_html_path, zap_xml_path):
+    # Try XML first
     if zap_xml_path and Path(zap_xml_path).exists():
         try:
             tree = ET.parse(zap_xml_path)
             root = tree.getroot()
             alerts = root.findall('.//alertitem')
-            summary = {}
+            summary = {"High": 0, "Medium": 0, "Low": 0, "Informational": 0}
             for alert in alerts:
-                risk = alert.findtext('riskdesc', 'Unknown').split(' ')[0]
-                summary[risk] = summary.get(risk, 0) + 1
-            return summary, len(alerts)
+                riskdesc = alert.findtext('riskdesc', 'Unknown')
+                if riskdesc.startswith('High'):
+                    summary["High"] += 1
+                elif riskdesc.startswith('Medium'):
+                    summary["Medium"] += 1
+                elif riskdesc.startswith('Low'):
+                    summary["Low"] += 1
+                elif riskdesc.startswith('Informational'):
+                    summary["Informational"] += 1
+            return summary
         except Exception as e:
             debug(f"Error parsing ZAP XML: {e}")
-    else:
-        debug(f"Missing ZAP XML file: {zap_xml_path}")
-    return {}, 0
+    # Fallback: Try HTML
+    if zap_html_path and Path(zap_html_path).exists():
+        try:
+            with open(zap_html_path, 'r', encoding='utf-8') as f:
+                soup = BeautifulSoup(f, 'html.parser')
+                summary_table = soup.find('table', class_='summary')
+                summary = {"High": 0, "Medium": 0, "Low": 0, "Informational": 0}
+                if summary_table:
+                    rows = summary_table.find_all('tr')
+                    for row in rows:
+                        cols = row.find_all('td')
+                        if len(cols) == 2:
+                            risk = cols[0].get_text(strip=True)
+                            count = cols[1].get_text(strip=True)
+                            if risk in summary:
+                                try:
+                                    summary[risk] = int(count)
+                                except Exception:
+                                    pass
+                return summary
+        except Exception as e:
+            debug(f"Error parsing ZAP HTML: {e}")
+    # Fallback: all zeros
+    return {"High": 0, "Medium": 0, "Low": 0, "Informational": 0}
 
 def semgrep_summary(semgrep_json):
     findings = []
@@ -81,14 +111,14 @@ def main():
     debug(f"Starting HTML report generation. Output: {OUTPUT_FILE}")
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     target = os.environ.get('ZAP_TARGET', 'Unknown')
-    zap_html = os.path.join(RESULTS_DIR, 'zap-report.html')
-    zap_xml = os.path.join(RESULTS_DIR, 'zap-report.xml')
+    zap_html_path = os.path.join(RESULTS_DIR, 'zap-report.xml.html')
+    zap_xml_path = os.path.join(RESULTS_DIR, 'zap-report.xml')
     semgrep_json_path = os.path.join(RESULTS_DIR, 'semgrep.json')
     trivy_json_path = os.path.join(RESULTS_DIR, 'trivy.json')
 
     semgrep_json = read_json(semgrep_json_path)
     trivy_json = read_json(trivy_json_path)
-    zap_sum, zap_alerts = zap_summary(zap_html, zap_xml)
+    zap_alerts = zap_summary(zap_html_path, zap_xml_path)
     semgrep_findings = semgrep_summary(semgrep_json)
     trivy_vulns = trivy_summary(trivy_json)
 
@@ -100,7 +130,7 @@ def main():
             f.write(f'<b>Target:</b> {target}</p>\n')
             f.write('<h2>Overall Summary</h2>\n')
             f.write('<ul>')
-            f.write(f'<li>ZAP Alerts: {zap_alerts}</li>')
+            f.write(f'<li>ZAP Alerts: {zap_alerts["High"]} High, {zap_alerts["Medium"]} Medium, {zap_alerts["Low"]} Low, {zap_alerts["Informational"]} Informational</li>')
             f.write(f'<li>Semgrep Findings: {len(semgrep_findings)}</li>')
             f.write(f'<li>Trivy Vulnerabilities: {len(trivy_vulns)}</li>')
             f.write('</ul>')
@@ -115,12 +145,12 @@ def main():
             f.write('<h2>ZAP Web Vulnerability Scan</h2>')
             if zap_alerts:
                 f.write('<table><tr><th>Risk Level</th><th>Number of Alerts</th></tr>')
-                for risk, count in zap_sum.items():
+                for risk, count in zap_alerts.items():
                     f.write(f'<tr><td>{risk}</td><td>{count}</td></tr>')
                 f.write('</table>')
             else:
                 f.write('<p>No ZAP alerts found or report missing.</p>')
-            if Path(zap_html).exists():
+            if Path(zap_html_path).exists():
                 f.write(f'<p>See full ZAP report: <a href="zap-report.html">zap-report.html</a></p>')
 
             # Semgrep Section
