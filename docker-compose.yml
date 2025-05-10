@@ -49,7 +49,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    entrypoint: ["python3", "web/app.py"]
+    entrypoint: ["./scripts/wait-for-results.sh"]
     volumes:
       - ./results:/results
       - ./scripts:/scripts
