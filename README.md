@@ -132,3 +132,13 @@ SecuLite ist Open Source, MIT-Lizenz.
   ```
 - Stelle sicher, dass dein Webserver auf `0.0.0.0` lauscht (nicht nur auf `127.0.0.1`).
 - Wenn das Target auf `localhost` steht und kein Report erzeugt wird, siehe auch das Log (`logs/security-check.log`) für eine genaue Fehlermeldung und Lösungsvorschlag.
+
+## Results Directory
+
+All scan results (ZAP, Semgrep, Trivy) are written to `/seculite/results` inside the container. This directory is mounted to `./results` on the host. You will find all reports (XML, HTML, JSON, TXT) in the `results/` directory after a run.
+
+## Troubleshooting: ZAP Report Path
+
+**Previous Issue:** ZAP reports were not appearing in the host's `results/` directory due to inconsistent output paths and Docker volume mounts. The script and Dockerfile previously used `/zap/results` and relative paths, which did not always map to the host.
+
+**Solution:** All ZAP output is now forced to `/seculite/results` (absolute path), which is always mounted to the host's `./results`. This ensures all reports are persisted and accessible after a scan.
