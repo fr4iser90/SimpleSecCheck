@@ -41,6 +41,7 @@ SecuLite ist ein All-in-One-Security-Toolkit für moderne Softwareprojekte. Es v
    - Reports: im Ordner `results/`
    - Logfiles: im Ordner `logs/`
    - Aggregierte Übersicht: `results/security-summary.txt` und `.json`
+   - **Neuer HTML-Gesamtbericht:** `results/security-summary.html` (vereint ZAP, Semgrep, Trivy)
 
 ---
 
@@ -135,7 +136,11 @@ SecuLite ist Open Source, MIT-Lizenz.
 
 ## Results Directory
 
-All scan results (ZAP, Semgrep, Trivy) are written to `/seculite/results` inside the container. This directory is mounted to `./results` on the host. You will find all reports (XML, HTML, JSON, TXT) in the `results/` directory after a run.
+All scan results (ZAP, Semgrep, Trivy) are written to `/seculite/results` inside the container. This directory is mounted to `./results` on the host. You will find all reports (XML, HTML, JSON, TXT, and the unified HTML summary) in the `results/` directory after a run.
+
+**Unified HTML Report:**
+- `results/security-summary.html` combines the most important findings from all tools in a single, easy-to-read file.
+- Links to the raw tool reports are included for further analysis.
 
 ## ZAP Report Robustness (Docker/CI)
 
