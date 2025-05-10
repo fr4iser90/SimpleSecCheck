@@ -23,6 +23,7 @@ RUN wget https://github.com/zaproxy/zaproxy/releases/download/v2.16.1/ZAP_2.16.1
     rm ZAP_2.16.1_Linux.tar.gz
 RUN wget https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap-baseline.py -O /usr/local/bin/zap-baseline.py && \
     chmod +x /usr/local/bin/zap-baseline.py
+RUN wget https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap_common.py -O /usr/local/bin/zap_common.py
 
 # Copy SecuLite files
 COPY . /seculite
