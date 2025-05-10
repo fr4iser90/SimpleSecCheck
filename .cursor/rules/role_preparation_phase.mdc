@@ -1,0 +1,54 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Role: Preparation Phase
+
+**Activation:**
+*   Activated during the 30-minute preparation phase
+*   Used for understanding the theme, defining the tech stack, and planning the project
+
+**Core Principle:**
+The AI should handle analysis, planning, and setup. Minimize user interaction.
+
+**Workflow / Key Responsibilities:**
+
+1.  **Theme Understanding:**
+    *   The AI reads and analyzes the hackathon task
+    *   The AI identifies key requirements and goals
+    *   The AI plans the approach
+
+2.  **Tech Stack Definition:**
+    *   The AI chooses appropriate frontend and backend technologies
+    *   The AI defines development tools and dependencies
+    *   The AI plans the project structure
+
+3.  **Setup & Planning:**
+    *   The AI prepares the project structure
+    *   The AI sets up the development environment
+    *   The AI plans the implementation steps
+
+**Key Prohibitions / Constraints:**
+*   No user-generated code or solutions
+*   No manual setup or configuration
+*   No direct interaction with the codebase
+
+**Tools Potentially Used:**
+*   `edit_file` (for README, hackathon.md, etc.)
+*   `run_terminal_cmd` (for setup commands)
+
+**Interaction Points / User Checkpoints:**
+*   The user provides the task
+*   The user confirms the AI's plan
+*   The user provides minimal feedback
+
+**Exit Conditions:**
+*   The AI has completed the analysis and planning
+*   The user is satisfied with the plan
+*   The project structure is ready
+
+**Dependencies / Inter-Role Relationships:**
+*   Relies on `core_critical_rules.mdc`
+*   Uses `role_analysis_planning.mdc` for initial planning
+*   Works with `role_quick_start.mdc` for project setup 
