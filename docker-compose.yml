@@ -5,6 +5,10 @@ services:
     build: .
     image: seculite:latest
     container_name: seculite
+    environment:
+      - ZAP_TARGET=http://host.docker.internal:8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./results:/seculite/results
       - ./logs:/seculite/logs

@@ -27,12 +27,12 @@ HTML_REPORT="${HTML_REPORT:-0}"
 
 # Usage: ./scripts/security-check.sh [TARGET_PATH]
 TARGET_PATH="${1:-..}"
-RESULTS_DIR="results"
-LOG_FILE="logs/security-check.log"
+RESULTS_DIR="/seculite/results"
+LOG_FILE="/seculite/logs/security-check.log"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 SUMMARY_JSON="$RESULTS_DIR/security-summary.json"
 
-mkdir -p "$RESULTS_DIR" "logs"
+mkdir -p "$RESULTS_DIR" "/seculite/logs"
 
 # Clear previous results
 > "$SUMMARY_TXT"
@@ -71,12 +71,29 @@ if command -v zap-baseline.py &>/dev/null; then
   export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
   echo "[ZAP] ENV: ZAP_PATH=$ZAP_PATH JAVA_HOME=$JAVA_HOME" | tee -a "$LOG_FILE"
   echo "[ZAP] Running baseline scan on $ZAP_TARGET..." | tee -a "$LOG_FILE"
-  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -r "$RESULTS_DIR/zap-report.xml" 2>>"$LOG_FILE" || echo "[ZAP] Scan failed" >> "$LOG_FILE"
+  ZAP_TMP_REPORT="/tmp/zap-report.xml"
+  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -r "$ZAP_TMP_REPORT" 2>>"$LOG_FILE" || {
+    echo "[ZAP] Scan failed" >> "$LOG_FILE"
+    if [[ "$ZAP_TARGET" =~ localhost ]]; then
+      echo "[ZAP] ERROR: Das Ziel $ZAP_TARGET ist aus dem Container nicht erreichbar!" | tee -a "$LOG_FILE"
+      echo "[ZAP] Lösung: Setze ZAP_TARGET=\"http://host.docker.internal:8000\" und stelle sicher, dass dein Webserver auf 0.0.0.0 lauscht." | tee -a "$LOG_FILE"
+    fi
+  }
+  if [ -f "$ZAP_TMP_REPORT" ]; then
+    cp "$ZAP_TMP_REPORT" "$RESULTS_DIR/zap-report.xml"
+  else
+    echo "[ZAP] ERROR: Report wurde nicht erzeugt! Pfad: $ZAP_TMP_REPORT" | tee -a "$LOG_FILE"
+    exit 2
+  fi
   if [ "$HTML_REPORT" = "1" ]; then
-    export ZAP_PATH=/opt/ZAP_2.16.1
-    export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-    echo "[ZAP] ENV: ZAP_PATH=$ZAP_PATH JAVA_HOME=$JAVA_HOME (HTML)" | tee -a "$LOG_FILE"
-    python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -f html -o "$RESULTS_DIR/zap-report.html" 2>>"$LOG_FILE" || echo "[ZAP] HTML report failed" >> "$LOG_FILE"
+    ZAP_TMP_HTML="/tmp/zap-report.html"
+    python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -f html -o "$ZAP_TMP_HTML" 2>>"$LOG_FILE" || echo "[ZAP] HTML report failed" >> "$LOG_FILE"
+    if [ -f "$ZAP_TMP_HTML" ]; then
+      cp "$ZAP_TMP_HTML" "$RESULTS_DIR/zap-report.html"
+    else
+      echo "[ZAP] ERROR: HTML-Report wurde nicht erzeugt! Pfad: $ZAP_TMP_HTML" | tee -a "$LOG_FILE"
+      exit 2
+    fi
   fi
   echo "[ZAP] Baseline scan complete." | tee -a "$SUMMARY_TXT"
 else
