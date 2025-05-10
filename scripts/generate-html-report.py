@@ -102,7 +102,7 @@ def trivy_summary(trivy_json):
     return vulns
 
 def html_header(title):
-    return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>{title}</title>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<style>\n:root {{\n  --bg-light: #f8f9fa;\n  --bg-dark: #181a1b;\n  --text-light: #181a1b;\n  --text-dark: #f8f9fa;\n  --accent: #007bff;\n  --table-bg: #fff;\n  --table-bg-dark: #23272b;\n  --table-border: #dee2e6;\n  --table-border-dark: #343a40;\n}}\nbody {{\n  background: var(--bg-light);\n  color: var(--text-light);\n  font-family: 'Segoe UI', Arial, sans-serif;\n  margin: 0; padding: 0;\n  transition: background 0.2s, color 0.2s;\n}}\nbody.darkmode {{\n  background: var(--bg-dark);\n  color: var(--text-dark);\n}}\n.header {{\n  display: flex; justify-content: space-between; align-items: center;\n  padding: 1.2em 2em 0.5em 2em;\n  background: var(--bg-light);\n  border-bottom: 1px solid var(--table-border);\n}}\nbody.darkmode .header {{\n  background: var(--bg-dark);\n  border-bottom: 1px solid var(--table-border-dark);\n}}\n.toggle-btn {{\n  background: var(--accent);\n  color: #fff;\n  border: none;\n  border-radius: 1.5em;\n  padding: 0.5em 1.2em;\n  font-size: 1em;\n  cursor: pointer;\n  transition: background 0.2s;\n}}\n.toggle-btn:hover {{\n  background: #0056b3;\n}}\nh1, h2, h3 {{ margin: 0; font-size: 2em; }}\nh2 {{ margin-top: 2em; }}\ntable {{\n  border-collapse: collapse;\n  width: 100%;\n  margin: 1em 0;\n  background: var(--table-bg);\n  color: inherit;\n}}\nbody.darkmode table {{\n  background: var(--table-bg-dark);\n}}\nth, td {{\n  border: 1px solid var(--table-border);\n  padding: 0.5em 1em;\n  text-align: left;\n}}\nbody.darkmode th, body.darkmode td {{\n  border: 1px solid var(--table-border-dark);\n}}\na {{\n  color: var(--accent);\n  text-decoration: none;\n}}\na:hover {{\n  text-decoration: underline;\n}}\n.summary-box {{\n  background: #e9ecef;\n  border-radius: 0.5em;\n  padding: 1em;\n  margin: 1.5em 0;\n}}\nbody.darkmode .summary-box {{\n  background: #23272b;\n}}\n</style>\n<script>\nfunction toggleDarkMode() {{\n  document.body.classList.toggle('darkmode');\n  localStorage.setItem('seculite-darkmode', document.body.classList.contains('darkmode'));\n}}\nwindow.onload = function() {{\n  if (localStorage.getItem('seculite-darkmode') === 'true') {{\n    document.body.classList.add('darkmode');\n  }}\n}};\n</script>\n</head>\n<body>\n<div class="header">\n  <h1>SecuLite Security Scan Summary</h1>\n  <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n</div>\n<div class="summary-box">'''
+    return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>{title}</title>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<style>\n:root {{\n  --bg-light: #f8f9fa;\n  --bg-dark: #181a1b;\n  --text-light: #181a1b;\n  --text-dark: #f8f9fa;\n  --accent: #007bff;\n  --table-bg: #fff;\n  --table-bg-dark: #23272b;\n  --table-border: #dee2e6;\n  --table-border-dark: #343a40;\n  --sev-critical: #b30000;\n  --sev-high: #e67300;\n  --sev-medium: #e6b800;\n  --sev-low: #007399;\n  --sev-info: #666;\n  --sev-passed: #28a745;\n  --sev-bg-critical: #ffeaea;\n  --sev-bg-high: #fff4e5;\n  --sev-bg-medium: #fffbe5;\n  --sev-bg-low: #e5f6fa;\n  --sev-bg-info: #f0f0f0;\n  --sev-bg-passed: #e6f9ed;\n}}\nbody {{\n  background: var(--bg-light);\n  color: var(--text-light);\n  font-family: 'Segoe UI', Arial, sans-serif;\n  margin: 0; padding: 0;\n  transition: background 0.2s, color 0.2s;\n}}\nbody.darkmode {{\n  background: var(--bg-dark);\n  color: var(--text-dark);\n}}\n.header {{\n  display: flex; justify-content: space-between; align-items: center;\n  padding: 1.2em 2em 0.5em 2em;\n  background: var(--bg-light);\n  border-bottom: 1px solid var(--table-border);\n}}\nbody.darkmode .header {{\n  background: var(--bg-dark);\n  border-bottom: 1px solid var(--table-border-dark);\n}}\n.toggle-btn {{\n  background: var(--accent);\n  color: #fff;\n  border: none;\n  border-radius: 1.5em;\n  padding: 0.5em 1.2em;\n  font-size: 1em;\n  cursor: pointer;\n  transition: background 0.2s;\n}}\n.toggle-btn:hover {{\n  background: #0056b3;\n}}\nh1, h2, h3 {{ margin: 0; font-size: 2em; }}\nh2 {{ margin-top: 2em; }}\ntable {{\n  border-collapse: collapse;\n  width: 100%;\n  margin: 1em 0;\n  background: var(--table-bg);\n  color: inherit;\n}}\nbody.darkmode table {{\n  background: var(--table-bg-dark);\n}}\nth, td {{\n  border: 1px solid var(--table-border);\n  padding: 0.5em 1em;\n  text-align: left;\n}}\nbody.darkmode th, body.darkmode td {{\n  border: 1px solid var(--table-border-dark);\n}}\na {{\n  color: var(--accent);\n  text-decoration: none;\n}}\na:hover {{\n  text-decoration: underline;\n}}\n.summary-box {{\n  background: #e9ecef;\n  border-radius: 0.5em;\n  padding: 1em;\n  margin: 1.5em 0;\n}}\nbody.darkmode .summary-box {{\n  background: #23272b;\n}}\n.severity-CRITICAL, .sev-CRITICAL {{ color: var(--sev-critical); font-weight: bold; }}\n.severity-HIGH, .sev-HIGH {{ color: var(--sev-high); font-weight: bold; }}\n.severity-MEDIUM, .sev-MEDIUM {{ color: var(--sev-medium); font-weight: bold; }}\n.severity-LOW, .sev-LOW {{ color: var(--sev-low); }}\n.severity-INFO, .severity-INFORMATIONAL, .sev-INFO, .sev-INFORMATIONAL {{ color: var(--sev-info); }}\n.severity-PASSED, .sev-PASSED {{ color: var(--sev-passed); font-weight: bold; }}\n.row-CRITICAL {{ background: var(--sev-bg-critical); }}\n.row-HIGH {{ background: var(--sev-bg-high); }}\n.row-MEDIUM {{ background: var(--sev-bg-medium); }}\n.row-LOW {{ background: var(--sev-bg-low); }}\n.row-INFO, .row-INFORMATIONAL {{ background: var(--sev-bg-info); }}\n.row-PASSED {{ background: var(--sev-bg-passed); }}\n.all-clear {{ background: var(--sev-bg-passed); color: var(--sev-passed); border-radius: 0.5em; padding: 1em; margin: 1em 0; font-weight: bold; display: flex; align-items: center; gap: 0.7em; font-size: 1.2em; }}\n.icon {{ font-size: 1.2em; vertical-align: middle; margin-right: 0.3em; }}\n</style>\n<script>\nfunction toggleDarkMode() {{\n  document.body.classList.toggle('darkmode');\n  localStorage.setItem('seculite-darkmode', document.body.classList.contains('darkmode'));\n}}\nwindow.onload = function() {{\n  if (localStorage.getItem('seculite-darkmode') === 'true') {{\n    document.body.classList.add('darkmode');\n  }}\n}};\n</script>\n</head>\n<body>\n<div class="header">\n  <h1>SecuLite Security Scan Summary</h1>\n  <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n</div>\n<div class="summary-box">'''
 
 def html_footer():
     return '</div>\n</body></html>'
@@ -125,9 +125,41 @@ def main():
     try:
         with open(OUTPUT_FILE, 'w') as f:
             f.write(html_header('SecuLite Security Scan Summary'))
-            f.write(f'<h1>SecuLite Security Scan Summary</h1>\n')
             f.write(f'<p><b>Scan Date:</b> {now}<br>')
             f.write(f'<b>Target:</b> {target}</p>\n')
+
+            # --- Visual summary with icons/colors for each tool ---
+            # ZAP
+            zap_icon = '✅' if sum(zap_alerts.values()) == 0 else ''
+            if zap_alerts['High'] > 0:
+                zap_icon = '🚨'
+            elif zap_alerts['Medium'] > 0:
+                zap_icon = '⚠️'
+            elif zap_alerts['Low'] > 0 or zap_alerts['Informational'] > 0:
+                zap_icon = 'ℹ️'
+            f.write(f'<div class="tool-summary"><span class="icon sev-{"HIGH" if zap_alerts["High"]>0 else ("MEDIUM" if zap_alerts["Medium"]>0 else ("LOW" if zap_alerts["Low"]>0 else ("INFO" if zap_alerts["Informational"]>0 else "PASSED")))}">{zap_icon}</span> <b>ZAP:</b> {zap_alerts["High"]} High, {zap_alerts["Medium"]} Medium, {zap_alerts["Low"]} Low, {zap_alerts["Informational"]} Info</div>')
+            # Semgrep
+            if len(semgrep_findings) == 0:
+                f.write('<div class="tool-summary"><span class="icon sev-PASSED">✅</span> <b>Semgrep:</b> No findings</div>')
+            else:
+                f.write(f'<div class="tool-summary"><span class="icon sev-HIGH">🚨</span> <b>Semgrep:</b> {len(semgrep_findings)} findings</div>')
+            # Trivy
+            trivy_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
+            for v in trivy_vulns:
+                sev = v['Severity'].upper()
+                if sev in trivy_counts:
+                    trivy_counts[sev] += 1
+            trivy_icon = '✅' if sum(trivy_counts.values()) == 0 else ''
+            if trivy_counts['CRITICAL'] > 0:
+                trivy_icon = '🚨'
+            elif trivy_counts['HIGH'] > 0:
+                trivy_icon = '🚨'
+            elif trivy_counts['MEDIUM'] > 0:
+                trivy_icon = '⚠️'
+            elif trivy_counts['LOW'] > 0 or trivy_counts['INFO'] > 0:
+                trivy_icon = 'ℹ️'
+            f.write(f'<div class="tool-summary"><span class="icon sev-{"CRITICAL" if trivy_counts["CRITICAL"]>0 else ("HIGH" if trivy_counts["HIGH"]>0 else ("MEDIUM" if trivy_counts["MEDIUM"]>0 else ("LOW" if trivy_counts["LOW"]>0 else ("INFO" if trivy_counts["INFO"]>0 else "PASSED"))))}">{trivy_icon}</span> <b>Trivy:</b> {trivy_counts["CRITICAL"]} Critical, {trivy_counts["HIGH"]} High, {trivy_counts["MEDIUM"]} Medium, {trivy_counts["LOW"]} Low, {trivy_counts["INFO"]} Info</div>')
+
             f.write('<h2>Overall Summary</h2>\n')
             f.write('<ul>')
             f.write(f'<li>ZAP Alerts: {zap_alerts["High"]} High, {zap_alerts["Medium"]} Medium, {zap_alerts["Low"]} Low, {zap_alerts["Informational"]} Informational</li>')
@@ -146,10 +178,18 @@ def main():
             if zap_alerts:
                 f.write('<table><tr><th>Risk Level</th><th>Number of Alerts</th></tr>')
                 for risk, count in zap_alerts.items():
-                    f.write(f'<tr><td>{risk}</td><td>{count}</td></tr>')
+                    icon = ''
+                    sev_class = risk.upper()
+                    if risk == 'High': icon = '🚨'
+                    elif risk == 'Medium': icon = '⚠️'
+                    elif risk == 'Low': icon = 'ℹ️'
+                    elif risk == 'Informational': icon = 'ℹ️'
+                    f.write(f'<tr class="row-{sev_class}"><td class="severity-{sev_class}">{icon} {risk}</td><td>{count}</td></tr>')
                 f.write('</table>')
+                if sum(zap_alerts.values()) == 0:
+                    f.write('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No web vulnerabilities found.</div>')
             else:
-                f.write('<p><b>Scan completed. No web vulnerabilities found.</b></p>')
+                f.write('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No web vulnerabilities found.</div>')
             if Path(zap_html_path).exists():
                 f.write(f'<p>See full ZAP report: <a href="zap-report.html">zap-report.html</a></p>')
 
@@ -159,10 +199,16 @@ def main():
                 f.write('<table><tr><th>Rule</th><th>File</th><th>Line</th><th>Message</th><th>Severity</th></tr>')
                 for finding in semgrep_findings:
                     sev = finding['severity'].upper()
-                    f.write(f'<tr><td>{finding["check_id"]}</td><td>{finding["path"]}</td><td>{finding["start"]}</td><td>{finding["message"]}</td><td class="severity-{sev}">{sev}</td></tr>')
+                    icon = ''
+                    if sev == 'CRITICAL': icon = '🚨'
+                    elif sev == 'HIGH': icon = '🚨'
+                    elif sev == 'MEDIUM': icon = '⚠️'
+                    elif sev == 'LOW': icon = 'ℹ️'
+                    elif sev in ('INFO', 'INFORMATIONAL'): icon = 'ℹ️'
+                    f.write(f'<tr class="row-{sev}"><td>{finding["check_id"]}</td><td>{finding["path"]}</td><td>{finding["start"]}</td><td>{finding["message"]}</td><td class="severity-{sev}">{icon} {sev}</td></tr>')
                 f.write('</table>')
             else:
-                f.write('<p><b>Scan completed. No code vulnerabilities found.</b></p>')
+                f.write('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No code vulnerabilities found.</div>')
 
             # Trivy Section
             f.write('<h2>Trivy Dependency & Container Scan</h2>')
@@ -170,10 +216,16 @@ def main():
                 f.write('<table><tr><th>Package</th><th>Severity</th><th>CVE</th><th>Title</th></tr>')
                 for v in trivy_vulns:
                     sev = v['Severity'].upper()
-                    f.write(f'<tr><td>{v["PkgName"]}</td><td class="severity-{sev}">{sev}</td><td>{v["VulnerabilityID"]}</td><td>{v["Title"]}</td></tr>')
+                    icon = ''
+                    if sev == 'CRITICAL': icon = '🚨'
+                    elif sev == 'HIGH': icon = '🚨'
+                    elif sev == 'MEDIUM': icon = '⚠️'
+                    elif sev == 'LOW': icon = 'ℹ️'
+                    elif sev in ('INFO', 'INFORMATIONAL'): icon = 'ℹ️'
+                    f.write(f'<tr class="row-{sev}"><td>{v["PkgName"]}</td><td class="severity-{sev}">{icon} {sev}</td><td>{v["VulnerabilityID"]}</td><td>{v["Title"]}</td></tr>')
                 f.write('</table>')
             else:
-                f.write('<p><b>Scan completed. No vulnerabilities found in dependencies or containers.</b></p>')
+                f.write('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No vulnerabilities found in dependencies or containers.</div>')
 
             f.write(html_footer())
         debug(f"HTML report successfully written to {OUTPUT_FILE}")
