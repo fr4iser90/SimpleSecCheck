@@ -165,22 +165,18 @@ SecuLite is open source, licensed under the MIT License.
 
 Weitere Hinweise und Beispiele findest du in der Dokumentation und im Ordner `doc/`.
 
-## 🖥️ Optional: ZAP WebUI aktivieren
+## 🖥️ ZAP WebUI (Manuelle Nutzung)
 
 Für manuelle, explorative Security-Tests kannst du das ZAP Webinterface (WebUI) nutzen:
 
-1. **In `docker-compose.yml` Ports freigeben:**
-   ```yaml
-   ports:
-     - "8080:8080"
-   ```
-2. **Container starten:**
+1. **WebUI-Service starten:**
    ```sh
-   docker compose up --build
+   docker compose up zap-webui
    ```
-3. **WebUI im Browser öffnen:**
+2. **WebUI im Browser öffnen:**
    [http://localhost:8080](http://localhost:8080)
 
 **Hinweis:**
 - Das WebUI ist nur für manuelle Tests gedacht und sollte in CI/CD-Umgebungen deaktiviert bleiben.
 - Im WebUI kannst du ZAP steuern, Scans konfigurieren und Reports direkt ansehen.
+- Für automatisierte Checks weiterhin den Service `seculite` nutzen.
