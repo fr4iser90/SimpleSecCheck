@@ -28,11 +28,14 @@ HTML_REPORT="${HTML_REPORT:-0}"
 # Usage: ./scripts/security-check.sh [TARGET_PATH]
 TARGET_PATH="${1:-..}"
 RESULTS_DIR="/seculite/results"
-LOG_FILE="/seculite/logs/security-check.log"
+LOGS_DIR="/seculite/logs"
+LOG_FILE="$LOGS_DIR/security-check.log"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 SUMMARY_JSON="$RESULTS_DIR/security-summary.json"
 
-mkdir -p "$RESULTS_DIR" "/seculite/logs"
+mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
+echo "[DEBUG] Listing $RESULTS_DIR before ZAP scan:"
+ls -l "$RESULTS_DIR"
 
 # Clear previous results
 > "$SUMMARY_TXT"
@@ -65,35 +68,42 @@ if ! command -v jq &>/dev/null; then
   fi
 fi
 
+echo "[DEBUG] Testing write permissions in $RESULTS_DIR"
+touch "$RESULTS_DIR/test-write.txt" && echo "[DEBUG] Write test succeeded" || echo "[DEBUG] Write test FAILED"
+
 # Run ZAP Baseline Scan
 if command -v zap-baseline.py &>/dev/null; then
   export ZAP_PATH=/opt/ZAP_2.16.1
   export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
   echo "[ZAP] ENV: ZAP_PATH=$ZAP_PATH JAVA_HOME=$JAVA_HOME" | tee -a "$LOG_FILE"
   echo "[ZAP] Running baseline scan on $ZAP_TARGET..." | tee -a "$LOG_FILE"
-  ZAP_TMP_REPORT="/tmp/zap-report.xml"
-  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -r "$ZAP_TMP_REPORT" 2>>"$LOG_FILE" || {
-    echo "[ZAP] Scan failed" >> "$LOG_FILE"
-    if [[ "$ZAP_TARGET" =~ localhost ]]; then
-      echo "[ZAP] ERROR: Das Ziel $ZAP_TARGET ist aus dem Container nicht erreichbar!" | tee -a "$LOG_FILE"
-      echo "[ZAP] Lösung: Setze ZAP_TARGET=\"http://host.docker.internal:8000\" und stelle sicher, dass dein Webserver auf 0.0.0.0 lauscht." | tee -a "$LOG_FILE"
-    fi
+  ZAP_REPORT_XML="$RESULTS_DIR/zap-report.xml"
+  ZAP_REPORT_HTML="$RESULTS_DIR/zap-report.html"
+  ZAP_REPORT_XMLHTML="$RESULTS_DIR/zap-report.xml.html"
+  REL_ZAP_REPORT_XML="zap-report.xml"
+  REL_ZAP_REPORT_HTML="zap-report.html"
+  echo "[DEBUG] Running ZAP with absolute path: $ZAP_REPORT_XML"
+  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -r "$ZAP_REPORT_XML" 2>>"$LOG_FILE" || {
+    echo "[ZAP] Scan failed (absolute path)" >> "$LOG_FILE"
   }
-  if [ -f "$ZAP_TMP_REPORT" ]; then
-    cp "$ZAP_TMP_REPORT" "$RESULTS_DIR/zap-report.xml"
+  echo "[DEBUG] Running ZAP with relative path: $REL_ZAP_REPORT_XML"
+  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -r "$REL_ZAP_REPORT_XML" 2>>"$LOG_FILE" || {
+    echo "[ZAP] Scan failed (relative path)" >> "$LOG_FILE"
+  }
+  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -f html -o "$ZAP_REPORT_HTML" 2>>"$LOG_FILE" || echo "[ZAP] HTML report failed" >> "$LOG_FILE"
+  echo "[DEBUG] Listing $RESULTS_DIR after ZAP scan:"
+  ls -l "$RESULTS_DIR"
+  echo "[DEBUG] Searching for any zap-report* files and copying to $RESULTS_DIR"
+  find / -type f -name 'zap-report*' -exec cp --no-clobber {} "$RESULTS_DIR" \; 2>/dev/null
+  ls -l "$RESULTS_DIR"
+  if [ -f "$ZAP_REPORT_XML" ] || [ -f "$ZAP_REPORT_HTML" ] || [ -f "$ZAP_REPORT_XMLHTML" ]; then
+    echo "[ZAP] Report(s) erfolgreich erzeugt:"
+    [ -f "$ZAP_REPORT_XML" ] && echo "  - $ZAP_REPORT_XML"
+    [ -f "$ZAP_REPORT_HTML" ] && echo "  - $ZAP_REPORT_HTML"
+    [ -f "$ZAP_REPORT_XMLHTML" ] && echo "  - $ZAP_REPORT_XMLHTML"
   else
-    echo "[ZAP] ERROR: Report wurde nicht erzeugt! Pfad: $ZAP_TMP_REPORT" | tee -a "$LOG_FILE"
+    echo "[ZAP] ERROR: Kein Report wurde erzeugt!" | tee -a "$LOG_FILE"
     exit 2
-  fi
-  if [ "$HTML_REPORT" = "1" ]; then
-    ZAP_TMP_HTML="/tmp/zap-report.html"
-    python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -f html -o "$ZAP_TMP_HTML" 2>>"$LOG_FILE" || echo "[ZAP] HTML report failed" >> "$LOG_FILE"
-    if [ -f "$ZAP_TMP_HTML" ]; then
-      cp "$ZAP_TMP_HTML" "$RESULTS_DIR/zap-report.html"
-    else
-      echo "[ZAP] ERROR: HTML-Report wurde nicht erzeugt! Pfad: $ZAP_TMP_HTML" | tee -a "$LOG_FILE"
-      exit 2
-    fi
   fi
   echo "[ZAP] Baseline scan complete." | tee -a "$SUMMARY_TXT"
 else
@@ -125,8 +135,14 @@ fi
 
 # Aggregate Results
 {
-  echo "==== ZAP Report ===="
-  [ -f "$RESULTS_DIR/zap-report.xml" ] && cat "$RESULTS_DIR/zap-report.xml" || echo "No ZAP report."
+  echo "==== ZAP Report (XML) ===="
+  [ -f "$RESULTS_DIR/zap-report.xml" ] && cat "$RESULTS_DIR/zap-report.xml" || echo "No ZAP XML report."
+  echo
+  echo "==== ZAP Report (HTML) ===="
+  [ -f "$RESULTS_DIR/zap-report.html" ] && cat "$RESULTS_DIR/zap-report.html" || echo "No ZAP HTML report."
+  echo
+  echo "==== ZAP Report (XMLHTML) ===="
+  [ -f "$RESULTS_DIR/zap-report.xml.html" ] && cat "$RESULTS_DIR/zap-report.xml.html" || echo "No ZAP XMLHTML report."
   echo
   echo "==== Semgrep Findings ===="
   [ -f "$RESULTS_DIR/semgrep.txt" ] && cat "$RESULTS_DIR/semgrep.txt" || echo "No Semgrep findings."
