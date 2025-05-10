@@ -54,7 +54,7 @@ fi
 # Run ZAP Baseline Scan
 if command -v zap-baseline.py &>/dev/null; then
   echo "[ZAP] Running baseline scan..." | tee -a "$LOG_FILE"
-  zap-baseline.py -t "http://localhost:8000" -c zap/baseline.conf -r "$RESULTS_DIR/zap-report.xml" 2>>"$LOG_FILE" || echo "[ZAP] Scan failed" >> "$LOG_FILE"
+  zap-baseline.py -t "http://localhost:8000" -r "$RESULTS_DIR/zap-report.xml" 2>>"$LOG_FILE" || echo "[ZAP] Scan failed" >> "$LOG_FILE"
   echo "[ZAP] Baseline scan complete." | tee -a "$SUMMARY_TXT"
 else
   echo "[ZAP] zap-baseline.py not found, skipping ZAP scan." | tee -a "$LOG_FILE"

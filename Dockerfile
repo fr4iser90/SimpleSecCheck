@@ -33,5 +33,6 @@ WORKDIR /seculite
 RUN chmod +x scripts/security-check.sh
 
 RUN mkdir -p /zap/wrk
+RUN mkdir -p /zap/wrk/zap && cp /seculite/zap/baseline.conf /zap/wrk/zap/baseline.conf
 
 ENTRYPOINT ["./scripts/security-check.sh"]
