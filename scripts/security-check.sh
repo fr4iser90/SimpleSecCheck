@@ -25,8 +25,8 @@ ZAP_TARGET="${ZAP_TARGET:-${1:-http://localhost:8000}}"
 HTML_REPORT="${HTML_REPORT:-0}"
 
 # Usage: ./scripts/security-check.sh [TARGET_PATH]
-# Set scan target to /seculite (project root inside container)
-TARGET_PATH="/seculite"
+# Set scan target to /target (App-Code im Container)
+TARGET_PATH="/target"
 RESULTS_DIR="/seculite/results"
 LOGS_DIR="/seculite/logs"
 LOG_FILE="$LOGS_DIR/security-check.log"
@@ -123,9 +123,9 @@ fi
 
 # Run Semgrep
 if command -v semgrep &>/dev/null; then
-  echo "[Semgrep] Running code scan..." | tee -a "$LOG_FILE"
-  semgrep --config /seculite/rules "$TARGET_PATH" --json > "$RESULTS_DIR/semgrep.json" 2>>"$LOG_FILE" || echo "[Semgrep] Scan failed" >> "$LOG_FILE"
-  semgrep --config /seculite/rules "$TARGET_PATH" --text > "$RESULTS_DIR/semgrep.txt" 2>>"$LOG_FILE"
+  echo "[Semgrep] Running code scan on $TARGET_PATH..." | tee -a "$LOG_FILE"
+  semgrep --config /seculite/rules $TARGET_PATH --json > "$RESULTS_DIR/semgrep.json" 2>>"$LOG_FILE" || echo "[Semgrep] Scan failed" >> "$LOG_FILE"
+  semgrep --config /seculite/rules $TARGET_PATH --text > "$RESULTS_DIR/semgrep.txt" 2>>"$LOG_FILE"
   echo "[Semgrep] Code scan complete." | tee -a "$SUMMARY_TXT"
 else
   echo "[Semgrep] semgrep not found, skipping code scan." | tee -a "$LOG_FILE"
@@ -133,12 +133,9 @@ fi
 
 # Run Trivy
 if command -v trivy &>/dev/null; then
-  echo "[Trivy] Running dependency/container scan..." | tee -a "$LOG_FILE"
-  trivy fs --config /seculite/trivy/config.yaml "$TARGET_PATH" --format json > "$RESULTS_DIR/trivy.json" 2>>"$LOG_FILE" || echo "[Trivy] Scan failed" >> "$LOG_FILE"
-  trivy fs --config /seculite/trivy/config.yaml "$TARGET_PATH" --format table > "$RESULTS_DIR/trivy.txt" 2>>"$LOG_FILE"
-  if [ "$HTML_REPORT" = "1" ]; then
-    trivy fs --config /seculite/trivy/config.yaml "$TARGET_PATH" --format template --template "@/usr/local/share/trivy/templates/html.tpl" > "$RESULTS_DIR/trivy.html" 2>>"$LOG_FILE" || echo "[Trivy] HTML report failed" >> "$LOG_FILE"
-  fi
+  echo "[Trivy] Running dependency/container scan on $TARGET_PATH..." | tee -a "$LOG_FILE"
+  trivy fs --config /seculite/trivy/config.yaml --format json -o "$RESULTS_DIR/trivy.json" $TARGET_PATH 2>>"$LOG_FILE"
+  trivy fs --config /seculite/trivy/config.yaml --format table -o "$RESULTS_DIR/trivy.txt" $TARGET_PATH 2>>"$LOG_FILE"
   echo "[Trivy] Dependency/container scan complete." | tee -a "$SUMMARY_TXT"
 else
   echo "[Trivy] trivy not found, skipping dependency/container scan." | tee -a "$LOG_FILE"
