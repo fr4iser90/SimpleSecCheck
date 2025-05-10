@@ -20,28 +20,36 @@ SecuLite ist ein All-in-One-Security-Toolkit für moderne Softwareprojekte. Es v
 
 ## 🏁 Quick Start
 
-1. **Build & Run All-in-One-Scan (Headless/CLI):**
-   ```sh
-   # Standard-Ziel (localhost:8000)
-   docker compose up --build seculite
-   # Mit eigener Ziel-URL (z.B. für Web-App im Container/Netzwerk)
-   ZAP_TARGET="http://dein-ziel:port" docker compose up seculite
-   # Oder als Argument:
-   docker compose run seculite ./scripts/security-check.sh http://dein-ziel:port
-   ```
-   → Führt ZAP (Web), Semgrep (Code), Trivy (Dependencies) sequenziell aus.
+1. **Web Dashboard (Recommended):**
+   - Start the web service:
+     ```sh
+     docker compose up --build web
+     ```
+   - **Note:** On the very first start, it may take several minutes before the dashboard is available. The web service waits until the initial scan is complete and results are generated. During this time, the page will not be reachable (404). A loading page or placeholder will be implemented in the future.
+   - Once the scan is finished, the dashboard is available at [http://localhost:5000/](http://localhost:5000/).
+   - Reports: in the `results/` folder
+   - Log files: in the `logs/` folder
+   - Aggregated summary: `results/security-summary.txt` and `.json`
+   - **Unified HTML Report:** `results/security-summary.html` (combines ZAP, Semgrep, Trivy)
 
-2. **(Optional) ZAP WebUI für manuelle Tests:**
-   ```sh
-   docker compose up --build zap-webui
-   ```
-   → WebUI erreichbar unter: [http://localhost:8080](http://localhost:8080)
+2. **Headless CLI (Console Only):**
+   - Run the all-in-one scan directly:
+     ```sh
+     # Default target (localhost:8000)
+     docker compose up --build seculite
+     # With custom target URL (e.g., for a web app in a container/network)
+     ZAP_TARGET="http://your-target:port" docker compose up seculite
+     # Or as an argument:
+     docker compose run seculite ./scripts/security-check.sh http://your-target:port
+     ```
+   - Results as above in the `results/` folder and as HTML report.
 
-3. **Ergebnisse ansehen:**
-   - Reports: im Ordner `results/`
-   - Logfiles: im Ordner `logs/`
-   - Aggregierte Übersicht: `results/security-summary.txt` und `.json`
-   - **Neuer HTML-Gesamtbericht:** `results/security-summary.html` (vereint ZAP, Semgrep, Trivy)
+3. **ZAP WebUI (Optional, for manual web testing):**
+   - Start the ZAP WebUI:
+     ```sh
+     docker compose up --build zap-webui
+     ```
+   - WebUI available at: [http://localhost:8080](http://localhost:8080)
 
 ---
 
