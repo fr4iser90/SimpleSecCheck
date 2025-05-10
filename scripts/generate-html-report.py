@@ -225,7 +225,7 @@ window.onload = function() {{
   if (localStorage.getItem('seculite-darkmode') === 'true') {{
     document.body.classList.add('darkmode');
   }}
-}};\n</script>\n</head>\n<body>\n<div class="header">\n  <h1>SecuLite Security Scan Summary</h1>\n  <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n</div>\n<div class="summary-box">'''
+}};\n</script>\n<script src="webui.js"></script>\n</head>\n<body>\n<div class="header">\n  <h1>SecuLite Security Scan Summary</h1>\n  <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n</div>\n<div class="summary-box">'''
 
 def html_footer():
     return '</div>\n</body></html>'
@@ -316,6 +316,8 @@ def main():
             else:
                 f.write('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No web vulnerabilities found.</div>')
             if Path(zap_html_path).exists():
+                f.write(f'<p>See full ZAP report: <a href="zap-report.xml.html">zap-report.xml.html</a></p>')
+            elif Path(os.path.join(RESULTS_DIR, "zap-report.html")).exists():
                 f.write(f'<p>See full ZAP report: <a href="zap-report.html">zap-report.html</a></p>')
 
             # Semgrep Section

@@ -49,5 +49,7 @@ RUN cp -r /opt/ZAP_2.16.1/* /zap/
 # Symlink zap-x.sh to zap.sh for zap-baseline.py compatibility
 RUN ln -s /zap/zap.sh /zap/zap-x.sh
 
+COPY scripts/webui.js /seculite/results/webui.js
+
 WORKDIR /zap/wrk
 ENTRYPOINT ["/seculite/scripts/security-check.sh"]
