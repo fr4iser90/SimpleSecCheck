@@ -149,9 +149,9 @@ def main():
                     f.write(f'<tr><td>{risk}</td><td>{count}</td></tr>')
                 f.write('</table>')
             else:
-                f.write('<p>No ZAP alerts found or report missing.</p>')
+                f.write('<p><b>Scan durchgeführt.</b> Keine Web-Schwachstellen gefunden.</p>')
             if Path(zap_html_path).exists():
-                f.write(f'<p>See full ZAP report: <a href="zap-report.html">zap-report.html</a></p>')
+                f.write(f'<p>Siehe vollständigen ZAP-Report: <a href="zap-report.html">zap-report.html</a></p>')
 
             # Semgrep Section
             f.write('<h2>Semgrep Static Code Analysis</h2>')
@@ -162,7 +162,7 @@ def main():
                     f.write(f'<tr><td>{finding["check_id"]}</td><td>{finding["path"]}</td><td>{finding["start"]}</td><td>{finding["message"]}</td><td class="severity-{sev}">{sev}</td></tr>')
                 f.write('</table>')
             else:
-                f.write('<p>No Semgrep findings or report missing.</p>')
+                f.write('<p><b>Scan durchgeführt.</b> Keine Code-Schwachstellen gefunden.</p>')
 
             # Trivy Section
             f.write('<h2>Trivy Dependency & Container Scan</h2>')
@@ -173,7 +173,7 @@ def main():
                     f.write(f'<tr><td>{v["PkgName"]}</td><td class="severity-{sev}">{sev}</td><td>{v["VulnerabilityID"]}</td><td>{v["Title"]}</td></tr>')
                 f.write('</table>')
             else:
-                f.write('<p>No Trivy vulnerabilities or report missing.</p>')
+                f.write('<p><b>Scan durchgeführt.</b> Keine Schwachstellen in Abhängigkeiten oder Containern gefunden.</p>')
 
             f.write(html_footer())
         debug(f"HTML report successfully written to {OUTPUT_FILE}")
