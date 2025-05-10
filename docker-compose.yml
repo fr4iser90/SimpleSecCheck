@@ -5,15 +5,22 @@ services:
     build: .
     image: seculite:latest
     container_name: seculite
-    # command: /target
     volumes:
       - ./results:/seculite/results
       - ./logs:/seculite/logs
       - /home/fr4iser/Documents/Development/FoundryCord/:/target:ro
     #  - /absolute/path/to/your/codebase:/target:ro    #  - /absolute/path/to/your/codebase:/target:ro
-    # Uncomment to expose ZAP's web interface or API (default port 8080)
-    # ports:
-    #   - "8080:8080"
     # Uncomment and set the following if you want to scan a different path
     # environment:
     #   - TARGET_PATH=/target 
+
+  zap-webui:
+    image: seculite:latest
+    container_name: zap-webui
+    entrypoint: ["/opt/ZAP_2.16.1/zap.sh", "-daemon", "-host", "0.0.0.0", "-port", "8080"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./results:/seculite/results
+      - ./logs:/seculite/logs
+      - /home/fr4iser/Documents/Development/FoundryCord/:/target:ro

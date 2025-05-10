@@ -184,5 +184,3 @@ Für manuelle, explorative Security-Tests kannst du das ZAP Webinterface (WebUI)
 **Hinweis:**
 - Das WebUI ist nur für manuelle Tests gedacht und sollte in CI/CD-Umgebungen deaktiviert bleiben.
 - Im WebUI kannst du ZAP steuern, Scans konfigurieren und Reports direkt ansehen.
-
----
