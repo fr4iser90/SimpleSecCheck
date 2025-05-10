@@ -40,10 +40,12 @@ RUN chmod +x scripts/security-check.sh
 RUN mkdir -p /zap/wrk
 RUN mkdir -p /zap/wrk/zap && cp /seculite/zap/baseline.conf /zap/wrk/zap/baseline.conf
 
-# Symlink /zap to /opt/ZAP_2.16.1 for zap-baseline.py compatibility
-RUN ln -s /opt/ZAP_2.16.1 /zap
-
+# Copy ZAP files to /zap for zap-baseline.py compatibility
+RUN cp -r /opt/ZAP_2.16.1/* /zap/
+# Ensure results directory exists for ZAP output
+RUN mkdir -p /zap/results
 # Symlink zap-x.sh to zap.sh for zap-baseline.py compatibility
 RUN ln -s /zap/zap.sh /zap/zap-x.sh
 
-ENTRYPOINT ["./scripts/security-check.sh"]
+WORKDIR /seculite
+ENTRYPOINT ["/seculite/scripts/security-check.sh"]

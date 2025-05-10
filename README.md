@@ -123,3 +123,12 @@ SecuLite ist Open Source, MIT-Lizenz.
 - ZAP scans require Python 3 to run zap-baseline.py.
 - The Docker image installs Python 3 automatically.
 - If running outside Docker, ensure `python3` is available in your PATH. The script will fail early with a clear error if not.
+
+## Troubleshooting: ZAP erzeugt keine Reports?
+- Prüfe, ob das Ziel (z.B. http://localhost:8000) im Container erreichbar ist.
+- **WICHTIG:** Wenn du einen Webserver auf dem Host scannen willst, setze:
+  ```sh
+  ZAP_TARGET="http://host.docker.internal:8000" docker compose run seculite
+  ```
+- Stelle sicher, dass dein Webserver auf `0.0.0.0` lauscht (nicht nur auf `127.0.0.1`).
+- Wenn das Target auf `localhost` steht und kein Report erzeugt wird, siehe auch das Log (`logs/security-check.log`) für eine genaue Fehlermeldung und Lösungsvorschlag.
