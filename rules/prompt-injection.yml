@@ -2,7 +2,6 @@ rules:
   - id: prompt-injection-detect
     patterns:
       - pattern: 'prompt = ... + ...'
-      - pattern: 'prompt = f"...{...}"'
     message: 'Possible prompt injection: avoid direct user input in prompt construction.'
     languages: [python, javascript, typescript]
     severity: ERROR 

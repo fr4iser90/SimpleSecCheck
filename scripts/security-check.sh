@@ -95,3 +95,5 @@ fi
 jq -s 'reduce .[] as $item ({}; . * $item)' "$RESULTS_DIR/semgrep.json" "$RESULTS_DIR/trivy.json" 2>/dev/null > "$SUMMARY_JSON" || echo '{"error": "Could not aggregate JSON results"}' > "$SUMMARY_JSON"
 
 echo "[SecuLite] Security checks complete. See $SUMMARY_TXT and $SUMMARY_JSON for results." | tee -a "$LOG_FILE" 
+
+exit 0 
