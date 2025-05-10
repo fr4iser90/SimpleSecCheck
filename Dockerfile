@@ -32,4 +32,6 @@ WORKDIR /seculite
 # Make script executable
 RUN chmod +x scripts/security-check.sh
 
+RUN mkdir -p /zap/wrk
+
 ENTRYPOINT ["./scripts/security-check.sh"]
