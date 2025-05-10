@@ -139,38 +139,50 @@ All contributions are welcome—help us build the future of simple, effective se
 
 SecuLite is open source, licensed under the MIT License.
 
-## 🐳 Docker Usage
+## 🐳 Docker Quick Start
 
-You can run SecuLite as a standalone Docker container:
+1. **Pfad zum zu scannenden Projekt eintragen:**
+   - Öffne `docker-compose.yml`
+   - Passe die Zeile an:
+     ```yaml
+     volumes:
+       - ./results:/seculite/results
+       - ./logs:/seculite/logs
+       - /ABSOLUTER/PFAD/ZU/DEINEM/PROJEKT:/target:ro
+     ```
+     Ersetze `/ABSOLUTER/PFAD/ZU/DEINEM/PROJEKT` durch den Pfad zu deinem Code.
 
-1. **Build the Docker image:**
+2. **Build & Scan starten:**
    ```sh
-   docker build -t seculite .
+   docker compose up --build
    ```
-2. **Run the container, mounting your codebase and results directory:**
+
+3. **Ergebnisse ansehen:**
+   - Text- und JSON-Reports: im Ordner `results/`
+   - Detaillierte Logs: im Ordner `logs/`
+
+---
+
+Weitere Hinweise und Beispiele findest du in der Dokumentation und im Ordner `doc/`.
+
+## 🖥️ Optional: ZAP WebUI aktivieren
+
+Für manuelle, explorative Security-Tests kannst du das ZAP Webinterface (WebUI) nutzen:
+
+1. **In `docker-compose.yml` Ports freigeben:**
+   ```yaml
+   ports:
+     - "8080:8080"
+   ```
+2. **Container starten:**
    ```sh
-   docker run --rm \
-     -v /path/to/your/codebase:/target:ro \
-     -v $(pwd)/results:/seculite/results \
-     -v $(pwd)/logs:/seculite/logs \
-     seculite /target
+   docker compose up --build
    ```
-- `/path/to/your/codebase` is the directory you want to scan (read-only)
-- `results` and `logs` are local directories to collect output
+3. **WebUI im Browser öffnen:**
+   [http://localhost:8080](http://localhost:8080)
 
-The results will be available in your local `results/` and `logs/` folders after the scan.
+**Hinweis:**
+- Das WebUI ist nur für manuelle Tests gedacht und sollte in CI/CD-Umgebungen deaktiviert bleiben.
+- Im WebUI kannst du ZAP steuern, Scans konfigurieren und Reports direkt ansehen.
 
-## 🐳 Docker Compose Usage
-
-You can also use SecuLite with Docker Compose:
-
-1. **Edit `docker-compose.yml`:**
-   - Set `/absolute/path/to/your/codebase` to the directory you want to scan.
-2. **Run the scan:**
-   ```sh
-   docker-compose up --build
-   ```
-3. **Results:**
-   - Results and logs will be available in your local `results/` and `logs/` folders.
-
-Example `docker-compose.yml` is included in the repo.
+---
