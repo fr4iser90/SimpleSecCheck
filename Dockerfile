@@ -15,6 +15,7 @@ RUN pip3 install --upgrade pip
 RUN pip3 install semgrep
 RUN pip3 install pyyaml
 RUN pip3 install python-owasp-zap-v2.4
+RUN pip3 install beautifulsoup4
 
 # Install Trivy (always latest)
 RUN export TRIVY_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep browser_download_url | grep Linux-64bit.deb | cut -d '"' -f 4) && \
