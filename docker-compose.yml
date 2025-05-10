@@ -45,6 +45,20 @@ services:
     networks:
       - ${DOCKER_NETWORK}
 
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["python3", "web/app.py"]
+    volumes:
+      - ./results:/results
+      - ./scripts:/scripts
+    ports:
+      - "5000:5000"
+    working_dir: /seculite
+    depends_on:
+      - seculite
+
 networks:
   bridge:
     driver: bridge
