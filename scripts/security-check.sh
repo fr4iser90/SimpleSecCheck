@@ -3,6 +3,14 @@
 # Make sure this script is executable: chmod +x scripts/security-check.sh
 set -euo pipefail
 
+# === DEBUG: Print environment and ZAP script status ===
+echo "[DEBUG] PATH: $PATH"
+echo "[DEBUG] ls -l /usr/local/bin/"
+ls -l /usr/local/bin/
+echo "[DEBUG] ls -l /opt/ZAP_2.16.1/"
+ls -l /opt/ZAP_2.16.1/ || echo "/opt/ZAP_2.16.1/ not found"
+echo "[DEBUG] command -v zap-baseline.py: $(command -v zap-baseline.py || echo not found)"
+
 # Usage: ./scripts/security-check.sh [TARGET_PATH]
 TARGET_PATH="${1:-..}"
 RESULTS_DIR="results"

@@ -18,8 +18,8 @@ RUN export TRIVY_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/trivy
 RUN wget https://github.com/zaproxy/zaproxy/releases/download/v2.16.1/ZAP_2.16.1_Linux.tar.gz && \
     tar -xvzf ZAP_2.16.1_Linux.tar.gz -C /opt && \
     rm ZAP_2.16.1_Linux.tar.gz
-RUN ls -l /opt/ && ls -l /opt/ZAP_2.16.1/
-RUN ln -s /opt/ZAP_2.16.1/zap-baseline.py /usr/local/bin/zap-baseline.py
+RUN wget https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap-baseline.py -O /usr/local/bin/zap-baseline.py && \
+    chmod +x /usr/local/bin/zap-baseline.py
 
 # Copy SecuLite files
 COPY . /seculite
