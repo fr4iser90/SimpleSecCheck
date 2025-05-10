@@ -114,3 +114,12 @@ SecuLite ist Open Source, MIT-Lizenz.
 - Optionaler ZAP-WebUI-Service für manuelle Tests
 - Aggregierte Reports, CI/CD-ready, modular erweiterbar
 - Doku und Task-Listen synchronisiert mit aktuellem Stand
+
+## Requirements
+- Docker (recommended)
+- Python 3 (required for ZAP scans; installed in the Docker image)
+
+## ZAP (Web Security Scanning)
+- ZAP scans require Python 3 to run zap-baseline.py.
+- The Docker image installs Python 3 automatically.
+- If running outside Docker, ensure `python3` is available in your PATH. The script will fail early with a clear error if not.

@@ -5,6 +5,11 @@ RUN apt-get update && \
     apt-get install -y python3-pip wget curl jq git openjdk-17-jre && \
     ln -s /usr/bin/python3 /usr/bin/python
 
+# Ensure Python 3 and pip are available for ZAP
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip && \
+    ln -sf /usr/bin/python3 /usr/bin/python
+
 # Upgrade pip and install Semgrep
 RUN pip3 install --upgrade pip
 RUN pip3 install semgrep

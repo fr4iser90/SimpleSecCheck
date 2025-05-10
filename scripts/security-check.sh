@@ -15,6 +15,12 @@ echo "[DEBUG] ls -l /opt/ZAP_2.16.1/"
 ls -l /opt/ZAP_2.16.1/ || echo "/opt/ZAP_2.16.1/ not found"
 echo "[DEBUG] command -v zap-baseline.py: $(command -v zap-baseline.py || echo not found)"
 
+# Check for python3 availability (required for ZAP)
+if ! command -v python3 &>/dev/null; then
+  echo "[ERROR] python3 is not installed or not in PATH. ZAP scan cannot run. Please install python3." | tee -a "$LOG_FILE"
+  exit 1
+fi
+
 # Ziel-URL für ZAP bestimmen
 ZAP_TARGET="${ZAP_TARGET:-${1:-http://localhost:8000}}"
 HTML_REPORT="${HTML_REPORT:-0}"
