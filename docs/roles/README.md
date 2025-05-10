@@ -23,4 +23,7 @@
 - Add a new `.mdc` file in the `roles/` directory.
 - Follow the standard header: Name, Activation, Core Principle, Workflow, Prohibitions, Tools, Interaction Points, Exit Conditions, Dependencies.
 - Add a "See also" section linking to this index and related roles.
-- Update this index with the new role and its relationships. 
+- Update this index with the new role and its relationships.
+
+## Rule Documentation
+- See [../rules/README.md](../../rules/README.md) for a summary of all Semgrep rules, their purpose, and links to feature documentation. 

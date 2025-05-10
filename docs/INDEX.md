@@ -78,6 +78,7 @@ docs/
 
 ## 🧑‍💻 Roles & Rules
 - [Roles/Rules Index](roles/README.md)
+- [Rules Directory & Rule Docs](../rules/README.md)
 
 ---
 
@@ -116,4 +117,5 @@ A dedicated documentation role (`role_documentation.mdc`) ensures that all docs 
 - /docs/plan/task_5.md
 - /docs/plan/task_6.md
 - /docs/plan/task_7.md
-- /docs/roles/README.md 
+- /docs/roles/README.md
+- /rules/README.md 
