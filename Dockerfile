@@ -43,4 +43,7 @@ RUN mkdir -p /zap/wrk/zap && cp /seculite/zap/baseline.conf /zap/wrk/zap/baselin
 # Symlink /zap to /opt/ZAP_2.16.1 for zap-baseline.py compatibility
 RUN ln -s /opt/ZAP_2.16.1 /zap
 
+# Symlink zap-x.sh to zap.sh for zap-baseline.py compatibility
+RUN ln -s /zap/zap.sh /zap/zap-x.sh
+
 ENTRYPOINT ["./scripts/security-check.sh"]
