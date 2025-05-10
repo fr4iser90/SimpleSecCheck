@@ -1,8 +1,8 @@
 # Task List: Phase 6 – Automatisierte Auswertung, Reporting & API-Security
 
-- [ ] Script zur Auswertung aller Scan-Resultate (ZAP, Semgrep, Trivy)
-- [ ] Findings nach Schweregrad sortieren und zusammenfassen
-- [ ] "Alles okay"-Abschnitte explizit ausgeben
+- [x] Script zur Auswertung aller Scan-Resultate (ZAP, Semgrep, Trivy)
+- [x] Findings nach Schweregrad sortieren und zusammenfassen
+- [x] "Alles okay"-Abschnitte explizit ausgeben
 - [ ] To-Do-Liste für Entwickler generieren
 - [ ] Optional: HTML-Report erzeugen
 - [ ] Optional: Slack/Teams/Email-Benachrichtigung bei kritischen Findings
