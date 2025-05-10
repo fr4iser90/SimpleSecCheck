@@ -250,6 +250,8 @@ def main():
             f.write(html_header('SecuLite Security Scan Summary'))
             f.write(f'<p><b>Scan Date:</b> {now}<br>')
             f.write(f'<b>Target:</b> {target}</p>\n')
+            # WebUI Controls Block
+            f.write('''\n<!-- WebUI Controls -->\n<div style="margin: 1em 0;">\n  <button id="scan-btn">Jetzt neuen Scan starten</button>\n  <button id="refresh-status-btn">Status aktualisieren</button>\n  <span id="scan-status" style="margin-left:1em; color: #007bff;">Status wird geladen...</span>\n</div>\n<!-- Hinweis: Scan-Status und Trigger laufen über Port 9100 (Watchdog) -->\n''')
 
             # --- Visual summary with icons/colors for each tool ---
             # ZAP
