@@ -5,11 +5,12 @@ services:
     build: .
     image: seculite:latest
     container_name: seculite
-    command: /target
+    # command: /target
     volumes:
       - ./results:/seculite/results
       - ./logs:/seculite/logs
-      - /absolute/path/to/your/codebase:/target:ro
+      - /home/fr4iser/Documents/Development/FoundryCord/:/target:ro
+    #  - /absolute/path/to/your/codebase:/target:ro    #  - /absolute/path/to/your/codebase:/target:ro
     # Uncomment to expose ZAP's web interface or API (default port 8080)
     # ports:
     #   - "8080:8080"
