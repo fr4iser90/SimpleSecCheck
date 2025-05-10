@@ -100,20 +100,20 @@ A dedicated documentation role (`role_documentation.mdc`) ensures that all docs 
 
 ## 📂 Absolute Paths (for reference)
 
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/INDEX.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/EXTENDING.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/features/ai_prompt_injection.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/features/code_issues.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/features/dependency_container.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/features/web_vulnerabilities.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/plan/PLAN.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/plan/STATUS.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/plan/detailed_plan.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/plan/task_1.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/plan/task_2.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/plan/task_3md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/plan/task_4.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/plan/task_5.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/plan/task_6.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/plan/task_7.md
-- /home/fr4iser/Documents/Git/SimpleSecCheck/docs/roles/README.md 
+- /docs/INDEX.md
+- /docs/EXTENDING.md
+- /docs/features/ai_prompt_injection.md
+- /docs/features/code_issues.md
+- /docs/features/dependency_container.md
+- /docs/features/web_vulnerabilities.md
+- /docs/plan/PLAN.md
+- /docs/plan/STATUS.md
+- /docs/plan/detailed_plan.md
+- /docs/plan/task_1.md
+- /docs/plan/task_2.md
+- /docs/plan/task_3md
+- /docs/plan/task_4.md
+- /docs/plan/task_5.md
+- /docs/plan/task_6.md
+- /docs/plan/task_7.md
+- /docs/roles/README.md 
