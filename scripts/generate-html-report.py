@@ -102,10 +102,10 @@ def trivy_summary(trivy_json):
     return vulns
 
 def html_header(title):
-    return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>{title}</title>\n<style>\nbody {{ font-family: Arial, sans-serif; margin: 2em; }}\nh1, h2, h3 {{ color: #003366; }}\ntable {{ border-collapse: collapse; width: 100%; margin-bottom: 2em; }}\nth, td {{ border: 1px solid #ccc; padding: 0.5em; text-align: left; }}\nth {{ background: #f0f0f0; }}\ntr:nth-child(even) {{ background: #fafafa; }}\n.severity-CRITICAL {{ color: #b30000; font-weight: bold; }}\n.severity-HIGH {{ color: #e67300; font-weight: bold; }}\n.severity-MEDIUM {{ color: #e6b800; font-weight: bold; }}\n.severity-LOW {{ color: #007399; }}\n.severity-INFO, .severity-INFORMATIONAL {{ color: #666; }}\n</style>\n</head>\n<body>\n'''
+    return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>{title}</title>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<style>\n:root {{\n  --bg-light: #f8f9fa;\n  --bg-dark: #181a1b;\n  --text-light: #181a1b;\n  --text-dark: #f8f9fa;\n  --accent: #007bff;\n  --table-bg: #fff;\n  --table-bg-dark: #23272b;\n  --table-border: #dee2e6;\n  --table-border-dark: #343a40;\n}}\nbody {{\n  background: var(--bg-light);\n  color: var(--text-light);\n  font-family: 'Segoe UI', Arial, sans-serif;\n  margin: 0; padding: 0;\n  transition: background 0.2s, color 0.2s;\n}}\nbody.darkmode {{\n  background: var(--bg-dark);\n  color: var(--text-dark);\n}}\n.header {{\n  display: flex; justify-content: space-between; align-items: center;\n  padding: 1.2em 2em 0.5em 2em;\n  background: var(--bg-light);\n  border-bottom: 1px solid var(--table-border);\n}}\nbody.darkmode .header {{\n  background: var(--bg-dark);\n  border-bottom: 1px solid var(--table-border-dark);\n}}\n.toggle-btn {{\n  background: var(--accent);\n  color: #fff;\n  border: none;\n  border-radius: 1.5em;\n  padding: 0.5em 1.2em;\n  font-size: 1em;\n  cursor: pointer;\n  transition: background 0.2s;\n}}\n.toggle-btn:hover {{\n  background: #0056b3;\n}}\nh1, h2, h3 {{ margin: 0; font-size: 2em; }}\nh2 {{ margin-top: 2em; }}\ntable {{\n  border-collapse: collapse;\n  width: 100%;\n  margin: 1em 0;\n  background: var(--table-bg);\n  color: inherit;\n}}\nbody.darkmode table {{\n  background: var(--table-bg-dark);\n}}\nth, td {{\n  border: 1px solid var(--table-border);\n  padding: 0.5em 1em;\n  text-align: left;\n}}\nbody.darkmode th, body.darkmode td {{\n  border: 1px solid var(--table-border-dark);\n}}\na {{\n  color: var(--accent);\n  text-decoration: none;\n}}\na:hover {{\n  text-decoration: underline;\n}}\n.summary-box {{\n  background: #e9ecef;\n  border-radius: 0.5em;\n  padding: 1em;\n  margin: 1.5em 0;\n}}\nbody.darkmode .summary-box {{\n  background: #23272b;\n}}\n</style>\n<script>\nfunction toggleDarkMode() {{\n  document.body.classList.toggle('darkmode');\n  localStorage.setItem('seculite-darkmode', document.body.classList.contains('darkmode'));\n}}\nwindow.onload = function() {{\n  if (localStorage.getItem('seculite-darkmode') === 'true') {{\n    document.body.classList.add('darkmode');\n  }}\n}};\n</script>\n</head>\n<body>\n<div class="header">\n  <h1>SecuLite Security Scan Summary</h1>\n  <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n</div>\n<div class="summary-box">'''
 
 def html_footer():
-    return '</body></html>'
+    return '</div>\n</body></html>'
 
 def main():
     debug(f"Starting HTML report generation. Output: {OUTPUT_FILE}")
@@ -149,9 +149,9 @@ def main():
                     f.write(f'<tr><td>{risk}</td><td>{count}</td></tr>')
                 f.write('</table>')
             else:
-                f.write('<p><b>Scan durchgeführt.</b> Keine Web-Schwachstellen gefunden.</p>')
+                f.write('<p><b>Scan completed. No web vulnerabilities found.</b></p>')
             if Path(zap_html_path).exists():
-                f.write(f'<p>Siehe vollständigen ZAP-Report: <a href="zap-report.html">zap-report.html</a></p>')
+                f.write(f'<p>See full ZAP report: <a href="zap-report.html">zap-report.html</a></p>')
 
             # Semgrep Section
             f.write('<h2>Semgrep Static Code Analysis</h2>')
@@ -162,7 +162,7 @@ def main():
                     f.write(f'<tr><td>{finding["check_id"]}</td><td>{finding["path"]}</td><td>{finding["start"]}</td><td>{finding["message"]}</td><td class="severity-{sev}">{sev}</td></tr>')
                 f.write('</table>')
             else:
-                f.write('<p><b>Scan durchgeführt.</b> Keine Code-Schwachstellen gefunden.</p>')
+                f.write('<p><b>Scan completed. No code vulnerabilities found.</b></p>')
 
             # Trivy Section
             f.write('<h2>Trivy Dependency & Container Scan</h2>')
@@ -173,7 +173,7 @@ def main():
                     f.write(f'<tr><td>{v["PkgName"]}</td><td class="severity-{sev}">{sev}</td><td>{v["VulnerabilityID"]}</td><td>{v["Title"]}</td></tr>')
                 f.write('</table>')
             else:
-                f.write('<p><b>Scan durchgeführt.</b> Keine Schwachstellen in Abhängigkeiten oder Containern gefunden.</p>')
+                f.write('<p><b>Scan completed. No vulnerabilities found in dependencies or containers.</b></p>')
 
             f.write(html_footer())
         debug(f"HTML report successfully written to {OUTPUT_FILE}")
