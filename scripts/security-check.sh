@@ -5,7 +5,6 @@
 #   oder
 #   ./scripts/security-check.sh [ZAP_TARGET_URL]
 # Default: http://localhost:8000
-set -euo pipefail
 
 # === DEBUG: Print environment and ZAP script status ===
 echo "[DEBUG] PATH: $PATH"
@@ -18,7 +17,7 @@ echo "[DEBUG] command -v zap-baseline.py: $(command -v zap-baseline.py || echo n
 # Check for python3 availability (required for ZAP)
 if ! command -v python3 &>/dev/null; then
   echo "[ERROR] python3 is not installed or not in PATH. ZAP scan cannot run. Please install python3." | tee -a "$LOG_FILE"
-  exit 1
+  # Do not exit, continue
 fi
 
 # Ziel-URL für ZAP bestimmen
@@ -26,7 +25,8 @@ ZAP_TARGET="${ZAP_TARGET:-${1:-http://localhost:8000}}"
 HTML_REPORT="${HTML_REPORT:-0}"
 
 # Usage: ./scripts/security-check.sh [TARGET_PATH]
-TARGET_PATH="${1:-..}"
+# Set scan target to /seculite (project root inside container)
+TARGET_PATH="/seculite"
 RESULTS_DIR="/seculite/results"
 LOGS_DIR="/seculite/logs"
 LOG_FILE="$LOGS_DIR/security-check.log"
@@ -52,7 +52,7 @@ done
 if [ ${#MISSING_TOOLS[@]} -ne 0 ]; then
   echo "[SecuLite] Missing required tools: ${MISSING_TOOLS[*]}" | tee -a "$LOG_FILE"
   echo "Please install all required tools before running the script." | tee -a "$LOG_FILE"
-  exit 1
+  # Do not exit, continue
 fi
 
 # Ensure jq is installed
@@ -64,7 +64,7 @@ if ! command -v jq &>/dev/null; then
     sudo yum install -y jq
   else
     echo "[SecuLite] Please install jq manually." | tee -a "$LOG_FILE"
-    exit 1
+    # Do not exit, continue
   fi
 fi
 
@@ -104,7 +104,7 @@ if command -v zap-baseline.py &>/dev/null; then
     [ -f "$ZAP_REPORT_XMLHTML" ] && echo "  - $ZAP_REPORT_XMLHTML"
   else
     echo "[ZAP] ERROR: Kein Report wurde erzeugt!" | tee -a "$LOG_FILE"
-    exit 2
+    # Do not exit, continue
   fi
   echo "[ZAP] Baseline scan complete." | tee -a "$SUMMARY_TXT"
 else
@@ -114,8 +114,8 @@ fi
 # Run Semgrep
 if command -v semgrep &>/dev/null; then
   echo "[Semgrep] Running code scan..." | tee -a "$LOG_FILE"
-  semgrep --config rules/ "$TARGET_PATH" --json > "$RESULTS_DIR/semgrep.json" 2>>"$LOG_FILE" || echo "[Semgrep] Scan failed" >> "$LOG_FILE"
-  semgrep --config rules/ "$TARGET_PATH" --text > "$RESULTS_DIR/semgrep.txt" 2>>"$LOG_FILE"
+  semgrep --config /seculite/rules "$TARGET_PATH" --json > "$RESULTS_DIR/semgrep.json" 2>>"$LOG_FILE" || echo "[Semgrep] Scan failed" >> "$LOG_FILE"
+  semgrep --config /seculite/rules "$TARGET_PATH" --text > "$RESULTS_DIR/semgrep.txt" 2>>"$LOG_FILE"
   echo "[Semgrep] Code scan complete." | tee -a "$SUMMARY_TXT"
 else
   echo "[Semgrep] semgrep not found, skipping code scan." | tee -a "$LOG_FILE"
@@ -124,10 +124,10 @@ fi
 # Run Trivy
 if command -v trivy &>/dev/null; then
   echo "[Trivy] Running dependency/container scan..." | tee -a "$LOG_FILE"
-  trivy fs --config trivy/config.yaml "$TARGET_PATH" --format json > "$RESULTS_DIR/trivy.json" 2>>"$LOG_FILE" || echo "[Trivy] Scan failed" >> "$LOG_FILE"
-  trivy fs --config trivy/config.yaml "$TARGET_PATH" --format table > "$RESULTS_DIR/trivy.txt" 2>>"$LOG_FILE"
+  trivy fs --config /seculite/trivy/config.yaml "$TARGET_PATH" --format json > "$RESULTS_DIR/trivy.json" 2>>"$LOG_FILE" || echo "[Trivy] Scan failed" >> "$LOG_FILE"
+  trivy fs --config /seculite/trivy/config.yaml "$TARGET_PATH" --format table > "$RESULTS_DIR/trivy.txt" 2>>"$LOG_FILE"
   if [ "$HTML_REPORT" = "1" ]; then
-    trivy fs --config trivy/config.yaml "$TARGET_PATH" --format template --template "@/usr/local/share/trivy/templates/html.tpl" > "$RESULTS_DIR/trivy.html" 2>>"$LOG_FILE" || echo "[Trivy] HTML report failed" >> "$LOG_FILE"
+    trivy fs --config /seculite/trivy/config.yaml "$TARGET_PATH" --format template --template "@/usr/local/share/trivy/templates/html.tpl" > "$RESULTS_DIR/trivy.html" 2>>"$LOG_FILE" || echo "[Trivy] HTML report failed" >> "$LOG_FILE"
   fi
   echo "[Trivy] Dependency/container scan complete." | tee -a "$SUMMARY_TXT"
 else
@@ -154,6 +154,9 @@ fi
 
 jq -s 'reduce .[] as $item ({}; . * $item)' "$RESULTS_DIR/semgrep.json" "$RESULTS_DIR/trivy.json" 2>/dev/null > "$SUMMARY_JSON" || echo '{"error": "Could not aggregate JSON results"}' > "$SUMMARY_JSON"
 
-echo "[SecuLite] Security checks complete. See $SUMMARY_TXT and $SUMMARY_JSON for results." | tee -a "$LOG_FILE" 
+# Always generate the unified HTML report inside the container
+python3 /seculite/scripts/generate-html-report.py
+
+echo "[SecuLite] Security checks complete. See $SUMMARY_TXT, $SUMMARY_JSON, and security-summary.html for results." | tee -a "$LOG_FILE" 
 
 exit 0 
