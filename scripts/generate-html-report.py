@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from bs4 import BeautifulSoup
+import traceback
 
 RESULTS_DIR = os.environ.get('RESULTS_DIR', '/seculite/results')
 OUTPUT_FILE = '/seculite/results/security-summary.html'
@@ -102,7 +103,129 @@ def trivy_summary(trivy_json):
     return vulns
 
 def html_header(title):
-    return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>{title}</title>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<style>\n:root {{\n  --bg-light: #f8f9fa;\n  --bg-dark: #181a1b;\n  --text-light: #181a1b;\n  --text-dark: #f8f9fa;\n  --accent: #007bff;\n  --table-bg: #fff;\n  --table-bg-dark: #23272b;\n  --table-border: #dee2e6;\n  --table-border-dark: #343a40;\n  --sev-critical: #b30000;\n  --sev-high: #e67300;\n  --sev-medium: #e6b800;\n  --sev-low: #007399;\n  --sev-info: #666;\n  --sev-passed: #28a745;\n  --sev-bg-critical: #ffeaea;\n  --sev-bg-high: #fff4e5;\n  --sev-bg-medium: #fffbe5;\n  --sev-bg-low: #e5f6fa;\n  --sev-bg-info: #f0f0f0;\n  --sev-bg-passed: #e6f9ed;\n}}\nbody {{\n  background: var(--bg-light);\n  color: var(--text-light);\n  font-family: 'Segoe UI', Arial, sans-serif;\n  margin: 0; padding: 0;\n  transition: background 0.2s, color 0.2s;\n}}\nbody.darkmode {{\n  background: var(--bg-dark);\n  color: var(--text-dark);\n}}\n.header {{\n  display: flex; justify-content: space-between; align-items: center;\n  padding: 1.2em 2em 0.5em 2em;\n  background: var(--bg-light);\n  border-bottom: 1px solid var(--table-border);\n}}\nbody.darkmode .header {{\n  background: var(--bg-dark);\n  border-bottom: 1px solid var(--table-border-dark);\n}}\n.toggle-btn {{\n  background: var(--accent);\n  color: #fff;\n  border: none;\n  border-radius: 1.5em;\n  padding: 0.5em 1.2em;\n  font-size: 1em;\n  cursor: pointer;\n  transition: background 0.2s;\n}}\n.toggle-btn:hover {{\n  background: #0056b3;\n}}\nh1, h2, h3 {{ margin: 0; font-size: 2em; }}\nh2 {{ margin-top: 2em; }}\ntable {{\n  border-collapse: collapse;\n  width: 100%;\n  margin: 1em 0;\n  background: var(--table-bg);\n  color: inherit;\n}}\nbody.darkmode table {{\n  background: var(--table-bg-dark);\n}}\nth, td {{\n  border: 1px solid var(--table-border);\n  padding: 0.5em 1em;\n  text-align: left;\n}}\nbody.darkmode th, body.darkmode td {{\n  border: 1px solid var(--table-border-dark);\n}}\na {{\n  color: var(--accent);\n  text-decoration: none;\n}}\na:hover {{\n  text-decoration: underline;\n}}\n.summary-box {{\n  background: #e9ecef;\n  border-radius: 0.5em;\n  padding: 1em;\n  margin: 1.5em 0;\n}}\nbody.darkmode .summary-box {{\n  background: #23272b;\n}}\n.severity-CRITICAL, .sev-CRITICAL {{ color: var(--sev-critical); font-weight: bold; }}\n.severity-HIGH, .sev-HIGH {{ color: var(--sev-high); font-weight: bold; }}\n.severity-MEDIUM, .sev-MEDIUM {{ color: var(--sev-medium); font-weight: bold; }}\n.severity-LOW, .sev-LOW {{ color: var(--sev-low); }}\n.severity-INFO, .severity-INFORMATIONAL, .sev-INFO, .sev-INFORMATIONAL {{ color: var(--sev-info); }}\n.severity-PASSED, .sev-PASSED {{ color: var(--sev-passed); font-weight: bold; }}\n.row-CRITICAL {{ background: var(--sev-bg-critical); }}\n.row-HIGH {{ background: var(--sev-bg-high); }}\n.row-MEDIUM {{ background: var(--sev-bg-medium); }}\n.row-LOW {{ background: var(--sev-bg-low); }}\n.row-INFO, .row-INFORMATIONAL {{ background: var(--sev-bg-info); }}\n.row-PASSED {{ background: var(--sev-bg-passed); }}\n.all-clear {{ background: var(--sev-bg-passed); color: var(--sev-passed); border-radius: 0.5em; padding: 1em; margin: 1em 0; font-weight: bold; display: flex; align-items: center; gap: 0.7em; font-size: 1.2em; }}\n.icon {{ font-size: 1.2em; vertical-align: middle; margin-right: 0.3em; }}\n</style>\n<script>\nfunction toggleDarkMode() {{\n  document.body.classList.toggle('darkmode');\n  localStorage.setItem('seculite-darkmode', document.body.classList.contains('darkmode'));\n}}\nwindow.onload = function() {{\n  if (localStorage.getItem('seculite-darkmode') === 'true') {{\n    document.body.classList.add('darkmode');\n  }}\n}};\n</script>\n</head>\n<body>\n<div class="header">\n  <h1>SecuLite Security Scan Summary</h1>\n  <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n</div>\n<div class="summary-box">'''
+    return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>{title}</title>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<style>\n:root {{
+  --bg-light: #f8f9fa;
+  --bg-dark: #181a1b;
+  --text-light: #181a1b;
+  --text-dark: #f8f9fa;
+  --accent: #007bff;
+  --table-bg: #fff;
+  --table-bg-dark: #23272b;
+  --table-border: #dee2e6;
+  --table-border-dark: #343a40;
+  --sev-critical: #b30000;
+  --sev-high: #e67300;
+  --sev-medium: #e6b800;
+  --sev-low: #007399;
+  --sev-info: #666;
+  --sev-passed: #28a745;
+  --sev-bg-critical: #ffeaea;
+  --sev-bg-high: #fff4e5;
+  --sev-bg-medium: #fffbe5;
+  --sev-bg-low: #e5f6fa;
+  --sev-bg-info: #f0f0f0;
+  --sev-bg-passed: #e6f9ed;
+}}
+body {{
+  background: var(--bg-light);
+  color: var(--text-light);
+  font-family: 'Segoe UI', Arial, sans-serif;
+  margin: 0; padding: 0;
+  transition: background 0.2s, color 0.2s;
+}}
+body.darkmode {{
+  background: var(--bg-dark);
+  color: var(--text-dark);
+}}
+.header {{
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 1.2em 2em 0.5em 2em;
+  background: var(--bg-light);
+  border-bottom: 1px solid var(--table-border);
+}}
+body.darkmode .header {{
+  background: var(--bg-dark);
+  border-bottom: 1px solid var(--table-border-dark);
+}}
+.toggle-btn {{
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 1.5em;
+  padding: 0.5em 1.2em;
+  font-size: 1em;
+  cursor: pointer;
+  transition: background 0.2s;
+}}
+.toggle-btn:hover {{
+  background: #0056b3;
+}}
+h1, h2, h3 {{ margin: 0; font-size: 2em; }}
+h2 {{ margin-top: 2em; }}
+table {{
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  background: var(--table-bg);
+  color: inherit;
+}}
+body.darkmode table {{
+  background: var(--table-bg-dark);
+}}
+th, td {{
+  border: 1px solid var(--table-border);
+  padding: 0.5em 1em;
+  text-align: left;
+}}
+body.darkmode th, body.darkmode td {{
+  border: 1px solid var(--table-border-dark);
+}}
+a {{
+  color: var(--accent);
+  text-decoration: none;
+}}
+a:hover {{
+  text-decoration: underline;
+}}
+.summary-box {{
+  background: #e9ecef;
+  border-radius: 0.5em;
+  padding: 1em;
+  margin: 1.5em 0;
+}}
+body.darkmode .summary-box {{
+  background: #23272b;
+}}
+.severity-CRITICAL, .sev-CRITICAL {{ color: var(--sev-critical); font-weight: bold; }}
+.severity-HIGH, .sev-HIGH {{ color: var(--sev-high); font-weight: bold; }}
+.severity-MEDIUM, .sev-MEDIUM {{ color: var(--sev-medium); font-weight: bold; }}
+.severity-LOW, .sev-LOW {{ color: var(--sev-low); }}
+.severity-INFO, .severity-INFORMATIONAL, .sev-INFO, .sev-INFORMATIONAL {{ color: var(--sev-info); }}
+.severity-PASSED, .sev-PASSED {{ color: var(--sev-passed); font-weight: bold; }}
+.row-CRITICAL {{ background: var(--sev-bg-critical); }}
+.row-HIGH {{ background: var(--sev-bg-high); }}
+.row-MEDIUM {{ background: var(--sev-bg-medium); }}
+.row-LOW {{ background: var(--sev-bg-low); }}
+.row-INFO, .row-INFORMATIONAL {{ background: var(--sev-bg-info); }}
+.row-PASSED {{ background: var(--sev-bg-passed); }}
+.all-clear {{ background: var(--sev-bg-passed); color: var(--sev-passed); border-radius: 0.5em; padding: 1em; margin: 1em 0; font-weight: bold; display: flex; align-items: center; gap: 0.7em; font-size: 1.2em; }}
+.icon {{ font-size: 1.2em; vertical-align: middle; margin-right: 0.3em; }}
+/* --- Fix contrast in dark mode --- */
+body.darkmode .row-CRITICAL td, body.darkmode .row-CRITICAL th {{ color: #fff !important; background: #a94442 !important; }}
+body.darkmode .row-HIGH td, body.darkmode .row-HIGH th {{ color: #fff !important; background: #e67c00 !important; }}
+body.darkmode .row-MEDIUM td, body.darkmode .row-MEDIUM th {{ color: #222 !important; background: #ffe066 !important; }}
+body.darkmode .row-LOW td, body.darkmode .row-LOW th {{ color: #003366 !important; background: #b3e6f7 !important; }}
+body.darkmode .row-INFO td, body.darkmode .row-INFO th, body.darkmode .row-INFORMATIONAL td, body.darkmode .row-INFORMATIONAL th {{ color: #222 !important; background: #bfc9d1 !important; }}
+body.darkmode .row-PASSED td, body.darkmode .row-PASSED th {{ color: #155724 !important; background: #b7f7d8 !important; }}
+</style>\n<script>\nfunction toggleDarkMode() {{
+  document.body.classList.toggle('darkmode');
+  localStorage.setItem('seculite-darkmode', document.body.classList.contains('darkmode'));
+}}
+window.onload = function() {{
+  if (localStorage.getItem('seculite-darkmode') === 'true') {{
+    document.body.classList.add('darkmode');
+  }}
+}};\n</script>\n</head>\n<body>\n<div class="header">\n  <h1>SecuLite Security Scan Summary</h1>\n  <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n</div>\n<div class="summary-box">'''
 
 def html_footer():
     return '</div>\n</body></html>'
@@ -231,6 +354,7 @@ def main():
         debug(f"HTML report successfully written to {OUTPUT_FILE}")
     except Exception as e:
         debug(f"Failed to write HTML report: {e}")
+        traceback.print_exc()
         sys.exit(1)
 
 if __name__ == '__main__':
