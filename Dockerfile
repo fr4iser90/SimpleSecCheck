@@ -16,6 +16,7 @@ RUN pip3 install semgrep
 RUN pip3 install pyyaml
 RUN pip3 install python-owasp-zap-v2.4
 RUN pip3 install beautifulsoup4
+RUN pip3 install pyyaml json5  # Added for configuration script
 
 # Install Trivy (always latest)
 RUN export TRIVY_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep browser_download_url | grep Linux-64bit.deb | cut -d '"' -f 4) && \
@@ -35,8 +36,9 @@ RUN wget https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap_commo
 COPY . /seculite
 WORKDIR /seculite
 
-# Make script executable
+# Make scripts executable
 RUN chmod +x scripts/security-check.sh
+RUN chmod +x scripts/configure.py
 
 RUN mkdir -p /zap/wrk
 RUN mkdir -p /zap/wrk/zap && cp /seculite/zap/baseline.conf /zap/wrk/zap/baseline.conf
