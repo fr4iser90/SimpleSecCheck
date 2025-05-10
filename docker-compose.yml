@@ -25,7 +25,9 @@ services:
       - -port
       - "8080"
       - -config
-      - api.addrs.addr.name=0.0.0.0
+      - api.addrs.addr.name=.*
+      - -config
+      - api.addrs.addr.regex=true
       - -config
       - api.disablekey=true
     ports:
