@@ -1,7 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 ---
 description: 
@@ -10,7 +10,7 @@ alwaysApply: false
 ---
 # role_task_manager.mdc
 
-**See also:** [roles/README.md](../roles/README.md), master_of_repo.mdc, core_critical_rules.mdc, role_analysis_planning.mdc, role_coding_phase.mdc
+**See also:** [roles/README.md](mdc:../roles/README.md), master_of_repo.mdc, core_critical_rules.mdc, role_analysis_planning.mdc, role_coding_phase.mdc
 **Last updated:** 2024-05-10
 
 # Role: Task Manager
