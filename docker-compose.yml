@@ -5,29 +5,31 @@ services:
     build: .
     image: seculite:latest
     container_name: seculite
+    env_file:
+      - .env
     environment:
-      - ZAP_TARGET=http://host.docker.internal:8000
+      - ZAP_TARGET=${TARGET_URL}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./results:/seculite/results
-      - ./logs:/seculite/logs
-      - /home/fr4iser/Documents/Development/FoundryCord/:/target:ro
-    #  - /absolute/path/to/your/codebase:/target:ro    #  - /absolute/path/to/your/codebase:/target:ro
-    # Uncomment and set the following if you want to scan a different path
-    # environment:
-    #   - TARGET_PATH=/target 
+      - ${REPORT_PATH}:/seculite/results
+      - ${LOG_PATH}:/seculite/logs
+      - ${TARGET_PATH}:/target:ro
+    networks:
+      - ${DOCKER_NETWORK}
 
   zap-webui:
     image: seculite:latest
     container_name: zap-webui
+    env_file:
+      - .env
     entrypoint:
       - /opt/ZAP_2.16.1/zap.sh
       - -daemon
       - -host
       - 0.0.0.0
       - -port
-      - "8080"
+      - "${ZAP_WEBUI_PORT}"
       - -config
       - api.addrs.addr.name=.*
       - -config
@@ -35,8 +37,14 @@ services:
       - -config
       - api.disablekey=true
     ports:
-      - "8080:8080"
+      - "${ZAP_WEBUI_PORT}:${ZAP_WEBUI_PORT}"
     volumes:
-      - ./results:/seculite/results
-      - ./logs:/seculite/logs
-      - /home/fr4iser/Documents/Development/FoundryCord/:/target:ro
+      - ${REPORT_PATH}:/seculite/results
+      - ${LOG_PATH}:/seculite/logs
+      - ${TARGET_PATH}:/target:ro
+    networks:
+      - ${DOCKER_NETWORK}
+
+networks:
+  bridge:
+    driver: bridge
