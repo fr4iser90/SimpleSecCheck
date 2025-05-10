@@ -7,7 +7,7 @@ app = Flask(__name__)
 
 SCAN_LOCK = threading.Lock()
 SCAN_STATUS = {'status': 'idle'}
-RESULTS_DIR = os.path.abspath('results')
+RESULTS_DIR = '/results'
 
 @app.route('/')
 def serve_dashboard():
