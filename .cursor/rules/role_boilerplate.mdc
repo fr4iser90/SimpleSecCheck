@@ -1,0 +1,50 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Role: [Role Name]
+
+**Activation:**
+*   [When is this role activated?]
+*   [What triggers this role?]
+*   [Is it implicit or explicit?]
+
+**Core Principle:**
+[One sentence describing the fundamental purpose of this role]
+
+**Workflow / Key Responsibilities:**
+
+1.  **Phase 1: [Phase Name]**
+    *   [Step 1]
+    *   [Step 2]
+    *   [Step 3]
+
+2.  **Phase 2: [Phase Name]**
+    *   [Step 1]
+    *   [Step 2]
+    *   [Step 3]
+
+**Key Prohibitions / Constraints:**
+*   [What should this role NOT do?]
+*   [What are the limits?]
+
+**Tools Potentially Used:**
+*   [List of tools this role might use]
+
+**Interaction Points / User Checkpoints:**
+*   [When should the role interact with the user?]
+*   [What requires user confirmation?]
+
+**Exit Conditions:**
+*   [When does this role complete?]
+*   [What conditions trigger role exit?]
+
+**Dependencies / Inter-Role Relationships:**
+*   [What other roles does this depend on?]
+*   [How does it interact with other roles?]
+*   [What conditions trigger role exit?]
+
+**Dependencies / Inter-Role Relationships:**
+*   [What other roles does this depend on?]
+*   [How does it interact with other roles?]

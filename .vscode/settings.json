@@ -1,0 +1,74 @@
+{
+  // ... other settings might be here ...
+
+  "actionButtons": {
+    "defaultColor": "white", // Default button color
+    "loadNpmCommands": false, // Don't auto-add npm commands
+    "reloadButton": "♻️", // Or null to disable reload button
+    "commands": [
+      // Button 1: Hot Reload All (Local)
+      {
+        "name": "$(sync) Hot Reload", // $(sync) is a refresh-like icon
+        "tooltip": "Run: SimpleDevOpsToolkit --hot-reload-all",
+        "color": "cyan", // Example color
+        "command": "SimpleDevOpsToolkit --hot-reload-all",
+        "singleInstance": true // Reuse the same terminal
+      },
+      // Button 2: Quick Deploy (Local)
+      {
+        "name": "$(rocket) Quick Deploy", // $(rocket) icon
+        "tooltip": "Run: SimpleDevOpsToolkit --quick-deploy",
+        "color": "lightgreen",
+        "command": "SimpleDevOpsToolkit --quick-deploy",
+        "singleInstance": true
+      },
+      // Button 3: Quick Deploy (Remote)
+      {
+        "name": "$(cloud-upload) Remote Deploy", // $(cloud-upload) icon
+        "tooltip": "Run: SimpleDevOpsToolkit --remote --quick-deploy",
+        "color": "orange",
+        "command": "SimpleDevOpsToolkit --remote --quick-deploy",
+        "singleInstance": true
+      },
+      // Updated log buttons
+      {
+        "name": "$(output) Logs: Bot", // Renamed from Main
+        "tooltip": "View last 50 lines for foundrycord-bot",
+        "color": "lightblue",
+        "command": "SimpleDevOpsToolkit --logs=foundrycord-bot --lines=50", // Use actual name
+        "singleInstance": true
+      },
+      { // Added Web Logs button
+        "name": "$(browser) Logs: Web", // $(browser) icon
+        "tooltip": "View last 50 lines for foundrycord-web",
+        "color": "lightseagreen", // Different color
+        "command": "SimpleDevOpsToolkit --logs=foundrycord-web --lines=50",
+        "singleInstance": true
+      },
+      {
+        "name": "$(database) Logs: DB", // $(database) icon
+        "tooltip": "View last 50 lines for foundrycord-db",
+        "color": "lightcoral",
+        "command": "SimpleDevOpsToolkit --logs=foundrycord-db --lines=50", // Use actual name
+        "singleInstance": true
+      },
+      {
+        "name": "$(output) Follow: Bot", // Renamed from Main
+        "tooltip": "Follow logs for foundrycord-bot",
+        "color": "lightblue",
+        "command": "SimpleDevOpsToolkit --logs=foundrycord-bot --follow", // Use actual name
+        "singleInstance": true // Important: follow needs its own terminal
+      },
+      {
+        "name": "$(stop) Safe Down+Vols", // $(stop) icon
+        "tooltip": "Run: SimpleDevOpsToolkit --safe-down-volumes (Stops containers, removes volumes)",
+        "color": "tomato", // A warning-like color
+        "command": "SimpleDevOpsToolkit --safe-down-volumes",
+        "singleInstance": true 
+      }
+      // Optionally add Follow: Web button here if needed
+    ]
+  }
+
+  // ... other settings might be here ...
+}

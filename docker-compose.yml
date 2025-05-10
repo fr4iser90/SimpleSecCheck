@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  seculite:
+    build: .
+    image: seculite:latest
+    container_name: seculite
+    command: /target
+    volumes:
+      - ./results:/seculite/results
+      - ./logs:/seculite/logs
+      - /absolute/path/to/your/codebase:/target:ro
+    # Uncomment to expose ZAP's web interface or API (default port 8080)
+    # ports:
+    #   - "8080:8080"
+    # Uncomment and set the following if you want to scan a different path
+    # environment:
+    #   - TARGET_PATH=/target 

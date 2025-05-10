@@ -1,0 +1,8 @@
+rules:
+  - id: dangerous-function-detect
+    patterns:
+      - pattern: 'eval(...)'
+      - pattern: 'exec(...)'
+    message: 'Dangerous function usage detected (eval/exec).'
+    languages: [python, javascript, typescript]
+    severity: WARNING 

@@ -1,0 +1,8 @@
+# Trivy Config
+scan:
+  vulnerabilities:
+    - OS
+    - library
+format:
+  - table
+  - json 

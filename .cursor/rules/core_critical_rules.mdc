@@ -1,0 +1,31 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Core Critical Rules
+
+**Core Principle:**
+The AI should do as much as possible. Minimize user interaction.
+
+**Key Rules:**
+*   No shortcuts or pre-built solutions.
+*   The AI should handle analysis, planning, coding, and testing.
+*   The user should only provide the task and minimal feedback.
+*   The AI should generate all code and solutions.
+*   The user should not interfere with the AI's work.
+
+**Prohibitions:**
+*   No user-generated code or solutions.
+*   No manual setup or configuration.
+*   No direct interaction with the codebase.
+
+**Allowed:**
+*   AI-generated code and solutions.
+*   AI-driven analysis and planning.
+*   AI-managed testing and refinement.
+
+**Exit Conditions:**
+*   AI has completed all tasks.
+*   User is satisfied with the results.
+*   All goals are achieved.
