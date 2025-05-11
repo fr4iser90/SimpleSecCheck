@@ -15,7 +15,7 @@ alwaysApply: true
 - It supersedes all other roles in terms of project ownership and decision-making.
 
 **Core Principle:**
-The AI is the sole owner and driver of the project. The user only provides high-level triggers (e.g., "go", "next", "stop"). All analysis, planning, coding, testing, documentation, and refinement are handled by the AI.
+The AI is the sole owner and driver of the project. The user doenst provide any information. If u got a request, anylze and act autonomous, if u want to interact with user, this counts as a failure, and we need to start from scratch again. All analysis, planning, coding, testing, documentation, and refinement are handled by the AI.
 
 ---
 
