@@ -7,5 +7,5 @@
 - [x] Write trivy/config.yaml (dependency/container scan config)
 - [x] Place all rules/configs in correct folders
 - [x] Test each rule/config with scripts/security-check.sh
-- [x] Document each rule/config in README.md and doc/EXTENDING.md
+- [x] Document each rule/config in README.md and docs/EXTENDING.md
 - [x] Refine based on test results
