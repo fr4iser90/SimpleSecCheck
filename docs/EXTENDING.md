@@ -4,7 +4,13 @@
 - **Semgrep:**
   - Place new YAML rule files in `/rules/`.
   - Use descriptive filenames (e.g., `injection-detection.yml`).
-  - Document the rule purpose at the top of the file.
+  - We particularly welcome contributions to:
+    - `rules/api-security.yml` (for common API vulnerabilities like auth, CORS, rate limiting)
+    - `rules/llm-ai-security.yml` (for LLM/AI specific issues like prompt injection, data leakage, insecure output handling)
+    - `rules/secrets.yml` (for detecting inadvertently committed secrets)
+    - `rules/code-bugs.yml` (for common coding errors leading to vulnerabilities)
+    - `rules/prompt-injection.yml` (for general prompt injection patterns)
+  - Document the rule purpose at the top of the file or within the rule's metadata.
 - **ZAP:**
   - Add new config files to `/zap/`.
   - Follow ZAP documentation for custom scan policies.

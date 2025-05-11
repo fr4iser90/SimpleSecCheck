@@ -1,0 +1,29 @@
+[
+  {
+    "tool": "semgrep",
+    "check_id": "generic.secrets.security.hardcoded-secret.hardcoded-secret",
+    "path_pattern": "src/examples/.*",
+    "line_content_pattern": "just_an_example_key",
+    "reason": "This is an example key in a demonstration file, not a real secret."
+  },
+  {
+    "tool": "semgrep",
+    "check_id": "python.django.security.debug-true.debug-true",
+    "path_pattern": "settings_dev.py",
+    "reason": "DEBUG=True is intentional for development settings file."
+  },
+  {
+    "tool": "zap",
+    "plugin_id": "10021",
+    "uri_pattern": "http://localhost:8000/test-endpoints/no-x-content-type-options",
+    "parameter_pattern": null,
+    "reason": "Test endpoint intentionally missing X-Content-Type-Options for specific test case."
+  },
+  {
+    "tool": "trivy",
+    "vulnerability_id": "CVE-2020-12345",
+    "package_name": "example-lib",
+    "package_version_pattern": "1.0.*",
+    "reason": "This CVE is for a feature not used in our project, risk accepted after review for v1.0.x."
+  }
+] 

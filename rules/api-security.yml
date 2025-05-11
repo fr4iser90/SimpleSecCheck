@@ -1,0 +1,68 @@
+rules:
+  - id: missing-api-authentication
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              @app.route('/api/...')
+              def $FUNC(...):
+                ...
+          - pattern-inside: |
+              @api_view(['GET', 'POST'])
+              def $FUNC(...):
+                ...
+      - pattern-not: |
+          @login_required
+          ...
+      - pattern-not: |
+          permission_classes = [IsAuthenticated]
+          ...
+      - pattern-not-inside: |
+          if not request.user.is_authenticated:
+            ...
+    message: >-
+      API endpoint appears to be missing authentication. Ensure that all API
+      endpoints handling sensitive data or operations require proper
+      authentication.
+    languages:
+      - python
+    severity: HIGH
+
+  - id: overly-permissive-cors
+    patterns:
+      - pattern-either:
+          - pattern: |
+              set_header("Access-Control-Allow-Origin", "*")
+          - pattern: |
+              CORS(app, resources={r"/api/*": {"origins": "*"}})
+      - focus-metavariable: $ORIGIN
+        metavariable-regex:
+          metavariable: $ORIGIN
+          regex: \*
+    message: >-
+      Overly permissive CORS policy detected (Access-Control-Allow-Origin: *).
+      This can allow any domain to make requests to your API, potentially
+      leading to security vulnerabilities. Restrict origins to trusted domains.
+    languages:
+      - python
+      - javascript
+      - go
+    severity: MEDIUM
+
+  - id: potential-missing-rate-limiting
+    patterns:
+      - pattern-inside: |
+          @app.route('/api/...')
+          def $FUNC(...):
+            ...
+      - pattern-not: |
+          @limiter.limit(...)
+          ...
+      - pattern-not-inside: |
+          rate_limit_check(...)
+          ...
+    message: >-
+      This API endpoint does not seem to have explicit rate limiting.
+      Consider adding rate limiting to prevent abuse and ensure availability.
+    languages:
+      - python
+    severity: MEDIUM 
