@@ -1,0 +1,51 @@
+rules:
+  - id: exposed-llm-api-key
+    patterns:
+      - pattern-either:
+          - pattern: |
+              OPENAI_API_KEY = "sk-..."
+          - pattern: |
+              HF_TOKEN = "hf_..."
+          - pattern: |
+              GOOGLE_API_KEY = "AIza..."
+      - pattern-inside: |
+          ... = os.environ.get("...") # Good: loaded from env
+        message: "Potential hardcoded LLM API key. Load keys from environment variables or a secure vault."
+        languages:
+          - python
+        severity: CRITICAL
+
+  - id: llm-direct-html-output
+    patterns:
+      - pattern: |
+          response = llm.generate(...)
+          ...
+          return f"<html>{response}</html>"
+      - pattern-not: |
+          response = llm.generate(...)
+          ...
+          safe_response = html.escape(response) # Good: sanitized
+          return f"<html>{safe_response}</html>"
+    message: >-
+      LLM output is directly rendered in HTML without sanitization.
+      This could lead to XSS if the LLM generates malicious HTML/JavaScript.
+      Always sanitize LLM outputs before rendering them in web contexts.
+    languages:
+      - python
+    severity: HIGH
+
+  - id: llm-prompt-concatenation-user-input
+    patterns:
+      - pattern: |
+          prompt = "Translate to French: " + user_input
+          llm.generate(prompt)
+      - pattern: |
+          prompt = f"Summarize this: {user_text}"
+          llm.generate(prompt)
+    message: >-
+      User input is directly concatenated into an LLM prompt. This is a common
+      source of prompt injection vulnerabilities. Consider using structured input,
+      input validation, and output encoding, or specific libraries designed to prevent prompt injection.
+    languages:
+      - python
+    severity: HIGH 

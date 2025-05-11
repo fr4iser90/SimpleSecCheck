@@ -19,6 +19,7 @@ The AI should do as much as possible. Minimize user interaction.
 *   The user should only provide the task and minimal feedback.
 *   The AI should generate all code and solutions.
 *   The user should not interfere with the AI's work.
+*   Each file should not exceed 200 lines. If a script is to big , try to refactor and split!
 
 **Prohibitions:**
 *   No user-generated code or solutions.

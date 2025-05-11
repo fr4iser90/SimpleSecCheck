@@ -3,10 +3,10 @@
 - [x] Script to analyze all scan results (ZAP, Semgrep, Trivy)
 - [x] Sort and summarize findings by severity
 - [x] Explicitly output "All OK" sections
-- [ ] Generate to-do list for developers
-- [ ] Optionally: Generate HTML report
-- [ ] Optionally: Slack/Teams/Email notification for critical findings
-- [ ] Semgrep rules for API security (Auth, CORS, Rate Limiting)
-- [ ] Adjust ZAP policy for API endpoints
-- [ ] More Semgrep rules for LLM/AI security
-- [ ] Update documentation!
+- [x] Generate to-do list for developers
+- [x] Optionally: Generate HTML report
+- [x] Optionally: Slack/Teams/Email notification for critical findings
+- [x] Semgrep rules for API security (Auth, CORS, Rate Limiting)
+- [x] Adjust ZAP policy for API endpoints
+- [x] More Semgrep rules for LLM/AI security
+- [x] Update documentation!

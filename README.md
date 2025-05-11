@@ -19,6 +19,37 @@ SecuLite is an all-in-one security toolkit for modern software projects. It comb
 - **Unified Reporting:** Results as TXT/JSON, clearly aggregated
 - **Extensible & Open:** Easily add your own rules, tools, workflows
 - **CI/CD-ready:** Docker-based, GitHub Actions workflow included
+- **Email Notifications:** Optional email alerts for critical/high severity findings.
+
+---
+
+## ⚙️ Configuration
+
+SecuLite can be configured using environment variables. Create a `.env` file in the project root or set them in your shell.
+
+### Core Configuration
+
+- `ZAP_TARGET`: The target URL for ZAP to scan (e.g., `http://localhost:8000`). Can also be passed as an argument to `security-check.sh`.
+- `HTML_REPORT`: Set to `1` to generate an HTML report (default is `0` for console-only, though the Docker setup typically generates it).
+
+### Email Notification Configuration (Optional)
+
+To enable email notifications for critical/high severity findings, set the following environment variables:
+
+- `NOTIFICATION_EMAIL_RECIPIENT`: Email address to send notifications to.
+- `SMTP_SERVER`: SMTP server address (e.g., `smtp.example.com`).
+- `SMTP_PORT`: SMTP server port (e.g., `587` or `465`).
+- `SMTP_USER`: Username for SMTP authentication.
+- `SMTP_PASSWORD`: Password for SMTP authentication.
+- `SMTP_SENDER_EMAIL`: The "From" email address for notifications (defaults to `SMTP_USER` if not set).
+
+### LLM Provider Configuration (Optional)
+
+For AI-powered explanations of findings in the HTML report:
+
+- `LLM_PROVIDER`: Choose from `openai`, `gemini`, `huggingface`, `groq`, `mistral`, `anthropic` (defaults to `openai`).
+- `<PROVIDER>_API_KEY`: API key for the chosen provider (e.g., `OPENAI_API_KEY`).
+- `<PROVIDER>_MODEL`: Specific model for the chosen provider (e.g., `OPENAI_MODEL=gpt-4`).
 
 ---
 
@@ -60,6 +91,21 @@ cd SimpleSecCheck
      docker compose up --build zap-webui
      ```
    - WebUI available at: [http://localhost:8080](http://localhost:8080)
+
+## 🛠️ Available Scans & Rules
+
+SecuLite utilizes the following tools and rule categories:
+
+- **OWASP ZAP:** Web application vulnerabilities (baseline scan).
+- **Semgrep:** Static code analysis for:
+    - Code Bugs (`rules/code-bugs.yml`)
+    - Secrets Detection (`rules/secrets.yml`)
+    - Prompt Injection (`rules/prompt-injection.yml`)
+    - API Security (`rules/api-security.yml`)
+    - LLM/AI Security (`rules/llm-ai-security.yml`)
+- **Trivy:** Dependency and container image scanning.
+
+---
 
 ## 🤝 Contributing & Extending
 
