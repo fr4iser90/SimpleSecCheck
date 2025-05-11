@@ -173,4 +173,7 @@ echo "[SecuLite] Security checks complete. See $SUMMARY_TXT, $SUMMARY_JSON, and 
 # At the very end, before exit 0
 rm -f "$LOCK_FILE"
 
+# Ensure webui.js is always present in the results directory
+cp /seculite/scripts/webui.js /seculite/results/webui.js 2>/dev/null || cp scripts/webui.js results/webui.js 2>/dev/null
+
 exit 0 
