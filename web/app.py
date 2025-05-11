@@ -11,7 +11,11 @@ RESULTS_DIR = '/results'
 
 @app.route('/')
 def serve_dashboard():
-    return send_from_directory(RESULTS_DIR, 'security-summary.html')
+    summary_path = os.path.join(RESULTS_DIR, 'security-summary.html')
+    if os.path.exists(summary_path):
+        return send_from_directory(RESULTS_DIR, 'security-summary.html')
+    else:
+        return send_from_directory(os.path.dirname(__file__), 'loading.html')
 
 @app.route('/<path:filename>')
 def serve_static(filename):
@@ -33,7 +37,10 @@ def trigger_scan():
 
 @app.route('/status')
 def scan_status():
-    return jsonify({'status': SCAN_STATUS['status']})
+    lock_file = os.path.join(RESULTS_DIR, '.scan-running')
+    if os.path.exists(lock_file):
+        return jsonify({'status': 'running'})
+    return jsonify({'status': 'idle'})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000) 

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SecuLite – Loading...</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin-top: 10%; }
+    .spinner { margin: 2em auto; width: 50px; height: 50px; border: 6px solid #eee; border-top: 6px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="spinner"></div>
+  <h2>Preparing your security dashboard...</h2>
+  <p id="status">Checking scan status...</p>
+  <script>
+    async function pollStatus() {
+      try {
+        const res = await fetch('/status');
+        const data = await res.json();
+        document.getElementById('status').innerText = 'Scan status: ' + data.status;
+        if (data.status === 'idle') {
+          // Try to load the dashboard after scan is done
+          setTimeout(() => { window.location.reload(); }, 2000);
+        } else {
+          setTimeout(pollStatus, 2000);
+        }
+      } catch {
+        document.getElementById('status').innerText = 'Unable to connect to backend...';
+        setTimeout(pollStatus, 3000);
+      }
+    }
+    pollStatus();
+  </script>
+</body>
+</html> 

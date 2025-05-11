@@ -33,6 +33,10 @@ LOG_FILE="$LOGS_DIR/security-check.log"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 SUMMARY_JSON="$RESULTS_DIR/security-summary.json"
 
+# At the very top, after variable definitions
+LOCK_FILE="$RESULTS_DIR/.scan-running"
+touch "$LOCK_FILE"
+
 mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
 echo "[DEBUG] Listing $RESULTS_DIR before ZAP scan:"
 ls -l "$RESULTS_DIR"
@@ -165,5 +169,8 @@ jq -s 'reduce .[] as $item ({}; . * $item)' "$RESULTS_DIR/semgrep.json" "$RESULT
 python3 /seculite/scripts/generate-html-report.py
 
 echo "[SecuLite] Security checks complete. See $SUMMARY_TXT, $SUMMARY_JSON, and security-summary.html for results." | tee -a "$LOG_FILE" 
+
+# At the very end, before exit 0
+rm -f "$LOCK_FILE"
 
 exit 0 
