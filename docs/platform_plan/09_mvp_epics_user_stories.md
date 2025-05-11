@@ -98,6 +98,126 @@ This document outlines high-level Epics and initial User Stories for the SecuLit
 -   As a platform developer, I want tool outputs to be parsed and normalized into a common internal format for findings.
 -   As a platform developer, I want tool-specific severity levels to be mapped to a standardized internal severity scale.
 
-(Further Epics for Findings Management, Reporting, Notifications, Admin, UX, Security, and Documentation to be detailed based on P0 features...)
+## Epic 6: Findings Lifecycle Management (MVP Core)
+
+**Goal:** Enable users to view, triage, and manage security findings identified by scans.
+**P0 Features Covered:**
+- Aggregation of findings from multiple tools for a single scan.
+- Deduplication of identical findings (Basic).
+- Detailed Finding View (Description, severity, evidence, tool source, timestamps, basic audit trail for status changes).
+- Comprehensive Triage Workflow (Core states: New, Confirmed, False Positive, Resolved).
+- Assigning findings to specific users for remediation.
+- Advanced filtering, sorting, and searching of findings (Basic filters).
+- Severity level management (Standardized internal scale).
+
+**Initial User Stories:**
+-   As a user, I want to see all findings from a scan aggregated in one place.
+-   As a user, I want the system to automatically deduplicate identical findings from different tools or scans (basic).
+-   As a user, I want to view detailed information for each finding, including its description, severity, evidence, and source tool.
+-   As a user, I want to see when a finding was first seen and last seen, and a basic history of its status changes.
+-   As a user, I want to triage findings by setting their status to New, Confirmed, False Positive, or Resolved.
+-   As a Project Owner/Admin, I want to assign a finding to a specific user for remediation.
+-   As a user, I want to filter and sort the list of findings based on project, scan, severity, and status.
+-   As a user, I want findings to have a standardized severity level (e.g., Critical, High, Medium, Low, Info) mapped from the source tools.
+
+## Epic 7: Basic Reporting & Export (MVP)
+
+**Goal:** Provide users with essential reporting capabilities for scans and findings.
+**P0 Features Covered:**
+- Scan-specific summary reports.
+- Exportable reports in common formats (CSV/JSON for detailed finding export).
+
+**Initial User Stories:**
+-   As a user, I want to view a summary report for a specific scan, showing key details and a count of findings by severity.
+-   As a user, I want to export all finding details from a scan or project in CSV format for offline analysis.
+-   As a user, I want to export all finding details from a scan or project in JSON format for integration with other tools.
+
+## Epic 8: Core Notification System (MVP)
+
+**Goal:** Inform users about important scan events and finding assignments.
+**P0 Features Covered:**
+- User notifications for scan completion (success/failure).
+- Alerts for newly discovered findings (with configurable severity threshold).
+- Notifications for findings assigned to a user.
+- Configurable notification preferences per user (Channels: Email as baseline MVP).
+
+**Initial User Stories:**
+-   As a user, I want to receive an email notification when a scan I initiated completes (successfully or with failure).
+-   As a user, I want to receive an email alert when a new finding above a certain severity (e.g., High, Critical) is discovered in my projects.
+-   As a user, I want to be able to configure the minimum severity threshold for receiving new finding alerts.
+-   As a user, I want to receive an email notification when a finding is assigned to me for remediation.
+-   As a user, I want basic preferences to manage my email notifications (e.g., enable/disable certain types).
+
+## Epic 9: System Administration Basics (MVP)
+
+**Goal:** Provide administrators with essential tools for user and system management.
+**P0 Features Covered:**
+- User Management Interface (Invite users, manage roles, activate/deactivate accounts).
+- Admin-initiated password reset for users.
+- Configuration for global system settings (e.g., default email 'from' address, SMTP server).
+
+**Initial User Stories:**
+-   As an administrator, I want to invite new users to the platform.
+-   As an administrator, I want to assign roles to users.
+-   As an administrator, I want to activate or deactivate user accounts.
+-   As an administrator, I want to be able to reset a user's password if they are locked out.
+-   As an administrator, I want to configure the system's SMTP server settings for sending emails.
+-   As an administrator, I want to set a default 'from' address for system emails.
+
+## Epic 10: Foundational User Experience (MVP - Guiding Principles)
+
+**Goal:** Ensure the MVP provides a usable, clear, and consistent user experience.
+**P0 Features Covered:** (These are primarily guiding principles for all UI development)
+- Intuitive, clean, modern web interface (Vue.js).
+- Fast load times and responsive interactions.
+- Responsive design (desktop focus initially).
+- Clear navigation and information hierarchy.
+- Consistent UI patterns, terminology, visual design.
+- Clear, immediate, contextual visual feedback.
+- Workflow optimization, sensible defaults.
+- User-friendly forms, proactive validation.
+- User-friendly, informative error messages.
+- Helpful tooltips, inline help, empty states.
+
+**Initial User Stories:** (These stories represent the *application* of the principles to MVP features)
+-   As a user, I expect the interface to be easy to understand and navigate for all MVP features.
+-   As a user, I expect pages and actions within the MVP scope to load quickly.
+-   As a user on a desktop, I expect the MVP features to be well-laid out and functional.
+-   As a user, I expect to see clear loading indicators and success/error messages for my actions within MVP features.
+-   As a user, I expect forms for MVP features (e.g., project creation, scan config) to have sensible defaults and clear validation.
+
+## Epic 11: Core Platform Security (MVP - Guiding Principles & Features)
+
+**Goal:** Ensure the MVP is built with fundamental security practices in place.
+**P0 Features Covered:** (Mix of principles and discrete features)
+- Adherence to secure coding practices.
+- Regular automated security testing (Basic SAST/SCA).
+- Protection against common web vulnerabilities.
+- Robust input validation and output encoding.
+- Secure handling of secrets and credentials.
+- API endpoints enforce authN/authZ.
+- Anti-CSRF tokens.
+- Dependency management and vulnerability scanning.
+
+**Initial User Stories:** (Representing the implementation of these for MVP)
+-   As a developer, I will follow secure coding guidelines when building MVP features.
+-   As a developer, I will ensure basic SAST and SCA scans are run against the platform's codebase during MVP development.
+-   As a developer, I will implement defenses against common vulnerabilities like XSS and SQLi for all MVP features handling user input.
+-   As a developer, I will ensure all user-supplied input for MVP features is validated on the backend.
+-   As a developer, I will ensure secrets like the Django SECRET_KEY and database credentials are not hardcoded and are handled securely for the MVP deployment.
+-   As a developer, I will ensure all MVP API endpoints correctly enforce authentication and authorization rules defined in RBAC.
+-   As a developer, I will ensure Django's built-in CSRF protection is active for all relevant MVP web forms.
+-   As a developer, I will regularly scan project dependencies for known vulnerabilities during MVP development.
+
+## Epic 12: Essential Developer & Release Documentation (MVP)
+
+**Goal:** Provide the minimum necessary documentation for developers to contribute and for users to understand releases.
+**P0 Features Covered:**
+- Detailed setup guide for the local development environment.
+- Release Notes / Changelog.
+
+**Initial User Stories:**
+-   As a new developer joining the project, I want a clear guide on how to set up my local development environment for the MVP.
+-   As a user/stakeholder, I want to see release notes or a changelog for each version of the MVP that is deployed, detailing what has changed.
 
 --- 
