@@ -4,6 +4,7 @@
 - All-in-one security toolkit (ZAP, Semgrep, Trivy) is robust and CI/CD-ready.
 - ZAP report persistence is solved with a fallback copy mechanism.
 - Roles/rules are streamlined for autonomous, self-improving management.
+- Dashboard with scan button and status is implemented.
 
 ## Immediate Next Steps
 1. Standardize and cross-link all role/rule files.
@@ -12,12 +13,14 @@
 4. Add configurable scan profiles (depth, speed, custom rules).
 5. Add auto-fix suggestions for common issues.
 6. Add a simple dashboard or status badge for CI/CD.
+7. Implement LLM integration for vulnerability analysis (Phase 9).
 
 ## Longer-Term Roadmap
 - Compliance checks (OWASP Top 10, SLSA, etc.)
 - Auto-update rules and tools
 - Integration with external vulnerability databases
 - Advanced reporting and analytics
+- Enhanced LLM capabilities (multi-model support, custom prompts)
 
 ## Self-Monitoring
 - This plan will be updated after each major change.

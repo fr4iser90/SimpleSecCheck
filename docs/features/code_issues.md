@@ -1,17 +1,17 @@
 # Code Issues Checks (Semgrep)
 
-SecuLite prüft deinen Code auf typische Fehler, unsichere Patterns und Hardcoded Secrets.
+SecuLite checks your code for common bugs, unsafe patterns, and hardcoded secrets.
 
-## Was wird geprüft?
-- Unsichere Funktionen (z.B. eval, exec)
-- Hardcoded Secrets (z.B. Passwörter, API-Keys)
-- Code-Bugs und unsichere Patterns
+## What is checked?
+- Dangerous functions (e.g. eval, exec)
+- Hardcoded secrets (e.g. passwords, API keys)
+- Code bugs and unsafe patterns
 
-## Wie funktioniert der Check?
-- Mit Semgrep und eigenen Regeln im Ordner `rules/`
-- Die Regeln sind für Python, JavaScript, TypeScript ausgelegt
+## How does the check work?
+- Uses Semgrep and custom rules in the `rules/` folder
+- Rules are designed for Python, JavaScript, TypeScript
 
-## Beispielregel (Dangerous Function)
+## Example Rule (Dangerous Function)
 ```yaml
 rules:
   - id: dangerous-function-detect
@@ -23,17 +23,17 @@ rules:
     severity: WARNING
 ```
 
-## Beispiel-Finding
+## Example Finding
 ```python
 user_code = input()
 eval(user_code)  # <-- Finding!
 ```
 
-## Ergebnisse
-- Findings stehen in `results/semgrep.txt` und `results/semgrep.json`
+## Results
+- Findings are in `results/semgrep.txt` and `results/semgrep.json`
 
-## Eigene Regeln ergänzen
-- Lege eine neue YAML-Datei im Ordner `rules/` an
-- Siehe [Semgrep Doku](https://semgrep.dev/docs/writing-rules/) für eigene Patterns
+## Add your own rules
+- Create a new YAML file in the `rules/` folder
+- See [Semgrep Docs](https://semgrep.dev/docs/writing-rules/) for custom patterns
 
 ---

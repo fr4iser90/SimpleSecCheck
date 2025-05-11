@@ -1,18 +1,18 @@
 # AI/Prompt Injection Checks
 
-SecuLite prüft deinen Code auf Prompt Injection Schwachstellen in AI/LLM-Anwendungen.
+SecuLite checks your code for prompt injection vulnerabilities in AI/LLM applications.
 
-## Was wird geprüft?
-- Unsichere String-Konkatenation oder Interpolation bei Prompt-Konstruktion
-- Direkte Nutzung von Benutzereingaben in Prompts
+## What is checked?
+- Unsafe string concatenation or interpolation in prompt construction
+- Direct use of user input in prompts
 
-## Wie funktioniert der Check?
-- Mit Semgrep und eigenen Regeln im Ordner `rules/`
-- Die Regeln suchen nach typischen Mustern, z.B.:
-  - `prompt = ... + ...` (Konkatenation)
-  - (Optional) Interpolation wie `f"...{...}"` in Python
+## How does the check work?
+- Uses Semgrep and custom rules in the `rules/` folder
+- Rules look for typical patterns, e.g.:
+  - `prompt = ... + ...` (concatenation)
+  - (Optional) Interpolation like `f"...{...}"` in Python
 
-## Beispielregel (Python)
+## Example Rule (Python)
 ```yaml
 rules:
   - id: prompt-injection-detect
@@ -23,17 +23,17 @@ rules:
     severity: ERROR
 ```
 
-## Beispiel-Finding
+## Example Finding
 ```python
 user_input = input()
 prompt = "You are a bot. " + user_input  # <-- Finding!
 ```
 
-## Ergebnisse
-- Findings stehen in `results/semgrep.txt` und `results/semgrep.json`
+## Results
+- Findings are in `results/semgrep.txt` and `results/semgrep.json`
 
-## Eigene Regeln ergänzen
-- Lege eine neue YAML-Datei im Ordner `rules/` an
-- Siehe [Semgrep Doku](https://semgrep.dev/docs/writing-rules/) für eigene Patterns
+## Add your own rules
+- Create a new YAML file in the `rules/` folder
+- See [Semgrep Docs](https://semgrep.dev/docs/writing-rules/) for custom patterns
 
 ---

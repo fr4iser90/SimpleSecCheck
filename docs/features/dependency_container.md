@@ -1,22 +1,22 @@
 # Dependency & Container Checks (Trivy)
 
-SecuLite prüft deine Dependencies und Container auf bekannte Schwachstellen.
+SecuLite checks your dependencies and containers for known vulnerabilities.
 
-## Was wird geprüft?
-- Open Source Libraries (Python, JS, etc.)
-- Betriebssystem-Pakete
-- Container-Images
+## What is checked?
+- Open source libraries (Python, JS, etc.)
+- Operating system packages
+- Container images
 
-## Wie funktioniert der Check?
-- Mit Trivy und Konfiguration in `trivy/config.yaml`
-- Das Skript ruft `trivy fs` auf und scannt das Zielverzeichnis
+## How does the check work?
+- Uses Trivy and configuration in `trivy/config.yaml`
+- The script runs `trivy fs` and scans the target directory
 
-## Beispiel-Aufruf
+## Example Command
 ```sh
 trivy fs --config trivy/config.yaml /target --format json > results/trivy.json
 ```
 
-## Beispiel-Finding (Ausschnitt aus JSON)
+## Example Finding (JSON excerpt)
 ```json
 {
   "Vulnerabilities": [
@@ -30,11 +30,11 @@ trivy fs --config trivy/config.yaml /target --format json > results/trivy.json
 }
 ```
 
-## Ergebnisse
-- Findings stehen in `results/trivy.txt` und `results/trivy.json`
+## Results
+- Findings are in `results/trivy.txt` and `results/trivy.json`
 
-## Erweiterung
-- Trivy-Konfiguration in `trivy/config.yaml` anpassen
-- Siehe [Trivy Doku](https://aquasecurity.github.io/trivy/latest/docs/) für weitere Optionen
+## Extension
+- Adjust Trivy configuration in `trivy/config.yaml`
+- See [Trivy Docs](https://aquasecurity.github.io/trivy/latest/docs/) for more options
 
 ---

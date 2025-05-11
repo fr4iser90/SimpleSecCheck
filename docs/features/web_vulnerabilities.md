@@ -1,24 +1,24 @@
 # Web Vulnerability Checks (ZAP)
 
-SecuLite prüft deine Webanwendung automatisiert auf typische Schwachstellen.
+SecuLite automatically checks your web application for common vulnerabilities.
 
-## Was wird geprüft?
+## What is checked?
 - XSS (Cross-Site Scripting)
 - SQL Injection
-- Unsichere Konfigurationen
-- Weitere OWASP Top 10 Schwachstellen
+- Insecure configurations
+- Other OWASP Top 10 vulnerabilities
 
-## Wie funktioniert der Check?
-- Mit OWASP ZAP (Baseline Scan)
-- Das Skript ruft `zap-baseline.py` auf und scannt die Ziel-URL (z.B. http://localhost:8000)
-- Ergebnisse werden als XML/HTML gespeichert
+## How does the check work?
+- Uses OWASP ZAP (Baseline Scan)
+- The script runs `zap-baseline.py` and scans the target URL (e.g. http://localhost:8000)
+- Results are saved as XML/HTML
 
-## Beispiel-Aufruf
+## Example Command
 ```sh
 zap-baseline.py -t "http://localhost:8000" -c zap/baseline.conf -r results/zap-report.xml
 ```
 
-## Beispiel-Finding (Ausschnitt aus XML)
+## Example Finding (XML excerpt)
 ```xml
 <alertitem>
   <alert>Cross Site Scripting (Reflected)</alert>
@@ -27,12 +27,12 @@ zap-baseline.py -t "http://localhost:8000" -c zap/baseline.conf -r results/zap-r
 </alertitem>
 ```
 
-## Ergebnisse
-- Reports in `results/zap-report.xml` (und optional HTML)
-- Zusammenfassung in `results/security-summary.txt`
+## Results
+- Reports in `results/zap-report.xml` (and optionally HTML)
+- Summary in `results/security-summary.txt`
 
-## Erweiterung
-- ZAP-Konfiguration in `zap/baseline.conf` anpassen
-- Für manuelle Tests: ZAP WebUI aktivieren (siehe README)
+## Extension
+- Adjust ZAP configuration in `zap/baseline.conf`
+- For manual tests: enable ZAP WebUI (see README)
 
 ---
