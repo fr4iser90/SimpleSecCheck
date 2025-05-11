@@ -121,92 +121,96 @@ Prioritization will be an ongoing process, and these levels may be adjusted as t
 
 ## 8. Notifications & Alerts (Application-Level)
 
--   User notifications for scan completion (success/failure).
-    -   Configurable scope: e.g., only for scans initiated by the user, or for all scans on projects they own/are a member of.
--   Alerts for newly discovered findings.
-    -   Configurable severity threshold (e.g., Critical, High, Medium) for triggering alerts.
-    -   Option for immediate alert delivery or inclusion in a periodic digest (see preferences).
--   Notifications for findings assigned to a user.
--   Configurable notification preferences per user:
-    -   Channels: Email, In-app notifications.
-    -   Frequency for digests (e.g., daily, weekly summary of relevant events).
-    -   Ability to opt-in/opt-out of specific notification types (e.g., new finding alerts vs. scan completion).
--   Notifications for Triage Activity (configurable to manage noise):
-    -   When a finding a user is assigned to (or reported, or is watching) has its status changed (e.g., marked False Positive, Resolved).
-    -   When a comment is added to a finding a user is assigned to or watching.
--   Notifications for Scheduled Report Generation:
+-   User notifications for scan completion (success/failure). - **P0 (MVP)**
+    -   Configurable scope: e.g., only for scans initiated by the user, or for all scans on projects they own/are a member of. - **P1 (Essential)**
+-   Alerts for newly discovered findings. - **P0 (MVP)**
+    -   Configurable severity threshold (e.g., Critical, High, Medium) for triggering alerts. - **P0 (MVP)**
+    -   Option for immediate alert delivery or inclusion in a periodic digest (see preferences). - **P1 (Essential)** (Digest is part of User Preferences P1)
+-   Notifications for findings assigned to a user. - **P0 (MVP)**
+-   Configurable notification preferences per user: - **P1 (Essential)**
+    -   Channels: Email, In-app notifications. - **P0 (MVP)** (Email as baseline MVP, In-app notifications are **P1 (Essential)**)
+    -   Frequency for digests (e.g., daily, weekly summary of relevant events). - **P1 (Essential)**
+    -   Ability to opt-in/opt-out of specific notification types (e.g., new finding alerts vs. scan completion). - **P1 (Essential)**
+-   Notifications for Triage Activity (configurable to manage noise): - **P1 (Essential)**
+    -   When a finding a user is assigned to (or reported, or is watching) has its status changed (e.g., marked False Positive, Resolved). - **P1 (Essential)**
+    -   When a comment is added to a finding a user is assigned to or watching. - **P1 (Essential)**
+-   Notifications for Scheduled Report Generation: - **P2 (Important)** (Depends on Report Scheduling in Sec 7)
     -   Confirmation upon successful generation of a scheduled report, with a link to the report.
--   (Future) Integration with external notification channels like Slack/Teams for application events (distinct from CI/CD notifications).
+-   (Future) Integration with external notification channels like Slack/Teams for application events (distinct from CI/CD notifications). - **P2 (Important)**
 
 ## 9. Administration & System Management
 
--   System Health Dashboard for administrators (DB status, Redis status, Celery worker status, disk space, etc.).
-    -   Includes application-level health indicators (e.g., API responsiveness, key workflow health).
-    -   Basic interface for viewing/searching system logs for troubleshooting (complementary to centralized Docker logging).
--   User Management Interface (Invite users, manage roles, activate/deactivate accounts).
-    -   Admin-initiated password reset for users.
-    -   Ability to view user activity (e.g., last login time).
-    -   (Future P2/P3) Bulk import/export of users.
--   Tool Management Interface (Add/configure tool definitions, update default parameters - see also Section 5 features like enable/disable, health checks).
--   Background Task Monitoring (View Celery task queues, worker status, task history).
-    -   (Future P1/P2) Ability to retry selected failed tasks (if Celery and task design allow safe retries).
-    -   (Future P2/P3) Interface for purging old task history/results.
--   Configuration for global system settings (e.g., default email 'from' address, platform name/branding elements if customizable) and external integrations (e.g., JIRA, Slack for app notifications, SMTP server).
--   System Maintenance Mode (Priority: P1/P2): Ability for an administrator to put the platform into a temporary maintenance mode, displaying a custom message to users, to prevent access during upgrades or urgent maintenance.
+-   System Health Dashboard for administrators (DB status, Redis status, Celery worker status, disk space, etc.). - **P1 (Essential)** (Basic health check: DB, Redis, Celery worker status)
+    -   Includes application-level health indicators (e.g., API responsiveness, key workflow health). - **P2 (Important)**
+    -   Basic interface for viewing/searching system logs for troubleshooting (complementary to centralized Docker logging). - **P2 (Important)**
+-   User Management Interface (Invite users, manage roles, activate/deactivate accounts). - **P0 (MVP)**
+    -   Admin-initiated password reset for users. - **P0 (MVP)**
+    -   Ability to view user activity (e.g., last login time). - **P1 (Essential)**
+    -   (Future P2/P3) Bulk import/export of users. - **P3 (Future Consideration)**
+-   Tool Management Interface (Add/configure tool definitions, update default parameters - see also Section 5 features like enable/disable, health checks). - Covered by **P1 (Essential)** in Section 5.
+-   Background Task Monitoring (View Celery task queues, worker status, task history). - **P1 (Essential)** (Basic view of queues & worker status)
+    -   (Future P1/P2) Ability to retry selected failed tasks (if Celery and task design allow safe retries). - **P2 (Important)**
+    -   (Future P2/P3) Interface for purging old task history/results. - **P3 (Future Consideration)**
+-   Configuration for global system settings (e.g., default email 'from' address, platform name/branding elements if customizable) - **P0 (MVP)**
+    -   and external integrations (e.g., JIRA, Slack for app notifications, SMTP server). - SMTP is **P0 (MVP)**, JIRA/Slack **P2 (Important)** (corresponds to features in other sections)
+-   System Maintenance Mode (Priority: P1/P2): Ability for an administrator to put the platform into a temporary maintenance mode, displaying a custom message to users, to prevent access during upgrades or urgent maintenance. - **P2 (Important)** (Renamed from P1/P2)
 -   Data Management (Future Consideration):
-    -   (Future P2/P3) Admin interface options for data management, such as triggering manual backups (if applicable beyond automated system backups), viewing backup status, or setting up policies for archival/purging of very old scan data or findings to manage storage.
+    -   (Future P2/P3) Admin interface options for data management, such as triggering manual backups (if applicable beyond automated system backups), viewing backup status, or setting up policies for archival/purging of very old scan data or findings to manage storage. - **P3 (Future Consideration)**
 -   Licensing Management (Future Consideration/If Applicable):
-    -   (Future P3/If Applicable) Interface for managing software licenses or feature entitlements if the platform has commercial tiers or editions.
+    -   (Future P3/If Applicable) Interface for managing software licenses or feature entitlements if the platform has commercial tiers or editions. - **P3 (Future Consideration)**
 
 ## 10. User Experience (UX) & User Interface (UI)
 
--   Intuitive, clean, and modern web interface built with Vue.js (as planned).
--   Fast load times and responsive interactions throughout the application, even with large datasets (e.g., many findings or projects).
--   Responsive design for usability across different screen sizes (desktop focus initially, with consideration for tablet/mobile readability).
--   Clear navigation and information hierarchy.
-    -   Breadcrumbs or clear visual cues for navigation hierarchy, especially in deeper sections.
--   Consistent UI patterns, terminology, and visual design across all modules and pages to reduce cognitive load.
--   Clear, immediate, and contextual visual feedback for user actions (e.g., loading indicators for asynchronous operations, success/error messages that are easily noticeable, confirmation dialogs for destructive actions like deletions).
--   Workflow optimization to minimize clicks and effort for common tasks. Provide sensible defaults for configurations where possible.
--   User-friendly forms and data displays with proactive validation to prevent errors before submission.
--   User-friendly, informative error messages that guide the user on how to resolve the issue or who to contact when things go wrong.
--   Accessibility considerations (aiming for WCAG AA where feasible).
--   Helpful tooltips, inline help, and well-designed empty states for sections with no data yet (e.g., no projects, no scans) that guide users on what to do next. Contextual onboarding tours or checklists for first-time users or new features.
--   (Future P1/P2) Global search functionality allowing users to quickly find projects, scan configurations, or specific findings from anywhere in the application.
--   (Future P2/P3) User-customizable dashboard widgets (selection, arrangement) or views for tables (column visibility, order).
--   (Future P2) Support for keyboard navigation for power users and improved accessibility.
+-   Intuitive, clean, and modern web interface built with Vue.js (as planned). - **P0 (MVP)** (This is an overarching goal and guiding principle for all UI/UX work)
+-   Fast load times and responsive interactions throughout the application, even with large datasets (e.g., many findings or projects). - **P0 (MVP)** (Continuous performance consideration)
+-   Responsive design for usability across different screen sizes (desktop focus initially, with consideration for tablet/mobile readability). - **P0 (MVP)** (Desktop focus is MVP; tablet/mobile best-effort for MVP, improved in **P1 (Essential)**)
+-   Clear navigation and information hierarchy. - **P0 (MVP)**
+    -   Breadcrumbs or clear visual cues for navigation hierarchy, especially in deeper sections. - **P1 (Essential)**
+-   Consistent UI patterns, terminology, and visual design across all modules and pages to reduce cognitive load. - **P0 (MVP)** (Guiding principle)
+-   Clear, immediate, and contextual visual feedback for user actions (e.g., loading indicators for asynchronous operations, success/error messages that are easily noticeable, confirmation dialogs for destructive actions like deletions). - **P0 (MVP)** (Guiding principle)
+-   Workflow optimization to minimize clicks and effort for common tasks. Provide sensible defaults for configurations where possible. - **P0 (MVP)** (Guiding principle)
+-   User-friendly forms and data displays with proactive validation to prevent errors before submission. - **P0 (MVP)** (Guiding principle)
+-   User-friendly, informative error messages that guide the user on how to resolve the issue or who to contact when things go wrong. - **P0 (MVP)** (Guiding principle)
+-   Accessibility considerations (aiming for WCAG AA where feasible). - **P1 (Essential)** (This is an ongoing effort, with foundational aspects in MVP and continuous improvement planned for P1 and beyond)
+-   Helpful tooltips, inline help, and well-designed empty states for sections with no data yet (e.g., no projects, no scans) that guide users on what to do next. - **P0 (MVP)**
+    - Contextual onboarding tours or checklists for first-time users or new features. - **P2 (Important)**
+-   (Future P1/P2) Global search functionality allowing users to quickly find projects, scan configurations, or specific findings from anywhere in the application. - **P2 (Important)** (Clarified from P1/P2)
+-   (Future P2/P3) User-customizable dashboard widgets (selection, arrangement) or views for tables (column visibility, order). - **P3 (Future Consideration)** (Clarified from P2/P3)
+-   (Future P2) Support for keyboard navigation for power users and improved accessibility. - **P2 (Important)**
 
 ## 11. Security (Platform Self-Security)
 
--   Adherence to secure coding practices throughout platform development (e.g., following OWASP Secure Coding Practices, ASVS where applicable).
--   Regular automated security testing of the platform codebase (using its own capabilities where possible - dogfooding). Includes SAST, DAST (on a staging/test instance of the platform itself), and SCA for its own codebase and dependencies.
--   Protection against common web vulnerabilities (OWASP Top 10 - XSS, SQLi, CSRF, etc.) through a defense-in-depth approach.
--   Robust input validation on all user-supplied data (API parameters, UI form fields, configuration settings) and consistent, context-aware output encoding to prevent injection attacks (XSS, SQLi, command injection, etc.).
--   Secure handling of secrets and credentials used by the platform itself (e.g., Django SECRET_KEY, database credentials, API keys for any external services it consumes), ensuring they are stored securely (e.g., using environment variables, Docker secrets, or a vault solution) and have restricted access at rest and in transit.
--   Ensure all API endpoints enforce appropriate authentication and fine-grained authorization checks (as per RBAC). Protect against common API vulnerabilities (e.g., mass assignment, broken object-level authorization, excessive data exposure).
--   Implement rate limiting on sensitive endpoints (e.g., login, password reset, user creation, key API functions) to mitigate brute-force attacks and other abuse. Implement and enforce anti-CSRF tokens for all state-changing web requests.
--   Implement a strong and restrictive Content Security Policy (CSP) to further mitigate XSS and data injection attacks.
--   Dependency management and vulnerability scanning for platform components. Includes regular review and removal of unused or outdated dependencies to minimize attack surface.
--   (Future) Regular third-party security audits/penetration tests.
+-   Adherence to secure coding practices throughout platform development (e.g., following OWASP Secure Coding Practices, ASVS where applicable). - **P0 (MVP)** (Ongoing guiding principle)
+-   Regular automated security testing of the platform codebase (using its own capabilities where possible - dogfooding). - **P0 (MVP)** (Basic SAST/SCA for its own codebase from the start)
+    - Includes SAST, DAST (on a staging/test instance of the platform itself), and SCA for its own codebase and dependencies. - DAST for self is **P1 (Essential)**
+-   Protection against common web vulnerabilities (OWASP Top 10 - XSS, SQLi, CSRF, etc.) through a defense-in-depth approach. - **P0 (MVP)** (Ongoing guiding principle)
+-   Robust input validation on all user-supplied data (API parameters, UI form fields, configuration settings) and consistent, context-aware output encoding to prevent injection attacks (XSS, SQLi, command injection, etc.). - **P0 (MVP)** (Ongoing guiding principle)
+-   Secure handling of secrets and credentials used by the platform itself (e.g., Django SECRET_KEY, database credentials, API keys for any external services it consumes), ensuring they are stored securely (e.g., using environment variables, Docker secrets, or a vault solution) and have restricted access at rest and in transit. - **P0 (MVP)** (Fundamental)
+-   Ensure all API endpoints enforce appropriate authentication and fine-grained authorization checks (as per RBAC). Protect against common API vulnerabilities (e.g., mass assignment, broken object-level authorization, excessive data exposure). - **P0 (MVP)** (Ongoing guiding principle, tied to RBAC implementation)
+-   Implement rate limiting on sensitive endpoints (e.g., login, password reset, user creation, key API functions) to mitigate brute-force attacks and other abuse. - **P1 (Essential)**
+    - Implement and enforce anti-CSRF tokens for all state-changing web requests. - **P0 (MVP)** (Standard Django feature)
+-   Implement a strong and restrictive Content Security Policy (CSP) to further mitigate XSS and data injection attacks. - **P1 (Essential)**
+-   Dependency management and vulnerability scanning for platform components. Includes regular review and removal of unused or outdated dependencies to minimize attack surface. - **P0 (MVP)** (Ongoing process, e.g., using `pip-audit`, `npm audit` regularly)
+-   (Future) Regular third-party security audits/penetration tests. - **P3 (Future Consideration)**
 
 ## 12. Documentation
 
--   **User Documentation**: Comprehensive guides on how to use all platform features, aimed at end-users (security engineers, developers).
-    -   Delivered via an online, searchable documentation portal.
-    -   Include tutorials, use-case examples, and FAQs.
-    -   In-app contextual help links pointing to relevant documentation sections.
--   **Developer Documentation**: Detailed API documentation (e.g., generated from OpenAPI specs), guides for contributing to the platform, and architectural overviews.
-    -   Data model diagrams and explanations.
-    -   Detailed setup guide for the local development environment.
-    -   Guidelines for code style, testing, and contribution process.
--   **Administration Guide**: Instructions for platform administrators on installation, configuration, maintenance, and troubleshooting.
-    -   Detailed backup and restore procedures.
-    -   Step-by-step upgrade guide for new platform versions.
-    -   Guidance on performance tuning and scaling.
--   **Tool Integration Guide**: Documentation for developers on how to integrate new security tools into the SecuLite v2 framework.
-    -   Best practices for writing parsers and normalizing tool outputs.
--   **Security Documentation**: Dedicated security documentation outlining the platform's security architecture, data handling practices, incident response contacts (if applicable), and security features. This can be for internal reference and/or for users/auditors.
--   **Release Notes / Changelog**: Maintain a clear, versioned, and publicly accessible changelog for each platform release, detailing new features, significant improvements, bug fixes, and any breaking changes.
--   **Contribution Guide**: A guide for external or internal contributors detailing how to report bugs, suggest features, coding standards, testing requirements, and the PR process.
+-   **User Documentation**: Comprehensive guides on how to use all platform features, aimed at end-users (security engineers, developers). - **P1 (Essential)** (Core P0/P1 features must be documented for the P1 release that follows MVP)
+    -   Delivered via an online, searchable documentation portal. - **P1 (Essential)**
+    -   Include tutorials, use-case examples, and FAQs. - **P1 (Essential)**
+    -   In-app contextual help links pointing to relevant documentation sections. - **P2 (Important)**
+-   **Developer Documentation**: Detailed API documentation (e.g., generated from OpenAPI specs), guides for contributing to the platform, and architectural overviews. - **P1 (Essential)** (API docs for P0 API functionality; contribution guide as team/community grows)
+    -   Data model diagrams and explanations. - **P1 (Essential)**
+    -   Detailed setup guide for the local development environment. - **P0 (MVP)** (Essential for any developer to start working on the project)
+    -   Guidelines for code style, testing, and contribution process. - **P1 (Essential)**
+-   **Administration Guide**: Instructions for platform administrators on installation, configuration, maintenance, and troubleshooting. - **P1 (Essential)** (For deploying and managing a P1-level system)
+    -   Detailed backup and restore procedures. - **P1 (Essential)**
+    -   Step-by-step upgrade guide for new platform versions. - **P2 (Important)** (Becomes critical post-P1 as the system evolves)
+    -   Guidance on performance tuning and scaling. - **P2 (Important)**
+-   **Tool Integration Guide**: Documentation for developers on how to integrate new security tools into the SecuLite v2 framework. - **P1 (Essential)** (If the goal is to have others integrate tools soon after MVP/P1)
+    -   Best practices for writing parsers and normalizing tool outputs. - **P1 (Essential)**
+-   **Security Documentation**: Dedicated security documentation outlining the platform's security architecture, data handling practices, incident response contacts (if applicable), and security features. This can be for internal reference and/or for users/auditors. - **P2 (Important)**
+-   **Release Notes / Changelog**: Maintain a clear, versioned, and publicly accessible changelog for each platform release, detailing new features, significant improvements, bug fixes, and any breaking changes. - **P0 (MVP)** (Essential from the very first internal or external release)
+-   **Contribution Guide**: A guide for external or internal contributors detailing how to report bugs, suggest features, coding standards, testing requirements, and the PR process. - **P1 (Essential)** (This is the developer-focused contribution guide, previously mentioned)
 
 --- 
