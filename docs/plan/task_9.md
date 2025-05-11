@@ -21,9 +21,9 @@ Integrate LLM capabilities into SecuLite to provide AI-powered vulnerability exp
 
 ### 3. Provider Selection & Configuration
 - [ ] Implement provider selection logic (config & UI)
-- [ ] Add UI/UX for API-Key input und Provider-Auswahl
-- [ ] Dokumentiere Datenschutz, Kosten, Vor-/Nachteile je Option
-- [ ] Fallback-Logik bei Fehlern oder Limits
+- [ ] Add UI/UX for API-Key input and provider selection
+- [ ] Document privacy, costs, pros/cons for each option
+- [ ] Fallback logic for errors or limits
 
 ### 4. Vulnerability Analysis Integration
 - [ ] Create vulnerability explanation generator
@@ -51,7 +51,7 @@ Integrate LLM capabilities into SecuLite to provide AI-powered vulnerability exp
 ## Success Criteria
 - AI explanations for all vulnerability types
 - Actionable fix suggestions
-- Configurable LLM backend (OpenAI, Google, HuggingFace, lokal)
+- Configurable LLM backend (OpenAI, Google, HuggingFace, local)
 - User can select and configure provider
-- Datenschutz und Kosten transparent dokumentiert
+- Privacy and costs transparently documented
 - Seamless dashboard integration 

@@ -1,14 +1,14 @@
 # Task List: Phase 7 – Advanced Automation, Integration & Developer Experience
 
-- [ ] Automatisches Mapping aller Findings auf OWASP Top 10, DSGVO, NIST, etc.
-- [ ] Compliance-Report generieren
-- [ ] Plug-in-System für neue Tools/Checks
-- [ ] Auto-Fix-Vorschläge für triviale Findings
-- [ ] False-Positive-Handling (Whitelist, Suppression)
-- [ ] Historie/Trend-Analyse der Findings
-- [ ] Dashboard für Security-Status und Trends
-- [ ] Automatische Erkennung des Tech-Stacks und Anpassung der Checks
-- [ ] Ticket-Erstellung bei kritischen Findings (Jira, GitHub Issues)
-- [ ] PDF-Export des Reports
-- [ ] Troubleshooting/FAQ und Beispiel-Output in der Doku
-- [ ] Video/Screen-Demo für Onboarding 
+- [ ] Automatic mapping of all findings to OWASP Top 10, GDPR, NIST, etc.
+- [ ] Generate compliance report
+- [ ] Plug-in system for new tools/checks
+- [ ] Auto-fix suggestions for trivial findings
+- [ ] False-positive handling (whitelist, suppression)
+- [ ] History/trend analysis of findings
+- [ ] Dashboard for security status and trends
+- [ ] Automatic detection of tech stack and adjustment of checks
+- [ ] Ticket creation for critical findings (Jira, GitHub Issues)
+- [ ] PDF export of the report
+- [ ] Troubleshooting/FAQ and example output in the documentation
+- [ ] Video/screen demo for onboarding 

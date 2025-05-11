@@ -1,7 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 # role_documentation.mdc
 
@@ -14,7 +14,7 @@ alwaysApply: false
 - Always active; responsible for all documentation quality and structure.
 
 **Core Principle:**
-Documentation is a first-class citizen. It must be clear, up-to-date, and easy to navigate for all users and contributors.
+Documentation is a first-class citizen. It must be clear, up-to-date, and easy to navigate for all users and contributors. English only.
 
 **Workflow / Key Responsibilities:**
 1. Maintain a central documentation index (INDEX.md)
