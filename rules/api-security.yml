@@ -28,24 +28,24 @@ rules:
     severity: HIGH
 
   - id: overly-permissive-cors
+    focus-metavariable: $ORIGIN_SETTING
     patterns:
       - pattern-either:
           - pattern: |
-              set_header("Access-Control-Allow-Origin", "*")
+              set_header("Access-Control-Allow-Origin", $ORIGIN_SETTING)
           - pattern: |
-              CORS(app, resources={r"/api/*": {"origins": "*"}})
-      - focus-metavariable: $ORIGIN
-        metavariable-regex:
-          metavariable: $ORIGIN
-          regex: \*
+              CORS(..., resources={ $PATTERN_KEY: {"origins": $ORIGIN_SETTING, ...}, ...})
+          - pattern: |
+              CORS(..., origins=$ORIGIN_SETTING, ...)
+      - metavariable-regex:
+          metavariable: $ORIGIN_SETTING
+          regex: '^(\"\\*\"|\\*)$'
     message: >-
       Overly permissive CORS policy detected (Access-Control-Allow-Origin: *).
       This can allow any domain to make requests to your API, potentially
       leading to security vulnerabilities. Restrict origins to trusted domains.
     languages:
       - python
-      - javascript
-      - go
     severity: MEDIUM
 
   - id: potential-missing-rate-limiting

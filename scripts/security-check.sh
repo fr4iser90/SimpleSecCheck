@@ -1,179 +1,190 @@
 #!/bin/bash
-# SecuLite Security Check Script
-# Usage:
-#   ZAP_TARGET="http://dein-ziel:port" HTML_REPORT=1 ./scripts/security-check.sh
-#   oder
-#   ./scripts/security-check.sh [ZAP_TARGET_URL]
-# Default: http://localhost:8000
+# SecuLite - Main Security Check Orchestrator (NEW)
+# Purpose: Coordinates various security scanning tools and generates a consolidated report,
+# using the user-provided tool scripts.
 
-# === DEBUG: Print environment and ZAP script status ===
-echo "[DEBUG] PATH: $PATH"
-echo "[DEBUG] ls -l /usr/local/bin/"
-ls -l /usr/local/bin/
-echo "[DEBUG] ls -l /opt/ZAP_2.16.1/"
-ls -l /opt/ZAP_2.16.1/ || echo "/opt/ZAP_2.16.1/ not found"
-echo "[DEBUG] command -v zap-baseline.py: $(command -v zap-baseline.py || echo not found)"
+# Ensure script exits on any error
+set -e
 
-# Check for python3 availability (required for ZAP)
-if ! command -v python3 &>/dev/null; then
-  echo "[ERROR] python3 is not installed or not in PATH. ZAP scan cannot run. Please install python3." | tee -a "$LOG_FILE"
-  # Do not exit, continue
+# === Configuration ===
+# Script's own directory to reliably find other scripts
+ORCHESTRATOR_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TOOL_SCRIPTS_DIR="$ORCHESTRATOR_SCRIPT_DIR/tools"
+
+# --- Define Core Paths (these are absolute paths INSIDE the container) ---
+# These align with Dockerfile COPY commands and docker-compose.yml volume mounts.
+export BASE_PROJECT_DIR="/seculite" # Base directory where all project files are copied in Docker
+export TARGET_PATH_IN_CONTAINER="/target" # Where host code is mounted for scanning
+export RESULTS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results"
+export LOGS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/logs"
+export LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log" # Central log file
+
+# --- Tool Specific Configurations (absolute paths INSIDE container) ---
+export SEMGREP_RULES_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/rules"
+export TRIVY_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/trivy/config.yaml"
+export ZAP_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/zap/baseline.conf" # Note: your run_zap.sh hardcodes this.
+
+# --- DAST Target URL (from .env, passed to ZAP script) ---
+# TARGET_URL is from .env (e.g. http://host.docker.internal:8000)
+# Your run_zap.sh expects ZAP_TARGET as the env var.
+export ZAP_TARGET="${TARGET_URL:-http://host.docker.internal:8000}"
+
+# --- Other Environment Variables for Tool Scripts ---
+export TRIVY_SCAN_TYPE="${TRIVY_SCAN_TYPE:-fs}" # Default scan type for Trivy
+
+# --- Script Control & Setup ---
+LOCK_FILE="$RESULTS_DIR_IN_CONTAINER/.scan-running"
+
+# === Script Functions ===
+log_message() {
+    # Appends to the central log file
+    echo "[SecuLite Orchestrator] ($(date '+%Y-%m-%d %H:%M:%S')) ($BASHPID) $1" | tee -a "$LOG_FILE"
+}
+
+cleanup_lock() {
+    if [ -f "$LOCK_FILE" ]; then
+        log_message "Removing lock file: $LOCK_FILE"
+        rm -f "$LOCK_FILE"
+    fi
+}
+trap cleanup_lock EXIT SIGINT SIGTERM
+
+# === Main Execution Start ===
+mkdir -p "$RESULTS_DIR_IN_CONTAINER" "$LOGS_DIR_IN_CONTAINER"
+
+# Initialize log file for this run
+# Note: Your tool scripts also use `tee -a "$LOG_FILE"` so they will append.
+echo "----- SecuLite Scan Run Initialized: $(date '+%Y-%m-%d %H:%M:%S') -----" > "$LOG_FILE"
+log_message "Orchestrator script started."
+log_message "Container Base Project Dir (BASE_PROJECT_DIR): $BASE_PROJECT_DIR"
+log_message "Host Code Mount for Scanning (TARGET_PATH_IN_CONTAINER): $TARGET_PATH_IN_CONTAINER"
+log_message "Results Directory (RESULTS_DIR_IN_CONTAINER): $RESULTS_DIR_IN_CONTAINER"
+log_message "Logs Directory (LOGS_DIR_IN_CONTAINER): $LOGS_DIR_IN_CONTAINER"
+log_message "Semgrep Rules Path (SEMGREP_RULES_PATH_IN_CONTAINER): $SEMGREP_RULES_PATH_IN_CONTAINER"
+log_message "Trivy Config Path (TRIVY_CONFIG_PATH_IN_CONTAINER): $TRIVY_CONFIG_PATH_IN_CONTAINER"
+log_message "ZAP DAST Target (ZAP_TARGET): $ZAP_TARGET"
+
+# Lock File Management
+if [ -f "$LOCK_FILE" ]; then
+    log_message "[ERROR] Lock file $LOCK_FILE exists. Another scan may be in progress or failed to clean up. Exiting."
+    exit 1
 fi
-
-# Ziel-URL für ZAP bestimmen
-ZAP_TARGET="${ZAP_TARGET:-${1:-http://localhost:8000}}"
-HTML_REPORT="${HTML_REPORT:-0}"
-
-# Usage: ./scripts/security-check.sh [TARGET_PATH]
-# Set scan target to /target (App-Code im Container)
-TARGET_PATH="/target"
-RESULTS_DIR="/seculite/results"
-LOGS_DIR="/seculite/logs"
-LOG_FILE="$LOGS_DIR/security-check.log"
-SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
-SUMMARY_JSON="$RESULTS_DIR/security-summary.json"
-
-# At the very top, after variable definitions
-LOCK_FILE="$RESULTS_DIR/.scan-running"
+log_message "Creating lock file: $LOCK_FILE"
 touch "$LOCK_FILE"
 
-mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
-echo "[DEBUG] Listing $RESULTS_DIR before ZAP scan:"
-ls -l "$RESULTS_DIR"
+OVERALL_SUCCESS=true
 
-# Clear previous results
-> "$SUMMARY_TXT"
-> "$SUMMARY_JSON"
-> "$LOG_FILE"
+# --- Execute Tool Scripts ---
 
-# Check for required tools
-MISSING_TOOLS=()
-for tool in semgrep trivy; do
-  if ! command -v $tool &>/dev/null; then
-    MISSING_TOOLS+=("$tool")
-  fi
-done
-if [ ${#MISSING_TOOLS[@]} -ne 0 ]; then
-  echo "[SecuLite] Missing required tools: ${MISSING_TOOLS[*]}" | tee -a "$LOG_FILE"
-  echo "Please install all required tools before running the script." | tee -a "$LOG_FILE"
-  # Do not exit, continue
-fi
-
-# Ensure jq is installed
-if ! command -v jq &>/dev/null; then
-  echo "[SecuLite] jq not found, installing jq..." | tee -a "$LOG_FILE"
-  if command -v apt-get &>/dev/null; then
-    sudo apt-get update && sudo apt-get install -y jq
-  elif command -v yum &>/dev/null; then
-    sudo yum install -y jq
-  else
-    echo "[SecuLite] Please install jq manually." | tee -a "$LOG_FILE"
-    # Do not exit, continue
-  fi
-fi
-
-echo "[DEBUG] Testing write permissions in $RESULTS_DIR"
-touch "$RESULTS_DIR/test-write.txt" && echo "[DEBUG] Write test succeeded" || echo "[DEBUG] Write test FAILED"
-rm -f "$RESULTS_DIR/test-write.txt"
-
-# Run ZAP Baseline Scan
-if command -v zap-baseline.py &>/dev/null; then
-  export ZAP_PATH=/opt/ZAP_2.16.1
-  export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-  echo "[ZAP] ENV: ZAP_PATH=$ZAP_PATH JAVA_HOME=$JAVA_HOME" | tee -a "$LOG_FILE"
-  echo "[ZAP] Running baseline scan on $ZAP_TARGET..." | tee -a "$LOG_FILE"
-  ZAP_REPORT_XML="$RESULTS_DIR/zap-report.xml"
-  ZAP_REPORT_HTML="$RESULTS_DIR/zap-report.html"
-  ZAP_REPORT_XMLHTML="$RESULTS_DIR/zap-report.xml.html"
-  REL_ZAP_REPORT_XML="zap-report.xml"
-  REL_ZAP_REPORT_HTML="zap-report.html"
-  echo "[DEBUG] Running ZAP with absolute path: $ZAP_REPORT_XML"
-  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -x "$ZAP_REPORT_XML" 2>>"$LOG_FILE" || {
-    echo "[ZAP] Scan failed (absolute path)" >> "$LOG_FILE"
-  }
-  # Fallback: search for zap-report.xml anywhere and copy to results if missing
-  if [ ! -f "$ZAP_REPORT_XML" ]; then
-    FOUND_XML=$(find / -type f -name 'zap-report.xml' 2>/dev/null | head -n 1)
-    if [ -n "$FOUND_XML" ]; then
-      cp "$FOUND_XML" "$ZAP_REPORT_XML"
-      echo "[DEBUG] Copied fallback zap-report.xml from $FOUND_XML to $ZAP_REPORT_XML" >> "$LOG_FILE"
+# Set environment variables specifically for run_semgrep.sh before calling it
+log_message "--- Orchestrating Semgrep Scan ---"
+export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
+export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
+# LOG_FILE is already exported and used by run_semgrep.sh's `tee -a`
+export SEMGREP_RULES_PATH="$SEMGREP_RULES_PATH_IN_CONTAINER"
+if [ -f "$TOOL_SCRIPTS_DIR/run_semgrep.sh" ]; then
+    log_message "Executing $TOOL_SCRIPTS_DIR/run_semgrep.sh..."
+    # Output of run_semgrep.sh (which uses `tee -a "$LOG_FILE"`) will go to the log.
+    # We also capture its stdout/stderr here for additional orchestrator logging if needed, though it might be redundant.
+    if /bin/bash "$TOOL_SCRIPTS_DIR/run_semgrep.sh"; then
+        log_message "run_semgrep.sh completed successfully (exit code 0)."
     else
-      echo "[DEBUG] No zap-report.xml found anywhere in container." >> "$LOG_FILE"
+        EXIT_CODE=$?
+        log_message "[ORCHESTRATOR ERROR] run_semgrep.sh failed with exit code $EXIT_CODE."
+        OVERALL_SUCCESS=false
     fi
-  fi
-  echo "[DEBUG] Running ZAP with relative path: $REL_ZAP_REPORT_XML"
-  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -r "$REL_ZAP_REPORT_XML" 2>>"$LOG_FILE" || {
-    echo "[ZAP] Scan failed (relative path)" >> "$LOG_FILE"
-  }
-  python3 /usr/local/bin/zap-baseline.py -d -t "$ZAP_TARGET" -f html -o "$ZAP_REPORT_HTML" 2>>"$LOG_FILE" || echo "[ZAP] HTML report failed" >> "$LOG_FILE"
-  echo "[DEBUG] Listing $RESULTS_DIR after ZAP scan:"
-  ls -l "$RESULTS_DIR"
-  echo "[DEBUG] Searching for any zap-report* files and copying to $RESULTS_DIR"
-  find / -type f -name 'zap-report*' -exec cp --no-clobber {} "$RESULTS_DIR" \; 2>/dev/null
-  ls -l "$RESULTS_DIR"
-  if [ -f "$ZAP_REPORT_XML" ] || [ -f "$ZAP_REPORT_HTML" ] || [ -f "$ZAP_REPORT_XMLHTML" ]; then
-    echo "[ZAP] Report(s) erfolgreich erzeugt:"
-    [ -f "$ZAP_REPORT_XML" ] && echo "  - $ZAP_REPORT_XML"
-    [ -f "$ZAP_REPORT_HTML" ] && echo "  - $ZAP_REPORT_HTML"
-    [ -f "$ZAP_REPORT_XMLHTML" ] && echo "  - $ZAP_REPORT_XMLHTML"
-  else
-    echo "[ZAP] ERROR: Kein Report wurde erzeugt!" | tee -a "$LOG_FILE"
-    # Do not exit, continue
-  fi
-  echo "[ZAP] Baseline scan complete." | tee -a "$SUMMARY_TXT"
 else
-  echo "[ZAP] zap-baseline.py not found, skipping ZAP scan." | tee -a "$LOG_FILE"
+    log_message "[ORCHESTRATOR ERROR] $TOOL_SCRIPTS_DIR/run_semgrep.sh not found!"
+    OVERALL_SUCCESS=false
+fi
+log_message "--- Semgrep Scan Orchestration Finished ---"
+
+# Set environment variables specifically for run_trivy.sh
+log_message "--- Orchestrating Trivy Scan ---"
+export TARGET_PATH="$TARGET_PATH_IN_CONTAINER" # Re-export for clarity, though it's the same
+export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
+# LOG_FILE is exported
+export TRIVY_CONFIG_PATH="$TRIVY_CONFIG_PATH_IN_CONTAINER"
+# TRIVY_SCAN_TYPE is exported
+if [ -f "$TOOL_SCRIPTS_DIR/run_trivy.sh" ]; then
+    log_message "Executing $TOOL_SCRIPTS_DIR/run_trivy.sh..."
+    if /bin/bash "$TOOL_SCRIPTS_DIR/run_trivy.sh"; then
+        log_message "run_trivy.sh completed successfully (exit code 0)."
+    else
+        EXIT_CODE=$?
+        log_message "[ORCHESTRATOR ERROR] run_trivy.sh failed with exit code $EXIT_CODE."
+        OVERALL_SUCCESS=false
+    fi
+else
+    log_message "[ORCHESTRATOR ERROR] $TOOL_SCRIPTS_DIR/run_trivy.sh not found!"
+    OVERALL_SUCCESS=false
+fi
+log_message "--- Trivy Scan Orchestration Finished ---"
+
+# Set environment variables specifically for run_zap.sh
+log_message "--- Orchestrating ZAP Scan ---"
+# ZAP_TARGET is exported
+export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
+# LOG_FILE is exported
+# ZAP_CONFIG_PATH_IN_CONTAINER is available if run_zap.sh decides to use it via an env var instead of hardcoding.
+# Your current run_zap.sh hardcodes /seculite/zap/baseline.conf, which matches ZAP_CONFIG_PATH_IN_CONTAINER.
+if [ -f "$TOOL_SCRIPTS_DIR/run_zap.sh" ]; then
+    log_message "Executing $TOOL_SCRIPTS_DIR/run_zap.sh..."
+    if /bin/bash "$TOOL_SCRIPTS_DIR/run_zap.sh"; then
+        log_message "run_zap.sh completed successfully (exit code 0)."
+    else
+        EXIT_CODE=$?
+        log_message "[ORCHESTRATOR ERROR] run_zap.sh failed with exit code $EXIT_CODE."
+        OVERALL_SUCCESS=false
+    fi
+else
+    log_message "[ORCHESTRATOR ERROR] $TOOL_SCRIPTS_DIR/run_zap.sh not found!"
+    OVERALL_SUCCESS=false
+fi
+log_message "--- ZAP Scan Orchestration Finished ---"
+
+# --- Reporting Phase ---
+HTML_REPORT_PY_SCRIPT="$ORCHESTRATOR_SCRIPT_DIR/generate-html-report.py"
+HTML_REPORT_OUTPUT_FILE="$RESULTS_DIR_IN_CONTAINER/security-summary.html"
+
+# generate-html-report.py expects RESULTS_DIR and ZAP_TARGET as env vars.
+# RESULTS_DIR is already exported as RESULTS_DIR_IN_CONTAINER.
+# ZAP_TARGET is already exported.
+# It also uses FP_WHITELIST_FILE if set.
+export FP_WHITELIST_FILE="${FP_WHITELIST_FILE:-$BASE_PROJECT_DIR/conf/fp_whitelist.json}" # Default if not set
+
+log_message "Checking for HTML report generator: $HTML_REPORT_PY_SCRIPT"
+if [ -f "$HTML_REPORT_PY_SCRIPT" ]; then
+    log_message "Generating consolidated HTML report to $HTML_REPORT_OUTPUT_FILE..."
+    # The generate-html-report.py script's debug messages will go to stderr, which is not captured by default here.
+    # To capture its stderr into the main log, you'd add 2>&1 after it.
+    if PYTHONUNBUFFERED=1 python3 "$HTML_REPORT_PY_SCRIPT" >> "$LOG_FILE" 2>&1; then
+        log_message "HTML report generation script completed successfully."
+    else
+        EXIT_CODE=$?
+        log_message "[ORCHESTRATOR ERROR] HTML report generation script ($HTML_REPORT_PY_SCRIPT) failed with exit code $EXIT_CODE."
+        OVERALL_SUCCESS=false
+    fi
+else
+    log_message "[ORCHESTRATOR ERROR] HTML report script $HTML_REPORT_PY_SCRIPT not found!"
+    OVERALL_SUCCESS=false
 fi
 
-# Run Semgrep
-if command -v semgrep &>/dev/null; then
-  echo "[Semgrep] Running code scan on $TARGET_PATH..." | tee -a "$LOG_FILE"
-  semgrep --config /seculite/rules $TARGET_PATH --json > "$RESULTS_DIR/semgrep.json" 2>>"$LOG_FILE" || echo "[Semgrep] Scan failed" >> "$LOG_FILE"
-  semgrep --config /seculite/rules $TARGET_PATH --text > "$RESULTS_DIR/semgrep.txt" 2>>"$LOG_FILE"
-  echo "[Semgrep] Code scan complete." | tee -a "$SUMMARY_TXT"
+# Copy webui.js (if it exists in the orchestrator's script directory)
+WEBUI_JS_SOURCE="$ORCHESTRATOR_SCRIPT_DIR/webui.js"
+WEBUI_JS_DEST="$RESULTS_DIR_IN_CONTAINER/webui.js"
+if [ -f "$WEBUI_JS_SOURCE" ]; then
+    cp "$WEBUI_JS_SOURCE" "$WEBUI_JS_DEST"
+    log_message "webui.js copied to $WEBUI_JS_DEST"
 else
-  echo "[Semgrep] semgrep not found, skipping code scan." | tee -a "$LOG_FILE"
+    log_message "[WARN] webui.js not found at $WEBUI_JS_SOURCE, not copied."
 fi
 
-# Run Trivy
-if command -v trivy &>/dev/null; then
-  echo "[Trivy] Running dependency/container scan on $TARGET_PATH..." | tee -a "$LOG_FILE"
-  trivy fs --config /seculite/trivy/config.yaml --format json -o "$RESULTS_DIR/trivy.json" $TARGET_PATH 2>>"$LOG_FILE"
-  trivy fs --config /seculite/trivy/config.yaml --format table -o "$RESULTS_DIR/trivy.txt" $TARGET_PATH 2>>"$LOG_FILE"
-  echo "[Trivy] Dependency/container scan complete." | tee -a "$SUMMARY_TXT"
+log_message "SecuLite Security Scan Sequence Completed."
+if [ "$OVERALL_SUCCESS" = true ]; then
+    log_message "All tool scripts and reporting completed successfully."
+    exit 0
 else
-  echo "[Trivy] trivy not found, skipping dependency/container scan." | tee -a "$LOG_FILE"
-fi
-
-# Aggregate Results
-{
-  echo "==== ZAP Report (XML) ===="
-  [ -f "$RESULTS_DIR/zap-report.xml" ] && cat "$RESULTS_DIR/zap-report.xml" || echo "No ZAP XML report."
-  echo
-  echo "==== ZAP Report (HTML) ===="
-  [ -f "$RESULTS_DIR/zap-report.html" ] && cat "$RESULTS_DIR/zap-report.html" || echo "No ZAP HTML report."
-  echo
-  echo "==== ZAP Report (XMLHTML) ===="
-  [ -f "$RESULTS_DIR/zap-report.xml.html" ] && cat "$RESULTS_DIR/zap-report.xml.html" || echo "No ZAP XMLHTML report."
-  echo
-  echo "==== Semgrep Findings ===="
-  [ -f "$RESULTS_DIR/semgrep.txt" ] && cat "$RESULTS_DIR/semgrep.txt" || echo "No Semgrep findings."
-  echo
-  echo "==== Trivy Findings ===="
-  [ -f "$RESULTS_DIR/trivy.txt" ] && cat "$RESULTS_DIR/trivy.txt" || echo "No Trivy findings."
-} > "$SUMMARY_TXT"
-
-jq -s 'reduce .[] as $item ({}; . * $item)' "$RESULTS_DIR/semgrep.json" "$RESULTS_DIR/trivy.json" 2>/dev/null > "$SUMMARY_JSON" || echo '{"error": "Could not aggregate JSON results"}' > "$SUMMARY_JSON"
-
-# Always generate the unified HTML report inside the container
-python3 /seculite/scripts/generate-html-report.py
-
-echo "[SecuLite] Security checks complete. See $SUMMARY_TXT, $SUMMARY_JSON, and security-summary.html for results." | tee -a "$LOG_FILE" 
-
-# At the very end, before exit 0
-rm -f "$LOCK_FILE"
-
-# Ensure webui.js is always present in the results directory
-cp /seculite/scripts/webui.js /seculite/results/webui.js 2>/dev/null || cp scripts/webui.js results/webui.js 2>/dev/null
-
-exit 0 
+    log_message "[FINAL STATUS: FAILED] One or more steps failed. Please review $LOG_FILE."
+    exit 1
+fi 
