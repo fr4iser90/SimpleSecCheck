@@ -57,18 +57,7 @@ SecuLite is an all-in-one security toolkit for modern software projects. It comb
 
 ---
 
-## ⚙️ Konfiguration & Erweiterung
-
-- **Ziel-URL für ZAP:**
-  - Standard: `http://localhost:8000`
-  - Per ENV: `ZAP_TARGET="http://dein-ziel:port" docker compose up seculite`
-  - Oder als Argument: `docker compose run seculite ./scripts/security-check.sh http://dein-ziel:port`
-- **Eigene Regeln:** YAML-Files in `rules/` (Semgrep), `zap/`, `trivy/`
-- **Erweiterung:** Siehe `doc/EXTENDING.md`
-
----
-
-## 🏗 Architektur
+## 🏗 Architecture
 
 ```
 [Your Codebase]
@@ -83,8 +72,8 @@ SecuLite is an all-in-one security toolkit for modern software projects. It comb
      v
 [Unified Results & Filtering]
 ```
-- **Modular:** Tools und Regeln einfach erweiterbar
-- **Headless & WebUI:** CLI und Web-Modus parallel nutzbar
+- **Modular:** Tools and rules are easily extendable
+- **Headless & WebUI:** CLI and web mode can be used in parallel
 
 ---
 
@@ -103,30 +92,30 @@ SecuLite is an all-in-one security toolkit for modern software projects. It comb
 
 ## 🛠️ Status & Roadmap
 
-- **Phasen 1–5:** Planung, Struktur, All-in-One-CLI, Regeln, CI/CD **abgeschlossen**
-- **Phase 6:** Reporting, Aggregation, "Alles okay"-Abschnitte **fertig**; HTML-Report, Benachrichtigung **offen**
-- **Phase 7:** Advanced Features (Compliance, Dashboard, Auto-Fix, etc.) **Roadmap**
+- **Phases 1–5:** Planning, structure, all-in-one CLI, rules, CI/CD **completed**
+- **Phase 6:** Reporting, aggregation, "All OK" sections **done**; HTML report, notification **pending**
+- **Phase 7:** Advanced features (compliance, dashboard, auto-fix, etc.) **roadmap**
 
 ---
 
 ## 🤝 Contributing & Extending
 
-- Siehe [`doc/EXTENDING.md`](doc/EXTENDING.md) für eigene Regeln, Tools, Workflows.
-- Pull Requests, Issues und Feature-Vorschläge willkommen!
+- See [`doc/EXTENDING.md`](doc/EXTENDING.md) for adding your own rules, tools, workflows.
+- Pull requests, issues, and feature suggestions are welcome!
 
 ---
 
 ## 📄 License
 
-SecuLite ist Open Source, MIT-Lizenz.
+SecuLite is Open Source, MIT-licensed.
 
 ---
 
-## 📝 Changelog (Kernpunkte)
-- All-in-One-CLI-Scan (ZAP, Semgrep, Trivy) in einem Container
-- Optionaler ZAP-WebUI-Service für manuelle Tests
-- Aggregierte Reports, CI/CD-ready, modular erweiterbar
-- Doku und Task-Listen synchronisiert mit aktuellem Stand
+## 📝 Changelog (Key Points)
+- All-in-one CLI scan (ZAP, Semgrep, Trivy) in one container
+- Optional ZAP WebUI service for manual tests
+- Aggregated reports, CI/CD-ready, modularly extendable
+- Documentation and task lists synchronized with current state
 
 ## Requirements
 - Docker (recommended)
@@ -137,14 +126,14 @@ SecuLite ist Open Source, MIT-Lizenz.
 - The Docker image installs Python 3 automatically.
 - If running outside Docker, ensure `python3` is available in your PATH. The script will fail early with a clear error if not.
 
-## Troubleshooting: ZAP erzeugt keine Reports?
-- Prüfe, ob das Ziel (z.B. http://localhost:8000) im Container erreichbar ist.
-- **WICHTIG:** Wenn du einen Webserver auf dem Host scannen willst, setze:
+## Troubleshooting: ZAP does not generate reports?
+- Check if the target (e.g. http://localhost:8000) is reachable from inside the container.
+- **IMPORTANT:** If you want to scan a web server running on the host, set:
   ```sh
   ZAP_TARGET="http://host.docker.internal:8000" docker compose run seculite
   ```
-- Stelle sicher, dass dein Webserver auf `0.0.0.0` lauscht (nicht nur auf `127.0.0.1`).
-- Wenn das Target auf `localhost` steht und kein Report erzeugt wird, siehe auch das Log (`logs/security-check.log`) für eine genaue Fehlermeldung und Lösungsvorschlag.
+- Make sure your web server is listening on `0.0.0.0` (not just `127.0.0.1`).
+- If the target is set to `localhost` and no report is generated, also check the log (`logs/security-check.log`) for a detailed error message and suggested solution.
 
 ## Results Directory
 
