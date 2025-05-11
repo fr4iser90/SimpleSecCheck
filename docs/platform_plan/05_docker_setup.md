@@ -683,28 +683,449 @@ This entrypoint script provides flexibility and handles common startup routines 
 
 ## 6. `frontend/Dockerfile` Details (Multi-stage)
 
-*(This section will describe a multi-stage Dockerfile: Stage 1 (builder) using a Node image to install dependencies and build the Vue.js app. Stage 2 using an Nginx image to copy built assets from Stage 1 and the Nginx configuration.)*
+This Dockerfile is responsible for building the Vue.js frontend application into static assets. It uses a multi-stage build to ensure the final image that Nginx might use (or the assets it serves) are as small as possible, without including the Node.js build environment.
+
+The static assets will be served by the `nginx` service, either by copying them into an Nginx image or by Nginx mounting a volume where these assets are placed.
+
+```dockerfile
+# Stage 1: Build the Vue.js application
+# Use an official Node.js LTS (Long Term Support) image as the base for building.
+# Alpine versions are smaller. Choose one that matches your project's Node.js version needs.
+FROM node:18-alpine AS builder
+
+# Set the working directory in the container for the frontend app
+WORKDIR /app/frontend
+
+# Copy package.json and lock files, then run `npm ci` (or yarn equivalent).
+COPY ./frontend/package.json ./frontend/package-lock.json* ./frontend/yarn.lock* ./
+# The `*` is to handle cases where lock files might not exist initially or one is preferred.
+
+# Install dependencies based on the lock file
+# If using npm:
+RUN npm ci
+# If using yarn:
+# RUN yarn install --frozen-lockfile
+
+# Copy the rest of the frontend application code
+COPY ./frontend .
+
+# Build the Vue.js application for production
+# This command might vary based on your Vue project setup (e.g., Vue CLI, Vite)
+RUN npm run build
+# If using yarn:
+# RUN yarn build
+
+# At this point, the /app/frontend/dist directory (or similar, e.g., /app/frontend/build)
+# contains the compiled static assets of the Vue.js application.
+
+# Stage 2: (Optional) Serve with Nginx directly from a leaner image
+# This stage is useful if you want this Dockerfile to produce a self-contained Nginx image
+# serving the frontend. Alternatively, the nginx service in docker-compose.yml can
+# directly mount or copy assets from the 'builder' stage if configured appropriately.
+
+# FROM nginx:1.25-alpine
+
+# Copy the built static assets from the 'builder' stage
+# COPY --from=builder /app/frontend/dist /usr/share/nginx/html
+
+# Copy a custom Nginx configuration file (if needed for this specific frontend serving setup)
+# COPY ./nginx/nginx-frontend-specific.conf /etc/nginx/conf.d/default.conf
+
+# Expose port 80 for Nginx
+# EXPOSE 80
+
+# Default command to start Nginx
+# CMD ["nginx", "-g", "daemon off;"]
+
+# For SecuLite v2, we will primarily rely on the main `nginx` service defined in
+# `docker-compose.yml` (Section 3.7) to serve these assets. That Nginx service will
+# typically copy assets from the `builder` stage of this Dockerfile or mount a volume
+# that is populated by running the build stage of this Dockerfile.
+# The key output of this Dockerfile is the `/app/frontend/dist` directory in the `builder` stage.
+```
+
+**Key Steps and Explanations:**
+
+1.  **`FROM node:18-alpine AS builder` (Builder Stage)**:
+    *   Starts with an official Node.js image (e.g., version 18 LTS, Alpine variant for smaller size) named `builder`.
+    *   This stage will contain all the tools and dependencies needed to build the Vue.js application.
+
+2.  **`WORKDIR /app/frontend`**:
+    *   Sets the working directory for the frontend build process.
+
+3.  **`COPY ./frontend/package.json ./frontend/package-lock.json* ./frontend/yarn.lock* ./`**:
+    *   Copies the package definition and lock files first to leverage Docker's build cache. If these haven't changed, subsequent `npm ci` or `yarn install` steps can be skipped if cached.
+
+4.  **`RUN npm ci` (or `RUN yarn install --frozen-lockfile`)**:
+    *   Installs project dependencies using `npm ci` (which is generally preferred for CI/build environments as it uses the `package-lock.json` strictly) or `yarn install` with `--frozen-lockfile`.
+
+5.  **`COPY ./frontend .`**:
+    *   Copies the rest of the Vue.js application source code into the working directory.
+
+6.  **`RUN npm run build` (or `RUN yarn build`)**:
+    *   Executes the build script defined in `package.json` (e.g., `vue-cli-service build`, `vite build`). This compiles the Vue.js application into static HTML, CSS, and JavaScript files, typically outputting them to a `dist` or `build` directory (e.g., `/app/frontend/dist`).
+
+7.  **Stage 2 (Optional Nginx Stage - Commented Out)**:
+    *   The commented-out section shows an example of a second stage that could take the build artifacts from the `builder` stage and serve them using a lean Nginx image.
+    *   `COPY --from=builder /app/frontend/dist /usr/share/nginx/html`: This command is crucial in multi-stage builds. It copies files from a previous stage (`builder`) into the current stage.
+    *   **Primary Approach for SecuLite v2**: As noted, our main `nginx` service (Section 3.7) will be responsible for serving these assets. It can achieve this by:
+        *   Using `COPY --from=...` if the `nginx` service itself is built using a Dockerfile that incorporates the Vue build stage.
+        *   More commonly, by mounting a host directory (e.g., `./frontend/dist`) that is populated by running the build: `docker-compose run --rm frontend_builder` (where `frontend_builder` would be a temporary service definition in `docker-compose.yml` just for running the build from this Dockerfile and outputting to a shared volume or host directory).
+        *   Or, if the Nginx service in `docker-compose.yml` has a `build` context, its Dockerfile can directly reference the `builder` stage of this `frontend/Dockerfile` to copy the assets.
+
+**Integration with `docker-compose.yml` and `nginx` service:**
+
+The primary role of this `frontend/Dockerfile` is to produce the static build artifacts. The `nginx` service defined in `docker-compose.yml` (Section 3.7) will then take these artifacts and serve them. A common pattern is:
+
+1.  Define a simple service in `docker-compose.yml` that just builds the frontend (if not part of the main `nginx` image build):
+    ```yaml
+    # In docker-compose.yml (example snippet for building assets)
+    services:
+      frontend_builder: # Temporary service just for building
+        build:
+          context: ./frontend
+          dockerfile: Dockerfile
+          target: builder # Only build up to the 'builder' stage
+        volumes:
+          - ./frontend/dist:/app/frontend/dist # Output build to host directory
+    ```
+    Then you would run `docker-compose run --rm frontend_builder` (assuming you name the service `frontend_builder`) before starting the main stack. The `nginx` service would then mount `./frontend/dist`.
+
+2.  Alternatively, the `nginx` service's Dockerfile can incorporate these stages directly or copy from the `builder` stage. If `nginx` service in `docker-compose.yml` has its own `Dockerfile` (e.g. `nginx/Dockerfile`), that file could look like:
+    ```dockerfile
+    # In nginx/Dockerfile (example)
+    # Stage 1: Build frontend (copied from frontend/Dockerfile)
+    FROM node:18-alpine AS builder
+    WORKDIR /app/frontend
+    COPY ./frontend/package.json ./frontend/package-lock.json* ./frontend/yarn.lock* ./
+    RUN npm ci
+    COPY ./frontend .
+    RUN npm run build
+
+    # Stage 2: Actual Nginx image
+    FROM nginx:1.25-alpine
+    COPY --from=builder /app/frontend/dist /usr/share/nginx/html
+    COPY ./nginx/nginx.conf /etc/nginx/nginx.conf
+    ```
+    In this case, the `nginx` service in `docker-compose.yml` would have `build: ./nginx`.
+
+For this plan, we assume the `nginx` service (Section 3.7) will mount a host directory like `./frontend/dist` which is populated by running the build defined in `frontend/Dockerfile`. The command to populate `./frontend/dist` might be `docker compose run --rm frontend_build_service` if we define a service named `frontend_build_service` that uses `frontend/Dockerfile` and whose `npm run build` output directory (`/app/frontend/dist`) is volume-mounted to `./frontend/dist` on the host.
 
 ---
 
 ## 7. `nginx/nginx.conf` Details (Example for `nginx` service)
 
-*(This section will provide an example Nginx configuration: upstream definition for the backend, server block for port 80/443, location block for serving frontend static assets from `/var/www/frontend`, location block for proxying `/api/` requests to the backend service, SSL configuration placeholders, and basic security headers.)*
+This Nginx configuration file (`nginx/nginx.conf`) will be mounted into the `nginx` service container. It defines how Nginx handles incoming HTTP/HTTPS requests, serves static frontend assets, and proxies API requests to the Django backend.
+
+This example includes common settings for serving a SPA (Single Page Application) like Vue.js and a Django backend, along with placeholders for SSL and security headers.
+
+```nginx
+# Basic Nginx worker and event settings
+user nginx;
+worker_processes auto; # Can be set to the number of CPU cores
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 1024; # Max connections per worker
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    # Logging format
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log /var/log/nginx/access.log main;
+    error_log /var/log/nginx/error.log warn;
+
+    # Enable Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css application/json application/javascript application/x-javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml;
+
+    # Define an upstream for the Django backend application
+    # 'backend' is the service name defined in docker-compose.yml
+    # Port 8000 is where Gunicorn is listening inside the backend container
+    upstream django_backend {
+        server backend:8000;
+    }
+
+    server {
+        listen 80 default_server;
+        # listen 443 ssl http2 default_server; # Uncomment for HTTPS
+        # server_name yourdomain.com www.yourdomain.com; # Replace with your domain
+
+        # SSL Configuration (Uncomment and configure if using HTTPS)
+        # ssl_certificate /etc/nginx/certs/yourdomain.com.crt;
+        # ssl_certificate_key /etc/nginx/certs/yourdomain.com.key;
+        # ssl_protocols TLSv1.2 TLSv1.3;
+        # ssl_prefer_server_ciphers on;
+        # ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384';
+        # ssl_session_cache shared:SSL:10m;
+        # ssl_session_timeout 1d;
+        # ssl_stapling on;
+        # ssl_stapling_verify on;
+        # add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+
+        # Path for Django static files (e.g., /static/admin/)
+        # Assumes backend_static_collected volume is mounted at /var/www/django_static in nginx service
+        location /static/ {
+            alias /var/www/django_static/;
+            expires 7d; # Cache static files for 7 days
+            access_log off; # Disable access logging for static files
+        }
+
+        # Path for Django media files (e.g., user-uploaded content)
+        # Assumes backend_media_data volume is mounted at /var/www/media in nginx service
+        location /media/ {
+            alias /var/www/media/;
+            expires 7d; # Cache media files for 7 days
+            access_log off;
+        }
+
+        # Location for API requests to be proxied to the Django backend
+        location /api/ {
+            proxy_pass http://django_backend; # Forward to the upstream defined above
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header Host $http_host;
+            proxy_redirect off;
+            proxy_buffering off; # Useful for streaming responses or Server-Sent Events
+            # Add other proxy headers if needed by your application
+        }
+
+        # Location for serving the frontend static assets (Vue.js app)
+        # Assumes frontend static assets are in /var/www/frontend
+        location / {
+            root /var/www/frontend;
+            try_files $uri $uri/ /index.html; # For SPA routing: try file, then directory, then fallback to index.html
+            expires -1; # Do not cache index.html to ensure users get the latest app version
+
+            # Security headers
+            # add_header X-Frame-Options "SAMEORIGIN" always;
+            # add_header X-Content-Type-Options "nosniff" always;
+            # add_header X-XSS-Protection "1; mode=block" always;
+            # add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            # add_header Content-Security-Policy "default-src 'self'; ..." always; # Define your CSP
+        }
+
+        # Optional: Add specific error pages or other configurations
+        # error_page 500 502 503 504 /50x.html;
+        # location = /50x.html {
+        #     root /usr/share/nginx/html; # Default Nginx error page location
+        # }
+    }
+}
+```
+
+**Key Components and Explanations:**
+
+1.  **Basic Settings (`user`, `worker_processes`, `pid`, `events`)**: Standard Nginx global settings.
+2.  **`http` Block**: Defines settings for HTTP traffic.
+    *   `include /etc/nginx/mime.types; default_type application/octet-stream;`: Basic MIME type handling.
+    *   `log_format`, `access_log`, `error_log`: Configure logging.
+    *   `gzip ...`: Enables and configures Gzip compression for better performance.
+3.  **`upstream django_backend`**: Defines a group of servers for the Django backend.
+    *   `server backend:8000;`: `backend` is the service name from `docker-compose.yml`, and `8000` is the port Gunicorn listens on within that service's container. Nginx will load balance requests if multiple servers were listed (not applicable here).
+4.  **`server` Block**: Configures a virtual server.
+    *   `listen 80 default_server;`: Listens on port 80 for HTTP requests. `default_server` makes this the default for requests not matching any other `server_name`.
+    *   `# listen 443 ssl http2 default_server;`: Commented out HTTPS listener. Requires SSL certificates.
+    *   `# server_name yourdomain.com www.yourdomain.com;`: Should be your actual domain(s).
+    *   **SSL Configuration (Commented Out)**: Placeholders for `ssl_certificate`, `ssl_certificate_key`, protocols, ciphers, and HSTS header. These are crucial for production HTTPS.
+5.  **`location /static/`**: Serves Django's collected static files (e.g., admin interface assets).
+    *   `alias /var/www/django_static/;`: Maps requests for `/static/...` to files in `/var/www/django_static/` inside the Nginx container. This path corresponds to the `backend_static_collected` volume mount.
+    *   `expires 7d; access_log off;`: Caching and logging settings.
+6.  **`location /media/`**: Serves Django's user-uploaded media files.
+    *   `alias /var/www/media/;`: Maps requests for `/media/...` to files in `/var/www/media/`. This path corresponds to the `backend_media_data` volume mount.
+7.  **`location /api/`**: Proxies requests starting with `/api/` to the Django backend.
+    *   `proxy_pass http://django_backend;`: Forwards the request to the `django_backend` upstream group.
+    *   `proxy_set_header ...`: Sets important headers for the backend to understand the original request (e.g., client IP, protocol, host).
+    *   `proxy_redirect off; proxy_buffering off;`: Common proxy settings.
+8.  **`location /`**: Serves the Vue.js Single Page Application (SPA).
+    *   `root /var/www/frontend;`: Sets the root directory for these requests to `/var/www/frontend`, where the Vue.js app's static assets (from `./frontend/dist`) are mounted.
+    *   `try_files $uri $uri/ /index.html;`: This is key for SPAs. Nginx first tries to find a file matching the URI (`$uri`), then a directory (`$uri/`). If neither exists (e.g., for a client-side route like `/dashboard`), it serves `/index.html`. The Vue.js router then handles the client-side navigation.
+    *   `expires -1;`: Prevents caching of `index.html` to ensure users get the latest version of the SPA.
+    *   **Security Headers (Commented Out)**: Examples of important security headers like `X-Frame-Options`, `X-Content-Type-Options`, `X-XSS-Protection`, `Referrer-Policy`, and `Content-Security-Policy`. These should be configured carefully.
+
+This `nginx.conf` provides a robust starting point. It should be placed in an `nginx` directory at the project root (e.g., `./nginx/nginx.conf`) and mounted into the Nginx container as specified in the `nginx` service definition in `docker-compose.yml` (Section 3.7).
 
 ---
 
 ## 8. Environment Variables (`.env.example`)
 
-*(A comprehensive list of necessary environment variables will be provided here, covering database credentials, Django settings, Celery settings, API URLs, etc. This will serve as a template for the actual `.env` file.)*
+An `.env.example` file should be created at the root of the project to provide a template for the actual `.env` file that developers will use. The `.env` file itself should be added to `.gitignore` to prevent committing sensitive credentials.
+
+This file will list all necessary environment variables for the different services.
+
+```env
+# .env.example - Environment variables for SecuLite v2
+# Copy this file to .env and fill in your actual values.
+# DO NOT COMMIT .env TO VERSION CONTROL.
+
+# General Settings
+# ----------------
+# Set to "development" or "production"
+# In Django, this might influence DEBUG settings, allowed hosts, etc.
+ENVIRONMENT=development
+
+# Django Backend Settings
+# -----------------------
+# SECURITY WARNING: keep the secret key used in production secret!
+# Generate a new secret key for your project, e.g., using python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'
+DJANGO_SECRET_KEY=your_django_secret_key_here
+
+# Set to True for development, False for production
+DJANGO_DEBUG=True
+
+# Allowed hosts for Django. For development, localhost and 127.0.0.1 are common.
+# For production, set to your actual domain(s), e.g., "yourdomain.com,www.yourdomain.com"
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,backend
+
+# Internal port the Django app (Gunicorn) runs on inside the container
+DJANGO_INTERNAL_PORT=8000
+
+# PostgreSQL Database Settings (for Django and Celery Beat Scheduler)
+# -------------------------------------------------------------------
+DB_ENGINE=django.db.backends.postgresql
+DB_NAME=seculite_db
+DB_USER=seculite_user
+DB_PASSWORD=your_secure_password_for_db_user
+DB_HOST=db # This is the service name of the PostgreSQL container in docker-compose.yml
+DB_PORT=5432
+
+# PGPASSWORD is used by psql in entrypoint.sh if DB_PASSWORD is not directly used by psql
+# Ensure this matches DB_PASSWORD if psql needs it explicitly.
+PGPASSWORD=${DB_PASSWORD}
+
+# Redis Settings (for Celery Broker and potentially Caching)
+# ---------------------------------------------------------
+REDIS_HOST=redis # Service name of the Redis container
+REDIS_PORT=6379
+REDIS_DB_CELERY=0 # Database number for Celery
+REDIS_DB_CACHE=1  # Database number for Django caching (if used)
+
+# Celery Settings
+# ---------------
+# Broker URL (using Redis)
+CELERY_BROKER_URL=redis://${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB_CELERY}
+# Result Backend URL (can also be Redis or PostgreSQL)
+# Using Redis for results:
+CELERY_RESULT_BACKEND=redis://${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB_CELERY}
+# Or using Django DB for results (requires django-celery-results package):
+# CELERY_RESULT_BACKEND=django-db
+
+# Celery Beat Scheduler Settings (if using django-celery-beat)
+# -----------------------------------------------------------
+# The entrypoint.sh script for the 'beat' service uses django_celery_beat.schedulers:DatabaseScheduler
+# which stores schedules in the Django database. No specific env vars needed here beyond DB access.
+
+# Frontend Settings (if any need to be passed at build time or runtime via Nginx)
+# -----------------------------------------------------------------------------------
+# Example: API base URL for the frontend to connect to
+# This is typically configured in the Vue.js app itself, but can be influenced by build-time env vars.
+# VUE_APP_API_BASE_URL=/api
+
+# Nginx Settings (related to domain names, SSL - though often managed in nginx.conf directly)
+# ---------------------------------------------------------------------------------------------
+# NGINX_HOST=localhost
+# NGINX_PORT=80
+
+# Entrypoint Script Variables (Optional control flags)
+# ----------------------------------------------------
+# Set to "false" to skip waiting for DB on Gunicorn startup (not recommended for first run)
+WAIT_FOR_DB=true
+# Set to "false" to skip waiting for DB on Celery worker startup
+WAIT_FOR_DB_CELERY=true
+# Set to "false" to skip waiting for DB on Celery beat startup
+WAIT_FOR_DB_CELERY_BEAT=true
+
+# Add any other application-specific settings here
+# E.g., API keys for external services, email server settings, etc.
+
+```
+
+**Explanation of Key Variables:**
+
+-   **`ENVIRONMENT`**: Indicates the runtime environment (e.g., `development`, `production`). Can be used by Django to adjust settings.
+-   **`DJANGO_SECRET_KEY`**: A critical security setting for Django. Must be unique and kept secret in production.
+-   **`DJANGO_DEBUG`**: Toggles Django's debug mode. Should be `False` in production.
+-   **`DJANGO_ALLOWED_HOSTS`**: A list of host/domain names that the Django site can serve.
+-   **Database Variables (`DB_*`, `PGPASSWORD`)**: Credentials and connection details for PostgreSQL. `DB_HOST` is set to `db`, the service name of the PostgreSQL container.
+-   **Redis Variables (`REDIS_*`)**: Connection details for Redis. `REDIS_HOST` is set to `redis`, the service name.
+-   **Celery Variables (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`)**: Configure Celery's message broker and result backend, pointing to the Redis service.
+-   **Entrypoint Script Variables (`WAIT_FOR_DB*`)**: Boolean flags to control whether the entrypoint script waits for the database before proceeding for different services. Useful for certain startup scenarios or debugging.
+
+This `.env.example` file should be comprehensive enough to get a developer started. They will copy it to `.env`, fill in secrets (like `DJANGO_SECRET_KEY` and `DB_PASSWORD`), and can adjust other settings as needed for their local environment.
 
 ---
 
 ## 9. Development Workflow Considerations
 
--   Using `docker-compose up --build`.
--   Volume mounts for live code reloading (backend Python and frontend Vue.js).
--   Accessing services (e.g., frontend via Nginx at `http://localhost:80`, backend API via Nginx proxy).
--   Debugging individual services.
+This section outlines common practices and commands for developers working with this Dockerized environment.
+
+1.  **Initial Setup**:
+    *   Ensure Docker and Docker Compose are installed.
+    *   Copy `.env.example` to `.env` and fill in the required values (especially `DJANGO_SECRET_KEY`, `DB_USER`, `DB_PASSWORD`).
+    *   Ensure the `backend/entrypoint.sh` script is executable: `chmod +x backend/entrypoint.sh`.
+
+2.  **Building and Starting Services**:
+    *   **First-time build or when Dockerfiles change**: `docker-compose build` (or `docker compose build` for newer syntax).
+    *   **Build and start all services**: `docker-compose up --build` (or `docker compose up --build`). The `--build` flag ensures images are rebuilt if their Dockerfile or context has changed.
+    *   **Start services (if already built)**: `docker-compose up` (or `docker compose up`).
+    *   **Start in detached mode (run in background)**: `docker-compose up -d`.
+
+3.  **Code Development and Live Reloading**:
+    *   **Backend (Django)**: The `backend` service in `docker-compose.yml` mounts `./backend:/app`. When you save changes to Python files in your local `./backend` directory, Gunicorn (if configured for auto-reload, which is typical for development, or by restarting the container) or the Django development server (if used instead of Gunicorn during dev) should pick up these changes. For Gunicorn, a reload might be triggered by sending a SIGHUP signal to the Gunicorn master process or by restarting the `backend` container if live reload isn't automatic for Gunicorn.
+        *   *Note on Gunicorn auto-reload*: Standard Gunicorn doesn't auto-reload code as effectively as `python manage.py runserver`. For development, some teams might temporarily switch the `backend` service's command to use `poetry run python manage.py runserver 0.0.0.0:8000` for better hot-reloading. This plan currently uses Gunicorn for consistency with production-like setup, so a container restart (`docker-compose restart backend`) might be needed for some backend changes to take effect if Gunicorn itself doesn't reload.
+    *   **Frontend (Vue.js)**: The `frontend/Dockerfile` builds static assets. For live reloading during Vue.js development, you would typically run the Vue development server (e.g., `npm run serve` or `yarn serve`) directly on your host machine or within a dedicated development container that mounts the frontend source code and has port forwarding. The Nginx service in this Docker setup is primarily for serving the *built* production assets.
+        *   To integrate Vue.js live reload with Docker, you might have a separate `docker-compose.dev.yml` that overrides the `frontend` part or adds a new service for the Vue dev server, e.g., mapping port 8080 from the Vue dev server container to the host.
+        *   Alternatively, develop the frontend outside Docker using Node/npm on your host, pointing its API requests to `http://localhost/api/` (assuming Nginx is running via Docker and proxying to the backend).
+
+4.  **Accessing Services**:
+    *   **Frontend Application**: `http://localhost` (or `http://localhost:PORT` if Nginx port 80 is mapped to a different host port).
+    *   **Backend API**: Via Nginx proxy at `http://localhost/api/`. Direct access to `http://localhost:8000` (Gunicorn) might also be possible if that port is mapped in `docker-compose.yml` for the `backend` service.
+    *   **Database**: If port 5432 is mapped for the `db` service, you can connect using a PostgreSQL client to `localhost:5432` with credentials from `.env`.
+    *   **Redis**: If port 6379 is mapped, tools like `redis-cli` can connect to `localhost:6379`.
+
+5.  **Running Management Commands (Django)**:
+    *   Use `docker-compose exec <service_name> <command>` or `docker-compose run --rm <service_name> <command>`.
+    *   Example: Create a superuser: `docker-compose exec backend poetry run python manage.py createsuperuser`
+    *   Example: Run specific tests: `docker-compose exec backend poetry run python manage.py test myapp.tests.SpecificTest`
+    *   Example: Open a Django shell: `docker-compose exec backend poetry run python manage.py shell`
+    *   `docker-compose run --rm ...` is useful for one-off commands as it starts a new container and removes it after execution.
+
+6.  **Viewing Logs**:
+    *   **All services (aggregated)**: `docker-compose logs` (or `docker compose logs`).
+    *   **Follow logs (live tail)**: `docker-compose logs -f`.
+    *   **Logs for a specific service**: `docker-compose logs -f backend`.
+
+7.  **Stopping Services**:
+    *   **Stop services (if running in foreground with `docker-compose up`)**: `Ctrl+C`.
+    *   **Stop services (if running in detached mode or from another terminal)**: `docker-compose stop`.
+
+8.  **Cleaning Up**:
+    *   **Stop and remove containers**: `docker-compose down`.
+    *   **Stop and remove containers, volumes, and images defined in compose file**: `docker-compose down --volumes --rmi local` (Use with caution, `--volumes` will delete data in named volumes like `postgres_data` unless they are declared as `external`).
+    *   **Prune unused Docker objects (globally)**: `docker system prune -a --volumes` (Very destructive, removes all unused images, containers, networks, and volumes not associated with any running container).
+
+9.  **Building Frontend Assets for Nginx**:
+    *   As per Section 6, the `frontend/Dockerfile` defines how to build static assets.
+    *   You might need a command to trigger this build and place assets where Nginx can find them (e.g., in `./frontend/dist` if Nginx mounts that).
+    *   One way: Define a builder service in `docker-compose.yml` as shown in Section 6's "Integration" notes, then run: `docker-compose run --rm frontend_builder` (assuming you name the service `frontend_builder`).
+    *   This step is manual before `docker-compose up` if Nginx relies on host-mounted pre-built assets. If Nginx builds the frontend as part of its own image, then `docker-compose build nginx` or `docker-compose up --build` handles it.
+
+10. **Debugging**:
+    *   **Python (Backend)**: Use `pdb` or `ipdb`. You can attach to a running container using `docker-compose exec backend <command_to_start_debugger_or_shell>` or modify the service command to start with a debugger attached.
+        *   Example for `pdb` in `manage.py` or views: `import pdb; pdb.set_trace()`.
+        *   Ensure service is run with `tty: true` and `stdin_open: true` in `docker-compose.yml` for interactive debugging.
+    *   **Vue.js (Frontend)**: Use browser developer tools. If running the Vue dev server (see point 3), it provides HMR and good debugging support.
+
+This workflow aims for a balance between a production-like setup and development ease.
 
 ---
 
