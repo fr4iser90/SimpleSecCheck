@@ -2,19 +2,23 @@
 
 > **Unified, Zero-Config Security for Modern Development**
 
-SecuLite ist ein All-in-One-Security-Toolkit für moderne Softwareprojekte. Es vereint automatisierte Web-, Code- und Dependency-Scans in einem einzigen CLI-Workflow – und bietet optional eine ZAP-WebUI für manuelle Tests.
+SecuLite is an all-in-one security toolkit for modern software projects. It combines automated web, code, and dependency scans in a single CLI workflow – and optionally offers a ZAP WebUI for manual tests.
+
+---
+
+**Note:** Before starting, adjust the `.env` file to set your local database connection, target URL, and any other environment-specific settings.
 
 ---
 
 ## 🚀 Features
 
-- **All-in-One-CLI:** Ein Befehl, alles automatisiert (ZAP, Semgrep, Trivy)
+- **All-in-One CLI:** One command, everything automated (ZAP, Semgrep, Trivy)
 - **Web Vulnerability Scanning:** OWASP ZAP (Baseline, Headless, optional WebUI)
-- **Static Code Analysis:** Semgrep (Code-Bugs, Secrets, AI/Prompt Injection)
+- **Static Code Analysis:** Semgrep (code bugs, secrets, AI/prompt injection)
 - **Dependency & Container Scanning:** Trivy (SCA, OS, Docker)
-- **Unified Reporting:** Ergebnisse als TXT/JSON, übersichtlich aggregiert
-- **Extensible & Open:** Eigene Regeln, Tools, Workflows einfach ergänzbar
-- **CI/CD-ready:** Docker-basiert, GitHub Actions-Workflow vorhanden
+- **Unified Reporting:** Results as TXT/JSON, clearly aggregated
+- **Extensible & Open:** Easily add your own rules, tools, workflows
+- **CI/CD-ready:** Docker-based, GitHub Actions workflow included
 
 ---
 
