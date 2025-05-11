@@ -458,13 +458,226 @@ With this, the definition of all services, volumes, and networks for the `docker
 
 ## 4. `backend/Dockerfile` Details
 
-*(This section will detail the steps: base Python image, working directory, environment variables like `PYTHONUNBUFFERED`, installing dependencies from `requirements.txt`, copying app code, and user setup. CMD or ENTRYPOINT will refer to `entrypoint.sh`.)*
+This Dockerfile is responsible for creating the image for the Django backend, Celery worker, and Celery beat services. It sets up the Python environment, installs dependencies, and copies the application code.
+
+```dockerfile
+# Stage 1: Base Python image and core dependencies
+FROM python:3.11-slim-bullseye AS base
+
+# Set environment variables to ensure Python output is sent straight to terminal
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Install system dependencies required for Python packages (e.g., psycopg2, Pillow)
+# Keep this minimal; add more as identified by package installation failures.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    # For Pillow (if image processing is needed)
+    # libjpeg-dev zlib1g-dev libtiff-dev libfreetype6-dev liblcms2-dev libwebp-dev \
+    # For other common Python packages
+    # libffi-dev libssl-dev \
+    && apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Poetry (Python package manager)
+# Using a specific version for reproducibility
+ARG POETRY_VERSION=1.7.1
+RUN pip install "poetry==${POETRY_VERSION}"
+
+# Copy only the files necessary for installing dependencies with Poetry
+COPY ./backend/poetry.lock ./backend/pyproject.toml /app/
+
+# Install project dependencies using Poetry
+# --no-root: Do not install the project itself as editable, only its dependencies
+# --no-dev: Do not install development dependencies (for a leaner production image)
+RUN poetry install --no-root --no-dev
+
+# Stage 2: Application code and runtime setup (can be same as base or a new stage)
+# For simplicity here, we continue from the base stage.
+# FROM base AS runtime
+
+# Copy the rest of the backend application code into the working directory
+COPY ./backend /app/
+
+# Create a non-root user for running the application for better security
+# ARG APP_USER=appuser
+# RUN useradd -ms /bin/bash ${APP_USER}
+# RUN chown -R ${APP_USER}:${APP_USER} /app
+# USER ${APP_USER}
+# Note: If using a non-root user, ensure entrypoint.sh and Gunicorn/Celery can run as this user,
+# and that file permissions (especially for media/static volumes) are handled correctly.
+# For simplicity in this initial plan, we will run as root, but a non-root user is recommended for production.
+
+# Expose the port Gunicorn will run on (same as in docker-compose.yml)
+EXPOSE 8000
+
+# The entrypoint script will handle migrations and then execute the CMD
+# CMD is defined in the docker-compose.yml for each service (backend, worker, beat)
+ENTRYPOINT ["/app/entrypoint.sh"]
+```
+
+**Key Steps and Explanations:**
+
+1.  **`FROM python:3.11-slim-bullseye AS base`**:
+    *   Starts from an official Python 3.11 slim image based on Debian Bullseye. Slim images are smaller than the full Debian images.
+    *   `AS base`: Names this stage `base`, allowing it to be referenced later if using multi-stage builds (though not heavily utilized here for simplicity yet).
+
+2.  **`ENV PYTHONDONTWRITEBYTECODE 1` and `ENV PYTHONUNBUFFERED 1`**:
+    *   `PYTHONDONTWRITEBYTECODE`: Prevents Python from writing `.pyc` files to disc (useful in containers).
+    *   `PYTHONUNBUFFERED`: Ensures that Python output (e.g., print statements, logs) is sent directly to the terminal without being buffered, which is important for Docker logging.
+
+3.  **`WORKDIR /app`**:
+    *   Sets the default working directory for subsequent `RUN`, `CMD`, `ENTRYPOINT`, `COPY`, and `ADD` instructions.
+
+4.  **`RUN apt-get update && apt-get install -y ...`**:
+    *   Installs necessary system-level dependencies. `build-essential` and `libpq-dev` are common for Django projects using PostgreSQL (for compiling `psycopg2`).
+    *   Includes commented-out examples for other common libraries like those needed for Pillow or `libffi`.
+    *   `--no-install-recommends` reduces unnecessary packages.
+    *   `apt-get clean && rm -rf /var/lib/apt/lists/*` cleans up apt cache to keep the image size down.
+
+5.  **`ARG POETRY_VERSION=1.7.1` and `RUN pip install "poetry==${POETRY_VERSION}"`**:
+    *   Installs Poetry, a dependency management tool for Python. Using a specific version ensures reproducibility.
+
+6.  **`COPY ./backend/poetry.lock ./backend/pyproject.toml /app/`**:
+    *   Copies only the `poetry.lock` and `pyproject.toml` files first. This leverages Docker's layer caching. If these files haven't changed, Docker can reuse the cached layer from the next step (dependency installation), speeding up builds when only application code changes.
+
+7.  **`RUN poetry install --no-root --no-dev`**:
+    *   Installs Python dependencies defined in `pyproject.toml` using the versions specified in `poetry.lock`.
+    *   `--no-root`: Skips installing the project package itself in editable mode.
+    *   `--no-dev`: Excludes development dependencies (like testing tools) to keep the production image lean. For a development-specific stage, you might omit `--no-dev`.
+
+8.  **`COPY ./backend /app/`**:
+    *   Copies the entire `./backend` directory (containing your Django project) into the `/app` directory in the image.
+
+9.  **Non-Root User (Commented Out for Initial Simplicity)**:
+    *   The commented-out section shows how to create and switch to a non-root user (`appuser`). This is a security best practice for production.
+    *   *Decision*: For the initial setup, we'll proceed with the root user to simplify volume permissions and Gunicorn/Celery execution, but this should be revisited and implemented before any production deployment.
+
+10. **`EXPOSE 8000`**:
+    *   Documents that the container will listen on port 8000 at runtime. This doesn't actually publish the port; publishing is done in `docker-compose.yml`.
+
+11. **`ENTRYPOINT ["/app/entrypoint.sh"]`**:
+    *   Specifies the `entrypoint.sh` script (detailed in Section 5) as the command to be executed when the container starts.
+    *   The actual command to run the application (Gunicorn, Celery worker, Celery beat) will be passed as an argument to this entrypoint script from the `command` directive in the `docker-compose.yml` file for each respective service.
+
+This Dockerfile provides a solid foundation for building the backend application image. It prioritizes caching, dependency management with Poetry, and includes placeholders for security best practices like using a non-root user.
 
 ---
 
 ## 5. `backend/entrypoint.sh` Details
 
-*(This script will handle: waiting for DB to be ready (optional), applying Django migrations, collecting static files, and starting Gunicorn/Daphne. Example commands will be provided.)*
+The `entrypoint.sh` script is executed when any container using the `backend` image starts (i.e., `backend`, `worker`, `beat` services). Its primary purpose is to handle setup tasks like waiting for the database to be ready, applying Django database migrations, and then executing the main command passed to the container (e.g., Gunicorn, Celery worker/beat).
+
+This script should be placed in the `backend/` directory and made executable (`chmod +x backend/entrypoint.sh`).
+
+```bash
+#!/bin/sh
+
+# Exit immediately if a command exits with a non-zero status.
+set -e
+
+# Function to check if PostgreSQL is ready
+wait_for_postgres() {
+  echo "Waiting for PostgreSQL to be ready..."
+  # The PGPASSWORD environment variable should be set for the psql command to work without a password prompt.
+  # It's typically set in the .env file and loaded by docker-compose.
+  until psql -h "${DB_HOST:-db}" -U "${DB_USER:-postgres}" -d "${DB_NAME:-postgres}" -c '\q' 2>/dev/null; do
+    echo "PostgreSQL is unavailable - sleeping"
+    sleep 1
+  done
+  echo "PostgreSQL is up - executing command"
+}
+
+# Determine the command to run based on the first argument passed to the script
+# This allows the same entrypoint to be used for Gunicorn, Celery worker, Celery beat, etc.
+case "$1" in
+  "gunicorn")
+    echo "Starting Gunicorn server..."
+    # Wait for DB only if it's the Gunicorn server (which might need DB for startup/migrations)
+    if [ "${WAIT_FOR_DB:-true}" = "true" ]; then
+      wait_for_postgres
+    fi
+    
+    echo "Applying database migrations..."
+    poetry run python manage.py migrate --noinput
+
+    echo "Collecting static files..."
+    poetry run python manage.py collectstatic --noinput --clear
+    # chown -R appuser:appuser /app/staticfiles_collected # If using non-root user
+    # chown -R appuser:appuser /app/media # If using non-root user
+    ;;
+  "celery_worker")
+    echo "Starting Celery worker..."
+    # Celery workers also might need DB to be ready if they interact with Django ORM on startup or for specific tasks.
+    if [ "${WAIT_FOR_DB_CELERY:-true}" = "true" ]; then
+      wait_for_postgres
+    fi
+    # The command for celery worker is passed as "celery_worker" then the actual celery command
+    # We shift to remove "celery_worker" and then execute the rest.
+    shift
+    ;; # The actual celery command is executed by "exec" below
+  "celery_beat")
+    echo "Starting Celery beat..."
+    # Celery beat might need DB for DatabaseScheduler.
+    if [ "${WAIT_FOR_DB_CELERY_BEAT:-true}" = "true" ]; then
+      wait_for_postgres
+    fi
+    # Similar to worker, shift and execute the rest.
+    shift
+    ;; # The actual celery beat command is executed by "exec" below
+  *) 
+    # If no specific known command, just run what was passed.
+    # This allows running arbitrary commands like `poetry run python manage.py shell`
+    echo "Running command as is: $@"
+    ;;
+esac
+
+# Execute the command passed into the Docker container (e.g., Gunicorn, Celery command, or manage.py command)
+# `exec "$@"` replaces the shell process with the command, so signals are passed correctly.
+exec "$@"
+
+```
+
+**Key Features and Explanations:**
+
+1.  **`#!/bin/sh`**: Shebang indicating the script should be run with `sh` (Bourne shell).
+2.  **`set -e`**: Exits the script immediately if any command fails. This is good for catching errors early.
+3.  **`wait_for_postgres()` Function**:
+    *   This function polls the PostgreSQL database to check if it's ready to accept connections before proceeding.
+    *   It uses `psql -h "${DB_HOST:-db}" ... -c '\q'`. The environment variables `DB_HOST`, `DB_USER`, `DB_NAME` (and implicitly `PGPASSWORD`) should be available from the `.env` file.
+    *   The `:-db` syntax provides a default value if the variable is unset or null.
+4.  **Command Handling (`case "$1" in ... esac`)**:
+    *   The script inspects the first argument (`$1`) passed to it. This argument is typically the first part of the `command` specified in `docker-compose.yml`.
+    *   **`"gunicorn"`)**: If the command is for Gunicorn (our `backend` service):
+        *   It optionally waits for the database using `wait_for_postgres` (controlled by `WAIT_FOR_DB` env var, defaulting to true).
+        *   Runs Django database migrations: `poetry run python manage.py migrate --noinput`.
+        *   Collects static files: `poetry run python manage.py collectstatic --noinput --clear`.
+        *   Commented out `chown` commands are placeholders for when a non-root user is implemented, to ensure correct file permissions for volumes.
+    *   **`"celery_worker"` and `"celery_beat"`)**: If the command is for Celery worker or beat:
+        *   It optionally waits for the database (controlled by `WAIT_FOR_DB_CELERY` or `WAIT_FOR_DB_CELERY_BEAT` env vars).
+        *   `shift`: This command removes the first argument (e.g., `celery_worker`) from the list of positional parameters (`$@`). This is because the actual Celery command (e.g., `celery -A seculite_api worker ...`) follows this marker. The `exec "$@"` at the end will then run the intended Celery command.
+    *   **`*)` (Default case)**: If the first argument doesn't match known services, it simply proceeds to execute the command as is. This allows running other Django management commands or a shell, e.g., `docker-compose run backend poetry run python manage.py createsuperuser`.
+5.  **`exec "$@"`**:
+    *   This is the crucial final step. It replaces the current shell process with the command specified by `"$@"` (all arguments passed to the script, potentially modified by `shift`).
+    *   Using `exec` ensures that the main application (Gunicorn, Celery, etc.) becomes PID 1 in the container (or at least the direct child of the entrypoint that receives signals properly), which is important for signal handling (like `SIGTERM` for graceful shutdown).
+
+**How it integrates with `docker-compose.yml`:**
+
+-   The `ENTRYPOINT ["/app/entrypoint.sh"]` in `backend/Dockerfile` sets this script to run first.
+-   The `command:` directive in `docker-compose.yml` for services using this image will provide the arguments to this script.
+    -   For `backend` service: `command: ["gunicorn", "seculite_api.wsgi:application", ...]`
+        *   `$1` in entrypoint.sh will be `gunicorn`.
+    -   For `worker` service: `command: ["celery_worker", "celery", "-A", "seculite_api", "worker", ...]`
+        *   `$1` will be `celery_worker`. After `shift`, `"$@"` becomes `celery -A seculite_api worker ...`.
+    -   For `beat` service: `command: ["celery_beat", "celery", "-A", "seculite_api", "beat", ...]`
+        *   `$1` will be `celery_beat`. After `shift`, `"$@"` becomes `celery -A seculite_api beat ...`.
+
+This entrypoint script provides flexibility and handles common startup routines for a Django application in Docker.
 
 ---
 
