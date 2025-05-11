@@ -7,9 +7,55 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 from bs4 import BeautifulSoup
 import traceback
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 RESULTS_DIR = os.environ.get('RESULTS_DIR', '/seculite/results')
 OUTPUT_FILE = '/seculite/results/security-summary.html'
+
+# Dynamische LLM-Client-Auswahl
+llm_provider = os.environ.get('LLM_PROVIDER', 'openai').lower()
+llm_config = {
+    'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', ''),
+    'OPENAI_MODEL': os.environ.get('OPENAI_MODEL', 'gpt-3.5-turbo'),
+    'OPENAI_ENDPOINT': os.environ.get('OPENAI_ENDPOINT', 'https://api.openai.com/v1/chat/completions'),
+    'GEMINI_API_KEY': os.environ.get('GEMINI_API_KEY', ''),
+    'GEMINI_MODEL': os.environ.get('GEMINI_MODEL', 'gemini-pro'),
+    'GEMINI_ENDPOINT': os.environ.get('GEMINI_ENDPOINT', 'https://generativelanguage.googleapis.com/v1beta/models'),
+    'HF_API_KEY': os.environ.get('HF_API_KEY', ''),
+    'HF_MODEL': os.environ.get('HF_MODEL', 'bigcode/starcoder2-15b'),
+    'HF_ENDPOINT': os.environ.get('HF_ENDPOINT', 'https://api-inference.huggingface.co/models'),
+    'GROQ_API_KEY': os.environ.get('GROQ_API_KEY', ''),
+    'GROQ_MODEL': os.environ.get('GROQ_MODEL', 'llama3-70b-8192'),
+    'GROQ_ENDPOINT': os.environ.get('GROQ_ENDPOINT', 'https://api.groq.com/openai/v1/chat/completions'),
+    'MISTRAL_API_KEY': os.environ.get('MISTRAL_API_KEY', ''),
+    'MISTRAL_MODEL': os.environ.get('MISTRAL_MODEL', 'mistral-medium'),
+    'MISTRAL_ENDPOINT': os.environ.get('MISTRAL_ENDPOINT', 'https://api.mistral.ai/v1/chat/completions'),
+    'ANTHROPIC_API_KEY': os.environ.get('ANTHROPIC_API_KEY', ''),
+    'ANTHROPIC_MODEL': os.environ.get('ANTHROPIC_MODEL', 'claude-3-opus-20240229'),
+    'ANTHROPIC_ENDPOINT': os.environ.get('ANTHROPIC_ENDPOINT', 'https://api.anthropic.com/v1/messages'),
+}
+
+if llm_provider == 'openai':
+    from scripts.llm.llm_client_openai import OpenAILLMClient
+    llm_client = OpenAILLMClient(llm_config)
+elif llm_provider == 'gemini':
+    from scripts.llm.llm_client_gemini import GeminiLLMClient
+    llm_client = GeminiLLMClient(llm_config)
+elif llm_provider == 'huggingface':
+    from scripts.llm.llm_client_huggingface import HuggingFaceLLMClient
+    llm_client = HuggingFaceLLMClient(llm_config)
+elif llm_provider == 'groq':
+    from scripts.llm.llm_client_groq import GroqLLMClient
+    llm_client = GroqLLMClient(llm_config)
+elif llm_provider == 'mistral':
+    from scripts.llm.llm_client_mistral import MistralLLMClient
+    llm_client = MistralLLMClient(llm_config)
+elif llm_provider == 'anthropic':
+    from scripts.llm.llm_client_anthropic import AnthropicLLMClient
+    llm_client = AnthropicLLMClient(llm_config)
+else:
+    from scripts.llm.llm_client_openai import OpenAILLMClient
+    llm_client = OpenAILLMClient(llm_config)
 
 def debug(msg):
     print(f"[generate-html-report] {msg}", file=sys.stderr)
@@ -75,13 +121,17 @@ def semgrep_summary(semgrep_json):
     findings = []
     if semgrep_json and 'results' in semgrep_json:
         for r in semgrep_json['results']:
-            findings.append({
+            finding = {
                 'check_id': r.get('check_id', ''),
                 'path': r.get('path', ''),
                 'start': r.get('start', {}).get('line', ''),
                 'message': r.get('extra', {}).get('message', ''),
                 'severity': r.get('extra', {}).get('severity', '')
-            })
+            }
+            # LLM integration: generate prompt and get AI explanation
+            prompt = f"Explain and suggest a fix for this finding: {finding['message']} in {finding['path']} at line {finding['start']}"
+            finding['ai_explanation'] = llm_client.query(prompt)
+            findings.append(finding)
     else:
         debug("No Semgrep results found in JSON.")
     return findings
@@ -323,7 +373,7 @@ def main():
             # Semgrep Section
             f.write('<h2>Semgrep Static Code Analysis</h2>')
             if semgrep_findings:
-                f.write('<table><tr><th>Rule</th><th>File</th><th>Line</th><th>Message</th><th>Severity</th></tr>')
+                f.write('<table><tr><th>Rule</th><th>File</th><th>Line</th><th>Message</th><th>Severity</th><th>AI Explanation</th></tr>')
                 for finding in semgrep_findings:
                     sev = finding['severity'].upper()
                     icon = ''
@@ -332,7 +382,8 @@ def main():
                     elif sev == 'MEDIUM': icon = '⚠️'
                     elif sev == 'LOW': icon = 'ℹ️'
                     elif sev in ('INFO', 'INFORMATIONAL'): icon = 'ℹ️'
-                    f.write(f'<tr class="row-{sev}"><td>{finding["check_id"]}</td><td>{finding["path"]}</td><td>{finding["start"]}</td><td>{finding["message"]}</td><td class="severity-{sev}">{icon} {sev}</td></tr>')
+                    ai_exp = finding.get('ai_explanation', '')
+                    f.write(f'<tr class="row-{sev}"><td>{finding["check_id"]}</td><td>{finding["path"]}</td><td>{finding["start"]}</td><td>{finding["message"]}</td><td class="severity-{sev}">{icon} {sev}</td><td>{ai_exp}</td></tr>')
                 f.write('</table>')
             else:
                 f.write('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No code vulnerabilities found.</div>')

@@ -8,19 +8,19 @@ Enhance the SecuLite dashboard to provide a robust, interactive, and user-friend
 ### 1. UI Feature Implementation
 - [x] Add scan button to `security-summary.html`
 - [x] Add status display for scan status (idle/running)
-- [ ] Implement auto-refresh after scan completion
-- [ ] Add error handling and user feedback (e.g., connection errors)
-- [ ] Add UI feedback for running scan (e.g., spinner, disabled button)
+- [x] Implement auto-refresh after scan completion
+- [x] Add error handling and user feedback (e.g., connection errors)
+- [x] Add UI feedback for running scan (e.g., spinner, disabled button)
 
 ### 2. Backend/API Integration
 - [x] Ensure backend API endpoints for `/scan` and `/status` exist and work
 - [ ] Improve API error messages and status codes for frontend robustness
 
 ### 3. Documentation & Screenshots
-- [ ] Update documentation to reflect dashboard features
-- [ ] Add/refresh screenshots in `docs/screenshots/`
+- [ ] Update documentation to reflect dashboard features (in progress)
+- [ ] Add/refresh screenshots in `docs/screenshots/` (in progress)
 
 ### 4. Testing & Validation
-- [ ] Test all dashboard features (scan trigger, status, auto-refresh, error handling)
-- [ ] Validate user experience and accessibility
+- [ ] Test all dashboard features (scan trigger, status, auto-refresh, error handling) (in progress)
+- [ ] Validate user experience and accessibility (in progress)
 
