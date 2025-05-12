@@ -67,7 +67,7 @@
 import axios from 'axios';
 import ScanJobDetail from './ScanJobDetail.vue'; // Import the new component
 
-const API_SCAN_JOBS_URL = '/api/core/scan-jobs/';
+const API_SCAN_JOBS_URL = '/api/v1/core/scan-jobs/';
 
 export default {
   name: 'ScanJobList',
