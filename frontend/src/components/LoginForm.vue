@@ -4,11 +4,11 @@
     <form @submit.prevent="handleLogin">
       <div class="form-group">
         <label for="login-email">Email or Username:</label>
-        <input type="text" id="login-email" v.model="formData.email" required />
+        <input type="text" id="login-email" v-model="formData.email" required ref="loginEmailInput" />
       </div>
       <div class="form-group">
         <label for="login-password">Password:</label>
-        <input type="password" id="login-password" v.model="formData.password" required />
+        <input type="password" id="login-password" v-model="formData.password" required ref="loginPasswordInput" />
       </div>
       <button type="submit" :disabled="isLoading">{{ isLoading ? 'Logging in...' : 'Login' }}</button>
     </form>
@@ -42,8 +42,20 @@ export default {
       this.message = '';
       this.isSuccess = false;
 
+      // --- DIAGNOSTIC LOGS ---
+      const emailFromRef = this.$refs.loginEmailInput?.value;
+      const passwordFromRef = this.$refs.loginPasswordInput?.value;
+      console.log('Values from refs:', { email: emailFromRef, password: passwordFromRef });
+      console.log('Values from formData before creating payload:', { email: this.formData.email, password: this.formData.password });
+      // --- END DIAGNOSTIC LOGS ---
+
       try {
-        const response = await axios.post(`${AUTH_API_URL}/login/`, this.formData);
+        const payload = {
+          email: this.formData.email,
+          password: this.formData.password
+        };
+        console.log('Sending login payload:', payload);
+        const response = await axios.post(`${AUTH_API_URL}/login/`, payload);
         const token = response.data.key;
         if (token) {
           localStorage.setItem('authToken', token);
