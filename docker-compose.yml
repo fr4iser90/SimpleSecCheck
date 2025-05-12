@@ -1,103 +1,157 @@
-version: '3.8'
-
 services:
-  seculite:
-    build: .
-    image: seculite:latest
-    container_name: seculite
-    env_file:
-      - .env
-    environment:
-      - ZAP_TARGET=${TARGET_URL}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL}
-      - OPENAI_ENDPOINT=${OPENAI_ENDPOINT}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL=${GEMINI_MODEL}
-      - GEMINI_ENDPOINT=${GEMINI_ENDPOINT}
-      - HF_API_KEY=${HF_API_KEY}
-      - HF_MODEL=${HF_MODEL}
-      - HF_ENDPOINT=${HF_ENDPOINT}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - GROQ_MODEL=${GROQ_MODEL}
-      - GROQ_ENDPOINT=${GROQ_ENDPOINT}
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
-      - MISTRAL_MODEL=${MISTRAL_MODEL}
-      - MISTRAL_ENDPOINT=${MISTRAL_ENDPOINT}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL}
-      - ANTHROPIC_ENDPOINT=${ANTHROPIC_ENDPOINT}
-      - LLM_PROVIDER=${LLM_PROVIDER}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+  db:
+    image: postgres:15-alpine
+    container_name: seculite_db
     volumes:
-      - ${REPORT_PATH}:/seculite/results
-      - ${LOG_PATH}:/seculite/logs
-      - ${TARGET_PATH}:/target:ro
-    networks:
-      - ${DOCKER_NETWORK}
-
-  zap-webui:
-    image: seculite:latest
-    container_name: zap-webui
+      - postgres_data:/var/lib/postgresql/data
     env_file:
       - .env
-    entrypoint:
-      - /opt/ZAP_2.16.1/zap.sh
-      - -daemon
-      - -host
-      - 0.0.0.0
-      - -port
-      - "${ZAP_WEBUI_PORT}"
-      - -config
-      - api.addrs.addr.name=.*
-      - -config
-      - api.addrs.addr.regex=true
-      - -config
-      - api.disablekey=true
     ports:
-      - "${ZAP_WEBUI_PORT}:${ZAP_WEBUI_PORT}"
-    volumes:
-      - ${REPORT_PATH}:/seculite/results
-      - ${LOG_PATH}:/seculite/logs
-      - ${TARGET_PATH}:/target:ro
+      - "5432:5432"
     networks:
-      - ${DOCKER_NETWORK}
+      - seculite_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  web:
+  redis:
+    image: redis:7-alpine
+    container_name: seculite_redis
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - seculite_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: seculite_backend
+    entrypoint: /app/entrypoint.sh
+    # The command for celery worker/beat will be prefixed with celery_worker/celery_beat to be handled by entrypoint.sh
+    command: ["gunicorn", "seculite_api.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--log-level", "info"]
+    volumes:
+      - ./backend:/app
+      - backend_static_collected:/app/staticfiles_collected
+      - backend_media_data:/app/media
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - seculite_network
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: seculite_worker
+    # Prefixing with 'celery_worker' for entrypoint.sh to handle
+    command: ["celery_worker", "celery", "-A", "seculite_api", "worker", "-l", "info", "-Q", "default,scans", "-c", "2"]
+    volumes:
+      - ./backend:/app
+      - backend_media_data:/app/media
+    env_file:
+      - .env
+    depends_on:
+      backend:
+        condition: service_started
+      # db:
+      #   condition: service_healthy # Alternative direct dependency
+      # redis:
+      #   condition: service_healthy # Alternative direct dependency
+    networks:
+      - seculite_network
+    restart: unless-stopped
+
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: seculite_beat
+    # Prefixing with 'celery_beat' for entrypoint.sh to handle
+    # Note: django-celery-beat was removed from pyproject.toml, this command will fail until it's restored and working.
+    # Placeholder command for now, or adjust entrypoint to not require it if django-celery-beat is not yet installed.
+    # For now, assuming it might be added back. If not, this service might not be started or its command changed.
+    command: >
+      celery_beat sh -c "rm -f /tmp/celerybeat.pid && \
+             celery -A seculite_api beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+    volumes:
+      - ./backend:/app
+    env_file:
+      - .env
+    depends_on:
+      backend:
+        condition: service_started
+      # db:
+      #   condition: service_healthy # Alternative direct dependency
+      # redis:
+      #   condition: service_healthy # Alternative direct dependency
+    networks:
+      - seculite_network
+    restart: unless-stopped
+
+  nginx:
+    # Use the custom Dockerfile in the nginx directory
     build:
       context: .
-      dockerfile: Dockerfile
-    entrypoint: ["python3", "web/app.py"]
-    volumes:
-      - ./results:/results
-      - ./scripts:/scripts
+      dockerfile: nginx/Dockerfile
+    container_name: seculite_nginx
     ports:
-      - "5000:5000"
-    working_dir: /seculite
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Mounts the Nginx configuration file (still needed if you want to easily modify it without rebuild)
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # REMOVE the frontend dist volume mount:
+      # - ./frontend/dist:/var/www/frontend:ro
+      # Keep Django static/media volume mounts:
+      - backend_static_collected:/var/www/django_static:ro
+      - backend_media_data:/var/www/media:ro # Keep if Nginx serves media
+      # Keep certs volume mount if needed:
+      # - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
-      - seculite
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL}
-      - OPENAI_ENDPOINT=${OPENAI_ENDPOINT}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL=${GEMINI_MODEL}
-      - GEMINI_ENDPOINT=${GEMINI_ENDPOINT}
-      - HF_API_KEY=${HF_API_KEY}
-      - HF_MODEL=${HF_MODEL}
-      - HF_ENDPOINT=${HF_ENDPOINT}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - GROQ_MODEL=${GROQ_MODEL}
-      - GROQ_ENDPOINT=${GROQ_ENDPOINT}
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
-      - MISTRAL_MODEL=${MISTRAL_MODEL}
-      - MISTRAL_ENDPOINT=${MISTRAL_ENDPOINT}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL}
-      - ANTHROPIC_ENDPOINT=${ANTHROPIC_ENDPOINT}
-      - LLM_PROVIDER=${LLM_PROVIDER}
+      backend:
+        condition: service_started
+    networks:
+      - seculite_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_static_collected:
+    driver: local
+  backend_media_data:
+    driver: local
 
 networks:
-  bridge:
+  seculite_network:
     driver: bridge

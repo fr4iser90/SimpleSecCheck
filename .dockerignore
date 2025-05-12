@@ -1,0 +1,58 @@
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+
+# Poetry
+.venv
+poetry.lock
+
+# Node / NPM
+node_modules
+npm-debug.log
+yarn-error.log
+
+# IDE / Editor specific
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite3
+
+# Media files (if large and not part of the repo)
+# media/
+
+# Static files (if collected elsewhere or large)
+# staticfiles_collected/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Coverage reports
+.coverage
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/ 
