@@ -40,7 +40,7 @@
 <script>
 import axios from 'axios';
 
-const API_KEYS_URL = '/api/core/api-keys/'; // Endpoint for APIKeyViewSet
+const API_KEYS_URL = '/api/v1/core/api-keys/'; // Corrected Endpoint with v1 prefix
 
 export default {
   name: 'ApiKeyManager',

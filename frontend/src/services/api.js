@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_CORE_URL = '/api/core';
+const API_CORE_URL = '/api/v1/core';
 
 // Utility for handling Axios responses, can be expanded (e.g., for error formatting)
 const handleResponse = (response) => response.data;
