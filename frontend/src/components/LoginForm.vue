@@ -21,7 +21,7 @@
 <script>
 import axios from 'axios';
 
-const AUTH_API_URL = '/api/auth';
+const AUTH_API_URL = '/api/v1/auth';
 
 export default {
   name: 'LoginForm',
