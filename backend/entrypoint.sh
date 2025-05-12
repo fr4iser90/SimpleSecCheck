@@ -34,6 +34,18 @@ case "$1" in
     echo "Applying database migrations..."
     poetry run python manage.py migrate --noinput
 
+    echo "Checking for superuser..."
+    # Check if required environment variables are set
+    if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_EMAIL" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ]; then
+      echo "Attempting to create/ensure superuser '$DJANGO_SUPERUSER_USERNAME'..."
+      # Use --noinput; requires DJANGO_SUPERUSER_USERNAME, DJANGO_SUPERUSER_EMAIL,
+      # and DJANGO_SUPERUSER_PASSWORD environment variables to be set.
+      # The command handles checking if the user already exists.
+      poetry run python manage.py createsuperuser --noinput || echo "Superuser '$DJANGO_SUPERUSER_USERNAME' already exists or creation failed."
+    else
+        echo "Superuser environment variables (DJANGO_SUPERUSER_USERNAME, DJANGO_SUPERUSER_EMAIL, DJANGO_SUPERUSER_PASSWORD) not set, skipping automatic superuser creation."
+    fi
+
     echo "Collecting static files..."
     poetry run python manage.py collectstatic --noinput --clear
     # chown -R appuser:appuser /app/staticfiles_collected # If using non-root user
