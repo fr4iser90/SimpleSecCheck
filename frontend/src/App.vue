@@ -9,7 +9,7 @@ import ScanJobList from './components/ScanJobList.vue'
 import ScanConfigurationManager from './components/ScanConfigurationManager.vue'
 import axios from 'axios';
 
-const AUTH_API_URL = '/api/auth';
+const AUTH_API_URL = '/api/v1/auth';
 
 export default {
   name: 'App',
