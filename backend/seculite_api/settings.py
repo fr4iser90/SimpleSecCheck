@@ -195,15 +195,23 @@ SITE_ID = 1 # Required by django-allauth
 
 # django-allauth specific settings (examples, customize as needed)
 ACCOUNT_EMAIL_VERIFICATION = 'optional' # Can be 'mandatory', 'optional', or 'none'
-ACCOUNT_AUTHENTICATION_METHOD = 'username_email' # Allow login with username or email
+ACCOUNT_AUTHENTICATION_METHOD = 'email' # Use email ONLY for login
 ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_USERNAME_REQUIRED = True # Or False, if you prefer email-only
-# ACCOUNT_USER_MODEL_USERNAME_FIELD = None # Set to None if ACCOUNT_USERNAME_REQUIRED is False
+ACCOUNT_USERNAME_REQUIRED = False # Username no longer required for login/signup
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None # Explicitly state username field is not used
 # ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 # ACCOUNT_LOGIN_ON_PASSWORD_RESET = True
 # For dj-rest-auth to work with JWT (if you switch from TokenAuth later)
 # REST_USE_JWT = True
 # DJOSER settings might go here if you were using Djoser instead
+
+# Explicitly define Authentication Backends
+AUTHENTICATION_BACKENDS = (
+    # Needed to login by username in Django admin, regardless of `allauth`
+    'django.contrib.auth.backends.ModelBackend',
+    # `allauth` specific authentication methods, such as login by e-mail
+    'allauth.account.auth_backends.AuthenticationBackend',
+)
 
 # Celery Configuration Options
 # ----------------------------
