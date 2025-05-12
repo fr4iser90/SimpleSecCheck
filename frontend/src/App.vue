@@ -38,8 +38,15 @@ export default {
   },
   methods: {
     onUserLoggedIn() {
-      this.isLoggedIn = true;
-      this.currentProjectIdForConfigManager = null;
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        axios.defaults.headers.common['Authorization'] = `Token ${token}`;
+        this.isLoggedIn = true;
+        this.currentProjectIdForConfigManager = null;
+      } else {
+        console.error("Login event received, but no token found in localStorage.");
+        this.handleLogout(true);
+      }
     },
     async handleLogout(isSessionExpired = false) {
       if (isSessionExpired) {
