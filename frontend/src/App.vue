@@ -71,6 +71,22 @@ export default {
     },
     handleProjectSelectedForConfigManager(projectId) {
       this.currentProjectIdForConfigManager = projectId;
+    },
+    async createDefaultProject() {
+      const PROJECT_API_URL = '/api/v1/core/projects/';
+      console.log('Attempting to create default project...');
+      try {
+        const response = await axios.post(PROJECT_API_URL, { name: 'Default Project' });
+        console.log('Default project created:', response.data);
+        // Trigger project list refresh in ScanRunner
+        if (this.$refs.scanRunner) {
+          this.$refs.scanRunner.fetchProjects();
+        }
+        alert('Default Project created successfully! The project list will refresh.');
+      } catch (error) {
+        console.error('Error creating default project:', error.response || error.message);
+        alert(`Failed to create default project: ${error.response?.data?.detail || error.message}`);
+      }
     }
   }
 }
@@ -98,7 +114,9 @@ export default {
         <ApiKeyManager :isLoggedIn="isLoggedIn" @session-expired="handleSessionExpired" />
         <hr class="separator" />
         <h2>Scan Operations</h2>
+        <button @click="createDefaultProject" class="action-button create-button">Create Default Project</button>
         <ScanRunner 
+            ref="scanRunner" 
             :isLoggedIn="isLoggedIn" 
             @session-expired="handleSessionExpired"
             @project-selected="handleProjectSelectedForConfigManager" 
