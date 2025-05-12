@@ -73,7 +73,7 @@ export default {
         } else {
           this.message = 'An unexpected error occurred during login.';
         }
-        console.error('Login error:', error.response || error.message);
+        console.error('Login error:', error.response ? error.response.data : error);
       } finally {
         this.isLoading = false;
       }
