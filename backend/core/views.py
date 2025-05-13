@@ -40,24 +40,28 @@ class ProjectViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated] # Default for list and create
 
     def get_permissions(self):
-        if self.action == 'retrieve':
-            # For retrieve, user must be at least a viewer
-            return [IsAuthenticated(), IsProjectViewerOrHigher()]
-        elif self.action in ['update', 'partial_update', 'destroy']:
-            # For modifications, user must be a manager or owner
-            return [IsAuthenticated(), IsProjectManager()]
-        # For list, create, and other actions, IsAuthenticated is sufficient
-        # as get_queryset and perform_create handle specifics.
+        """
+        Instantiates and returns the list of permissions that this view requires.
+        Owners/Managers can do anything. Developers can read. Authenticated users can list/create.
+        """
+        if self.action in ['list', 'create']:
+            self.permission_classes = [permissions.IsAuthenticated] # Any authenticated user can list or create projects
+        elif self.action in ['retrieve', 'update', 'partial_update', 'destroy']:
+            # For specific project instances, check if user is owner or manager
+            self.permission_classes = [permissions.IsAuthenticated, IsProjectOwner]
+        else:
+            # Default to deny all for any other actions
+            self.permission_classes = [permissions.DenyAll]
         return super().get_permissions()
 
     def perform_create(self, serializer):
-        project = serializer.save(owner=self.request.user)
-        # Automatically make the creator a 'manager' of the project
-        ProjectMembership.objects.create(
-            user=self.request.user,
-            project=project,
-            role=ProjectMembership.Role.MANAGER
-        )
+        """Ensure the user creating the project is set as its owner."""
+        project = serializer.save(owner=self.request.user) # Pass owner directly
+        # Create a ProjectMembership for the creator as 'owner'
+        ProjectMembership.objects.create(user=self.request.user, project=project, role='owner')
+        # The direct owner field on the project model is now set by serializer.save()
+        # project.owner = self.request.user # This line is no longer strictly needed if owner is passed in save
+        # project.save() # And this save is also not needed as the first save includes the owner
 
     def get_queryset(self):
         user = self.request.user
