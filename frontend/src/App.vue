@@ -73,19 +73,25 @@ export default {
       this.currentProjectIdForConfigManager = projectId;
     },
     async createDefaultProject() {
-      const PROJECT_API_URL = '/api/v1/core/projects/';
-      console.log('Attempting to create default project...');
       try {
-        const response = await axios.post(PROJECT_API_URL, { name: 'Default Project' });
+        const response = await axios.post('/api/v1/core/projects/', { name: 'Default Project' });
         console.log('Default project created:', response.data);
-        // Trigger project list refresh in ScanRunner
-        if (this.$refs.scanRunner) {
-          this.$refs.scanRunner.fetchProjects();
-        }
         alert('Default Project created successfully! The project list will refresh.');
+        // Refresh the project list in ScanRunner, assuming ScanRunner component has a ref and a method to fetch projects
+        if (this.$refs.scanRunner && typeof this.$refs.scanRunner.fetchProjects === 'function') {
+          this.$refs.scanRunner.fetchProjects();
+        } else {
+          console.warn('ScanRunner component or fetchProjects method not available.');
+          // Optionally, emit an event that a parent component or global state manager can listen to
+          // this.$root.$emit('projectListShouldRefresh'); // Example if using root instance as event bus
+        }
       } catch (error) {
-        console.error('Error creating default project:', error.response || error.message);
-        alert(`Failed to create default project: ${error.response?.data?.detail || error.message}`);
+        console.error('Failed to create default project:', error);
+        if (error.response && error.response.data && error.response.data.name && error.response.data.name[0].includes('project with this name already exists')) {
+          alert('Failed to create default project: A project with the name "Default Project" already exists.');
+        } else {
+          alert('Failed to create default project: Request failed with status code ' + (error.response ? error.response.status : 'unknown'));
+        }
       }
     }
   }
