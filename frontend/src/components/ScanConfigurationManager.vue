@@ -89,7 +89,7 @@
 <script>
 import axios from 'axios';
 
-const API_CONFIGURATIONS_URL = '/api/core/scan-configurations/';
+const API_CONFIGURATIONS_URL = '/api/v1/core/scan-configurations/';
 
 const initialConfigFormState = () => ({
   id: null,
@@ -135,14 +135,19 @@ export default {
     selectedProjectId: {
       immediate: true,
       handler(newProjectId) {
+        console.log('ScanConfigurationManager.vue: Watcher for selectedProjectId triggered. New value:', newProjectId);
         this.configurations = []; 
         this.errorMessage = null;
         this.cancelEditOrCreate(); // Also clears form and resets editing state
         if (newProjectId && this.isLoggedIn) {
+          console.log('ScanConfigurationManager.vue: Valid projectId and logged in. Fetching configurations for project ID:', newProjectId);
           this.fetchConfigurations(newProjectId);
         } else if (!newProjectId && this.isLoggedIn){
+          console.log('ScanConfigurationManager.vue: selectedProjectId is now null. No configurations will be fetched.');
           // this.errorMessage = "No project selected. Configurations cannot be loaded.";
           // Message is already in template
+        } else {
+          console.log('ScanConfigurationManager.vue: Conditions not met to fetch configurations (isLoggedIn:', this.isLoggedIn, ', newProjectId:', newProjectId, ')');
         }
       }
     },
@@ -265,10 +270,16 @@ export default {
             project: this.configForm.project || this.selectedProjectId // Ensure project is set
         };
 
+        console.log('ScanConfigurationManager.vue: Attempting to save configuration.');
+        console.log('ScanConfigurationManager.vue: API URL:', API_CONFIGURATIONS_URL);
+        console.log('ScanConfigurationManager.vue: Payload:', JSON.parse(JSON.stringify(payload)));
+
         try {
             if (this.editingConfiguration) { // Update (PUT)
+                console.log('ScanConfigurationManager.vue: Sending PUT request to:', `${API_CONFIGURATIONS_URL}${this.editingConfiguration.id}/`);
                 await axios.put(`${API_CONFIGURATIONS_URL}${this.editingConfiguration.id}/`, payload);
             } else { // Create (POST)
+                console.log('ScanConfigurationManager.vue: Sending POST request to:', API_CONFIGURATIONS_URL);
                 await axios.post(API_CONFIGURATIONS_URL, payload);
             }
             await this.fetchConfigurations(this.selectedProjectId); // Refresh list

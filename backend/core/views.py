@@ -120,16 +120,34 @@ class ScanConfigurationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        # Start with all configurations or those based on user's project memberships
         if user.is_superuser:
-            return ScanConfiguration.objects.all().select_related('project', 'created_by')
-        
-        # User sees configurations for projects they are members of (any role)
-        # This relies on ProjectMembership model being populated correctly.
-        member_projects = ProjectMembership.objects.filter(user=user).values_list('project_id', flat=True)
-        
-        return ScanConfiguration.objects.filter(
-            project_id__in=list(member_projects)
-        ).select_related('project', 'created_by').distinct()
+            queryset = ScanConfiguration.objects.all()
+        else:
+            member_project_ids = ProjectMembership.objects.filter(user=user).values_list('project_id', flat=True)
+            # If a non-superuser is not a member of any project, they should see no configurations.
+            if not member_project_ids:
+                return ScanConfiguration.objects.none()
+            queryset = ScanConfiguration.objects.filter(project_id__in=list(member_project_ids))
+
+        # Filter by specific project ID if provided in query parameters
+        project_id_query_param = self.request.query_params.get('project', None)
+        if project_id_query_param:
+            try:
+                project_id_to_filter = int(project_id_query_param)
+                # If user is not a superuser, ensure they are a member of the project they are trying to filter by.
+                # This prevents them from seeing configurations of projects they are not part of, even if they guess a project ID.
+                if not user.is_superuser and project_id_to_filter not in member_project_ids:
+                    return queryset.none() # Or ScanConfiguration.objects.none() to be more explicit
+                
+                queryset = queryset.filter(project_id=project_id_to_filter)
+
+            except ValueError:
+                # If 'project' query param is not a valid integer, return an empty queryset
+                # or consider raising a ValidationError for a 400 response.
+                return ScanConfiguration.objects.none() 
+
+        return queryset.select_related('project', 'created_by').distinct()
 
 class UserProfileViewSet(mixins.RetrieveModelMixin,
                          mixins.UpdateModelMixin,
