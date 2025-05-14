@@ -112,17 +112,39 @@ export default {
         await this.fetchApiKeys();
       } catch (error) {
         console.error('Error generating API key:', error.response || error.message);
-        this.errorMessage = 'Failed to generate API key.';
         if (error.response && error.response.data) {
-            let errors = [];
-            for (const field in error.response.data) {
-                errors.push(`${field}: ${error.response.data[field].join(', ')}`);
+            if (typeof error.response.data === 'string') {
+                // If the error response is a string (e.g., HTML error page), show a generic message
+                this.errorMessage = 'Failed to generate API key. The server returned an unexpected error.';
+            } else if (typeof error.response.data === 'object') {
+                let errors = [];
+                // Check for non_field_errors first or a general detail message
+                if (error.response.data.non_field_errors) {
+                    errors.push(error.response.data.non_field_errors.join(', '));
+                } else if (error.response.data.detail) {
+                    errors.push(error.response.data.detail);
+                }
+                // Then iterate over other field-specific errors if they exist
+                for (const field in error.response.data) {
+                    if (field !== 'non_field_errors' && field !== 'detail' && Array.isArray(error.response.data[field])) {
+                        errors.push(`${field.charAt(0).toUpperCase() + field.slice(1)}: ${error.response.data[field].join(', ')}`);
+                    } else if (field !== 'non_field_errors' && field !== 'detail' && typeof error.response.data[field] === 'string') {
+                        // Handle cases where a field error might be a single string
+                        errors.push(`${field.charAt(0).toUpperCase() + field.slice(1)}: ${error.response.data[field]}`);
+                    }
+                }
+                this.errorMessage = errors.length > 0 ? `Failed to generate API key: ${errors.join('; ')}` : 'Failed to generate API key. An unknown error occurred.';
+            } else {
+                 this.errorMessage = 'Failed to generate API key. The server response was not in the expected format.';
             }
-            this.errorMessage = `Failed to generate API key: ${errors.join('; ')}`;
-        } else if (error.response && error.response.status === 401) {
-            this.$emit('session-expired');
+        } else if (error.request) {
+            this.errorMessage = 'Failed to generate API key. No response received from server.';
         } else {
-            this.errorMessage = 'Failed to generate API key. An unknown error occurred.';
+            this.errorMessage = 'Failed to generate API key. An unknown error occurred during the request setup.';
+        }
+
+        if (error.response && error.response.status === 401) {
+            this.$emit('session-expired');
         }
       } finally {
         this.isGenerating = false;

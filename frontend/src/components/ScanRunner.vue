@@ -8,7 +8,7 @@
       
       <div class="form-group">
         <label for="project-select">Select Project:</label>
-        <select id="project-select" v-model="selectedProjectId" :disabled="isLoadingProjects || triggeringScan">
+        <select id="project-select" :value="selectedProjectId" @change="handleProjectSelectionChange" :disabled="isLoadingProjects || triggeringScan">
           <option :value="null" disabled>{{ isLoadingProjects ? 'Loading projects...' : (projectLoadError ? 'Error loading projects' : '-- Select a Project --') }}</option>
           <option v-for="project in projectList" :key="project.id" :value="project.id">
             {{ project.name }} (ID: {{ project.id }})
@@ -231,8 +231,10 @@ export default {
       deep: true // Watch for changes in array elements too, though maybe not strictly necessary here
     },
     selectedProjectId(newProjectId, oldProjectId) {
+      console.log(`ScanRunner.vue: WATCHER for selectedProjectId fired. New: ${newProjectId}, Old: ${oldProjectId}`); // DEBUG LINE
       if (newProjectId !== oldProjectId) {
         this.$emit('project-selected', newProjectId);
+        console.log(`ScanRunner.vue: selectedProjectId changed from ${oldProjectId} to ${newProjectId}, emitted 'project-selected'`); 
         this.selectedConfigurationId = null;
         this.scanConfigurations = [];
         this.configurationsError = null;
@@ -260,6 +262,42 @@ export default {
     // Handled by immediate watcher on isLoggedIn
   },
   methods: {
+    handleProjectSelectionChange(event) {
+      const newProjectId = event.target.value ? parseInt(event.target.value, 10) : null;
+      // Manually update selectedProjectId because we are not using v-model directly on select anymore for this specific handling
+      // However, selectedProject object also needs to be updated if other parts of the component rely on it.
+      // For now, let's assume selectedProjectId is the primary driver from the select.
+      // The component's selectedProjectId data property will be updated via the prop binding if App.vue sends it back down,
+      // or we might need to manage it locally if App.vue doesn't reflect it back to a prop this component uses for its own v-model.
+      // Given current structure, App.vue DOES NOT send selectedProjectId back to ScanRunner. ScanRunner manages its own selection.
+      // So, we MUST update this.selectedProjectId here.
+      
+      const oldProjectId = this.selectedProjectId;
+      this.selectedProjectId = newProjectId; // Update local state
+
+      // Update the selectedProject object as well
+      this.selectedProject = this.projectList.find(p => p.id === newProjectId) || null;
+
+      console.log(`ScanRunner.vue: handleProjectSelectionChange. New: ${newProjectId}, Old: ${oldProjectId}`);
+
+      if (newProjectId !== oldProjectId) {
+        this.$emit('project-selected', newProjectId);
+        console.log(`ScanRunner.vue: Emitted 'project-selected' with ${newProjectId}`);
+        
+        // Reset related states as was done in the watcher
+        this.selectedConfigurationId = null;
+        this.scanConfigurations = [];
+        this.configurationsError = null;
+        this.targetInfo = '';
+        this.initiatedJob = null;
+        this.scanTriggerError = null;
+        if (newProjectId) {
+          this.fetchScanConfigurations(newProjectId);
+        } else {
+          this.scanConfigurations = [];
+        }
+      }
+    },
     async fetchProjects() {
       if (!this.isLoggedIn) {
         this.projectList = [];
