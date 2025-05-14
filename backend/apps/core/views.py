@@ -63,33 +63,55 @@ class ProjectViewSet(viewsets.ModelViewSet):
         project = serializer.save(owner=self.request.user)
         ProjectMembership.objects.create(user=self.request.user, project=project, role=ProjectMembership.Role.MANAGER)
 
-        # Prepare target_details for the default ScanConfiguration
-        target_details = {}
-        if project.codebase_path_or_url:
-            value = project.codebase_path_or_url
-            if value.startswith(('http://', 'https://', 'git@', 'ssh://')):
-                target_details['codebase_git'] = value
-            elif value.startswith('/'): # Basic check for an absolute local path
-                target_details['codebase_local_path'] = value
-            else: # Fallback or could be a relative path if you support those
-                # For now, let's assume it's a local path if not clearly a URL
-                target_details['codebase_local_path'] = value 
-                print(f"Warning: codebase_path_or_url '{value}' for project {project.id} is not a clear URL or absolute path, treating as local path.")
+        target_details_for_scan_config = {}
+
+        docker_compose_project_name = self.request.data.get('selected_compose_project_name')
+        container_targets_data = self.request.data.get('container_targets')
+
+        if docker_compose_project_name and isinstance(container_targets_data, list):
+            target_details_for_scan_config['compose_project_name'] = docker_compose_project_name
+            processed_containers = []
+            for container_data in container_targets_data:
+                if isinstance(container_data, dict) and \
+                   all(key in container_data for key in ['id', 'name', 'image', 'host_code_path']):
+                    processed_containers.append({
+                        "id": container_data.get('id'),
+                        "name": container_data.get('name'),
+                        "image": container_data.get('image'),
+                        "host_code_path": container_data.get('host_code_path')
+                    })
+                else:
+                    print(f"Warning: Malformed container data received for project {project.id}: {container_data}")
+            target_details_for_scan_config['containers'] = processed_containers
+        else:
+            if project.codebase_path_or_url:
+                value = project.codebase_path_or_url
+                if value.startswith(('http://', 'https://', 'git@', 'ssh://')):
+                    target_details_for_scan_config['codebase_git'] = value
+                elif value.startswith('/'): 
+                    target_details_for_scan_config['codebase_local_path'] = value
+                else: 
+                    target_details_for_scan_config['codebase_local_path'] = value
+                    print(f"Warning: codebase_path_or_url '{value}' for project {project.id} is not a clear URL or absolute path, treating as local path.")
 
         if project.web_app_url:
-            target_details['web_url'] = project.web_app_url
+            target_details_for_scan_config['primary_web_app_url'] = project.web_app_url
+        
+        has_predefined_targets = bool(
+            target_details_for_scan_config.get('containers') or \
+            target_details_for_scan_config.get('codebase_git') or \
+            target_details_for_scan_config.get('codebase_local_path') or \
+            target_details_for_scan_config.get('primary_web_app_url')
+        )
 
-        # Automatically create a default scan configuration for the new project.
-        # This default configuration can then be customized by the user.
         ScanConfiguration.objects.create(
             project=project,
             name=f"Default Configuration for {project.name}",
-            description="Automatically created default scan configuration. Please edit to define targets and tools.",
-            # If target_details is empty, it will be stored as {} (empty JSON object)
-            target_details_json=target_details if target_details else None, 
-            tool_configurations_json=None, # Starts with no specific tool configs
+            description="Automatically created default scan configuration. Please review and customize targets and tools.",
+            target_details_json=target_details_for_scan_config if target_details_for_scan_config else None,
+            tool_configurations_json=None, 
             created_by=self.request.user,
-            has_predefined_targets=bool(target_details) # True if any target was set
+            has_predefined_targets=has_predefined_targets
         )
 
     def get_queryset(self):

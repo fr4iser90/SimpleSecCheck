@@ -62,35 +62,41 @@
             </div>
 
             <div v-if="selectedComposeProjectName && currentSelectedComposeProject && currentSelectedComposeProject.containers.length > 0" class="form-group">
-              <label for="dockerContainerSelect">Container aus '{{ selectedComposeProjectName }}' auswählen:</label>
-              <select id="dockerContainerSelect" v-model="selectedContainerId" @change="handleIndividualContainerSelectedInComposeProject($event.target.value)" class="form-control">
-                <option :value="null" disabled>-- Bitte Container wählen --</option>
-                <option v-for="container in currentSelectedComposeProject.containers" :key="container.id" :value="container.id">
-                  {{ container.name }} ({{ container.id }}) - Status: {{container.status}}
-                </option>
-              </select>
+              <h4>Host-Pfade für Container im Projekt '{{ selectedComposeProjectName }}':</h4>
+              
+              <button type="button" @click="discoverAllHostPathsForAllContainers" :disabled="isLoadingAllContainerPaths" class="btn btn-sm btn-primary mb-3">
+                <span v-if="isLoadingAllContainerPaths" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                {{ isLoadingAllContainerPaths ? 'Ermittle alle Pfade...' : 'Alle Host-Pfade automatisch erkennen' }}
+              </button>
+
+              <div class="scrollable-container-list">
+                <div v-for="container in currentSelectedComposeProject.containers" :key="container.id" class="container-host-path-item">
+                  <div>
+                    <strong>{{ container.name }}</strong> <small>(ID: {{ container.id }}, Image: {{ container.image }})</small>
+                  </div>
+                  <div class="form-group">
+                    <label :for="'hostPath-' + container.id" class="sr-only">Host-Pfad für {{ container.name }}</label>
+                    <input type="text" 
+                           :id="'hostPath-' + container.id" 
+                           v-model="selectedContainerHostPaths[container.id]" 
+                           placeholder="z.B. /lokaler/pfad/zum/code (optional)">
+                  </div>
+                  <div v-if="detectedIndividualContainerPaths[container.id] && detectedIndividualContainerPaths[container.id].length > 0" class="detected-paths-list">
+                    <small>Erkannte Pfade:</small>
+                    <ul>
+                      <li v-for="path in detectedIndividualContainerPaths[container.id]" :key="path" @click="selectDiscoveredPath(container.id, path)">
+                        {{ path }}
+                      </li>
+                    </ul>
+                  </div>
+                  <div v-if="detectedIndividualContainerPaths[container.id] && detectedIndividualContainerPaths[container.id].length === 0" class="alert alert-sm alert-warning mt-1">
+                    Keine spezifischen Host-Pfade für diesen Container durch Docker-Mounts gefunden.
+                  </div>
+                </div>
+              </div>
             </div>
              <div v-if="selectedComposeProjectName && currentSelectedComposeProject && currentSelectedComposeProject.containers.length === 0" class="alert alert-info">
                 Keine Container in diesem Docker-Compose-Projekt gefunden.
-            </div>
-
-            <div v-if="selectedContainerId && isLoadingContainerPaths" class="loading-spinner">
-              <p>Lade Pfade für Container {{ selectedContainerId }}...</p>
-            </div>
-            <div v-if="selectedContainerId && containerPathsError" class="alert alert-danger">
-              {{ containerPathsError }}
-            </div>
-            <div v-if="selectedContainerId && !isLoadingContainerPaths && containerHostPaths.length > 0" class="form-group">
-              <label for="containerHostPathSelect">Host-Pfad für Codebase auswählen:</label>
-              <select id="containerHostPathSelect" @change="selectHostPath($event.target.value)" class="form-control">
-                <option value="" disabled :selected="!newProjectCodebasePathOrUrl">-- Bitte Pfad wählen --</option>
-                <option v-for="path in containerHostPaths" :key="path" :value="path" :selected="path === newProjectCodebasePathOrUrl">
-                  {{ path }}
-                </option>
-              </select>
-            </div>
-            <div v-if="selectedContainerId && !isLoadingContainerPaths && !containerPathsError && containerHostPaths.length === 0" class="alert alert-info">
-               Keine geeigneten Host-Pfade für den ausgewählten Container gefunden.
             </div>
           </div>
           <!-- Docker Integration UI End -->
@@ -142,9 +148,11 @@ export default {
       dockerComposeProjectsError: null,
       selectedComposeProjectName: null, // Name of the selected compose project group
       selectedContainerId: null, // ID of the specific container selected within a compose project for path fetching
-      containerHostPaths: [],
-      isLoadingContainerPaths: false,
-      containerPathsError: null,
+      selectedContainerHostPaths: {}, // New: to store host paths for multiple containers
+      isLoadingAllContainerPaths: false, // NEW: For the global "discover all paths" button
+      detectedIndividualContainerPaths: {}, // To store discovered paths per container
+      deleteConfirmationName: '',
+      projectToDelete: null,
     };
   },
   methods: {
@@ -184,9 +192,9 @@ export default {
       this.dockerComposeProjectsError = null;
       this.selectedComposeProjectName = null;
       this.selectedContainerId = null;
-      this.containerHostPaths = [];
-      this.isLoadingContainerPaths = false;
-      this.containerPathsError = null;
+      this.selectedContainerHostPaths = {}; // Reset this as well
+      this.isLoadingAllContainerPaths = false; // RESET global loader
+      this.detectedIndividualContainerPaths = {};
     },
     closeCreateProjectModal() {
       this.showCreateProjectModal = false;
@@ -209,9 +217,29 @@ export default {
         const payload = {
           name: this.newProjectName,
           description: this.newProjectDescription,
+          // Default values, will be overridden if Docker selection is active
           codebase_path_or_url: this.newProjectCodebasePathOrUrl.trim() || null,
           web_app_url: this.newProjectWebAppUrl.trim() || null,
         };
+
+        if (this.showDockerSelection && this.selectedComposeProjectName && this.currentSelectedComposeProject) {
+          payload.selected_compose_project_name = this.selectedComposeProjectName;
+          payload.container_targets = this.currentSelectedComposeProject.containers.map(container => ({
+            id: container.id,
+            name: container.name,
+            image: container.image, // Ensure your container objects have 'image'
+            host_code_path: this.selectedContainerHostPaths[container.id] || null
+          }));
+          // Optionally, clear or ignore codebase_path_or_url and web_app_url if Docker is used
+          // For now, backend logic should prioritize docker_compose_targets if present
+          // payload.codebase_path_or_url = null; 
+          // payload.web_app_url = null;
+        } else {
+          // Ensure these are explicitly set if not using Docker, 
+          // or rely on the initial object population. Redundant for clarity here.
+          payload.codebase_path_or_url = this.newProjectCodebasePathOrUrl.trim() || null;
+          payload.web_app_url = this.newProjectWebAppUrl.trim() || null;
+        }
         
         await axios.post('/api/v1/core/projects/', payload);
         await this.fetchProjects(); // Reloads the list and emits the event
@@ -245,7 +273,7 @@ export default {
       this.dockerComposeProjects = [];
       this.selectedComposeProjectName = null;
       this.selectedContainerId = null;
-      this.containerHostPaths = [];
+      this.selectedContainerHostPaths = {}; // Reset/initialize for the new project
       try {
         console.log("Fetching docker compose projects...");
         const response = await axios.get('/api/v1/core/docker/compose-projects/');
@@ -270,67 +298,70 @@ export default {
       }
     },
     handleComposeProjectSelection() {
-      // Called when a compose project group is selected.
-      // It should prefill the SecuLite project name and reset container/path selections.
-      this.selectedContainerId = null;
-      this.containerHostPaths = [];
-      this.containerPathsError = null;
-      this.newProjectCodebasePathOrUrl = ''; // Reset path when project group changes
+      this.selectedContainerHostPaths = {}; // Reset/initialize for the new project
+      this.newProjectCodebasePathOrUrl = ''; // Reset, as paths are now per-container
 
-      if (this.selectedComposeProjectName) {
-        const projectGroup = this.dockerComposeProjects.find(p => p.compose_project_name === this.selectedComposeProjectName);
-        if (projectGroup && !this.newProjectName) { // Only prefill if SecuLite project name is empty
-          this.newProjectName = `Projekt-${projectGroup.compose_project_name}`;
-        }
-        // At this point, the UI would typically display the containers within this selectedComposeProjectName
-        // and allow the user to select one for path fetching.
+      if (this.currentSelectedComposeProject && this.currentSelectedComposeProject.containers) {
+        this.currentSelectedComposeProject.containers.forEach(container => {
+          this.selectedContainerHostPaths[container.id] = ''; 
+          this.detectedIndividualContainerPaths[container.id] = null; 
+        });
+      }
+    },
+    handleDockerSelectionChange() {
+      if (!this.showDockerSelection) {
+        this.selectedComposeProjectName = '';
+        this.newProjectName = ''; 
+        this.newProjectCodebasePathOrUrl = '';
+        this.selectedContainerHostPaths = {}; 
+        this.isLoadingAllContainerPaths = false; // RESET global loader
+        this.detectedIndividualContainerPaths = {};
       } else {
-        // Compose project selection was cleared
+        this.fetchDockerComposeProjects();
       }
     },
-    handleIndividualContainerSelectedInComposeProject(containerId) {
-        // Called when a user selects a specific container from the list of containers 
-        // belonging to the selectedComposeProjectName.
-        this.selectedContainerId = containerId;
-        if (this.selectedContainerId) {
-            this.fetchContainerHostPaths();
-        } else {
-            this.containerHostPaths = [];
-            this.containerPathsError = null;
-            this.newProjectCodebasePathOrUrl = ''; // Reset path if container selection is cleared
-        }
-    },
-    async fetchContainerHostPaths() {
-      if (!this.selectedContainerId) return;
-      this.isLoadingContainerPaths = true;
-      this.containerPathsError = null;
-      this.containerHostPaths = [];
-      try {
-        console.log(`Fetching host paths for container ${this.selectedContainerId}...`);
-        const response = await axios.get(`/api/v1/core/docker/containers/${this.selectedContainerId}/paths/`);
-        if (response.data && Array.isArray(response.data)) {
-            this.containerHostPaths = response.data;
-             if (this.containerHostPaths.length === 0) {
-                this.containerPathsError = "Keine Host-Pfade für diesen Container gefunden."; // Or a more neutral message
+    async discoverAllHostPathsForAllContainers() {
+      if (!this.currentSelectedComposeProject || !this.currentSelectedComposeProject.containers) return;
+
+      this.isLoadingAllContainerPaths = true;
+      // Reset detected paths for all relevant containers before starting new discovery
+      this.currentSelectedComposeProject.containers.forEach(container => {
+        this.detectedIndividualContainerPaths[container.id] = null;
+      });
+
+      const pathPromises = this.currentSelectedComposeProject.containers.map(async (container) => {
+        try {
+          const response = await axios.get(`/api/v1/core/docker/containers/${container.id}/paths/`);
+          if (response.data && Array.isArray(response.data)) {
+            this.detectedIndividualContainerPaths[container.id] = response.data;
+            if (response.data.length === 1) {
+              this.selectedContainerHostPaths[container.id] = response.data[0];
             }
-        } else {
-            this.containerPathsError = 'Unerwartete Antwort vom Server beim Laden der Container-Pfade.';
+          } else {
+            this.detectedIndividualContainerPaths[container.id] = []; // No paths found or unexpected format
+            console.warn("Discover all host paths: Unexpected response format for container", container.id, response.data);
+          }
+        } catch (err) {
+          console.error(`Error discovering host paths for container ${container.id}:`, err);
+          this.detectedIndividualContainerPaths[container.id] = []; // Indicate error/no paths
         }
-      } catch (err) {
-        console.error(`Error fetching host paths for container ${this.selectedContainerId}:`, err);
-        this.containerPathsError = `Fehler beim Laden der Pfade für Container ${this.selectedContainerId}.`;
-        if (err.response && err.response.data && err.response.data.error) {
-          this.containerPathsError = err.response.data.error;
-        } else if (err.message) {
-            this.containerPathsError = err.message;
-        }
+      });
+
+      try {
+        await Promise.all(pathPromises);
+      } catch (error) {
+        // This catch block might be redundant if individual errors are handled within the map, 
+        // but good for a general catch-all if Promise.all itself rejects due to an unhandled promise rejection (unlikely here).
+        console.error("Error during Promise.all for discoverAllHostPathsForAllContainers:", error);
       } finally {
-        this.isLoadingContainerPaths = false;
+        this.isLoadingAllContainerPaths = false;
       }
     },
-    selectHostPath(path) {
-      this.newProjectCodebasePathOrUrl = path;
-    }
+    selectDiscoveredPath(containerId, path) {
+      this.selectedContainerHostPaths[containerId] = path;
+      // Optionally, clear the detected paths list after selection to clean up UI
+      // this.detectedIndividualContainerPaths[containerId] = null; 
+    },
   },
   computed: {
     currentSelectedComposeProject() {
@@ -348,10 +379,11 @@ export default {
       if (!newValue) {
         // Reset selections when Docker feature is toggled off
         this.selectedComposeProjectName = null;
-        this.selectedContainerId = null;
-        this.containerHostPaths = [];
-        this.newProjectName = ''; // Or only if it was auto-filled by docker selection
+        this.newProjectName = ''; 
         this.newProjectCodebasePathOrUrl = '';
+        this.selectedContainerHostPaths = {}; 
+        this.isLoadingAllContainerPaths = false; // RESET global loader
+        this.detectedIndividualContainerPaths = {};
       }
     }
   },
@@ -539,5 +571,55 @@ h2 {
 .modal .btn-secondary:disabled {
   background-color: #6c757d;
   opacity: 0.65;
+}
+
+.container-host-path-item {
+  margin-bottom: 10px;
+  padding: 15px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background-color: #fff;
+}
+
+.container-host-path-item .form-group input[type="text"] {
+  flex-grow: 1;
+}
+
+.container-host-path-item .btn-outline-secondary {
+    /* margin-left: 8px; */ /* Using Bootstrap's ml-2 for spacing */
+    white-space: nowrap; /* Prevent button text from wrapping */
+}
+
+.alert-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875em;
+    margin-top: 5px; /* Add some space above small alerts */
+}
+
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.2em;
+    vertical-align: text-bottom; /* Align spinner nicely with text */
+    margin-right: 0.25rem;
+}
+
+.detected-paths-list li:last-child {
+  border-bottom: none;
+}
+.detected-paths-list li:hover {
+  background-color: #e9ecef; /* Slightly different hover for detected paths */
+  color: #0056b3;
+}
+
+.scrollable-container-list {
+  max-height: 300px; /* Adjust as needed, e.g., 40vh for viewport height percentage */
+  overflow-y: auto;
+  padding-right: 10px; /* Space for scrollbar to prevent content overlap */
+  border: 1px solid #eee; /* Optional: visual cue for the scrollable area */
+  border-radius: 4px; /* Optional: match other border radiuses */
+  margin-top: 10px; /* Optional: space above the list */
+  padding-top: 5px; /* Optional: space inside, above the first item */
+  padding-left: 5px; /* Optional: space inside, to the left of items */
 }
 </style> 
