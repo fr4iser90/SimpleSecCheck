@@ -17,6 +17,18 @@ class Project(models.Model):
         through='ProjectMembership',
         related_name='project_memberships'
     )
+    default_tool_settings_json = models.JSONField(
+        blank=True,
+        null=True,
+        default=dict,
+        help_text="Default tool settings JSON for scans in this project (e.g., {\"bandit\": {\"severity\": \"HIGH\"}})."
+    )
+    project_main_targets_json = models.JSONField(
+        blank=True,
+        null=True,
+        default=dict,
+        help_text="Main target definitions for the project (e.g., {\"codebase_git\": \"git@example.com:repo.git\", \"web_url\": \"https://example.com\"})."
+    )
 
     def __str__(self):
         return self.name
