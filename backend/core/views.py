@@ -28,7 +28,7 @@ from django.contrib.auth import get_user_model
 from .authentication import ApiKeyAuthentication # Import the custom authentication class
 # Docker API Integration Imports
 from rest_framework.views import APIView
-from .docker_service import list_running_containers, get_container_code_paths # Assuming docker_service.py is in the same app directory
+from .docker_service import list_running_containers, get_container_code_paths, get_grouped_docker_compose_projects # Added get_grouped_docker_compose_projects
 # End Docker API Integration Imports
 User = get_user_model()
 
@@ -622,3 +622,26 @@ class GetDockerContainerPathsView(APIView):
         if not paths_or_error: # Empty list, but valid response
             return Response([], status=status.HTTP_200_OK)
         return Response(paths_or_error, status=status.HTTP_200_OK)
+
+class ListDockerComposeProjectsView(APIView):
+    """
+    Lists Docker containers grouped by their 'com.docker.compose.project' label.
+    Requires admin privileges.
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, *args, **kwargs):
+        grouped_projects_or_error = get_grouped_docker_compose_projects()
+        if isinstance(grouped_projects_or_error, str): # Error message returned from service
+            return Response({"error": grouped_projects_or_error}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Transform the dictionary into a list of objects for a more common API response structure
+        # e.g., [{"project_name": "my_project", "containers": [...]}, ...]
+        response_data = []
+        for project_name, containers in grouped_projects_or_error.items():
+            response_data.append({
+                "compose_project_name": project_name,
+                "containers": containers
+            })
+
+        return Response(response_data, status=status.HTTP_200_OK)
