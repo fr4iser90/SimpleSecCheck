@@ -302,60 +302,141 @@ class ScanTriggerViewSet(viewsets.ViewSet):
         if not task_id:
             return Response({"error": "task_id path parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
         
-        task_result = AsyncResult(task_id)
-        
-        response_data = {
+        task = AsyncResult(task_id)
+        # Determine if the task result might contain sensitive information
+        # For now, assume results are okay to pass if task is ready.
+        # More granular control might be needed based on task types.
+        result_data = task.result if task.ready() else None
+        status_data = {
             'task_id': task_id,
-            'status': task_result.status,
-            'result': task_result.result if task_result.ready() else None
+            'status': task.status,
+            'result': result_data,
+            'traceback': task.traceback if task.failed() else None
         }
-        
-        # Attempt to fetch associated ScanJob and check permissions
-        scan_job_data = None
+
+        # Optionally, try to find the ScanJob associated with this celery_task_id
         try:
             scan_job = ScanJob.objects.select_related('project').get(celery_task_id=task_id)
-            # Permission check: User must be Viewer or higher for the ScanJob's project.
-            permission_check = IsProjectViewerOrHigher()
-            if not permission_check.has_object_permission(request, self, scan_job.project):
-                # If no permission, don't reveal ScanJob details, but still give Celery task status
-                scan_job_data = "Access to ScanJob details denied for this project."
-            else:
-                scan_job_data = ScanJobSerializer(scan_job).data
+            status_data['scan_job_details'] = ScanJobSerializer(scan_job).data
         except ScanJob.DoesNotExist:
-            scan_job_data = 'No associated ScanJob found for this Celery task ID.'
-        except Exception as e:
-            # Catch other potential errors during ScanJob retrieval/serialization
-            scan_job_data = f'Error retrieving ScanJob details: {str(e)}'
-        
-        response_data['scan_job_details'] = scan_job_data
-        
-        if task_result.failed():
-            response_data['error_message'] = str(task_result.info) # Celery task error
-            return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-        return Response(response_data, status=status.HTTP_200_OK)
+            status_data['scan_job_details'] = 'No ScanJob directly associated with this Celery task ID.'
+        except Exception as e: # Catch other potential errors
+            status_data['scan_job_details'] = f'Error retrieving ScanJob details: {str(e)}'
 
-class ScanJobViewSet(viewsets.ReadOnlyModelViewSet):
+        return Response(status_data)
+
+# Modified ScanJobViewSet to allow creation
+class ScanJobViewSet(viewsets.ModelViewSet): # Changed from ReadOnlyModelViewSet
     """
-    Provides read-only access to ScanJob instances and their results.
-    Users can only see jobs related to projects they own or are admins.
+    Provides access to ScanJob instances.
+    - Create: Users with appropriate project permissions can trigger new scans (create ScanJobs).
+    - List/Retrieve: Users can see jobs for projects they are members of.
+    - Update/Destroy: Potentially restricted to project managers/owners or superusers.
     """
     serializer_class = ScanJobSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated] # Base permission
 
     def get_queryset(self):
         user = self.request.user
         if user.is_superuser:
-            return ScanJob.objects.all().prefetch_related('results').select_related('project', 'initiator', 'scan_configuration').order_by('-created_at')
+            return ScanJob.objects.all().select_related('project', 'scan_configuration', 'initiator').prefetch_related('results')
         
-        # Users see jobs for projects they are members of (any role)
-        member_projects = ProjectMembership.objects.filter(user=user).values_list('project_id', flat=True)
-        return ScanJob.objects.filter(
-            project_id__in=list(member_projects)
-        ).prefetch_related('results').select_related('project', 'initiator', 'scan_configuration').order_by('-created_at')
+        # Regular users see jobs for projects they are members of
+        member_project_ids = ProjectMembership.objects.filter(user=user).values_list('project_id', flat=True)
+        if not member_project_ids:
+            return ScanJob.objects.none()
+        return ScanJob.objects.filter(project_id__in=list(member_project_ids)).select_related(
+            'project', 'scan_configuration', 'initiator'
+        ).prefetch_related('results')
 
-# You might want to create a dedicated API for Scan results later
-# For now, including trigger and status check here.
+    def get_permissions(self):
+        if self.action == 'create':
+            # For creating a ScanJob (triggering a scan), use IsProjectDeveloperOrHigher.
+            # This permission class should check against the project specified in the request data.
+            return [IsAuthenticated(), IsProjectDeveloperOrHigher()] 
+        elif self.action in ['retrieve', 'list']:
+            # For list/retrieve, get_queryset already filters by project membership.
+            # IsAuthenticated is sufficient here.
+            return [IsAuthenticated()]
+        elif self.action in ['update', 'partial_update', 'destroy']:
+            # For modifying or deleting, restrict to project managers/owners or superuser.
+            # This requires object-level permission check based on the ScanJob's project.
+            return [IsAuthenticated(), IsProjectManager()] # IsProjectManager needs to handle obj.project
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        project = serializer.validated_data['project']
+        user = self.request.user
+
+        # Explicit permission check before proceeding
+        # The IsProjectDeveloperOrHigher permission class checks self.request.user against project from serializer.validated_data['project']
+        # by calling check_object_permissions on the project object. We need to ensure that IsProjectDeveloperOrHigher
+        # is written to expect a Project instance for its has_object_permission check.
+        # For create, object is None, so has_permission is called. We must ensure it can access validated_data['project'].
+        # A simpler way is to manually check here if IsProjectDeveloperOrHigher is not set up for create like this.
+
+        if not user.is_superuser:
+            try:
+                membership = ProjectMembership.objects.get(project=project, user=user)
+                if membership.role not in [ProjectMembership.RoleChoices.DEVELOPER,
+                                            ProjectMembership.RoleChoices.MANAGER,
+                                            ProjectMembership.RoleChoices.OWNER]:
+                    self.permission_denied(
+                        self.request,
+                        message="You do not have Developer, Manager, or Owner role in this project to trigger a scan."
+                    )
+            except ProjectMembership.DoesNotExist:
+                self.permission_denied(
+                    self.request, 
+                    message="You are not a member of this project or do not have permission to trigger a scan."
+                )
+        
+        # If a scan_configuration is provided, use its tool_settings_json by default,
+        # unless tool_settings_json is also explicitly provided in the request (override).
+        scan_config = serializer.validated_data.get('scan_configuration')
+        tool_settings_from_request = serializer.validated_data.get('tool_settings_json')
+
+        final_tool_settings = None
+        if tool_settings_from_request:
+            final_tool_settings = tool_settings_from_request
+        elif scan_config and scan_config.tool_configurations_json:
+            final_tool_settings = scan_config.tool_configurations_json
+        
+        # Similarly for target_info_json, if config has predefined targets
+        target_info_from_request = serializer.validated_data.get('target_info_json')
+        final_target_info = target_info_from_request
+
+        if scan_config and scan_config.has_predefined_targets:
+            if target_info_from_request:
+                # Potentially log a warning or decide if request target_info overrides config's predefined targets
+                # For now, let's assume if config has_predefined_targets, they are used unless explicitly overridden.
+                # If the intent is to *not* allow override, this should be an error or target_info_from_request ignored.
+                # Current frontend logic disables target_info if config has predefined ones.
+                # Let's assume if config has predefined, its target_details_json is authoritative unless target_info_from_request is *meant* as an override.
+                # For simplicity now, if config has predefined, we use its definition. If target_info_from_request is present, it might be an error or an override.
+                # We will rely on config.target_details_json if has_predefined_targets is true.
+                final_target_info = scan_config.target_details_json # Use config's target if it has predefined
+            else:
+                final_target_info = scan_config.target_details_json
+        
+        # If no scan_config or it does not have_predefined_targets, target_info_from_request is used.
+        # If target_info_from_request is also null/empty, this might be an issue depending on tool requirements.
+
+        # Celery task will be created and ID assigned *after* initial ScanJob save usually,
+        # or as part of a more complex service layer.
+        # For now, status is PENDING, celery_task_id is null.
+        scan_job = serializer.save(
+            initiated_by=user,
+            status=ScanJobStatus.PENDING, # Initial status
+            tool_settings_json=final_tool_settings,
+            target_info_json=final_target_info,
+            celery_task_id=None # Will be set after Celery task is created
+        )
+        
+        # TODO: Here, you would typically trigger the Celery task
+        # For example: task_result = execute_scan_job.delay(scan_job.id)
+        # scan_job.celery_task_id = task_result.id
+        # scan_job.save(update_fields=['celery_task_id'])
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """

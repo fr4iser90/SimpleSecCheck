@@ -138,6 +138,13 @@ class ScanJobSerializer(serializers.ModelSerializer):
     scan_configuration_name = serializers.CharField(source='scan_configuration.name', read_only=True, allow_null=True)
     results = ScanResultSerializer(many=True, read_only=True)
 
+    project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all())
+    scan_configuration = serializers.PrimaryKeyRelatedField(
+        queryset=ScanConfiguration.objects.all(), 
+        required=False, 
+        allow_null=True
+    )
+
     class Meta:
         model = ScanJob
         fields = [
@@ -145,16 +152,30 @@ class ScanJobSerializer(serializers.ModelSerializer):
             'target_info_json', 'tool_settings_json', 'status', 'celery_task_id', 
             'initiated_by', 'created_at', 'started_timestamp', 'completed_timestamp',
             'results',
-            # CI/CD related fields
             'commit_hash', 'branch_name', 'repository_url', 'ci_build_id', 'triggered_by_ci'
         ]
         read_only_fields = [
-            'project_name', 'scan_configuration_name', 'status', 'celery_task_id', 
-            'initiated_by', 'created_at', 'started_timestamp', 'completed_timestamp',
-            'results',
-            # CI/CD fields should also be read-only via this serializer
-            'commit_hash', 'branch_name', 'repository_url', 'ci_build_id', 'triggered_by_ci'
+            'id',
+            'project_name', 
+            'scan_configuration_name', 
+            'status',
+            'celery_task_id',
+            'initiated_by',
+            'created_at', 'started_timestamp', 'completed_timestamp',
+            'results'
         ]
+
+    def validate(self, data):
+        project = data.get('project')
+        scan_configuration = data.get('scan_configuration')
+
+        if project and scan_configuration:
+            if scan_configuration.project != project:
+                raise serializers.ValidationError(
+                    {"scan_configuration": "This scan configuration does not belong to the selected project."}
+                )
+        
+        return data
 
 class UserProfileSerializer(serializers.ModelSerializer):
     user = UserSimpleSerializer(read_only=True)

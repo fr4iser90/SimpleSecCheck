@@ -38,8 +38,30 @@ const api = {
   },
   // Note: ScanRunner.vue uses get /api/core/scans/scan-status/{taskId}/ directly for Celery task status.
   // It also uses get /api/core/scan-jobs/{jobId}/ for refreshing ScanJob.
-  getCeleryTaskStatus: (taskId) => axios.get(`${API_CORE_URL}/scans/scan-status/${taskId}/`).then(handleResponse).catch(handleError),
-  getScanJob: (jobId) => axios.get(`${API_CORE_URL}/scan-jobs/${jobId}/`).then(handleResponse).catch(handleError),
+  async getScanJob(jobId) {
+    // Standardized to use apiClient and async/await
+    console.log(`api.js: getScanJob called for jobId: ${jobId}`);
+    try {
+      const response = await axios.get(`${API_CORE_URL}/scan-jobs/${jobId}/`);
+      console.log('api.js: getScanJob successful, response data:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('api.js: Error in getScanJob:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+  async getCeleryTaskStatus(taskId) {
+    // Standardized to use apiClient and async/await
+    console.log(`api.js: getCeleryTaskStatus called for taskId: ${taskId}`);
+    try {
+      const response = await axios.get(`${API_CORE_URL}/scans/scan-status/${taskId}/`);
+      console.log('api.js: getCeleryTaskStatus successful, response data:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('api.js: Error in getCeleryTaskStatus:', error.response?.data || error.message);
+      throw error;
+    }
+  },
   getScanJobs: (projectId) => { // For ScanJobList.vue
     let url = `${API_CORE_URL}/scan-jobs/`;
     if (projectId) {
@@ -75,6 +97,18 @@ const api = {
   // === Target Groups & Scan Targets (if managed directly) === 
   // getTargetGroups, createTargetGroup, etc.
   // getScanTargets, createScanTarget, etc.
+
+  async createScanJob(payload) {
+    console.log('api.js: createScanJob called with payload:', payload);
+    try {
+      const response = await axios.post(`${API_CORE_URL}/scan-jobs/`, payload);
+      console.log('api.js: createScanJob successful, response data:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('api.js: Error in createScanJob:', error.response?.data || error.message);
+      throw error; // Re-throw to be caught by the calling component
+    }
+  },
 
 };
 

@@ -322,12 +322,14 @@ export default {
       }
     },
     async triggerScan() {
-      if (!this.selectedProjectId) {
-        this.scanTriggerError = 'Project must be selected.';
+      if (!this.canTriggerScan) {
+        this.scanTriggerError = 'You do not have sufficient permissions to trigger scans for this project.';
+        console.error('ScanRunner.vue: TriggerScan called but canTriggerScan is false.');
         return;
       }
       if (this.isTargetInputRequired && !this.targetInfo) {
-        this.scanTriggerError = 'Target Info is required when not using a configuration with predefined targets.';
+        this.scanTriggerError = 'Target Info is required when no configuration with predefined targets is selected.';
+        console.error('ScanRunner.vue: TriggerScan called but targetInfo is missing and required.');
         return;
       }
 
@@ -336,23 +338,91 @@ export default {
       this.initiatedJob = null;
       this.clearPolling();
 
+      let parsedTargetInfo = null;
+      if (this.targetInfo && this.isTargetInputRequired) {
+        try {
+          // Attempt to parse if it looks like JSON, otherwise treat as a string target.
+          // For simplicity, let's assume targetInfo is either a simple string 
+          // or a JSON string that the backend expects for target_info_json.
+          // If the backend expects a JSON object for target_info_json, 
+          // and targetInfo is a simple string, this might need adjustment
+          // or the backend needs to handle simple string targets appropriately.
+          // For now, if it's not valid JSON, we send it as is, assuming backend might wrap it.
+          // A more robust approach would be to ensure targetInfo structure matches backend expectations.
+          parsedTargetInfo = JSON.parse(this.targetInfo); 
+        } catch (e) {
+          // If not JSON, and target_info_json in backend expects an object, this could be an issue.
+          // Assuming for now that if it's not JSON, it implies a different type of target input
+          // that the backend might handle (e.g. a single URL or path).
+          // Let's send it as a string wrapped in an object if backend expects JSON structure for target_info_json.
+          // This depends heavily on backend model for target_info_json.
+          // Given the name, it likely expects a JSON object or null.
+          // If targetInfo is just a string like "http://example.com", and backend target_info_json expects e.g. {"url": "..."}
+          // we need to be careful. For now, let's assume simple string targets aren't JSON.
+          // The backend `ScanJobSerializer` doesn't strictly enforce a JSON *object* for `target_info_json`,
+          // it just takes what it gets if it's valid JSON. If it's not, it would be null or an error.
+          // Let's send the raw string if it's not parseable as JSON, and let backend decide.
+          // OR, more safely, if target_info_json must be a JSON object, then non-JSON string input here is problematic.
+          // Let's assume the user provides valid JSON string if target_info_json requires it.
+          // For now, if parsing fails, we pass null and log an error, or pass the string directly if that's acceptable.
+          // Passing it directly if not JSON and `isTargetInputRequired` implies it is a direct target string.
+          // The backend field is `target_info_json` so it should be valid JSON or null.
+          console.warn('ScanRunner.vue: targetInfo is not valid JSON. Sending as-is or null might be appropriate depending on backend.');
+          // If target_info_json must be a JSON object, this is an error state or needs conversion.
+          // For now, if not parseable to JSON, we will send it as null and rely on backend validation or handling.
+          // parsedTargetInfo = { "direct_input": this.targetInfo }; // Example of wrapping
+          // Forcing it to null if not valid JSON and field is JSON type.
+          parsedTargetInfo = null; 
+          // A better UX would be to validate JSON input format if that is strictly required.
+          // Or, if free-form string is allowed for target_info_json (e.g. backend wraps it), then send this.targetInfo.
+          // Given the field name `target_info_json`, it should be valid JSON. So non-JSON means it shouldn't be sent to this field.
+          // This implies that if `isTargetInputRequired` is true, `this.targetInfo` *must* be a valid JSON string.
+          // We should add validation for this earlier or clarify backend requirements.
+          // For now, let's pass what we have if it was required.
+           if (this.isTargetInputRequired) { // Only try to send if it was actually required
+               try {
+                   parsedTargetInfo = JSON.parse(this.targetInfo);
+               } catch (jsonError) {
+                   console.error('ScanRunner.vue: Target Info is required and provided, but it is not valid JSON. Cannot proceed.', jsonError);
+                   this.scanTriggerError = 'Target Info must be valid JSON when manually entered.';
+                   this.triggeringScan = false;
+                   return;
+               }
+           }
+        }
+      }
+
+      const payload = {
+        project: this.selectedProjectId,
+        scan_configuration: this.selectedConfigurationId, // Can be null
+        target_info_json: parsedTargetInfo // Can be null if config has targets or if input was not valid JSON and required
+        // tool_settings_json is not explicitly sent; backend derives from config if present.
+      };
+
+      console.log('ScanRunner.vue: Triggering scan with payload:', JSON.parse(JSON.stringify(payload)));
+
       try {
-        const payload = {
-          project_id: this.selectedProjectId,
-          target_info: (this.selectedConfiguration && this.selectedConfiguration.has_predefined_targets) ? null : JSON.parse(this.targetInfo || 'null'),
-          scan_configuration_id: this.selectedConfigurationId
-        };
-        const data = await api.triggerSampleScan(payload);
-        this.initiatedJob = data.scan_job; 
-        this.taskIdToCheck = data.task_id;
-        if (this.taskIdToCheck) {
-            this.pollCeleryTaskStatus(this.taskIdToCheck);
+        // Assuming api.js has a method to create a scan job
+        const response = await api.createScanJob(payload); 
+        this.initiatedJob = response; // Assuming response is the created ScanJob object
+        console.log('ScanRunner.vue: Scan job created successfully:', JSON.parse(JSON.stringify(this.initiatedJob)));
+        if (this.initiatedJob && this.initiatedJob.celery_task_id) {
+          this.taskIdToCheck = this.initiatedJob.celery_task_id;
+          this.pollCeleryTaskStatus(this.taskIdToCheck);
+        } else if (this.initiatedJob) {
+          // If no celery_task_id, it means the scan might be PENDING and task not yet created.
+          // Or the backend doesn't return celery_task_id immediately (which it should if task is spawned).
+          console.warn('ScanRunner.vue: Scan job created, but no Celery task ID returned immediately. Status polling might not start.');
+          // We can still show the job details from `initiatedJob`.
         }
       } catch (error) {
-        console.error('Error triggering scan:', error);
-        this.scanTriggerError = error.response?.data?.error || error.response?.data?.detail || 'Failed to trigger scan.';
-        if (error.response && error.response.status === 401) {
-          this.$emit('session-expired');
+        console.error('ScanRunner.vue: Error triggering scan:', error);
+        this.scanTriggerError = error.response?.data?.detail || error.response?.data?.error || error.message || 'Failed to trigger scan.';
+        if (error.response?.data) {
+            // Log more detailed errors from backend if available
+            Object.keys(error.response.data).forEach(key => {
+                console.error(`Backend validation error for ${key}: ${error.response.data[key]}`);
+            });
         }
       } finally {
         this.triggeringScan = false;
