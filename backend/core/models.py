@@ -17,18 +17,11 @@ class Project(models.Model):
         through='ProjectMembership',
         related_name='project_memberships'
     )
-    default_tool_settings_json = models.JSONField(
-        blank=True,
-        null=True,
-        default=dict,
-        help_text="Default tool settings JSON for scans in this project (e.g., {\"bandit\": {\"severity\": \"HIGH\"}})."
-    )
-    project_main_targets_json = models.JSONField(
-        blank=True,
-        null=True,
-        default=dict,
-        help_text="Main target definitions for the project (e.g., {\"codebase_git\": \"git@example.com:repo.git\", \"web_url\": \"https://example.com\"})."
-    )
+    # Target and tool settings are now exclusively managed in ScanConfiguration
+
+    # New optional fields for codebase and web app URL
+    codebase_path_or_url = models.CharField(max_length=2000, blank=True, null=True, help_text='Optional: Path to the local codebase or URL of the Git repository.')
+    web_app_url = models.URLField(max_length=2000, blank=True, null=True, help_text='Optional: URL of the primary web application to scan.')
 
     def __str__(self):
         return self.name

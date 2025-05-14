@@ -24,9 +24,9 @@
         </div>
 
         <div class="form-group">
-          <label for="config-select">Select Scan Configuration (Optional):</label>
+          <label for="config-select">Select Scan Configuration (uses Project Default if none selected):</label>
           <select id="config-select" v-model="selectedConfigurationId" :disabled="configurationsLoading || triggeringScan || !canTriggerScan">
-            <option :value="null">{{ configurationsLoading ? 'Loading configurations...' : (configurationsError ? 'Error loading configurations' : '-- Manual Target Input --') }}</option>
+            <option :value="null">{{ configurationsLoading ? 'Loading configurations...' : (configurationsError ? 'Error loading configurations' : '-- Use Project Default Configuration --') }}</option>
             <option v-for="config in scanConfigurations" :key="config.id" :value="config.id">
               {{ config.name }} <span v-if="config.has_predefined_targets">(uses predefined targets)</span> (ID: {{ config.id }})
             </option>
@@ -34,30 +34,11 @@
           <div v-if="configurationsLoading" class="loading-inline">Loading...</div>
           <div v-if="configurationsError" class="error-inline">{{ configurationsError }}</div>
            <div v-if="!configurationsLoading && !configurationsError && scanConfigurations.length === 0 && selectedProjectId" class="info-inline">
-              No configurations found for this project. Use manual target input.
+              No specific configurations found for this project. The Project Default Configuration will be used.
           </div>
         </div>
 
-        <div class="form-group">
-          <label for="target-info">
-            Target Info <span v-if="!isTargetInputRequired && selectedConfigurationId">(using targets from configuration)</span>:
-          </label>
-          <input 
-            type="text" 
-            id="target-info" 
-            v-model="targetInfo" 
-            :placeholder="isTargetInputRequired ? 'Enter URL, path, or git repo' : 'Targets defined by configuration'"
-            :disabled="triggeringScan || !selectedProjectId || (!isTargetInputRequired && selectedConfigurationId != null) || !canTriggerScan"
-          >
-           <small v-if="isTargetInputRequired" class="info-inline">
-              E.g., http://example.com, /path/to/code, git@github.com:user/repo.git
-          </small>
-           <small v-else-if="!isTargetInputRequired && selectedConfigurationId" class="info-inline">
-              Manual target input is disabled as the selected configuration defines targets.
-          </small>
-        </div>
-
-        <button @click="triggerScan" :disabled="triggeringScan || !selectedProjectId || (isTargetInputRequired && !targetInfo) || !canTriggerScan" class="action-button">
+        <button @click="triggerScan" :disabled="triggeringScan || !selectedProjectId || !canTriggerScan" class="action-button">
           {{ triggeringScan ? 'Starting Scan...' : 'Trigger Scan' }}
         </button>
         <div v-if="scanTriggerError" class="error-message">{{ scanTriggerError }}</div>
@@ -69,8 +50,8 @@
         <p><strong>Project:</strong> {{ initiatedJob.project_name }}</p>
         <p><strong>Status:</strong> <span :class="`status-${initiatedJob.status.toLowerCase()}`">{{ initiatedJob.status }}</span></p>
         <p><strong>Celery Task ID:</strong> {{ initiatedJob.celery_task_id }}</p>
-        <p><strong>Configuration:</strong> {{ initiatedJob.scan_configuration_name || 'Manual Input' }}</p>
-        <p><strong>Targets:</strong> {{ initiatedJob.target_info || (selectedConfiguration && selectedConfiguration.has_predefined_targets ? 'From Configuration' : 'N/A') }}</p>
+        <p><strong>Configuration:</strong> {{ initiatedJob.scan_configuration_name || 'Project Default Configuration' }}</p>
+        <p><strong>Targets:</strong> {{ initiatedJob.scan_configuration_name ? 'Defined by selected configuration' : 'Defined by Project Default Configuration' }}</p>
         <button @click="refreshJobStatus(initiatedJob.id)" :disabled="checkingJobStatus" class="action-button">
           {{ checkingJobStatus ? 'Refreshing...' : 'Refresh Job Status' }}
         </button>
@@ -146,7 +127,6 @@ export default {
       configurationsLoading: false,
       configurationsError: null,
       
-      targetInfo: '',
       triggeringScan: false,
       scanTriggerError: null,
       initiatedJob: null,
@@ -166,12 +146,6 @@ export default {
     selectedConfiguration() {
       if (!this.selectedConfigurationId) return null;
       return this.scanConfigurations.find(config => config.id === this.selectedConfigurationId);
-    },
-    isTargetInputRequired() {
-      if (this.selectedConfiguration && this.selectedConfiguration.has_predefined_targets) {
-        return false; // Config selected and has its own targets
-      }
-      return true; // No config selected, or selected config doesn't define targets
     },
     selectedProjectId() {
       return this.selectedProject ? this.selectedProject.id : null;
@@ -253,7 +227,6 @@ export default {
         this.selectedConfigurationId = null;
         this.scanConfigurations = [];
         this.configurationsError = null;
-        this.targetInfo = '';
         this.initiatedJob = null;
         this.scanTriggerError = null;
         if (newProjectId) {
@@ -265,7 +238,6 @@ export default {
     },
     selectedConfigurationId(newConfigId, oldConfigId) {
         if (newConfigId !== oldConfigId) {
-            this.targetInfo = ''; 
             this.scanTriggerError = null; 
         }
     },
@@ -330,25 +302,15 @@ export default {
         console.error('ScanRunner.vue: TriggerScan called but canTriggerScan is false.');
         return;
       }
-      if (this.isTargetInputRequired && !this.targetInfo) {
-        this.scanTriggerError = 'Target Info is required when no configuration with predefined targets is selected.';
-        console.error('ScanRunner.vue: TriggerScan called but targetInfo is missing and required.');
-        return;
-      }
 
       this.triggeringScan = true;
       this.scanTriggerError = null;
       this.initiatedJob = null;
       this.clearPolling();
 
-      const rawTargetInput = (this.targetInfo && this.isTargetInputRequired) ? this.targetInfo : null;
-
       const payload = {
         project: this.selectedProjectId,
-        scan_configuration: this.selectedConfigurationId, // Can be null
-        target_info_input: rawTargetInput 
-        // target_info_json is no longer sent from here, backend will generate it from target_info_input
-        // tool_settings_json is not explicitly sent; backend derives from config if present.
+        scan_configuration: this.selectedConfigurationId, // This can be null, backend handles it
       };
 
       console.log('ScanRunner.vue: Triggering scan with payload:', JSON.parse(JSON.stringify(payload)));
@@ -465,7 +427,6 @@ export default {
       this.projectList = [];
       this.scanConfigurations = [];
       this.selectedConfigurationId = null;
-      this.targetInfo = '';
       this.initiatedJob = null;
       this.scanTriggerError = null;
       this.projectLoadError = null;

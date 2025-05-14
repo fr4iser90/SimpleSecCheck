@@ -55,16 +55,16 @@ class ProjectMembershipWriteSerializer(serializers.ModelSerializer):
 
 class ProjectSerializer(serializers.ModelSerializer):
     owner = UserSimpleSerializer(read_only=True)
+    owner_username = serializers.ReadOnlyField(source='owner.username')
     project_memberships = ProjectMembershipSerializer(source='projectmembership_set', many=True, read_only=True)
     can_trigger_scan = serializers.SerializerMethodField()
-    # project_main_targets_json and default_tool_settings_json are model fields and will be included if in Meta.fields
 
     class Meta:
         model = Project
-        fields = ['id', 'name', 'description', 'owner', 'created_at', 'updated_at', 
-                  'project_memberships', 'can_trigger_scan', 
-                  'project_main_targets_json', 'default_tool_settings_json'] # Ensured new fields are present
-        read_only_fields = ['owner', 'created_at', 'updated_at', 'project_memberships']
+        fields = ['id', 'name', 'description', 'owner', 'owner_username', 'members', 
+                  'project_memberships', 'created_at', 'updated_at', 'can_trigger_scan',
+                  'codebase_path_or_url', 'web_app_url']
+        read_only_fields = ['owner', 'created_at', 'updated_at']
 
     def get_can_trigger_scan(self, obj):
         request = self.context.get('request')
