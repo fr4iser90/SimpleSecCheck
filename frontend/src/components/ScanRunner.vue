@@ -177,26 +177,41 @@ export default {
       if (!this.selectedProject || !this.currentUser || !this.currentUser.id || !this.selectedProject.project_memberships) {
         return null;
       }
-      const membership = this.selectedProject.project_memberships.find(
-        m => m.user.id === this.currentUser.id
+      const memberships = Array.isArray(this.selectedProject.project_memberships) ? this.selectedProject.project_memberships : [];
+      const membership = memberships.find(
+        m => m.user && typeof m.user.id !== 'undefined' && m.user.id === this.currentUser.id
       );
 
       if (membership) {
-        return membership.role; // e.g., 'manager', 'developer', 'viewer'
+        return membership.role; 
       }
-      // Fallback: Check if current user is the project owner
-      if (this.selectedProject.owner && this.selectedProject.owner.id === this.currentUser.id) {
-        return 'owner'; // Treat owner as having full permissions for this context
+      if (this.selectedProject.owner && typeof this.selectedProject.owner.id !== 'undefined' && this.selectedProject.owner.id === this.currentUser.id) {
+        return 'owner';
       }
       return null;
     },
     canTriggerScan() {
-      if (!this.selectedProject || !this.isLoggedIn || !this.currentUser) {
+      if (!this.selectedProject || !this.isLoggedIn) {
+        console.log('ScanRunner.vue: canTriggerScan check - no selectedProject or not logged in, returning false.');
         return false;
       }
+      if (typeof this.selectedProject.can_trigger_scan === 'boolean') {
+        console.log(`ScanRunner.vue: canTriggerScan check - using backend flag: ${this.selectedProject.can_trigger_scan}`);
+        return this.selectedProject.can_trigger_scan;
+      }
+      
+      console.log('ScanRunner.vue: canTriggerScan check - backend flag not present, using client-side role check.');
+      if (!this.currentUser) {
+        console.log('ScanRunner.vue: canTriggerScan fallback - no currentUser, returning false.');
+        return false;
+      }
+
       const role = this.userRoleInSelectedProject;
-      // Project owners, managers, and developers can trigger scans.
-      return ['owner', 'manager', 'developer'].includes(role);
+      console.log(`ScanRunner.vue: canTriggerScan fallback - userRoleInSelectedProject: ${role}`);
+      const allowedRoles = ['owner', 'manager', 'developer'];
+      const canScan = allowedRoles.includes(role);
+      console.log(`ScanRunner.vue: canTriggerScan fallback - role allows scan: ${canScan}`);
+      return canScan;
     }
   },
   watch: {
@@ -212,26 +227,23 @@ export default {
     },
     projects: {
       handler(newProjects) {
-        // When the projects prop changes, update the internal projectList
         console.log('ScanRunner.vue: projects prop watcher triggered with:', JSON.parse(JSON.stringify(newProjects)));
         this.projectList = newProjects;
-        this.isLoadingProjects = false; // Assuming projects prop means loading is done
+        this.isLoadingProjects = false;
         this.projectLoadError = null;
         console.log('ScanRunner.vue: projectList set to:', JSON.parse(JSON.stringify(this.projectList)));
         console.log('ScanRunner.vue: isLoadingProjects set to false, projectLoadError set to null');
 
         if (newProjects && newProjects.length > 0) {
-          // Optionally, auto-select the first project or handle as needed
-          // this.selectedProject = newProjects[0]; // Store the project object if needed, or just the ID
         } else {
-          this.selectedProject = null; // Clear selection if projects list is empty
+          this.selectedProject = null;
         }
       },
-      immediate: true, // Trigger the handler immediately when the component is created
-      deep: true // Watch for changes in array elements too, though maybe not strictly necessary here
+      immediate: true,
+      deep: true
     },
     selectedProjectId(newProjectId, oldProjectId) {
-      console.log(`ScanRunner.vue: WATCHER for selectedProjectId fired. New: ${newProjectId}, Old: ${oldProjectId}`); // DEBUG LINE
+      console.log(`ScanRunner.vue: WATCHER for selectedProjectId fired. New: ${newProjectId}, Old: ${oldProjectId}`);
       if (newProjectId !== oldProjectId) {
         this.$emit('project-selected', newProjectId);
         console.log(`ScanRunner.vue: selectedProjectId changed from ${oldProjectId} to ${newProjectId}, emitted 'project-selected'`); 
@@ -254,49 +266,18 @@ export default {
             this.scanTriggerError = null; 
         }
     },
-    // scanResultDetails was used in a previous version for polling logic, 
-    // current polling is tied to initiatedJob.celery_task_id or taskIdToCheck
-    // Consider if this watcher is still needed or if polling logic is self-contained
   },
   created() {
-    // Handled by immediate watcher on isLoggedIn
   },
   methods: {
     handleProjectSelectionChange(event) {
-      const newProjectId = event.target.value ? parseInt(event.target.value, 10) : null;
-      // Manually update selectedProjectId because we are not using v-model directly on select anymore for this specific handling
-      // However, selectedProject object also needs to be updated if other parts of the component rely on it.
-      // For now, let's assume selectedProjectId is the primary driver from the select.
-      // The component's selectedProjectId data property will be updated via the prop binding if App.vue sends it back down,
-      // or we might need to manage it locally if App.vue doesn't reflect it back to a prop this component uses for its own v-model.
-      // Given current structure, App.vue DOES NOT send selectedProjectId back to ScanRunner. ScanRunner manages its own selection.
-      // So, we MUST update this.selectedProjectId here.
-      
-      const oldProjectId = this.selectedProjectId;
-      this.selectedProjectId = newProjectId; // Update local state
-
-      // Update the selectedProject object as well
-      this.selectedProject = this.projectList.find(p => p.id === newProjectId) || null;
-
-      console.log(`ScanRunner.vue: handleProjectSelectionChange. New: ${newProjectId}, Old: ${oldProjectId}`);
-
-      if (newProjectId !== oldProjectId) {
-        this.$emit('project-selected', newProjectId);
-        console.log(`ScanRunner.vue: Emitted 'project-selected' with ${newProjectId}`);
-        
-        // Reset related states as was done in the watcher
-        this.selectedConfigurationId = null;
-        this.scanConfigurations = [];
-        this.configurationsError = null;
-        this.targetInfo = '';
-        this.initiatedJob = null;
-        this.scanTriggerError = null;
-        if (newProjectId) {
-          this.fetchScanConfigurations(newProjectId);
-        } else {
-          this.scanConfigurations = [];
-        }
+      const projectId = parseInt(event.target.value, 10);
+      if (isNaN(projectId)) {
+          this.selectedProject = null;
+      } else {
+          this.selectedProject = this.projectList.find(p => p.id === projectId) || null;
       }
+      console.log('ScanRunner.vue: handleProjectSelectionChange. New selected project object:', JSON.parse(JSON.stringify(this.selectedProject)));
     },
     async fetchProjects() {
       if (!this.isLoggedIn) {
@@ -308,7 +289,7 @@ export default {
       this.projectLoadError = null;
       try {
         const response = await api.getProjects();
-        this.projectList = response.results || response; // Handle paginated/non-paginated
+        this.projectList = response.results || response;
         if (this.projectList.length === 0) {
           this.projectLoadError = 'No projects found or you don\'t have access to any.';
         }
@@ -327,9 +308,8 @@ export default {
       this.scanConfigurations = [];
       try {
         const data = await api.getScanConfigurations(projectId);
-        this.scanConfigurations = data.results; // Assuming pagination
+        this.scanConfigurations = data.results;
          if (!this.scanConfigurations || this.scanConfigurations.length === 0) {
-            // Handled by info message in template, no error state needed for empty list
         }
       } catch (error) {
         console.error(`Error fetching scan configurations for project ${projectId}:`, error);
@@ -350,27 +330,21 @@ export default {
         this.scanTriggerError = 'Target Info is required when not using a configuration with predefined targets.';
         return;
       }
-      // Permission check now handled by UI disabling elements via `canTriggerScan`
-      // if (!this.canTriggerScan) {
-      //   this.scanTriggerError = 'You do not have permission to trigger scans for this project.';
-      //   return;
-      // }
 
       this.triggeringScan = true;
       this.scanTriggerError = null;
       this.initiatedJob = null;
-      // this.currentCeleryTaskStatus = 'N/A'; // Not directly used in data, but for logic
-      this.clearPolling(); // Clear any existing polling
+      this.clearPolling();
 
       try {
         const payload = {
           project_id: this.selectedProjectId,
-          target_info: (this.selectedConfiguration && this.selectedConfiguration.has_predefined_targets) ? null : JSON.parse(this.targetInfo || 'null'), // Parse targetInfo if provided
+          target_info: (this.selectedConfiguration && this.selectedConfiguration.has_predefined_targets) ? null : JSON.parse(this.targetInfo || 'null'),
           scan_configuration_id: this.selectedConfigurationId
         };
         const data = await api.triggerSampleScan(payload);
         this.initiatedJob = data.scan_job; 
-        this.taskIdToCheck = data.task_id; // Use this for polling now
+        this.taskIdToCheck = data.task_id;
         if (this.taskIdToCheck) {
             this.pollCeleryTaskStatus(this.taskIdToCheck);
         }
@@ -391,24 +365,18 @@ export default {
       }
       this.checkingStatus = true;
       this.errorMessage = null;
-      // scanResultDetails is for the manual check form, not direct job polling
 
       try {
         const data = await api.getCeleryTaskStatus(celeryTaskId);
         
-        // Update initiatedJob if the task ID matches the one we are polling for initiated job
         if (this.initiatedJob && this.initiatedJob.celery_task_id === celeryTaskId) {
             if (data.scan_job_details && typeof data.scan_job_details === 'object') {
-                // Merge updates from scan_job_details into initiatedJob
                 this.initiatedJob = { ...this.initiatedJob, ...data.scan_job_details, status: data.scan_job_details.status || this.initiatedJob.status };
             } else if (data.status) {
-                // If no full job details, at least update celery status if it maps to job status
-                // This part might need refinement based on how Celery status relates to ScanJob status
             }
         }
         
-        // Update scanResultDetails if this function was called for the manual check form
-        if (this.taskIdToCheck === celeryTaskId && !this.statusPollInterval) { // Check if called manually
+        if (this.taskIdToCheck === celeryTaskId && !this.statusPollInterval) {
              this.scanResultDetails = data;
         }
 
@@ -421,20 +389,19 @@ export default {
       } catch (error) {
         console.error('Error checking Celery task status:', error);
         this.errorMessage = error.response?.data?.error || error.response?.data?.error_message || error.message || 'Failed to check task status.';
-        this.clearPollingOnError(celeryTaskId); // Pass celeryTaskId to clear specific poll
+        this.clearPollingOnError(celeryTaskId);
       } finally {
         this.checkingStatus = false;
       }
     },
     checkCeleryTaskStatusManually() {
-        this.scanResultDetails = null; // Clear previous manual check results
-        this.clearPolling(); // Stop any active polling from initiated job
+        this.scanResultDetails = null;
+        this.clearPolling();
         this.checkCeleryTaskStatus(this.taskIdToCheck);
     },
     pollCeleryTaskStatus(celeryTaskId) {
-      this.clearPolling(); // Clear any existing interval before starting a new one
+      this.clearPolling();
       this.statusPollInterval = setInterval(async () => {
-        // Ensure we are polling for the correct task, related to the initiatedJob
         if (!this.initiatedJob || this.initiatedJob.celery_task_id !== celeryTaskId) {
             this.clearPolling();
             return;
@@ -450,7 +417,6 @@ export default {
       }
     },
     clearPollingOnError(celeryTaskIdCurrentlyPolling) {
-        // Clear polling if the error is for the task we are actively polling for initiatedJob
         if (this.statusPollInterval && this.initiatedJob && this.initiatedJob.celery_task_id === celeryTaskIdCurrentlyPolling) {
             this.clearPolling();
         }
@@ -464,7 +430,6 @@ export default {
             if (this.initiatedJob && this.initiatedJob.id === jobId) {
                 this.initiatedJob = { ...this.initiatedJob, ...data }; 
             }
-            // If this job has a celery task and we were polling for it, update its status too
             if (data.celery_task_id) {
                 await this.checkCeleryTaskStatus(data.celery_task_id);
             }
@@ -479,8 +444,8 @@ export default {
         }
     },
     resetScanRunnerState() {
-      this.projectList = [];
       this.selectedProject = null;
+      this.projectList = [];
       this.scanConfigurations = [];
       this.selectedConfigurationId = null;
       this.targetInfo = '';
@@ -494,11 +459,8 @@ export default {
       this.clearPolling();
     },
     updateProjects(newProjects) {
-      // This method can be called by App.vue if direct method call is preferred over watch
-      // For now, the watcher on the 'projects' prop handles updates.
       this.projectList = newProjects;
       if (this.projectList.length > 0) {
-        // this.selectedProject = this.projectList[0].id; // Optional: auto-select first
       } else {
         this.selectedProject = null;
       }
