@@ -57,38 +57,35 @@ class ProjectViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Ensure the user creating the project is set as its owner and create a default scan configuration."""
         project = serializer.save(owner=self.request.user)
-        ProjectMembership.objects.create(user=self.request.user, project=project, role=ProjectMembership.Role.MANAGER) # Corrected role to MANAGER
+        ProjectMembership.objects.create(user=self.request.user, project=project, role=ProjectMembership.Role.MANAGER)
 
-        # Automatically create a default ScanConfiguration for the new project
-        default_config_name = f"Default Configuration for {project.name}"
-        
-        # Prepare target_details_json from project_main_targets_json
-        # This requires a mapping from the structure of project_main_targets_json
-        # to the expected structure of target_details_json (which is usually a list of target objects or a single complex object).
-        # For now, let's assume target_details_json can directly take what project_main_targets_json provides, 
-        # or project_main_targets_json is structured as a single target object compatible with target_details_json.
-        # A more robust solution might involve transforming the data.
-        # Example: if project_main_targets_json is {"codebase_git": "url", "web_url": "url2"}
-        # target_details_json might need to be [{ "type": "git_repo", "value": "url"}, {"type": "url", "value": "url2"}]
-        # For simplicity, we'll pass it directly if it's not None, assuming compatible structure or simple dict.
-        
-        generated_target_details = None
-        if project.project_main_targets_json:
-            # Simplistic direct assignment. This needs refinement based on actual structures.
-            # Assuming project_main_targets_json might store something like: 
-            # { "type": "git_repo", "value": "..." } or { "type": "url", "value": "..." }
-            # or a list of such objects if ScanConfiguration.target_details_json expects a list.
-            # Let's assume target_details_json for a ScanConfiguration can be a single dictionary defining one target set.
-            generated_target_details = project.project_main_targets_json 
+        # Prepare target_details for the default ScanConfiguration
+        target_details = {}
+        if project.codebase_path_or_url:
+            value = project.codebase_path_or_url
+            if value.startswith(('http://', 'https://', 'git@', 'ssh://')):
+                target_details['codebase_git'] = value
+            elif value.startswith('/'): # Basic check for an absolute local path
+                target_details['codebase_local_path'] = value
+            else: # Fallback or could be a relative path if you support those
+                # For now, let's assume it's a local path if not clearly a URL
+                target_details['codebase_local_path'] = value 
+                print(f"Warning: codebase_path_or_url '{value}' for project {project.id} is not a clear URL or absolute path, treating as local path.")
 
+        if project.web_app_url:
+            target_details['web_url'] = project.web_app_url
+
+        # Automatically create a default scan configuration for the new project.
+        # This default configuration can then be customized by the user.
         ScanConfiguration.objects.create(
             project=project,
-            name=default_config_name,
-            description="Automatically created default scan configuration.",
+            name=f"Default Configuration for {project.name}",
+            description="Automatically created default scan configuration. Please edit to define targets and tools.",
+            # If target_details is empty, it will be stored as {} (empty JSON object)
+            target_details_json=target_details if target_details else None, 
+            tool_configurations_json=None, # Starts with no specific tool configs
             created_by=self.request.user,
-            target_details_json=generated_target_details, # Use data from project
-            tool_configurations_json=project.default_tool_settings_json, # Use data from project
-            has_predefined_targets=bool(generated_target_details) # Set based on whether targets were populated
+            has_predefined_targets=bool(target_details) # True if any target was set
         )
 
     def get_queryset(self):
@@ -401,31 +398,31 @@ class ScanJobViewSet(viewsets.ModelViewSet): # Changed from ReadOnlyModelViewSet
         if not user.is_superuser:
             try:
                 membership = ProjectMembership.objects.get(project=project, user=user)
-                if membership.role not in [ProjectMembership.Role.DEVELOPER, ProjectMembership.Role.MANAGER, ProjectMembership.Role.OWNER]:
+                # Adjusted roles based on ProjectMembership.Role enum, assuming OWNER implies highest privileges like MANAGER
+                if membership.role not in [ProjectMembership.Role.DEVELOPER, ProjectMembership.Role.MANAGER]: 
                     raise permissions.PermissionDenied("You do not have permission to trigger scans for this project.")
             except ProjectMembership.DoesNotExist:
                 raise permissions.PermissionDenied("You are not a member of this project and cannot trigger scans.")
 
-        # Extract target_info and tool_settings directly from the scan_configuration
-        # The ScanJob model fields are target_info and tool_settings (JSONFields)
+        # Target info and tool settings are taken directly and exclusively from the selected ScanConfiguration
         job_target_info = scan_configuration.target_details_json
         job_tool_settings = scan_configuration.tool_configurations_json
 
-        # If target_details_json from config is None and has_predefined_targets is False, this might be an issue
-        # or indicate a tool that doesn't need explicit targets. For now, we pass it as is.
-        # Validation for required targets should ideally happen earlier or be part of ScanConfiguration validation.
+        # It's crucial that a ScanConfiguration selected for a job has valid targets.
+        # This validation should ideally be part of ScanConfiguration model/serializer or a check here.
         if not job_target_info and scan_configuration.has_predefined_targets:
-             # This case implies config says it has targets, but target_details_json is empty.
-             # Depending on policy, could raise error or proceed assuming tool might not need them.
-             # For now, we log a warning or let it proceed (tool might handle it).
-             print(f"Warning: ScanConfiguration {scan_configuration.id} has_predefined_targets=True but target_details_json is empty.")
+            # This case (config says it has targets, but json is empty) is an inconsistency.
+            # For now, we allow it, but the scan task might fail or misbehave.
+            # A stricter approach would be to raise a ValidationError here.
+            print(f"Warning: ScanConfiguration {scan_configuration.id} has_predefined_targets=True but target_details_json is empty or null.")
+        elif not job_target_info and not scan_configuration.has_predefined_targets:
+             # This implies the configuration expects targets to be defined elsewhere or not at all (e.g. some tools might not need explicit target files)
+             # In our new model, a ScanConfiguration should always have its targets if it's used for a scan.
+             # If job_target_info is null here, the scan will likely fail unless the tool itself has a global default.
+             # We should enforce that a usable ScanConfiguration has its target_details_json populated.
+             # For now, to prevent immediate breakage if has_predefined_targets is false and json is null:
+             pass # Let it proceed, but this signals a potentially misconfigured ScanConfiguration
 
-        # CI/CD related fields will be in serializer.validated_data if provided in the request
-        # and will be passed to ScanJob.objects.create via **serializer.validated_data in serializer.create()
-        # No need to explicitly pop them here if they are part of the serializer fields and handled by its create method.
-        
-        # serializer.save() will call serializer.create(validated_data)
-        # We pass additional kwargs which DRF merges into validated_data for the create method.
         scan_job = serializer.save(
             initiator=user,
             status=ScanJobStatus.PENDING, # Initial status

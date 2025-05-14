@@ -35,16 +35,12 @@
             <textarea id="projectDescription" v-model="newProjectDescription" rows="3"></textarea>
           </div>
           <div class="form-group">
-            <label for="projectTargetType">Typ des Hauptziels:</label>
-            <select id="projectTargetType" v-model="newProjectTargetType" class="form-control">
-              <option v-for="target in targetTypes" :key="target.value" :value="target.value">
-                {{ target.text }}
-              </option>
-            </select>
+            <label for="projectCodebasePathOrUrl">Codebase-Pfad oder -URL (optional):</label>
+            <input type="text" id="projectCodebasePathOrUrl" v-model="newProjectCodebasePathOrUrl" placeholder="z.B. /pfad/zur/codebase oder git@github.com:user/repo.git">
           </div>
           <div class="form-group">
-            <label for="projectTargetValue">Zielspezifikation:</label>
-            <input type="text" id="projectTargetValue" v-model="newProjectTargetValue" :placeholder="currentTargetPlaceholder" class="form-control" required>
+            <label for="projectWebAppUrl">Web-Anwendungs-URL (optional):</label>
+            <input type="url" id="projectWebAppUrl" v-model="newProjectWebAppUrl" placeholder="z.B. https://example.com">
           </div>
           <div v-if="createProjectError" class="error-message">
             {{ createProjectError }}
@@ -74,23 +70,11 @@ export default {
       showCreateProjectModal: false,
       newProjectName: '',
       newProjectDescription: '',
-      newProjectTargetType: 'git',
-      newProjectTargetValue: '',
-      targetTypes: [
-        { value: 'git', text: 'Git Repository', placeholder: 'z.B. git@github.com:user/repo.git', keyName: 'codebase_git' },
-        { value: 'web_url', text: 'Web-Anwendungs-URL', placeholder: 'z.B. https://example.com', keyName: 'web_url' },
-        { value: 'local_path', text: 'Lokaler Dateipfad', placeholder: 'z.B. /srv/my-codebase', keyName: 'codebase_local_path' },
-        { value: 'docker_image', text: 'Docker Image', placeholder: 'z.B. mein-image:latest', keyName: 'docker_image_name' }
-      ],
+      newProjectCodebasePathOrUrl: '',
+      newProjectWebAppUrl: '',
       isCreatingProject: false,
       createProjectError: null,
     };
-  },
-  computed: {
-    currentTargetPlaceholder() {
-      const selectedType = this.targetTypes.find(t => t.value === this.newProjectTargetType);
-      return selectedType ? selectedType.placeholder : 'Bitte Ziel eingeben';
-    }
   },
   methods: {
     async fetchProjects() {
@@ -118,16 +102,16 @@ export default {
       this.showCreateProjectModal = true;
       this.newProjectName = ''; // Reset form fields when opening
       this.newProjectDescription = '';
-      this.newProjectTargetType = 'git';
-      this.newProjectTargetValue = '';
+      this.newProjectCodebasePathOrUrl = '';
+      this.newProjectWebAppUrl = '';
       this.createProjectError = null;
     },
     closeCreateProjectModal() {
       this.showCreateProjectModal = false;
       this.newProjectName = '';
       this.newProjectDescription = '';
-      this.newProjectTargetType = 'git';
-      this.newProjectTargetValue = '';
+      this.newProjectCodebasePathOrUrl = '';
+      this.newProjectWebAppUrl = '';
       this.createProjectError = null;
       this.isCreatingProject = false; // Ensure loading state is reset
     },
@@ -136,33 +120,16 @@ export default {
         this.createProjectError = 'Projektname darf nicht leer sein.';
         return;
       }
-      if (!this.newProjectTargetValue.trim()) {
-        this.createProjectError = 'Zielspezifikation darf nicht leer sein.';
-        return;
-      }
       this.isCreatingProject = true;
       this.createProjectError = null;
-
-      let projectMainTargets = {};
-      const selectedTypeDefinition = this.targetTypes.find(t => t.value === this.newProjectTargetType);
-      if (selectedTypeDefinition && this.newProjectTargetValue.trim()) {
-        projectMainTargets[selectedTypeDefinition.keyName] = this.newProjectTargetValue.trim();
-      } else if (this.newProjectTargetValue.trim()) {
-        // Fallback, sollte nicht passieren wenn newProjectTargetType immer gesetzt ist
-        this.createProjectError = 'Ungültiger Zieltyp ausgewählt.';
-        this.isCreatingProject = false;
-        return;
-      }
 
       try {
         const payload = {
           name: this.newProjectName,
           description: this.newProjectDescription,
+          codebase_path_or_url: this.newProjectCodebasePathOrUrl.trim() || null,
+          web_app_url: this.newProjectWebAppUrl.trim() || null,
         };
-
-        if (Object.keys(projectMainTargets).length > 0) {
-          payload.project_main_targets_json = projectMainTargets;
-        }
         
         await axios.post('/api/v1/core/projects/', payload);
         await this.fetchProjects(); // Reloads the list and emits the event
