@@ -65,8 +65,15 @@
           </div>
           <div class="form-group" v-if="configForm.has_predefined_targets">
             <label for="config-target-details">Target Details (JSON):</label>
-            <textarea id="config-target-details" v-model="configForm.target_details_json" rows="5" placeholder='e.g., {\n  "type": "git_repo",\n  "url": "https://github.com/user/repo.git",\n  "branch": "main",\n  "include_paths": ["src/"],\n  "exclude_paths": ["tests/"]\n}'></textarea>
-            <small>Specify targets if 'has_predefined_targets' is checked. Otherwise, manual input will be required during scan run.</small>
+            <div class="form-group">
+              <label for="config-codebase-path-or-url">Codebase-Pfad oder -URL (optional):</label>
+              <input type="text" id="config-codebase-path-or-url" v-model="configForm.codebase_path_or_url" placeholder="z.B. /pfad/zur/codebase oder git@github.com:user/repo.git">
+            </div>
+            <div class="form-group">
+              <label for="config-web-app-url">Web-Anwendungs-URL (optional):</label>
+              <input type="text" id="config-web-app-url" v-model="configForm.web_app_url" placeholder="z.B. https://example.com">
+            </div>
+            <small>Geben Sie hier die spezifischen Ziele für diese Konfiguration ein. Diese überschreiben ggf. die vom Projekt geerbten Standardziele.</small>
           </div>
 
           <!-- New Tool Configuration Section -->
@@ -145,7 +152,9 @@ const initialConfigFormState = () => ({
   description: '',
   project: null, // Will be set from selectedProjectId prop
   has_predefined_targets: false,
-  target_details_json: '', 
+  target_details_json: '', // Still needed for raw JSON if we revert, but UI will use new fields
+  codebase_path_or_url: '', // New field for UI
+  web_app_url: '',           // New field for UI
   tools: {
     semgrep: {
       enabled: false,
@@ -173,6 +182,10 @@ export default {
     },
     selectedProjectId: {
       type: [String, Number],
+      default: null
+    },
+    selectedProject: { // New prop for the full project object
+      type: Object,
       default: null
     }
   },
@@ -251,57 +264,71 @@ export default {
             return;
         }
         this.editingConfiguration = null;
+        
+        // Pre-fill from selectedProject if available
+        let initialCodebase = '';
+        let initialWebAppUrl = '';
+        let initialHasTargets = false;
+
+        if (this.selectedProject) {
+            initialCodebase = this.selectedProject.codebase_path_or_url || '';
+            initialWebAppUrl = this.selectedProject.web_app_url || '';
+            if (initialCodebase || initialWebAppUrl) {
+                initialHasTargets = true;
+            }
+        }
+
         this.configForm = {
             ...initialConfigFormState(),
-            project: this.selectedProjectId
+            project: this.selectedProjectId,
+            codebase_path_or_url: initialCodebase,
+            web_app_url: initialWebAppUrl,
+            // Set has_predefined_targets true if project had defaults, so user sees the fields
+            has_predefined_targets: initialHasTargets 
         };
         this.showCreateForm = true;
         this.formErrorMessage = null;
     },
     prepareEditForm(config) {
-      this.editingConfiguration = config; // Store the original config object
+      console.log('Preparing edit form for config:', JSON.parse(JSON.stringify(config)));
+      this.editingConfiguration = { ...config }; // Store a copy for reference, not for direct binding
       
-      let parsedTools = initialConfigFormState().tools; // Start with defaults
-      if (config.tool_configurations_json) {
+      let codebase = '';
+      let webapp = '';
+      let hasTargets = false;
+
+      if (config.target_details_json) {
         try {
-          const savedToolSettings = JSON.parse(config.tool_configurations_json);
-          if (savedToolSettings.semgrep) {
-            parsedTools.semgrep.enabled = savedToolSettings.semgrep.enabled !== undefined ? savedToolSettings.semgrep.enabled : parsedTools.semgrep.enabled;
-            if (Array.isArray(savedToolSettings.semgrep.rulesets)) {
-              parsedTools.semgrep.rulesets = savedToolSettings.semgrep.rulesets.join(',');
-            } else if (typeof savedToolSettings.semgrep.rulesets === 'string') {
-              parsedTools.semgrep.rulesets = savedToolSettings.semgrep.rulesets;
+          const targets = typeof config.target_details_json === 'string' ? JSON.parse(config.target_details_json) : config.target_details_json;
+          if (targets) {
+            codebase = targets.codebase_git || targets.codebase_local_path || '';
+            webapp = targets.web_url || '';
+            if (codebase || webapp) {
+                hasTargets = true;
             }
           }
-          if (savedToolSettings.trivy) {
-            parsedTools.trivy.enabled = savedToolSettings.trivy.enabled !== undefined ? savedToolSettings.trivy.enabled : parsedTools.trivy.enabled;
-            parsedTools.trivy.scanType = savedToolSettings.trivy.scan_type || parsedTools.trivy.scanType;
-            if (Array.isArray(savedToolSettings.trivy.severity)) {
-              parsedTools.trivy.severity = savedToolSettings.trivy.severity.join(',');
-            } else if (typeof savedToolSettings.trivy.severity === 'string') {
-               parsedTools.trivy.severity = savedToolSettings.trivy.severity;
-            }
-            parsedTools.trivy.ignoreUnfixed = savedToolSettings.trivy.ignore_unfixed !== undefined ? savedToolSettings.trivy.ignore_unfixed : parsedTools.trivy.ignoreUnfixed;
-          }
-          // TODO: ZAP parsing if/when ZAP is added
         } catch (e) {
-          console.error('Error parsing tool_configurations_json for editing:', e);
-          this.formErrorMessage = 'Could not parse existing tool configurations. Please check and re-save.';
-          // Beibehaltung der Standardwerte für Tools, wenn Parsen fehlschlägt
+          console.error('Error parsing target_details_json for editing:', e);
+          this.formErrorMessage = 'Error parsing existing target details. Please check JSON format if editing manually.';
+          // Keep hasTargets false, so user sees empty fields and can correct
         }
       }
 
-      this.configForm = { 
+      const parsedTools = this.parseToolsFromConfig(config.tool_configurations_json);
+
+      this.configForm = {
         id: config.id,
-        name: config.name,
+        name: config.name || '',
         description: config.description || '',
-        project: config.project, 
-        has_predefined_targets: config.has_predefined_targets || false,
-        target_details_json: config.target_details_json || '',
+        project: config.project, // This should be the project ID
+        has_predefined_targets: config.has_predefined_targets || hasTargets, // Prefer explicit flag, fallback to parsed
+        target_details_json: config.target_details_json || '', // Keep original for reference / manual edit fallback
+        codebase_path_or_url: codebase,
+        web_app_url: webapp,
         tools: parsedTools
       };
-      this.showCreateForm = false; 
-      this.formErrorMessage = this.formErrorMessage || null; // Behalte den Parse-Fehler, falls vorhanden
+      this.showCreateForm = true; // Show the form which is now populated for editing
+      this.formErrorMessage = null; // Clear previous form errors
     },
     async deleteConfiguration(configId) {
       if (!confirm(`Are you sure you want to delete configuration ID ${configId}? This cannot be undone.`)) {
@@ -328,88 +355,79 @@ export default {
       }
     },
     async saveConfiguration() {
-        this.isSaving = true;
-        this.formErrorMessage = null;
-        
-        let targetDetailsPayload = null;
-        if (this.configForm.has_predefined_targets && this.configForm.target_details_json.trim()) {
-            try {
-                targetDetailsPayload = JSON.parse(this.configForm.target_details_json);
-            } catch (e) {
-                this.formErrorMessage = "Target Details JSON is invalid.";
-                this.isSaving = false;
-                return;
-            }
-        } else if (this.configForm.has_predefined_targets && !this.configForm.target_details_json.trim()) {
-            this.formErrorMessage = "Target Details JSON cannot be empty if 'This configuration defines specific targets' is checked.";
-            this.isSaving = false;
-            return;
+      this.formErrorMessage = null;
+      this.isSaving = true;
+
+      let dataToSave = {
+        name: this.configForm.name,
+        description: this.configForm.description,
+        project: this.selectedProjectId, // Ensure project ID is included
+        has_predefined_targets: this.configForm.has_predefined_targets,
+        tool_configurations_json: this.buildToolConfigurationsJson(), // Use helper to build this
+        target_details_json: null // Default to null
+      };
+
+      if (this.configForm.has_predefined_targets) {
+        const targets = {};
+        if (this.configForm.codebase_path_or_url && this.configForm.codebase_path_or_url.trim()) {
+          const codebaseValue = this.configForm.codebase_path_or_url.trim();
+          if (codebaseValue.startsWith(('http://', 'https://', 'git@', 'ssh://'))) {
+            targets['codebase_git'] = codebaseValue;
+          } else {
+            targets['codebase_local_path'] = codebaseValue;
+          }
         }
-
-        // Build tool_configurations_json from form data
-        const toolConfigurations = {};
-        if (this.configForm.tools.semgrep.enabled) {
-            toolConfigurations.semgrep = {
-                enabled: true,
-                rulesets: this.configForm.tools.semgrep.rulesets.split(',').map(s => s.trim()).filter(s => s)
-            };
-            if (toolConfigurations.semgrep.rulesets.length === 0) {
-                // Backend erwartet vielleicht einen Default oder spezifischen Wert wenn enabled
-                // Für jetzt, wenn leer, senden wir leeres Array, Backend muss damit umgehen oder wir definieren Default hier
-            }
+        if (this.configForm.web_app_url && this.configForm.web_app_url.trim()) {
+          targets['web_url'] = this.configForm.web_app_url.trim();
         }
-
-        if (this.configForm.tools.trivy.enabled) {
-            toolConfigurations.trivy = {
-                enabled: true,
-                scan_type: this.configForm.tools.trivy.scanType,
-                severity: this.configForm.tools.trivy.severity.split(',').map(s => s.trim()).filter(s => s),
-                ignore_unfixed: this.configForm.tools.trivy.ignoreUnfixed
-            };
-            if (toolConfigurations.trivy.severity.length === 0) {
-                // Ähnlich wie bei Semgrep, Backend-Verhalten oder Default hier definieren
-            }
+        // Only set target_details_json if there are actual targets defined
+        if (Object.keys(targets).length > 0) {
+          dataToSave.target_details_json = JSON.stringify(targets);
+        } else {
+          // If fields were empty but checkbox was checked, treat as no predefined targets
+          dataToSave.has_predefined_targets = false; 
         }
+      } else {
+         dataToSave.target_details_json = null; // Explicitly null if not has_predefined_targets
+      }
+      
+      // If has_predefined_targets is true but no targets were actually entered, 
+      // it might be better to also set has_predefined_targets to false.
+      if (dataToSave.has_predefined_targets && dataToSave.target_details_json === null) {
+          console.warn("has_predefined_targets was true, but no actual target details were generated. Setting has_predefined_targets to false.");
+          dataToSave.has_predefined_targets = false;
+      }
 
-        // TODO: ZAP configuration building
-
-        const payload = {
-            name: this.configForm.name,
-            description: this.configForm.description,
-            project: this.configForm.project,
-            has_predefined_targets: this.configForm.has_predefined_targets,
-            target_info_json: targetDetailsPayload, // Ensure this key matches backend serializer expectations
-            tool_configurations_json: Object.keys(toolConfigurations).length > 0 ? JSON.stringify(toolConfigurations) : null
-        };
-
-        try {
-            let response;
-            if (this.editingConfiguration && this.editingConfiguration.id) {
-                response = await axios.put(`${API_CONFIGURATIONS_URL}${this.editingConfiguration.id}/`, payload);
-            } else {
-                response = await axios.post(API_CONFIGURATIONS_URL, payload);
-            }
-            // Successfully saved, update local list or re-fetch for the project
-            this.fetchConfigurations(this.configForm.project); 
-            this.cancelEditOrCreate();
-        } catch (error) {
-            console.error('Error saving configuration:', error.response || error.message || error);
-            if (error.response && error.response.data) {
-                let messages = [];
-                for (const key in error.response.data) {
-                    const fieldErrors = Array.isArray(error.response.data[key]) ? error.response.data[key].join(', ') : error.response.data[key];
-                    messages.push(`${key.charAt(0).toUpperCase() + key.slice(1)}: ${fieldErrors}`);
-                }
-                this.formErrorMessage = messages.join('; ');
-            } else {
-                this.formErrorMessage = 'An unknown error occurred while saving the configuration.';
-            }
-             if (error.response && error.response.status === 401) {
-              this.$emit('session-expired');
-            }
-        } finally {
-            this.isSaving = false;
+      try {
+        let response;
+        if (this.editingConfiguration && this.configForm.id) {
+          // Update existing configuration
+          response = await axios.put(`${API_CONFIGURATIONS_URL}${this.configForm.id}/`, dataToSave);
+        } else {
+          // Create new configuration
+          response = await axios.post(API_CONFIGURATIONS_URL, dataToSave);
         }
+        console.log('Configuration saved:', response.data);
+        this.fetchConfigurations(this.selectedProjectId); // Refresh list
+        this.cancelEditOrCreate(); // Close form and reset
+      } catch (error) {
+        console.error('Error saving configuration:', error.response || error.message || error);
+        if (error.response && error.response.data) {
+          let messages = [];
+          for (const key in error.response.data) {
+            const fieldErrors = Array.isArray(error.response.data[key]) ? error.response.data[key].join(', ') : error.response.data[key];
+            messages.push(`${key.charAt(0).toUpperCase() + key.slice(1)}: ${fieldErrors}`);
+          }
+          this.formErrorMessage = messages.join('; ');
+        } else {
+          this.formErrorMessage = 'An unknown error occurred while saving the configuration.';
+        }
+        if (error.response && error.response.status === 401) {
+          this.$emit('session-expired');
+        }
+      } finally {
+        this.isSaving = false;
+      }
     },
     cancelEditOrCreate() {
         this.showCreateForm = false;
@@ -420,6 +438,77 @@ export default {
             this.configForm.project = this.selectedProjectId;
         }
         this.formErrorMessage = null;
+    },
+    parseToolsFromConfig(toolConfigJson) {
+      const parsedTools = {
+        semgrep: {
+          enabled: false,
+          rulesets: 'p/ci',
+        },
+        trivy: {
+          enabled: false,
+          scanType: 'fs',
+          severity: 'HIGH,CRITICAL',
+          ignoreUnfixed: false,
+        },
+        zap: {
+          enabled: false,
+        }
+      };
+
+      if (toolConfigJson) {
+        const toolConfig = JSON.parse(toolConfigJson);
+        if (toolConfig.semgrep) {
+          parsedTools.semgrep.enabled = toolConfig.semgrep.enabled !== undefined ? toolConfig.semgrep.enabled : parsedTools.semgrep.enabled;
+          if (Array.isArray(toolConfig.semgrep.rulesets)) {
+            parsedTools.semgrep.rulesets = toolConfig.semgrep.rulesets.join(',');
+          } else if (typeof toolConfig.semgrep.rulesets === 'string') {
+            parsedTools.semgrep.rulesets = toolConfig.semgrep.rulesets;
+          }
+        }
+        if (toolConfig.trivy) {
+          parsedTools.trivy.enabled = toolConfig.trivy.enabled !== undefined ? toolConfig.trivy.enabled : parsedTools.trivy.enabled;
+          parsedTools.trivy.scanType = toolConfig.trivy.scan_type || parsedTools.trivy.scanType;
+          if (Array.isArray(toolConfig.trivy.severity)) {
+            parsedTools.trivy.severity = toolConfig.trivy.severity.join(',');
+          } else if (typeof toolConfig.trivy.severity === 'string') {
+             parsedTools.trivy.severity = toolConfig.trivy.severity;
+          }
+          parsedTools.trivy.ignoreUnfixed = toolConfig.trivy.ignore_unfixed !== undefined ? toolConfig.trivy.ignore_unfixed : parsedTools.trivy.ignoreUnfixed;
+        }
+        // TODO: ZAP parsing if/when ZAP is added
+      }
+
+      return parsedTools;
+    },
+    buildToolConfigurationsJson() {
+      const toolConfigurations = {};
+      if (this.configForm.tools.semgrep.enabled) {
+        toolConfigurations.semgrep = {
+          enabled: true,
+          rulesets: this.configForm.tools.semgrep.rulesets.split(',').map(s => s.trim()).filter(s => s)
+        };
+        if (toolConfigurations.semgrep.rulesets.length === 0) {
+          // Backend erwartet vielleicht einen Default oder spezifischen Wert wenn enabled
+          // Für jetzt, wenn leer, senden wir leeres Array, Backend muss damit umgehen oder wir definieren Default hier
+        }
+      }
+
+      if (this.configForm.tools.trivy.enabled) {
+        toolConfigurations.trivy = {
+          enabled: true,
+          scan_type: this.configForm.tools.trivy.scanType,
+          severity: this.configForm.tools.trivy.severity.split(',').map(s => s.trim()).filter(s => s),
+          ignore_unfixed: this.configForm.tools.trivy.ignoreUnfixed
+        };
+        if (toolConfigurations.trivy.severity.length === 0) {
+          // Ähnlich wie bei Semgrep, Backend-Verhalten oder Default hier definieren
+        }
+      }
+
+      // TODO: ZAP configuration building
+
+      return Object.keys(toolConfigurations).length > 0 ? JSON.stringify(toolConfigurations) : null;
     }
   },
   emits: ['session-expired']
@@ -607,8 +696,8 @@ export default {
 }
 
 .tool-options label {
-  font-weight: normal;
-  font-size: 0.95em;
+  margin-top: 5px;
+  margin-bottom: 5px;
 }
 
 .tool-options input[type="text"],

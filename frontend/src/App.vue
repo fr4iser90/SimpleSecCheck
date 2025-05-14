@@ -29,6 +29,7 @@ export default {
     return {
       isLoggedIn: false,
       currentProjectIdForConfigManager: null,
+      selectedProjectForConfigManager: null,
       projectsForScanRunner: [],
     };
   },
@@ -46,6 +47,7 @@ export default {
         axios.defaults.headers.common['Authorization'] = `Token ${token}`;
         this.isLoggedIn = true;
         this.currentProjectIdForConfigManager = null;
+        this.selectedProjectForConfigManager = null;
         if (this.$refs.projectList) {
             this.$refs.projectList.fetchProjects();
         }
@@ -71,6 +73,7 @@ export default {
       delete axios.defaults.headers.common['Authorization'];
       this.isLoggedIn = false;
       this.currentProjectIdForConfigManager = null;
+      this.selectedProjectForConfigManager = null;
       this.projectsForScanRunner = [];
     },
     handleSessionExpired() {
@@ -78,6 +81,12 @@ export default {
     },
     handleProjectSelectedForConfigManager(projectId) {
       this.currentProjectIdForConfigManager = projectId;
+      if (projectId) {
+        this.selectedProjectForConfigManager = this.projectsForScanRunner.find(p => p.id === projectId) || null;
+      } else {
+        this.selectedProjectForConfigManager = null;
+      }
+      console.log('App.vue: selectedProjectForConfigManager updated:', JSON.parse(JSON.stringify(this.selectedProjectForConfigManager)));
     },
     handleProjectListUpdate(updatedProjects) {
       this.projectsForScanRunner = updatedProjects;
@@ -126,6 +135,7 @@ export default {
         <ScanConfigurationManager 
             :isLoggedIn="isLoggedIn" 
             :selectedProjectId="currentProjectIdForConfigManager"
+            :selectedProject="selectedProjectForConfigManager"
             @session-expired="handleSessionExpired"
         />
         <hr class="separator" />
