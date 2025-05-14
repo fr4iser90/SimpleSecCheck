@@ -9,8 +9,8 @@ WORKDIR /app/frontend
 # Copy package.json and lock files first for caching
 COPY ./frontend/package.json ./frontend/yarn.lock* ./frontend/package-lock.json* ./
 
-# Install dependencies using npm ci for reproducible builds
-RUN npm ci
+# Install dependencies - using npm install to auto-update lock file if needed during dev
+RUN npm install
 
 # Copy the rest of the frontend application code
 COPY ./frontend .
