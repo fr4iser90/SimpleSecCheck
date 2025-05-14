@@ -68,12 +68,60 @@
             <textarea id="config-target-details" v-model="configForm.target_details_json" rows="5" placeholder='e.g., {\n  "type": "git_repo",\n  "url": "https://github.com/user/repo.git",\n  "branch": "main",\n  "include_paths": ["src/"],\n  "exclude_paths": ["tests/"]\n}'></textarea>
             <small>Specify targets if 'has_predefined_targets' is checked. Otherwise, manual input will be required during scan run.</small>
           </div>
-          <div class="form-group">
-            <label for="config-tool-settings">Tool Configurations (JSON):</label>
-            <textarea id="config-tool-settings" v-model="configForm.tool_configurations_json" rows="5" placeholder='e.g., {\n  "bandit": { "enabled": true, "severity_level": "MEDIUM" },\n  "semgrep": { "enabled": true, "rulesets": ["p/default"] }\n}'></textarea>
-            <small>Define tool-specific settings. If empty, default tool behavior will apply.</small>
-          </div>
-           <div v-if="formErrorMessage" class="error-message">{{ formErrorMessage }}</div>
+
+          <!-- New Tool Configuration Section -->
+          <fieldset class="tool-config-fieldset">
+            <legend>Tool Configurations</legend>
+
+            <!-- Semgrep -->
+            <div class="tool-config-group">
+              <label class="tool-enable-label">
+                <input type="checkbox" v-model="configForm.tools.semgrep.enabled">
+                Enable Semgrep
+              </label>
+              <div v-if="configForm.tools.semgrep.enabled" class="tool-options">
+                <label for="semgrep-rulesets">Semgrep Rulesets (kommagetrennt):</label>
+                <input type="text" id="semgrep-rulesets" v-model="configForm.tools.semgrep.rulesets" placeholder="z.B. p/ci,r/generic">
+                <small>Standard: community-recommended (oft 'p/ci' oder leer lassen für Standard)</small>
+              </div>
+            </div>
+
+            <!-- Trivy -->
+            <div class="tool-config-group">
+              <label class="tool-enable-label">
+                <input type="checkbox" v-model="configForm.tools.trivy.enabled">
+                Enable Trivy
+              </label>
+              <div v-if="configForm.tools.trivy.enabled" class="tool-options">
+                <label for="trivy-scan-type">Trivy Scan Type:</label>
+                <select id="trivy-scan-type" v-model="configForm.tools.trivy.scanType">
+                  <option value="fs">Filesystem</option>
+                  <option value="image">Image</option>
+                  <option value="repo">Repository</option>
+                  <option value="vuln">Vulnerability Database</option> <!-- Selten direkt hier konfiguriert -->
+                </select>
+                <label>Severity Levels (kommagetrennt):</label>
+                <input type="text" v-model="configForm.tools.trivy.severity" placeholder="UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL">
+                <small>Standard: HIGH,CRITICAL</small>
+                 <label>
+                  <input type="checkbox" v-model="configForm.tools.trivy.ignoreUnfixed">
+                  Ignore Unfixed Vulnerabilities
+                </label>
+              </div>
+            </div>
+
+            <!-- ZAP (Placeholder for now) -->
+            <div class="tool-config-group">
+              <label class="tool-enable-label">
+                <input type="checkbox" v-model="configForm.tools.zap.enabled" disabled>
+                Enable ZAP (Konfiguration folgt)
+              </label>
+            </div>
+
+          </fieldset>
+          <!-- End of New Tool Configuration Section -->
+
+          <div v-if="formErrorMessage" class="error-message">{{ formErrorMessage }}</div>
           <div class="form-actions">
             <button type="submit" :disabled="isSaving" class="action-button save-button">
               {{ isSaving ? 'Saving...' : (editingConfiguration ? 'Update Configuration' : 'Create Configuration') }}
@@ -98,7 +146,22 @@ const initialConfigFormState = () => ({
   project: null, // Will be set from selectedProjectId prop
   has_predefined_targets: false,
   target_details_json: '', 
-  tool_configurations_json: '' 
+  tools: {
+    semgrep: {
+      enabled: false,
+      rulesets: 'p/ci', // Standard-Regelsatz als Beispiel
+    },
+    trivy: {
+      enabled: false,
+      scanType: 'fs', // Standard Scan-Typ
+      severity: 'HIGH,CRITICAL', // Standard Schweregrade
+      ignoreUnfixed: false,
+    },
+    zap: {
+      enabled: false,
+      // Weitere ZAP spezifische einfache Felder hier...
+    }
+  }
 });
 
 export default {
@@ -197,17 +260,48 @@ export default {
     },
     prepareEditForm(config) {
       this.editingConfiguration = config; // Store the original config object
-      this.configForm = { // Populate form with its data
+      
+      let parsedTools = initialConfigFormState().tools; // Start with defaults
+      if (config.tool_configurations_json) {
+        try {
+          const savedToolSettings = JSON.parse(config.tool_configurations_json);
+          if (savedToolSettings.semgrep) {
+            parsedTools.semgrep.enabled = savedToolSettings.semgrep.enabled !== undefined ? savedToolSettings.semgrep.enabled : parsedTools.semgrep.enabled;
+            if (Array.isArray(savedToolSettings.semgrep.rulesets)) {
+              parsedTools.semgrep.rulesets = savedToolSettings.semgrep.rulesets.join(',');
+            } else if (typeof savedToolSettings.semgrep.rulesets === 'string') {
+              parsedTools.semgrep.rulesets = savedToolSettings.semgrep.rulesets;
+            }
+          }
+          if (savedToolSettings.trivy) {
+            parsedTools.trivy.enabled = savedToolSettings.trivy.enabled !== undefined ? savedToolSettings.trivy.enabled : parsedTools.trivy.enabled;
+            parsedTools.trivy.scanType = savedToolSettings.trivy.scan_type || parsedTools.trivy.scanType;
+            if (Array.isArray(savedToolSettings.trivy.severity)) {
+              parsedTools.trivy.severity = savedToolSettings.trivy.severity.join(',');
+            } else if (typeof savedToolSettings.trivy.severity === 'string') {
+               parsedTools.trivy.severity = savedToolSettings.trivy.severity;
+            }
+            parsedTools.trivy.ignoreUnfixed = savedToolSettings.trivy.ignore_unfixed !== undefined ? savedToolSettings.trivy.ignore_unfixed : parsedTools.trivy.ignoreUnfixed;
+          }
+          // TODO: ZAP parsing if/when ZAP is added
+        } catch (e) {
+          console.error('Error parsing tool_configurations_json for editing:', e);
+          this.formErrorMessage = 'Could not parse existing tool configurations. Please check and re-save.';
+          // Beibehaltung der Standardwerte für Tools, wenn Parsen fehlschlägt
+        }
+      }
+
+      this.configForm = { 
         id: config.id,
         name: config.name,
         description: config.description || '',
         project: config.project, 
         has_predefined_targets: config.has_predefined_targets || false,
         target_details_json: config.target_details_json || '',
-        tool_configurations_json: config.tool_configurations_json || ''
+        tools: parsedTools
       };
-      this.showCreateForm = false; // Ensure create mode is off if edit is clicked
-      this.formErrorMessage = null;
+      this.showCreateForm = false; 
+      this.formErrorMessage = this.formErrorMessage || null; // Behalte den Parse-Fehler, falls vorhanden
     },
     async deleteConfiguration(configId) {
       if (!confirm(`Are you sure you want to delete configuration ID ${configId}? This cannot be undone.`)) {
@@ -236,7 +330,7 @@ export default {
     async saveConfiguration() {
         this.isSaving = true;
         this.formErrorMessage = null;
-        // Validate JSON fields before sending if they are not empty
+        
         let targetDetailsPayload = null;
         if (this.configForm.has_predefined_targets && this.configForm.target_details_json.trim()) {
             try {
@@ -252,42 +346,65 @@ export default {
             return;
         }
 
-        let toolConfigsPayload = null;
-        if (this.configForm.tool_configurations_json.trim()) {
-            try {
-                toolConfigsPayload = JSON.parse(this.configForm.tool_configurations_json);
-            } catch (e) {
-                this.formErrorMessage = "Tool Configurations JSON is invalid.";
-                this.isSaving = false;
-                return;
+        // Build tool_configurations_json from form data
+        const toolConfigurations = {};
+        if (this.configForm.tools.semgrep.enabled) {
+            toolConfigurations.semgrep = {
+                enabled: true,
+                rulesets: this.configForm.tools.semgrep.rulesets.split(',').map(s => s.trim()).filter(s => s)
+            };
+            if (toolConfigurations.semgrep.rulesets.length === 0) {
+                // Backend erwartet vielleicht einen Default oder spezifischen Wert wenn enabled
+                // Für jetzt, wenn leer, senden wir leeres Array, Backend muss damit umgehen oder wir definieren Default hier
             }
         }
 
+        if (this.configForm.tools.trivy.enabled) {
+            toolConfigurations.trivy = {
+                enabled: true,
+                scan_type: this.configForm.tools.trivy.scanType,
+                severity: this.configForm.tools.trivy.severity.split(',').map(s => s.trim()).filter(s => s),
+                ignore_unfixed: this.configForm.tools.trivy.ignoreUnfixed
+            };
+            if (toolConfigurations.trivy.severity.length === 0) {
+                // Ähnlich wie bei Semgrep, Backend-Verhalten oder Default hier definieren
+            }
+        }
+
+        // TODO: ZAP configuration building
+
         const payload = {
-            ...this.configForm,
-            target_details_json: targetDetailsPayload, // Send parsed JSON or null
-            tool_configurations_json: toolConfigsPayload, // Send parsed JSON or null
-            project: this.configForm.project || this.selectedProjectId // Ensure project is set
+            name: this.configForm.name,
+            description: this.configForm.description,
+            project: this.configForm.project,
+            has_predefined_targets: this.configForm.has_predefined_targets,
+            target_info_json: targetDetailsPayload, // Ensure this key matches backend serializer expectations
+            tool_configurations_json: Object.keys(toolConfigurations).length > 0 ? JSON.stringify(toolConfigurations) : null
         };
 
-        console.log('ScanConfigurationManager.vue: Attempting to save configuration.');
-        console.log('ScanConfigurationManager.vue: API URL:', API_CONFIGURATIONS_URL);
-        console.log('ScanConfigurationManager.vue: Payload:', JSON.parse(JSON.stringify(payload)));
-
         try {
-            if (this.editingConfiguration) { // Update (PUT)
-                console.log('ScanConfigurationManager.vue: Sending PUT request to:', `${API_CONFIGURATIONS_URL}${this.editingConfiguration.id}/`);
-                await axios.put(`${API_CONFIGURATIONS_URL}${this.editingConfiguration.id}/`, payload);
-            } else { // Create (POST)
-                console.log('ScanConfigurationManager.vue: Sending POST request to:', API_CONFIGURATIONS_URL);
-                await axios.post(API_CONFIGURATIONS_URL, payload);
+            let response;
+            if (this.editingConfiguration && this.editingConfiguration.id) {
+                response = await axios.put(`${API_CONFIGURATIONS_URL}${this.editingConfiguration.id}/`, payload);
+            } else {
+                response = await axios.post(API_CONFIGURATIONS_URL, payload);
             }
-            await this.fetchConfigurations(this.selectedProjectId); // Refresh list
-            this.cancelEditOrCreate(); // Close form and reset
+            // Successfully saved, update local list or re-fetch for the project
+            this.fetchConfigurations(this.configForm.project); 
+            this.cancelEditOrCreate();
         } catch (error) {
-            console.error('Error saving configuration:', error);
-            this.formErrorMessage = `Failed to save configuration. ${error.response?.data?.detail || JSON.stringify(error.response?.data) || error.message}`;
-            if (error.response && error.response.status === 401) {
+            console.error('Error saving configuration:', error.response || error.message || error);
+            if (error.response && error.response.data) {
+                let messages = [];
+                for (const key in error.response.data) {
+                    const fieldErrors = Array.isArray(error.response.data[key]) ? error.response.data[key].join(', ') : error.response.data[key];
+                    messages.push(`${key.charAt(0).toUpperCase() + key.slice(1)}: ${fieldErrors}`);
+                }
+                this.formErrorMessage = messages.join('; ');
+            } else {
+                this.formErrorMessage = 'An unknown error occurred while saving the configuration.';
+            }
+             if (error.response && error.response.status === 401) {
               this.$emit('session-expired');
             }
         } finally {
@@ -298,6 +415,10 @@ export default {
         this.showCreateForm = false;
         this.editingConfiguration = null;
         this.configForm = initialConfigFormState();
+        // Wenn selectedProjectId beim Cancel immer noch gesetzt ist, soll es im Formular bleiben für den nächsten "Create New"
+        if(this.selectedProjectId) {
+            this.configForm.project = this.selectedProjectId;
+        }
         this.formErrorMessage = null;
     }
   },
@@ -425,7 +546,8 @@ export default {
   font-weight: bold;
 }
 .form-group input[type="text"],
-.form-group textarea {
+.form-group textarea,
+.form-group select {
   width: 100%;
   padding: 10px;
   border: 1px solid #ced4da;
@@ -445,5 +567,59 @@ export default {
 .form-actions {
     margin-top: 20px;
     text-align: right;
+}
+
+.tool-config-fieldset {
+  border: 1px solid #ddd;
+  padding: 15px;
+  margin-bottom: 15px;
+  border-radius: 4px;
+}
+
+.tool-config-fieldset legend {
+  font-weight: bold;
+  padding: 0 10px;
+  width: auto; /* Behaves more like a natural legend */
+  font-size: 1.1em;
+}
+
+.tool-config-group {
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px dashed #eee;
+  border-radius: 3px;
+}
+
+.tool-enable-label {
+  font-weight: normal;
+  display: flex;
+  align-items: center;
+}
+
+.tool-enable-label input[type="checkbox"] {
+  margin-right: 8px;
+  width: auto; /* Override global input width for checkbox */
+}
+
+.tool-options {
+  margin-top: 10px;
+  padding-left: 25px; /* Indent options */
+}
+
+.tool-options label {
+  font-weight: normal;
+  font-size: 0.95em;
+}
+
+.tool-options input[type="text"],
+.tool-options select {
+  margin-bottom: 8px;
+}
+
+.tool-options small {
+  display: block;
+  font-size: 0.85em;
+  color: #666;
+  margin-bottom: 5px;
 }
 </style> 

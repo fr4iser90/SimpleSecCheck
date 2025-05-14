@@ -57,7 +57,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Ensure the user creating the project is set as its owner and create a default scan configuration."""
         project = serializer.save(owner=self.request.user)
-        ProjectMembership.objects.create(user=self.request.user, project=project, role=ProjectMembership.Role.OWNER) # Corrected role to use Enum
+        ProjectMembership.objects.create(user=self.request.user, project=project, role=ProjectMembership.Role.MANAGER) # Corrected role to MANAGER
 
         # Automatically create a default ScanConfiguration for the new project
         default_config_name = f"Default Configuration for {project.name}"

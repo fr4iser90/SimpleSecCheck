@@ -164,8 +164,7 @@ class ScanJobSerializer(serializers.ModelSerializer):
             'celery_task_id',
             'initiated_by',
             'created_at', 'started_timestamp', 'completed_timestamp',
-            'results',
-            'target_info', 'tool_settings'
+            'results'
         ]
 
     def validate(self, data):

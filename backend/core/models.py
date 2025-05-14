@@ -172,6 +172,10 @@ class ScanJob(models.Model):
     ci_build_id = models.CharField(max_length=255, null=True, blank=True, db_index=True)
     triggered_by_ci = models.BooleanField(default=False)
 
+    # Fields to store the actual target and tool configurations for this specific job run
+    target_info = models.JSONField(null=True, blank=True, help_text="The specific target information used for this scan job.")
+    tool_settings = models.JSONField(null=True, blank=True, help_text="The specific tool settings used for this scan job.")
+
     def __str__(self):
         return f"Scan Job {self.id} for {self.project.name} - Status: {self.status}"
 
