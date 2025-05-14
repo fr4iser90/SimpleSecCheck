@@ -55,13 +55,41 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def perform_create(self, serializer):
-        """Ensure the user creating the project is set as its owner."""
-        project = serializer.save(owner=self.request.user) # Pass owner directly
-        # Create a ProjectMembership for the creator as 'owner'
-        ProjectMembership.objects.create(user=self.request.user, project=project, role='owner')
-        # The direct owner field on the project model is now set by serializer.save()
-        # project.owner = self.request.user # This line is no longer strictly needed if owner is passed in save
-        # project.save() # And this save is also not needed as the first save includes the owner
+        """Ensure the user creating the project is set as its owner and create a default scan configuration."""
+        project = serializer.save(owner=self.request.user)
+        ProjectMembership.objects.create(user=self.request.user, project=project, role=ProjectMembership.Role.OWNER) # Corrected role to use Enum
+
+        # Automatically create a default ScanConfiguration for the new project
+        default_config_name = f"Default Configuration for {project.name}"
+        
+        # Prepare target_details_json from project_main_targets_json
+        # This requires a mapping from the structure of project_main_targets_json
+        # to the expected structure of target_details_json (which is usually a list of target objects or a single complex object).
+        # For now, let's assume target_details_json can directly take what project_main_targets_json provides, 
+        # or project_main_targets_json is structured as a single target object compatible with target_details_json.
+        # A more robust solution might involve transforming the data.
+        # Example: if project_main_targets_json is {"codebase_git": "url", "web_url": "url2"}
+        # target_details_json might need to be [{ "type": "git_repo", "value": "url"}, {"type": "url", "value": "url2"}]
+        # For simplicity, we'll pass it directly if it's not None, assuming compatible structure or simple dict.
+        
+        generated_target_details = None
+        if project.project_main_targets_json:
+            # Simplistic direct assignment. This needs refinement based on actual structures.
+            # Assuming project_main_targets_json might store something like: 
+            # { "type": "git_repo", "value": "..." } or { "type": "url", "value": "..." }
+            # or a list of such objects if ScanConfiguration.target_details_json expects a list.
+            # Let's assume target_details_json for a ScanConfiguration can be a single dictionary defining one target set.
+            generated_target_details = project.project_main_targets_json 
+
+        ScanConfiguration.objects.create(
+            project=project,
+            name=default_config_name,
+            description="Automatically created default scan configuration.",
+            created_by=self.request.user,
+            target_details_json=generated_target_details, # Use data from project
+            tool_configurations_json=project.default_tool_settings_json, # Use data from project
+            has_predefined_targets=bool(generated_target_details) # Set based on whether targets were populated
+        )
 
     def get_queryset(self):
         user = self.request.user
@@ -367,76 +395,46 @@ class ScanJobViewSet(viewsets.ModelViewSet): # Changed from ReadOnlyModelViewSet
     def perform_create(self, serializer):
         project = serializer.validated_data['project']
         user = self.request.user
+        scan_configuration = serializer.validated_data['scan_configuration'] # Now required
 
-        # Explicit permission check before proceeding
-        # The IsProjectDeveloperOrHigher permission class checks self.request.user against project from serializer.validated_data['project']
-        # by calling check_object_permissions on the project object. We need to ensure that IsProjectDeveloperOrHigher
-        # is written to expect a Project instance for its has_object_permission check.
-        # For create, object is None, so has_permission is called. We must ensure it can access validated_data['project'].
-        # A simpler way is to manually check here if IsProjectDeveloperOrHigher is not set up for create like this.
-
+        # Permission check (simplified, ensure user is member with appropriate role or superuser)
         if not user.is_superuser:
             try:
                 membership = ProjectMembership.objects.get(project=project, user=user)
-                if membership.role not in [ProjectMembership.RoleChoices.DEVELOPER,
-                                            ProjectMembership.RoleChoices.MANAGER,
-                                            ProjectMembership.RoleChoices.OWNER]:
-                    self.permission_denied(
-                        self.request,
-                        message="You do not have Developer, Manager, or Owner role in this project to trigger a scan."
-                    )
+                if membership.role not in [ProjectMembership.Role.DEVELOPER, ProjectMembership.Role.MANAGER, ProjectMembership.Role.OWNER]:
+                    raise permissions.PermissionDenied("You do not have permission to trigger scans for this project.")
             except ProjectMembership.DoesNotExist:
-                self.permission_denied(
-                    self.request, 
-                    message="You are not a member of this project or do not have permission to trigger a scan."
-                )
-        
-        # If a scan_configuration is provided, use its tool_settings_json by default,
-        # unless tool_settings_json is also explicitly provided in the request (override).
-        scan_config = serializer.validated_data.get('scan_configuration')
-        tool_settings_from_request = serializer.validated_data.get('tool_settings_json')
+                raise permissions.PermissionDenied("You are not a member of this project and cannot trigger scans.")
 
-        final_tool_settings = None
-        if tool_settings_from_request:
-            final_tool_settings = tool_settings_from_request
-        elif scan_config and scan_config.tool_configurations_json:
-            final_tool_settings = scan_config.tool_configurations_json
-        
-        # Similarly for target_info_json, if config has predefined targets
-        target_info_from_request = serializer.validated_data.get('target_info_json')
-        final_target_info = target_info_from_request
+        # Extract target_info and tool_settings directly from the scan_configuration
+        # The ScanJob model fields are target_info and tool_settings (JSONFields)
+        job_target_info = scan_configuration.target_details_json
+        job_tool_settings = scan_configuration.tool_configurations_json
 
-        if scan_config and scan_config.has_predefined_targets:
-            if target_info_from_request:
-                # Potentially log a warning or decide if request target_info overrides config's predefined targets
-                # For now, let's assume if config has_predefined_targets, they are used unless explicitly overridden.
-                # If the intent is to *not* allow override, this should be an error or target_info_from_request ignored.
-                # Current frontend logic disables target_info if config has predefined ones.
-                # Let's assume if config has predefined, its target_details_json is authoritative unless target_info_from_request is *meant* as an override.
-                # For simplicity now, if config has predefined, we use its definition. If target_info_from_request is present, it might be an error or an override.
-                # We will rely on config.target_details_json if has_predefined_targets is true.
-                final_target_info = scan_config.target_details_json # Use config's target if it has predefined
-            else:
-                final_target_info = scan_config.target_details_json
-        
-        # If no scan_config or it does not have_predefined_targets, target_info_from_request is used.
-        # If target_info_from_request is also null/empty, this might be an issue depending on tool requirements.
+        # If target_details_json from config is None and has_predefined_targets is False, this might be an issue
+        # or indicate a tool that doesn't need explicit targets. For now, we pass it as is.
+        # Validation for required targets should ideally happen earlier or be part of ScanConfiguration validation.
+        if not job_target_info and scan_configuration.has_predefined_targets:
+             # This case implies config says it has targets, but target_details_json is empty.
+             # Depending on policy, could raise error or proceed assuming tool might not need them.
+             # For now, we log a warning or let it proceed (tool might handle it).
+             print(f"Warning: ScanConfiguration {scan_configuration.id} has_predefined_targets=True but target_details_json is empty.")
 
-        # Celery task will be created and ID assigned *after* initial ScanJob save usually,
-        # or as part of a more complex service layer.
-        # For now, status is PENDING, celery_task_id is null.
+        # CI/CD related fields will be in serializer.validated_data if provided in the request
+        # and will be passed to ScanJob.objects.create via **serializer.validated_data in serializer.create()
+        # No need to explicitly pop them here if they are part of the serializer fields and handled by its create method.
+        
+        # serializer.save() will call serializer.create(validated_data)
+        # We pass additional kwargs which DRF merges into validated_data for the create method.
         scan_job = serializer.save(
-            initiated_by=user,
-            status=ScanJobStatus.PENDING, # Initial status
-            tool_settings_json=final_tool_settings,
-            target_info_json=final_target_info,
-            celery_task_id=None # Will be set after Celery task is created
+            initiator=user,
+            status=ScanJobStatus.PENDING,
+            target_info=job_target_info, # Pass data from config to be saved on ScanJob model
+            tool_settings=job_tool_settings  # Pass data from config to be saved on ScanJob model
         )
         
-        # TODO: Here, you would typically trigger the Celery task
-        # For example: task_result = execute_scan_job.delay(scan_job.id)
-        # scan_job.celery_task_id = task_result.id
-        # scan_job.save(update_fields=['celery_task_id'])
+        # TODO: Celery task triggering would go here, using scan_job.id and its details
+        # For example: execute_scan_job.delay(scan_job.id)
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """

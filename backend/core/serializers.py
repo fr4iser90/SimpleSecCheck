@@ -1,5 +1,7 @@
 from rest_framework import serializers
-from .models import Project, ScanTarget, TargetGroup, SecurityTool, ScanConfiguration, UserProfile, ApiKey, ScanResult, ScanJob, ProjectMembership
+from .models import (Project, ScanTarget, TargetGroup, SecurityTool, 
+                    ScanConfiguration, UserProfile, ApiKey, ScanResult, 
+                    ScanJob, ProjectMembership, ScanJobStatus) # Removed DefaultTargetTypeChoices, DefaultProjectTarget
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -55,10 +57,13 @@ class ProjectSerializer(serializers.ModelSerializer):
     owner = UserSimpleSerializer(read_only=True)
     project_memberships = ProjectMembershipSerializer(source='projectmembership_set', many=True, read_only=True)
     can_trigger_scan = serializers.SerializerMethodField()
+    # project_main_targets_json and default_tool_settings_json are model fields and will be included if in Meta.fields
 
     class Meta:
         model = Project
-        fields = ['id', 'name', 'description', 'owner', 'created_at', 'updated_at', 'project_memberships', 'can_trigger_scan']
+        fields = ['id', 'name', 'description', 'owner', 'created_at', 'updated_at', 
+                  'project_memberships', 'can_trigger_scan', 
+                  'project_main_targets_json', 'default_tool_settings_json'] # Ensured new fields are present
         read_only_fields = ['owner', 'created_at', 'updated_at', 'project_memberships']
 
     def get_can_trigger_scan(self, obj):
@@ -139,20 +144,17 @@ class ScanJobSerializer(serializers.ModelSerializer):
     results = ScanResultSerializer(many=True, read_only=True)
 
     project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all())
-    scan_configuration = serializers.PrimaryKeyRelatedField(
-        queryset=ScanConfiguration.objects.all(), 
-        required=False, 
-        allow_null=True
-    )
+    scan_configuration = serializers.PrimaryKeyRelatedField(queryset=ScanConfiguration.objects.all())
 
     class Meta:
         model = ScanJob
         fields = [
             'id', 'project', 'project_name', 'scan_configuration', 'scan_configuration_name',
-            'target_info_json', 'tool_settings_json', 'status', 'celery_task_id', 
+            'status', 'celery_task_id', 
             'initiated_by', 'created_at', 'started_timestamp', 'completed_timestamp',
             'results',
-            'commit_hash', 'branch_name', 'repository_url', 'ci_build_id', 'triggered_by_ci'
+            'commit_hash', 'branch_name', 'repository_url', 'ci_build_id', 'triggered_by_ci',
+            'target_info', 'tool_settings'
         ]
         read_only_fields = [
             'id',
@@ -162,20 +164,26 @@ class ScanJobSerializer(serializers.ModelSerializer):
             'celery_task_id',
             'initiated_by',
             'created_at', 'started_timestamp', 'completed_timestamp',
-            'results'
+            'results',
+            'target_info', 'tool_settings'
         ]
 
     def validate(self, data):
         project = data.get('project')
         scan_configuration = data.get('scan_configuration')
 
+        if not scan_configuration:
+            raise serializers.ValidationError({"scan_configuration": "This field is required."})
+
         if project and scan_configuration:
             if scan_configuration.project != project:
                 raise serializers.ValidationError(
                     {"scan_configuration": "This scan configuration does not belong to the selected project."}
                 )
-        
         return data
+
+    def create(self, validated_data):
+        return ScanJob.objects.create(**validated_data)
 
 class UserProfileSerializer(serializers.ModelSerializer):
     user = UserSimpleSerializer(read_only=True)

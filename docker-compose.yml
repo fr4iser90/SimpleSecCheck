@@ -93,8 +93,7 @@ services:
     # Placeholder command for now, or adjust entrypoint to not require it if django-celery-beat is not yet installed.
     # For now, assuming it might be added back. If not, this service might not be started or its command changed.
     command: >
-      sh -c "poetry run python manage.py migrate --noinput && \
-             rm -f /tmp/celerybeat.pid && \
+      sh -c "rm -f /tmp/celerybeat.pid && \
              celery -A seculite_api beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:
       - ./backend:/app

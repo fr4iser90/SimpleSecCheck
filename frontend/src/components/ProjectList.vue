@@ -34,6 +34,18 @@
             <label for="projectDescription">Beschreibung (optional):</label>
             <textarea id="projectDescription" v-model="newProjectDescription" rows="3"></textarea>
           </div>
+          <div class="form-group">
+            <label for="projectTargetType">Typ des Hauptziels:</label>
+            <select id="projectTargetType" v-model="newProjectTargetType" class="form-control">
+              <option v-for="target in targetTypes" :key="target.value" :value="target.value">
+                {{ target.text }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="projectTargetValue">Zielspezifikation:</label>
+            <input type="text" id="projectTargetValue" v-model="newProjectTargetValue" :placeholder="currentTargetPlaceholder" class="form-control" required>
+          </div>
           <div v-if="createProjectError" class="error-message">
             {{ createProjectError }}
           </div>
@@ -62,9 +74,23 @@ export default {
       showCreateProjectModal: false,
       newProjectName: '',
       newProjectDescription: '',
+      newProjectTargetType: 'git',
+      newProjectTargetValue: '',
+      targetTypes: [
+        { value: 'git', text: 'Git Repository', placeholder: 'z.B. git@github.com:user/repo.git', keyName: 'codebase_git' },
+        { value: 'web_url', text: 'Web-Anwendungs-URL', placeholder: 'z.B. https://example.com', keyName: 'web_url' },
+        { value: 'local_path', text: 'Lokaler Dateipfad', placeholder: 'z.B. /srv/my-codebase', keyName: 'codebase_local_path' },
+        { value: 'docker_image', text: 'Docker Image', placeholder: 'z.B. mein-image:latest', keyName: 'docker_image_name' }
+      ],
       isCreatingProject: false,
       createProjectError: null,
     };
+  },
+  computed: {
+    currentTargetPlaceholder() {
+      const selectedType = this.targetTypes.find(t => t.value === this.newProjectTargetType);
+      return selectedType ? selectedType.placeholder : 'Bitte Ziel eingeben';
+    }
   },
   methods: {
     async fetchProjects() {
@@ -92,27 +118,53 @@ export default {
       this.showCreateProjectModal = true;
       this.newProjectName = ''; // Reset form fields when opening
       this.newProjectDescription = '';
+      this.newProjectTargetType = 'git';
+      this.newProjectTargetValue = '';
       this.createProjectError = null;
     },
     closeCreateProjectModal() {
       this.showCreateProjectModal = false;
       this.newProjectName = '';
       this.newProjectDescription = '';
+      this.newProjectTargetType = 'git';
+      this.newProjectTargetValue = '';
       this.createProjectError = null;
       this.isCreatingProject = false; // Ensure loading state is reset
     },
     async createNewProject() {
       if (!this.newProjectName.trim()) {
-        this.createProjectError = 'Project name cannot be empty.';
+        this.createProjectError = 'Projektname darf nicht leer sein.';
+        return;
+      }
+      if (!this.newProjectTargetValue.trim()) {
+        this.createProjectError = 'Zielspezifikation darf nicht leer sein.';
         return;
       }
       this.isCreatingProject = true;
       this.createProjectError = null;
+
+      let projectMainTargets = {};
+      const selectedTypeDefinition = this.targetTypes.find(t => t.value === this.newProjectTargetType);
+      if (selectedTypeDefinition && this.newProjectTargetValue.trim()) {
+        projectMainTargets[selectedTypeDefinition.keyName] = this.newProjectTargetValue.trim();
+      } else if (this.newProjectTargetValue.trim()) {
+        // Fallback, sollte nicht passieren wenn newProjectTargetType immer gesetzt ist
+        this.createProjectError = 'Ungültiger Zieltyp ausgewählt.';
+        this.isCreatingProject = false;
+        return;
+      }
+
       try {
-        await axios.post('/api/v1/core/projects/', {
+        const payload = {
           name: this.newProjectName,
-          description: this.newProjectDescription
-        });
+          description: this.newProjectDescription,
+        };
+
+        if (Object.keys(projectMainTargets).length > 0) {
+          payload.project_main_targets_json = projectMainTargets;
+        }
+        
+        await axios.post('/api/v1/core/projects/', payload);
         await this.fetchProjects(); // Reloads the list and emits the event
         this.closeCreateProjectModal();
       } catch (err) {
@@ -244,7 +296,8 @@ h2 {
 }
 
 .form-group input[type="text"],
-.form-group textarea {
+.form-group textarea,
+.form-group select {
     width: 100%;
     padding: .5rem;
     border: 1px solid #ccc;
@@ -298,5 +351,27 @@ h2 {
 .modal .btn-secondary:disabled {
   background-color: #6c757d;
   opacity: 0.65;
+}
+
+.form-control { /* Basic styling for select and input to match a bit */
+  width: 100%;
+  padding: .375rem .75rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #495057;
+  background-color: #fff;
+  background-clip: padding-box;
+  border: 1px solid #ced4da;
+  border-radius: .25rem;
+  transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+  margin-bottom: 0.5rem; /* Add some space below */
+}
+
+/* Ensure modal inputs are full width */
+.modal-content .form-group input[type=\"text\"],
+.modal-content .form-group textarea,
+.modal-content .form-group select {
+    width: 100%; /* Ensures inputs/selects take full width of their container */
+    box-sizing: border-box; /* Includes padding and border in the element's total width and height */
 }
 </style> 

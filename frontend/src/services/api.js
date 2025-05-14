@@ -110,6 +110,10 @@ const api = {
     }
   },
 
+  getProjectDetails(projectId) {
+    return axios.get(`${API_CORE_URL}/projects/${projectId}/`);
+  },
+
 };
 
 export default api; 
