@@ -184,4 +184,37 @@ This document outlines the high-level tasks for implementing the SecuLite v2 Min
     -   E12.2.1. Create initial `CHANGELOG.md` or `RELEASE_NOTES.md` file.
     -   E12.2.2. Establish process for updating changelog with each significant change/PR.
 
+## Epic 13: Docker Host Integration for Target Definition (New)
+
+**Goal:** Enable users to select codebases from Docker containers running locally on the server as scan targets.
+
+-   **E13.1. Backend: Docker API Interaction & Configuration**:
+    -   E13.1.1. Add `docker-py` (Python Docker library) to backend dependencies (`pyproject.toml`).
+    -   E13.1.2. Update `docker-compose.yml` to mount the host's Docker socket (`/var/run/docker.sock`) into the backend container (reference: `05_docker_setup.md`). Document security implications.
+    -   E13.1.3. Implement service logic in the backend to list running containers and inspect their volume mounts via the Docker API.
+    -   E13.1.4. Develop and implement heuristics to identify potentially relevant host paths for codebases from volume mounts.
+-   **E13.2. Backend: New API Endpoints for Docker Host Interaction**:
+    -   E13.2.1. Implement API endpoint `/api/v1/dockerhost/containers/` (List Running Docker Containers) as per `03_api_design.md`.
+        -   Include filtering by name and status.
+        -   Ensure endpoint is restricted to authorized users (e.g., Admins).
+    -   E13.2.2. Implement API endpoint `/api/v1/dockerhost/containers/{container_id}/code-paths/` (Retrieve Potential Code Paths) as per `03_api_design.md`.
+        -   Ensure endpoint is restricted to authorized users.
+    -   E13.2.3. Write unit and integration tests for the new API endpoints and Docker interaction logic.
+-   **E13.3. Frontend: UI for Docker Container Selection in Project Creation/Editing**:
+    -   E13.3.1. Design and implement UI elements in `ProjectCreateModal.vue` (or a dedicated component) to:
+        -   Display an option/button to "Select codebase from local Docker container" (visible to authorized users only).
+        -   Display a list of running Docker containers (fetched from the new API endpoint).
+        -   Provide filtering capabilities for the container list.
+    -   E13.3.2. On container selection, implement an API call to fetch potential code paths for that container.
+    -   E13.3.3. Display a selection for the host paths provided by the backend.
+    -   E13.3.4. Populate the selected host path into the project form's "Codebase Path or URL" (`codebase_path_or_url`) field.
+    -   E13.3.5. Store metadata (e.g., container name, path in container) in the `TargetAsset`'s (or project's default configuration) `metadata` field when the project is created.
+-   **E13.4. Frontend: Backend API Integration**:
+    -   E13.4.1. Create API service functions in the frontend to communicate with the new `/api/v1/dockerhost/...` endpoints.
+    -   E13.4.2. Adapt frontend state management (Pinia/Vuex) to handle fetched container and path data if necessary.
+    -   E13.4.3. Implement error handling for API calls.
+-   **E13.5. Documentation & Tests**:
+    -   E13.5.1. Describe the new functionality in user and administrator documentation.
+    -   E13.5.2. Create end-to-end tests for the "create project with codebase from Docker container" workflow (if E2E tests are within MVP scope).
+
 This task breakdown provides a high-level roadmap. Each task will be further broken down into smaller, more manageable sub-tasks and potentially issues in a project tracking system as development commences. 

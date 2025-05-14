@@ -220,4 +220,31 @@ This document outlines high-level Epics and initial User Stories for the SecuLit
 -   As a new developer joining the project, I want a clear guide on how to set up my local development environment for the MVP.
 -   As a user/stakeholder, I want to see release notes or a changelog for each version of the MVP that is deployed, detailing what has changed.
 
+## Epic 13: Docker Host Integration for Target Definition (New)
+
+**Goal:** Enable authorized users to select codebases from Docker containers running locally on the server as scan targets, simplifying the target definition process.
+
+**Initial User Stories:**
+
+*   **As an Administrator (or authorized user), when creating or editing a project for an application hosted locally on the server via Docker, I want to have an option to select the codebase directly from one of the server's running Docker containers, so I don't have to manually find and copy host paths to the code volumes.**
+    *   *Acceptance Criteria:*
+        *   In the project creation/editing form, a clear option (e.g., button, dropdown trigger) like "Select codebase from local Docker container" is available.
+        *   This option is only visible and usable by users with the appropriate permissions.
+
+*   **As an Administrator (or authorized user), after choosing to select a codebase from a Docker container, I want to see a filterable and searchable list of currently running Docker containers on the server (displaying at least name, ID, and image), so I can quickly identify and select the relevant container.**
+    *   *Acceptance Criteria:*
+        *   The frontend fetches and displays the list of running containers from the backend API.
+        *   The list includes essential identifying information: container name, ID, and image.
+        *   The user can filter or search the list, for example, by container name.
+
+*   **As an Administrator (or authorized user), after selecting a specific Docker container from the list, I want to be presented with a list of potential host filesystem paths that correspond to its volume mounts (especially those typically containing code, like `/var/www/html` or `/app` within the container), so I can choose the correct path to the application's codebase.**
+    *   *Acceptance Criteria:*
+        *   The frontend fetches and displays the relevant host paths for the selected container from the backend API.
+        *   The displayed paths are host paths, ideally with an indication of their corresponding path within the container and volume type.
+
+*   **As an Administrator (or authorized user), after selecting a specific host path (derived from a Docker container's volume), I want this path to be automatically populated into the "Codebase Path or URL" field of the project form, so that the scan can be configured with the correct target.**
+    *   *Acceptance Criteria:*
+        *   The selected host path is correctly entered into the designated form field for the codebase.
+        *   Relevant metadata (e.g., the source Docker container name, the original path within the container) is optionally stored with the target asset information for traceability.
+
 --- 
