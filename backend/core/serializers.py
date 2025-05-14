@@ -54,11 +54,28 @@ class ProjectMembershipWriteSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     owner = UserSimpleSerializer(read_only=True)
     project_memberships = ProjectMembershipSerializer(source='projectmembership_set', many=True, read_only=True)
+    can_trigger_scan = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
-        fields = ['id', 'name', 'description', 'owner', 'created_at', 'updated_at', 'project_memberships']
+        fields = ['id', 'name', 'description', 'owner', 'created_at', 'updated_at', 'project_memberships', 'can_trigger_scan']
         read_only_fields = ['owner', 'created_at', 'updated_at', 'project_memberships']
+
+    def get_can_trigger_scan(self, obj):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            user = request.user
+            if user.is_superuser:
+                return True
+            # Check if the user is a member of the project with a role that allows scanning
+            try:
+                membership = ProjectMembership.objects.get(project=obj, user=user)
+                return membership.role in [ProjectMembership.RoleChoices.DEVELOPER,
+                                           ProjectMembership.RoleChoices.MANAGER,
+                                           ProjectMembership.RoleChoices.OWNER]
+            except ProjectMembership.DoesNotExist:
+                return False
+        return False
 
 class ScanTargetSerializer(serializers.ModelSerializer):
     class Meta:
