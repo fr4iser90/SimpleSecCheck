@@ -54,7 +54,7 @@ INSTALLED_APPS = [
     'dj_rest_auth.registration',
     'django_celery_beat', # For scheduling periodic tasks
     # Local apps
-    'core',
+    'apps.core',
 ]
 
 MIDDLEWARE = [
@@ -174,7 +174,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Django REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'core.authentication.ApiKeyAuthentication', # Custom API Key auth
+        'apps.core.authentication.ApiKeyAuthentication', # Custom API Key auth
         'rest_framework.authentication.TokenAuthentication', # dj-rest-auth default
         'rest_framework.authentication.SessionAuthentication', # For browsable API and web sessions
     ),
