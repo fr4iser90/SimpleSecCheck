@@ -245,6 +245,33 @@ export default {
   created() {
   },
   methods: {
+    isPublicFacingUrl(url) {
+      if (!url || typeof url !== 'string') return false;
+      try {
+        const parsedUrl = new URL(url);
+        const hostname = parsedUrl.hostname;
+
+        // Check for localhost
+        if (hostname === 'localhost') return false;
+
+        // Check for IP addresses
+        if (/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(hostname)) {
+          // Private IP ranges
+          if (hostname.startsWith('127.') ||
+              hostname.startsWith('10.') ||
+              hostname.startsWith('192.168.') ||
+              /^172\\.(1[6-9]|2[0-9]|3[0-1])\\./.test(hostname)) { // 172.16.0.0 - 172.31.255.255
+            return false;
+          }
+        }
+        // If it's not localhost or a private IP, and it's a valid URL (implicit by new URL success), consider it public.
+        // Handles http, https, and domain names.
+        return true;
+      } catch (e) {
+        console.warn("Invalid URL for public facing check:", url, e);
+        return false; // Treat invalid URLs as not public, or handle as an error.
+      }
+    },
     handleProjectSelectionChange(event) {
       const projectId = parseInt(event.target.value, 10);
       if (isNaN(projectId)) {
@@ -307,6 +334,32 @@ export default {
       this.scanTriggerError = null;
       this.initiatedJob = null;
       this.clearPolling();
+
+      let targetDetailsToParse = null;
+      if (this.selectedConfiguration && this.selectedConfiguration.target_details_json) {
+        targetDetailsToParse = this.selectedConfiguration.target_details_json;
+      } else if (!this.selectedConfigurationId && this.selectedProject && this.selectedProject.default_scan_configuration_details) {
+        targetDetailsToParse = this.selectedProject.default_scan_configuration_details.target_details_json;
+      }
+
+      if (targetDetailsToParse) {
+        try {
+          const targets = typeof targetDetailsToParse === 'string' ?
+                          JSON.parse(targetDetailsToParse) :
+                          targetDetailsToParse;
+
+          if (targets && targets.web_url && this.isPublicFacingUrl(targets.web_url)) {
+            const confirmationMessage = "Achtung: Sie sind im Begriff, eine Web-URL zu scannen. Das Scannen von Live-Systemen, insbesondere wenn diese durch Dienste wie Cloudflare geschützt sind, kann zu IP-Sperren oder verfälschten Ergebnissen führen. Es wird empfohlen, Webanwendungen in einer Testumgebung ohne vorgeschaltete Schutzmechanismen oder lokal zu testen. Stellen Sie sicher, dass Sie die Erlaubnis haben, das Ziel zu scannen. Fortfahren?";
+            if (!window.confirm(confirmationMessage)) {
+              this.triggeringScan = false;
+              return; // User cancelled
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing target_details_json for web_url check:', e);
+          // Optional: Inform user about parsing error, or just proceed without warning for this case
+        }
+      }
 
       const payload = {
         project: this.selectedProjectId,
