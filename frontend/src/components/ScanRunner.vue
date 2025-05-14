@@ -10,7 +10,7 @@
         <label for="project-select">Select Project:</label>
         <select id="project-select" v-model="selectedProjectId" :disabled="isLoadingProjects || triggeringScan">
           <option :value="null" disabled>{{ isLoadingProjects ? 'Loading projects...' : (projectLoadError ? 'Error loading projects' : '-- Select a Project --') }}</option>
-          <option v-for="project in projects" :key="project.id" :value="project.id">
+          <option v-for="project in projectList" :key="project.id" :value="project.id">
             {{ project.name }} (ID: {{ project.id }})
           </option>
         </select>
@@ -126,11 +126,15 @@ export default {
         required: true
     },
     currentUser: Object, // Expected: { id: Number, username: String, ... }
+    projects: { // Prop to receive projects from App.vue
+      type: Array,
+      default: () => []
+    }
   },
   data() {
     return {
-      projects: [],
-      selectedProjectId: null,
+      selectedProject: null,
+      projectList: [], // This will now be primarily populated by the prop
       isLoadingProjects: false,
       projectLoadError: null,
 
@@ -166,11 +170,8 @@ export default {
       }
       return true; // No config selected, or selected config doesn't define targets
     },
-    selectedProject() {
-      if (!this.selectedProjectId || this.projects.length === 0) {
-        return null;
-      }
-      return this.projects.find(p => p.id === this.selectedProjectId);
+    selectedProjectId() {
+      return this.selectedProject ? this.selectedProject.id : null;
     },
     userRoleInSelectedProject() {
       if (!this.selectedProject || !this.currentUser || !this.currentUser.id || !this.selectedProject.project_memberships) {
@@ -203,11 +204,31 @@ export default {
       immediate: true,
       handler(isLoggedIn) {
         if (isLoggedIn) {
-          this.fetchProjects();
+          console.log('ScanRunner.vue: isLoggedIn watcher fired, relying on projects prop.');
         } else {
           this.resetScanRunnerState();
         }
       }
+    },
+    projects: {
+      handler(newProjects) {
+        // When the projects prop changes, update the internal projectList
+        console.log('ScanRunner.vue: projects prop watcher triggered with:', JSON.parse(JSON.stringify(newProjects)));
+        this.projectList = newProjects;
+        this.isLoadingProjects = false; // Assuming projects prop means loading is done
+        this.projectLoadError = null;
+        console.log('ScanRunner.vue: projectList set to:', JSON.parse(JSON.stringify(this.projectList)));
+        console.log('ScanRunner.vue: isLoadingProjects set to false, projectLoadError set to null');
+
+        if (newProjects && newProjects.length > 0) {
+          // Optionally, auto-select the first project or handle as needed
+          // this.selectedProject = newProjects[0]; // Store the project object if needed, or just the ID
+        } else {
+          this.selectedProject = null; // Clear selection if projects list is empty
+        }
+      },
+      immediate: true, // Trigger the handler immediately when the component is created
+      deep: true // Watch for changes in array elements too, though maybe not strictly necessary here
     },
     selectedProjectId(newProjectId, oldProjectId) {
       if (newProjectId !== oldProjectId) {
@@ -240,22 +261,23 @@ export default {
   },
   methods: {
     async fetchProjects() {
-      if (!this.isLoggedIn) return;
+      if (!this.isLoggedIn) {
+        this.projectList = [];
+        this.projectLoadError = 'User not logged in.';
+        return;
+      }
       this.isLoadingProjects = true;
       this.projectLoadError = null;
       try {
-        // const response = await axios.get(`${API_CORE_URL}/projects/`); 
-        const data = await api.getProjects();
-        this.projects = data.results; // Assuming pagination, adjust if not
-        if (this.projects.length === 0) {
-            this.projectLoadError = "No projects found or you don't have access to any.";
+        const response = await api.getProjects();
+        this.projectList = response.results || response; // Handle paginated/non-paginated
+        if (this.projectList.length === 0) {
+          this.projectLoadError = 'No projects found or you don\'t have access to any.';
         }
       } catch (error) {
-        console.error('Error fetching projects:', error);
-        this.projectLoadError = error.response?.data?.detail || 'Failed to load projects.';
-        if (error.response && error.response.status === 401) {
-            this.$emit('session-expired');
-        }
+        console.error('Error fetching projects in ScanRunner:', error);
+        this.projectLoadError = 'Failed to load projects. ' + (error.response?.data?.detail || error.message);
+        this.projectList = [];
       } finally {
         this.isLoadingProjects = false;
       }
@@ -266,7 +288,6 @@ export default {
       this.configurationsError = null;
       this.scanConfigurations = [];
       try {
-        // const response = await axios.get(`${API_CORE_URL}/scan-configurations/?project=${projectId}`);
         const data = await api.getScanConfigurations(projectId);
         this.scanConfigurations = data.results; // Assuming pagination
          if (!this.scanConfigurations || this.scanConfigurations.length === 0) {
@@ -309,7 +330,6 @@ export default {
           target_info: (this.selectedConfiguration && this.selectedConfiguration.has_predefined_targets) ? null : JSON.parse(this.targetInfo || 'null'), // Parse targetInfo if provided
           scan_configuration_id: this.selectedConfigurationId
         };
-        // const response = await axios.post(`${API_CORE_URL}/scans/trigger-sample-scan/`, payload);
         const data = await api.triggerSampleScan(payload);
         this.initiatedJob = data.scan_job; 
         this.taskIdToCheck = data.task_id; // Use this for polling now
@@ -336,7 +356,6 @@ export default {
       // scanResultDetails is for the manual check form, not direct job polling
 
       try {
-        // const response = await axios.get(`${API_CORE_URL}/scans/scan-status/${celeryTaskId}/`);
         const data = await api.getCeleryTaskStatus(celeryTaskId);
         
         // Update initiatedJob if the task ID matches the one we are polling for initiated job
@@ -403,7 +422,6 @@ export default {
         this.checkingJobStatus = true;
         this.jobStatusError = null;
         try {
-            // const response = await axios.get(`${API_CORE_URL}/scan-jobs/${jobId}/`);
             const data = await api.getScanJob(jobId);
             if (this.initiatedJob && this.initiatedJob.id === jobId) {
                 this.initiatedJob = { ...this.initiatedJob, ...data }; 
@@ -423,8 +441,8 @@ export default {
         }
     },
     resetScanRunnerState() {
-      this.projects = [];
-      this.selectedProjectId = null;
+      this.projectList = [];
+      this.selectedProject = null;
       this.scanConfigurations = [];
       this.selectedConfigurationId = null;
       this.targetInfo = '';
@@ -436,6 +454,16 @@ export default {
       this.scanResultDetails = null;
       this.errorMessage = null;
       this.clearPolling();
+    },
+    updateProjects(newProjects) {
+      // This method can be called by App.vue if direct method call is preferred over watch
+      // For now, the watcher on the 'projects' prop handles updates.
+      this.projectList = newProjects;
+      if (this.projectList.length > 0) {
+        // this.selectedProject = this.projectList[0].id; // Optional: auto-select first
+      } else {
+        this.selectedProject = null;
+      }
     }
   },
   beforeUnmount() {
