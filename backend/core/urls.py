@@ -5,7 +5,7 @@ from .views import (
     SecurityToolViewSet, ScanConfigurationViewSet, UserProfileViewSet,
     ApiKeyViewSet, ScanTriggerViewSet, ScanJobViewSet, 
     ProjectMembershipViewSet, UserViewSet, CIScanTriggerViewSet,
-    ListDockerContainersView, GetDockerContainerPathsView
+    ListDockerContainersView, GetDockerContainerPathsView, ListDockerComposeProjectsView
 )
 
 router = DefaultRouter()
@@ -26,4 +26,5 @@ urlpatterns = [
     path('', include(router.urls)),
     path('docker/containers/', ListDockerContainersView.as_view(), name='docker-list-containers'),
     path('docker/containers/<str:container_id>/paths/', GetDockerContainerPathsView.as_view(), name='docker-container-paths'),
+    path('docker/compose-projects/', ListDockerComposeProjectsView.as_view(), name='docker-list-compose-projects'),
 ] 
