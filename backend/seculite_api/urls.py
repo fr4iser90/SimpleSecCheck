@@ -19,7 +19,7 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/v1/core/', include('core.urls')),
+    path('api/v1/core/', include('apps.core.urls')),
     path('api/v1/auth/', include('dj_rest_auth.urls')), # dj-rest-auth main URLs
     path('api/v1/auth/registration/', include('dj_rest_auth.registration.urls')), # dj-rest-auth registration URLs
     # path('api-auth/', include('rest_framework.urls', namespace='rest_framework')) # Optional: for browsable API login

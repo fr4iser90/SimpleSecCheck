@@ -46,7 +46,7 @@ class DockerAPITests(APITestCase):
             {"id": "def456uvw", "name": "test_container_2", "image": "another_image:1.0", "status": "running"}
         ]
         
-        with patch('core.views.list_running_containers') as mock_list_containers:
+        with patch('apps.core.views.list_running_containers') as mock_list_containers:
             mock_list_containers.return_value = mock_container_data
             
             self.client.force_authenticate(user=self.admin_user)
@@ -62,7 +62,7 @@ class DockerAPITests(APITestCase):
         Test the list_docker_containers endpoint when the service returns an error.
         """
         error_message = "Docker API error: Connection refused"
-        with patch('core.views.list_running_containers') as mock_list_containers:
+        with patch('apps.core.views.list_running_containers') as mock_list_containers:
             mock_list_containers.return_value = error_message
             
             self.client.force_authenticate(user=self.admin_user)
@@ -92,7 +92,7 @@ class DockerAPITests(APITestCase):
 
         # 3. Test access with admin user (should be successful)
         mock_path_data = ['/mnt/code/project_a', '/var/www/html']
-        with patch('core.views.get_container_code_paths') as mock_get_paths:
+        with patch('apps.core.views.get_container_code_paths') as mock_get_paths:
             mock_get_paths.return_value = mock_path_data
             
             self.client.force_authenticate(user=self.admin_user)
@@ -112,7 +112,7 @@ class DockerAPITests(APITestCase):
         specific_container_paths_url = self.container_paths_url_template.replace('PLACEHOLDER_ID', test_container_id)
         error_message = f"Container '{test_container_id}' not found."
 
-        with patch('core.views.get_container_code_paths') as mock_get_paths:
+        with patch('apps.core.views.get_container_code_paths') as mock_get_paths:
             mock_get_paths.return_value = error_message
             
             self.client.force_authenticate(user=self.admin_user)
@@ -131,7 +131,7 @@ class DockerAPITests(APITestCase):
         specific_container_paths_url = self.container_paths_url_template.replace('PLACEHOLDER_ID', test_container_id)
         error_message = "Docker API error: Unexpected issue"
 
-        with patch('core.views.get_container_code_paths') as mock_get_paths:
+        with patch('apps.core.views.get_container_code_paths') as mock_get_paths:
             mock_get_paths.return_value = error_message
             
             self.client.force_authenticate(user=self.admin_user)
