@@ -428,13 +428,26 @@ class ScanJobViewSet(viewsets.ModelViewSet): # Changed from ReadOnlyModelViewSet
         # We pass additional kwargs which DRF merges into validated_data for the create method.
         scan_job = serializer.save(
             initiator=user,
-            status=ScanJobStatus.PENDING,
-            target_info=job_target_info, # Pass data from config to be saved on ScanJob model
-            tool_settings=job_tool_settings  # Pass data from config to be saved on ScanJob model
+            status=ScanJobStatus.PENDING, # Initial status
+            target_info=job_target_info, 
+            tool_settings=job_tool_settings
         )
         
-        # TODO: Celery task triggering would go here, using scan_job.id and its details
-        # For example: execute_scan_job.delay(scan_job.id)
+        # Trigger the Celery task
+        try:
+            task = execute_scan_job.delay(scan_job.id)
+            scan_job.celery_task_id = task.id
+            scan_job.status = ScanJobStatus.QUEUED # Update status to QUEUED
+            scan_job.save(update_fields=['celery_task_id', 'status'])
+            print(f"Scan job {scan_job.id} submitted to Celery with task ID {task.id}")
+        except Exception as e:
+            # Handle potential errors during Celery task submission
+            print(f"Error submitting scan job {scan_job.id} to Celery: {e}")
+            # Optionally, set scan_job status to FAILED here if Celery submission fails critically
+            # scan_job.status = ScanJobStatus.FAILED
+            # scan_job.save(update_fields=['status'])
+            # Depending on requirements, you might want to re-raise the exception or handle it gracefully
+            pass # For now, just log and continue, the job remains PENDING if Celery fails
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """
