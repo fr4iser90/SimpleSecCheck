@@ -22,6 +22,7 @@ This document specifies the design for the SecuLite v2 RESTful API. This API wil
     *   [3.7. Scans (`/api/v1/scans/`)](#37-scans)
     *   [3.8. ScanToolResults (Nested under Scans: `/api/v1/scans/{scan_id}/toolresults/`)](#38-scantoolresults)
     *   [3.9. Findings (`/api/v1/findings/`)](#39-findings)
+    *   [3.10. Docker Host Interaction Endpoints (`/api/v1/dockerhost/`)](#310-docker-host-interaction-endpoints)
     *   *(More resources/endpoints will be detailed here)*
 4.  [Common API Conventions](#4-common-api-conventions)
     *   [4.1. Pagination](#41-pagination)
@@ -533,6 +534,75 @@ Endpoints for viewing, triaging, and managing security findings.
 *   `POST /api/v1/findings/{finding_id}/comments/`
     *   **Description:** To manage comments or an audit trail for a finding. This would likely involve a separate `FindingComment` model.
     *   **Permissions:** `HasAccessToFindingProject` for GET, `CanManageFindingsInProject` for POST.
+
+### 3.10. Docker Host Interaction Endpoints (`/api/v1/dockerhost/`)
+
+These endpoints enable the SecuLite backend (with appropriate permissions and configuration for Docker socket access) to retrieve information about Docker containers running locally on the host. This primarily serves the feature of selecting codebases from Docker volumes as scan targets.
+
+**Prerequisites:**
+- The SecuLite backend must be configured to access the host's Docker socket (see `05_docker_setup.md`).
+- The calling user requires appropriate permissions (e.g., `IsAdminUser` or a more specific permission like `CanAccessDockerHostInfo`).
+
+#### 3.10.1. List Running Docker Containers
+
+*   `GET /api/v1/dockerhost/containers/`
+    *   **Description:** Retrieves a list of Docker containers currently running on the host. The information returned should be relevant for identification and selection in the frontend.
+    *   **Query Params:**
+        *   `name_filter` (string, optional): Filters containers whose names contain the specified string.
+        *   `status_filter` (string, optional, default: 'running'): Filters by container status (e.g., 'running', 'exited').
+    *   **Response Body (200 OK):** Paginated list of Container Information objects.
+        ```json
+        {
+          "count": 1,
+          "next": null,
+          "previous": null,
+          "results": [
+            {
+              "id": "abcdef123456", // Docker Container ID (short or long)
+              "name": "my_application_container_1",
+              "image": "my_app_image:latest",
+              "status": "running", // e.g., 'running', 'exited', 'paused'
+              "created_at": "2023-10-26T10:00:00Z", // Container creation time
+              "ports": [ // Optional: exposed ports for additional info
+                { "host_port": 8080, "container_port": 80, "protocol": "tcp" }
+              ]
+            }
+            // ... other containers
+          ]
+        }
+        ```
+    *   **Permissions:** `IsAdminUser` (or a more specific permission `CanAccessDockerHostInfo`).
+
+#### 3.10.2. Retrieve Potential Code Paths from a Container
+
+*   `GET /api/v1/dockerhost/containers/{container_id}/code-paths/`
+    *   **Description:** For a specific Docker container, retrieves a list of host filesystem paths derived from its volume mounts that could potentially contain codebases. The backend analyzes the container's volume mounts and returns the corresponding host paths.
+    *   **Path Parameter:**
+        *   `container_id` (string, required): The ID of the Docker container.
+    *   **Response Body (200 OK):**
+        ```json
+        {
+          "container_id": "abcdef123456",
+          "container_name": "my_application_container_1",
+          "potential_code_paths": [
+            {
+              "host_path": "/path/on/host/to/volume_for_html",
+              "path_in_container": "/var/www/html",
+              "volume_type": "bind", // 'bind' or 'volume'
+              "description": "Potential codebase (e.g., web server root)" // Optional description
+            },
+            {
+              "host_path": "/another/path/on/host/to/app_code",
+              "path_in_container": "/app/src",
+              "volume_type": "bind",
+              "description": "Potential codebase (e.g., application sources)"
+            }
+            // ... other relevant paths
+          ]
+        }
+        ```
+        If no relevant paths are found or the container has no volumes, `potential_code_paths` will be an empty array.
+    *   **Permissions:** `IsAdminUser` (or `CanAccessDockerHostInfo`).
 
 ---
 

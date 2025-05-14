@@ -210,7 +210,7 @@ Below are the primary entities that will be represented as Django models. Some n
 `# ... potentially more types ...`
 `ASSET_TYPE_CHOICES = [`
     `(ASSET_TYPE_URL, 'URL'),`
-    `(ASSET_TYPE_GIT, 'Git Repository'),`
+    `(ASSET_TYPE_GIT, 'Git Repository / Codebase Path'),`
     `(ASSET_TYPE_DOCKER, 'Docker Image'),`
     `(ASSET_TYPE_FILE, 'File Upload'),`
     `(ASSET_TYPE_IP, 'IP Address'),`
@@ -224,8 +224,13 @@ Below are the primary entities that will be represented as Django models. Some n
 *   **`asset_type`**: `CharField(max_length=50, choices=ASSET_TYPE_CHOICES, help_text="Type of the asset being targeted.")`
 *   **`identifier`**: `TextField(help_text="The main identifier for the asset (e.g., URL, git clone path, image name).")`
     *   Description: This field stores the core piece of information needed to access/scan the asset.
-*   **`metadata`**: `JSONField(default=dict, blank=True, help_text="Type-specific additional details, e.g., {\"branch\": \"main\"} for git.")`
+        For `asset_type` 'git_repository', this can be a Git URL or a local filesystem path to a codebase.
+        This includes host paths that are derived from inspecting Docker container volumes,
+        allowing direct filesystem scans of codebases running in local containers.
+*   **`metadata`**: `JSONField(default=dict, blank=True, help_text="Type-specific additional details, e.g., {\"branch\": \"main\"} for git, or {\"source_docker_container_id\": \"abcdef123456\", \"source_docker_container_name\": \"my_app_container\", \"path_in_container\": \"/var/www/html\"} if the identifier path was derived from a Docker container volume.")`
     *   Description: Flexible field to store context-specific data for different asset types.
+        For assets derived from Docker containers, this could store the original container ID, name,
+        and the path within the container for traceability or display purposes.
 *   **`description`**: `TextField(blank=True, null=True, help_text="Optional description for this target asset.")`
 *   **`is_active`**: `BooleanField(default=True, help_text="Is this target asset currently active for scanning?")`
 *   **`created_at`**: `DateTimeField(auto_now_add=True)`

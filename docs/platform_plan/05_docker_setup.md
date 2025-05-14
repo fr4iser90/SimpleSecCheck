@@ -16,6 +16,7 @@ This document details the Docker setup for SecuLite v2, including the services, 
     *   [3.7. `nginx` (Web Server/Reverse Proxy) Service](#37-nginx-web-serverreverse-proxy-service)
     *   [3.8. Volumes](#38-volumes)
     *   [3.9. Networks](#39-networks)
+    *   [3.10. Backend Access to the Host Docker Socket (for Container Analysis)](#310-backend-access-to-the-host-docker-socket-for-container-analysis)
 4.  [`backend/Dockerfile` Details](#4-backenddockerfile-details)
 5.  [`backend/entrypoint.sh` Details](#5-backendentrypointsh-details)
 6.  [`frontend/Dockerfile` Details (Multi-stage)](#6-frontenddockerfile-details-multi-stage)
@@ -175,6 +176,8 @@ services:
       - ./backend:/app # Mount backend code for development (live reload)
       - backend_static_collected:/app/staticfiles_collected # Volume for collected static files
       - backend_media_data:/app/media # Volume for user-uploaded media files
+      # NEW: Mount Docker socket
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8000:8000"  # Expose Gunicorn port (mainly for Nginx to proxy to)
     env_file:
@@ -205,6 +208,7 @@ services:
     -   `./backend:/app`: Mounts the local `backend` directory into `/app` in the container. This is crucial for development, allowing live code changes without rebuilding the image.
     -   `backend_static_collected:/app/staticfiles_collected`: A named volume for Django's `collectstatic` output. Nginx can potentially serve from this volume.
     -   `backend_media_data:/app/media`: A named volume for user-uploaded files (e.g., `ScanToolResult.raw_output_path`).
+    -   `./var/run/docker.sock:/var/run/docker.sock`: Mounts the Docker socket to allow the backend to interact with Docker.
 -   **`ports: - "8000:8000"`**: Exposes port 8000. While Nginx will be the primary entry point from the outside on port 80/443, this can be useful for direct access during development or if Nginx is on the same host but not in Docker.
 -   **`env_file: - .env`**: Loads environment variables from the `.env` file (e.g., `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, database URL, Celery settings).
 -   **`depends_on`**: Ensures that the `db` and `redis` services are healthy before this service starts.
@@ -453,6 +457,47 @@ networks:
 This `networks` definition is also placed at the root level of the `docker-compose.yml` file, similar to the `volumes` section.
 
 With this, the definition of all services, volumes, and networks for the `docker-compose.yml` file is complete.
+
+### 3.10. Backend Access to the Host Docker Socket (for Container Analysis)
+
+To enable the SecuLite backend to query the list of Docker containers running on the host and analyze their volume paths (as planned for the "Select Docker Container as Scan Target" feature), the `backend` container requires access to the host system's Docker socket.
+
+This is typically achieved by mounting the Docker socket into the `backend` container.
+
+**Update in `docker-compose.yml` for the `backend` service:**
+
+```yaml
+services:
+  # ...
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: seculite_backend
+    # ... other configurations ...
+    volumes:
+      - ./backend:/app
+      - backend_static_collected:/app/staticfiles_collected
+      - backend_media_data:/app/media
+      # NEW: Mount Docker socket
+      - /var/run/docker.sock:/var/run/docker.sock
+    # ...
+```
+
+**Security Implications and Considerations:**
+
+*   **High Privileges:** Access to the Docker socket (`/var/run/docker.sock`) essentially grants the container root-equivalent permissions over the host's Docker daemon. A process within the container with access to this socket can execute arbitrary Docker commands on the host, including starting, stopping, and manipulating containers, as well as accessing the host's file system via volume mounts in newly started containers.
+*   **Risk Mitigation:**
+    *   **Trusted Code:** This functionality should only be implemented if the code accessing the Docker socket (in the SecuLite backend) is absolutely trustworthy and has been carefully vetted.
+    *   **Minimal Usage:** Access to the socket should only be used for explicitly required operations (listing containers, inspecting configurations).
+    *   **No Uncontrolled Command Execution:** The backend should not forward raw, user-supplied commands to the Docker socket.
+    *   **Read-Only Access Preferred:** If possible, only read operations should be performed via the Docker API to retrieve configuration details.
+    *   **Alternative (More Complex):** For environments with higher security requirements, a dedicated, minimally privileged "sidecar" container or an external microservice could be considered to act as a strictly controlled proxy for Docker API requests. However, for the MVP phase of SecuLite v2, direct socket mounting is pursued as a pragmatic approach, assuming SecuLite is operated on a trusted server.
+*   **User in Container:** If the backend process runs as a non-root user within the container, it must be ensured that this user has permission to access the mounted Docker socket. Often, the Docker socket on the host belongs to the `docker` group. The user in the container would then need to be a member of this group (same GID), or the socket would need to be mounted with appropriate permissions, increasing complexity. For the initial implementation, it is assumed that the process in the backend container (still) runs as root or has sufficient permissions. *This is an important point to consider when implementing a non-root user in the backend container.*
+
+**Dependencies:**
+
+*   The `docker-py` (or a similar) Python library must be added to the backend's dependencies (`pyproject.toml`) to interact programmatically with the Docker API.
 
 ---
 
