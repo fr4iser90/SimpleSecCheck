@@ -61,8 +61,9 @@
 
 <script>
 import axios from 'axios';
+import Chart from 'chart.js/auto';
 
-const API_SCAN_JOBS_URL = '/api/core/scan-jobs/';
+const API_SCAN_JOBS_URL = '/api/v1/core/scan-jobs/';
 
 export default {
   name: 'ScanJobDetail',
