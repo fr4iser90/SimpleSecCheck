@@ -47,6 +47,7 @@ services:
       - ./backend:/app
       - backend_static_collected:/app/staticfiles_collected
       - backend_media_data:/app/media
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8000:8000"
     env_file:

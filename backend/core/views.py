@@ -26,6 +26,10 @@ from celery.result import AsyncResult
 from .tasks import execute_scan_job, simulate_bandit_scan # Ensure both are imported
 from django.contrib.auth import get_user_model
 from .authentication import ApiKeyAuthentication # Import the custom authentication class
+# Docker API Integration Imports
+from rest_framework.views import APIView
+from .docker_service import list_running_containers, get_container_code_paths # Assuming docker_service.py is in the same app directory
+# End Docker API Integration Imports
 User = get_user_model()
 
 # Create your views here.
@@ -584,3 +588,37 @@ class CIScanTriggerViewSet(viewsets.ViewSet):
             response_serializer = ScanJobSerializer(scan_job)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# Docker API Views
+class ListDockerContainersView(APIView):
+    """
+    Lists all currently running Docker containers.
+    Requires admin privileges.
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, *args, **kwargs):
+        containers_or_error = list_running_containers()
+        if isinstance(containers_or_error, str): # Error message returned
+            if "No running containers found" in containers_or_error:
+                 return Response({"message": containers_or_error}, status=status.HTTP_200_OK) # Or 404 if preferred
+            return Response({"error": containers_or_error}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(containers_or_error, status=status.HTTP_200_OK)
+
+class GetDockerContainerPathsView(APIView):
+    """
+    Retrieves potential host code paths for a given Docker container.
+    Requires admin privileges.
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, container_id, *args, **kwargs):
+        paths_or_error = get_container_code_paths(container_id)
+        if isinstance(paths_or_error, str): # Error message returned
+            if "not found" in paths_or_error.lower():
+                return Response({"error": paths_or_error}, status=status.HTTP_404_NOT_FOUND)
+            # For other errors from the service, consider them server-side issues or specific Docker issues
+            return Response({"error": paths_or_error}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        if not paths_or_error: # Empty list, but valid response
+            return Response([], status=status.HTTP_200_OK)
+        return Response(paths_or_error, status=status.HTTP_200_OK)

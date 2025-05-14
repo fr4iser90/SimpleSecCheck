@@ -4,7 +4,8 @@ from .views import (
     ProjectViewSet, ScanTargetViewSet, TargetGroupViewSet, 
     SecurityToolViewSet, ScanConfigurationViewSet, UserProfileViewSet,
     ApiKeyViewSet, ScanTriggerViewSet, ScanJobViewSet, 
-    ProjectMembershipViewSet, UserViewSet, CIScanTriggerViewSet
+    ProjectMembershipViewSet, UserViewSet, CIScanTriggerViewSet,
+    ListDockerContainersView, GetDockerContainerPathsView
 )
 
 router = DefaultRouter()
@@ -23,4 +24,6 @@ router.register(r'ci/trigger-scan', CIScanTriggerViewSet, basename='ci-scan-trig
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('docker/containers/', ListDockerContainersView.as_view(), name='docker-list-containers'),
+    path('docker/containers/<str:container_id>/paths/', GetDockerContainerPathsView.as_view(), name='docker-container-paths'),
 ] 
