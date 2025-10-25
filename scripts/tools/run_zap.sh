@@ -1,17 +1,17 @@
 #!/bin/bash
-# Individual ZAP Scan Script for SecuLite Plugin System (v6 - Reintroducing targeted find for reports)
+# Individual ZAP Scan Script for SimpleSecCheck Plugin System (v6 - Reintroducing targeted find for reports)
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
 # Expected Environment Variables:
 # ZAP_TARGET: Target URL for ZAP (e.g., http://host.docker.internal:8000)
-# RESULTS_DIR: Directory to store results (e.g., /seculite/results)
-# LOG_FILE: Path to the main log file (e.g., /seculite/logs/security-check.log)
+# RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
 # ZAP_STARTUP_DELAY: Optional delay in seconds to wait for target to be ready (default 25)
 
 ZAP_TARGET="${ZAP_TARGET:-http://host.docker.internal:8000}"
-RESULTS_DIR="${RESULTS_DIR:-/seculite/results}" # This is an absolute path like /seculite/results
-LOG_FILE="${LOG_FILE:-/seculite/logs/security-check.log}"
+RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}" # This is an absolute path like /SimpleSecCheck/results
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
 ZAP_STARTUP_DELAY="${ZAP_STARTUP_DELAY:-25}"
 
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"

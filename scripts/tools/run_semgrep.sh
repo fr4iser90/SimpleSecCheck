@@ -1,15 +1,15 @@
 #!/bin/bash
-# Individual Semgrep Scan Script for SecuLite Plugin System
+# Individual Semgrep Scan Script for SimpleSecCheck Plugin System
 
 # Expected Environment Variables or Arguments:
 # TARGET_PATH: Path to the code to scan (e.g., /target)
-# RESULTS_DIR: Directory to store results (e.g., /seculite/results)
-# LOG_FILE: Path to the main log file (e.g., /seculite/logs/security-check.log)
+# RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
 
 TARGET_PATH="${TARGET_PATH:-/target}"
-RESULTS_DIR="${RESULTS_DIR:-/seculite/results}"
-LOG_FILE="${LOG_FILE:-/seculite/logs/security-check.log}"
-SEMGREP_RULES_PATH="${SEMGREP_RULES_PATH:-/seculite/rules}" # Default rules path
+RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+SEMGREP_RULES_PATH="${SEMGREP_RULES_PATH:-/SimpleSecCheck/rules}" # Default rules path
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

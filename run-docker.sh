@@ -1,5 +1,5 @@
 #!/bin/bash
-# SecuLite - Docker Single-Shot Security Scanner
+# SimpleSecCheck - Docker Single-Shot Security Scanner
 # Usage: 
 #   ./run-docker.sh <target-path>                    # Scan local code
 #   ./run-docker.sh <website-url>                    # Scan website
@@ -44,7 +44,7 @@ LOGS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR/logs"
 
 # Functions
 log_message() {
-    echo -e "${BLUE}[SecuLite Docker]${NC} $1"
+    echo -e "${BLUE}[SimpleSecCheck Docker]${NC} $1"
 }
 
 log_success() {
@@ -79,7 +79,7 @@ fi
 mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
 
 echo ""
-echo -e "${BLUE}🚀 SecuLite Docker Security Scanner${NC}"
+echo -e "${BLUE}🚀 SimpleSecCheck Docker Security Scanner${NC}"
 echo "=========================================="
 echo -e "🎯 Scan Type: ${GREEN}$SCAN_TYPE${NC}"
 if [ "$SCAN_TYPE" = "code" ]; then
@@ -104,8 +104,8 @@ if [ "$SCAN_TYPE" = "code" ]; then
     # Code scan: mount code directory
     if docker-compose -f docker-compose.yml run --rm \
         -v "$TARGET_PATH:/target:ro" \
-        -v "$RESULTS_DIR:/seculite/results" \
-        -v "$LOGS_DIR:/seculite/logs" \
+        -v "$RESULTS_DIR:/SimpleSecCheck/results" \
+        -v "$LOGS_DIR:/SimpleSecCheck/logs" \
         scanner; then
         log_success "Code security scan completed successfully!"
         OVERALL_SUCCESS=true
@@ -116,8 +116,8 @@ if [ "$SCAN_TYPE" = "code" ]; then
 else
     # Website scan: no code mount needed
     if docker-compose -f docker-compose.yml run --rm \
-        -v "$RESULTS_DIR:/seculite/results" \
-        -v "$LOGS_DIR:/seculite/logs" \
+        -v "$RESULTS_DIR:/SimpleSecCheck/results" \
+        -v "$LOGS_DIR:/SimpleSecCheck/logs" \
         scanner; then
         log_success "Website security scan completed successfully!"
         OVERALL_SUCCESS=true
@@ -149,4 +149,4 @@ echo -e "${BLUE}📁 Generated Files:${NC}"
 [ -f "$LOGS_DIR/security-check.log" ] && echo -e "  ${GREEN}✓${NC} Log File: $LOGS_DIR/security-check.log"
 
 echo ""
-log_message "SecuLite Docker Security Scan Completed: $(date)"
+log_message "SimpleSecCheck Docker Security Scan Completed: $(date)"

@@ -1,4 +1,4 @@
-// webui.js: SecuLite WebUI Features
+// webui.js: SimpleSecCheck WebUI Features
 
 let scanInProgress = false;
 let autoRefreshInterval = null;

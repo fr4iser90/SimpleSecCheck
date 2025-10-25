@@ -33,25 +33,25 @@ RUN wget https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap-basel
     chmod +x /usr/local/bin/zap-baseline.py
 RUN wget https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap_common.py -O /usr/local/bin/zap_common.py
 
-# Copy SecuLite files
-COPY . /seculite
-WORKDIR /seculite
+# Copy SimpleSecCheck files
+COPY . /SimpleSecCheck
+WORKDIR /SimpleSecCheck
 
 # Make scripts executable
 RUN chmod +x scripts/security-check.sh
 RUN chmod +x scripts/configure.py
 
 RUN mkdir -p /zap/wrk
-RUN mkdir -p /zap/wrk/zap && cp /seculite/zap/baseline.conf /zap/wrk/zap/baseline.conf
+RUN mkdir -p /zap/wrk/zap && cp /SimpleSecCheck/zap/baseline.conf /zap/wrk/zap/baseline.conf
 
 # Copy ZAP files to /zap for zap-baseline.py compatibility
 RUN cp -r /opt/ZAP_2.16.1/* /zap/
 # Symlink zap-x.sh to zap.sh for zap-baseline.py compatibility
 RUN ln -s /zap/zap.sh /zap/zap-x.sh
 
-COPY scripts/webui.js /seculite/results/webui.js
+COPY scripts/webui.js /SimpleSecCheck/results/webui.js
 
-COPY web/loading.html /seculite/web/loading.html
+COPY web/loading.html /SimpleSecCheck/web/loading.html
 
 WORKDIR /zap/wrk
-ENTRYPOINT ["/seculite/scripts/security-check.sh"]
+ENTRYPOINT ["/SimpleSecCheck/scripts/security-check.sh"]

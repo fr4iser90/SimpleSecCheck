@@ -14,8 +14,8 @@ from scripts.semgrep_processor import semgrep_summary, generate_semgrep_html_sec
 from scripts.trivy_processor import trivy_summary, generate_trivy_html_section
 from scripts.llm_connector import llm_client
 
-RESULTS_DIR = os.environ.get('RESULTS_DIR', '/seculite/results')
-OUTPUT_FILE = '/seculite/results/security-summary.html'
+RESULTS_DIR = os.environ.get('RESULTS_DIR', '/SimpleSecCheck/results')
+OUTPUT_FILE = '/SimpleSecCheck/results/security-summary.html'
 
 def debug(msg):
     print(f"[generate-html-report] {msg}", file=sys.stderr)
@@ -48,7 +48,7 @@ def main():
 
     try:
         with open(OUTPUT_FILE, 'w') as f:
-            f.write(html_header('SecuLite Security Scan Summary'))
+            f.write(html_header('SimpleSecCheck Security Scan Summary'))
             f.write(f'<p><b>Scan Date:</b> {now}<br>')
             f.write(f'<b>Target:</b> {target}</p>\n')
             # WebUI Controls Block

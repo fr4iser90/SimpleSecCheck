@@ -1,6 +1,6 @@
-# SecuLite Documentation Hub
+# SimpleSecCheck Documentation Hub
 
-Welcome to the central documentation hub for SecuLite. This is the single source of truth for all project documentation.
+Welcome to the central documentation hub for SimpleSecCheck. This is the single source of truth for all project documentation.
 
 ## 📚 Documentation Structure
 

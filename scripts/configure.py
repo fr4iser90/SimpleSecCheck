@@ -12,8 +12,8 @@ def get_input(prompt, default=None):
         return response if response else default
     return input(f"{prompt}: ").strip()
 
-def configure_seculite():
-    print("SecuLite Configuration Setup")
+def configure_SimpleSecCheck():
+    print("SimpleSecCheck Configuration Setup")
     print("===========================")
     
     config = {
@@ -34,7 +34,7 @@ def configure_seculite():
     # Create .env file
     env_path = Path(".env")
     with open(env_path, "w") as f:
-        f.write("# SecuLite Configuration\n\n")
+        f.write("# SimpleSecCheck Configuration\n\n")
         for key, value in config.items():
             f.write(f"{key}={value}\n")
     
@@ -49,7 +49,7 @@ def configure_seculite():
 
 if __name__ == "__main__":
     try:
-        configure_seculite()
+        configure_SimpleSecCheck()
     except KeyboardInterrupt:
         print("\nConfiguration cancelled")
         sys.exit(1) 

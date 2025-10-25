@@ -1,39 +1,21 @@
-# SecuLite - Deep Security Scanner
+# SimpleSecCheck - Single-Shot Security Scanner
 
-> **Single-Shot Deep Security Analysis for Modern Development**
+> **One Command, Complete Security Analysis**
 
-SecuLite is a powerful, single-shot security scanner that performs comprehensive deep analysis of your codebase and web applications. It combines automated web, code, and dependency scans with aggressive scanning policies for maximum security coverage.
+SimpleSecCheck is a powerful, single-shot Docker-based security scanner that performs comprehensive analysis of your codebase or web applications. Simply run one command and get detailed security reports with no permanent monitoring or infrastructure required.
 
 ---
 
 ## 🚀 Features
 
-- **Single-Shot Deep Analysis:** One command, comprehensive security scan
-- **Aggressive Web Scanning:** OWASP ZAP with extended spider and scanner settings
-- **Deep Code Analysis:** Semgrep with multiple rule sets (custom + auto + security-focused)
-- **Comprehensive Dependency Scanning:** Trivy with all vulnerability databases and scanners
-- **Intelligent Reporting:** AI-powered analysis with LLM integration
-- **Zero Infrastructure:** No databases, no persistent services, no security risks
+- **Single-Shot Analysis:** One command, complete security scan
+- **Dual Scan Modes:** Code analysis OR web application scanning
+- **Comprehensive Code Analysis:** Semgrep + Trivy for vulnerabilities and dependencies
+- **Web Application Scanning:** OWASP ZAP for web vulnerabilities
+- **Unified Reporting:** Consolidated HTML reports with all findings
+- **Zero Infrastructure:** No databases, no persistent services, no monitoring
 - **Docker-Based:** Isolated, secure scanning environment
-
----
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-Create a `.env` file in the project root or set these variables:
-
-- `TARGET_URL`: Target URL for web scanning (default: `http://host.docker.internal:8000`)
-- `SCAN_DEPTH`: Scan depth level (default: `deep`)
-
-### LLM Integration (Optional)
-
-For AI-powered vulnerability analysis:
-
-- `LLM_PROVIDER`: Choose from `openai`, `gemini`, `huggingface`, `groq`, `mistral`, `anthropic`
-- `<PROVIDER>_API_KEY`: API key for the chosen provider
-- `<PROVIDER>_MODEL`: Specific model (e.g., `OPENAI_MODEL=gpt-4`)
+- **Easy Usage:** Simple `./run-docker.sh` command for everything
 
 ---
 
@@ -44,72 +26,83 @@ For AI-powered vulnerability analysis:
 - Docker and Docker Compose
 - Target codebase or web application to scan
 
-### Basic Usage
+### Easy Usage
 
 ```bash
 # Clone the repository
 git clone https://github.com/fr4iser90/SimpleSecCheck.git
 cd SimpleSecCheck
 
-# Scan a local project
+# Scan a local code project
 ./run-docker.sh /path/to/your/project
 
-# Scan with custom web target
-./run-docker.sh /path/to/your/project http://localhost:3000
+# Scan a website
+./run-docker.sh https://example.com
 ```
 
-### Docker Compose Usage
+That's it! Results will be available in the `results/` directory.
+
+### What Gets Scanned
+
+**Code Projects:**
+- Static code analysis with Semgrep
+- Dependency vulnerabilities with Trivy
+- Security rule violations
+
+**Websites:**
+- Web application vulnerabilities with OWASP ZAP
+- Security misconfigurations
+- Common web attacks
+
+---
+
+## ⚙️ Configuration (Optional)
+
+### Environment Variables
+
+Create a `.env` file for custom settings:
 
 ```bash
-# Scan with default settings
-docker-compose run --rm -v /path/to/target:/target:ro scanner
+# For web scanning
+TARGET_URL=https://your-website.com
 
-# Scan with custom environment
-TARGET_URL=http://your-app:8080 docker-compose run --rm -v /path/to/target:/target:ro scanner
+# For code scanning (default: auto-detected)
+SCAN_TYPE=code
 ```
 
 ---
 
-## 🔍 Deep Analysis Features
+## 🔍 Analysis Details
 
-### Web Application Scanning (ZAP)
-- **Aggressive Spider:** Extended crawling with JavaScript execution
-- **Deep Scanner:** Comprehensive vulnerability detection
-- **Extended Timeouts:** More thorough analysis
-- **Multiple Report Formats:** XML and HTML outputs
+### Code Analysis Tools
+- **Semgrep:** Static code analysis with security-focused rules
+- **Trivy:** Dependency vulnerability scanning
+- **Custom Rules:** OWASP Top 10, secrets detection, API security
 
-### Code Analysis (Semgrep)
-- **Multi-Rule Scanning:** Custom rules + auto rules + security-focused rules
-- **Comprehensive Coverage:** All severity levels (ERROR, WARNING, INFO)
-- **Security-Focused Rules:** OWASP Top 10, secrets detection, security audit
-- **Verbose Output:** Detailed analysis results
-
-### Dependency Scanning (Trivy)
-- **All Scanners:** Vulnerabilities, secrets, misconfigurations
-- **All Severities:** CRITICAL, HIGH, MEDIUM, LOW
-- **Multiple Formats:** JSON and table outputs
-- **Comprehensive Coverage:** Filesystem and container image scanning
+### Web Analysis Tools
+- **OWASP ZAP:** Web application vulnerability scanning
+- **Comprehensive Coverage:** Common web attacks and misconfigurations
+- **Automated Testing:** Spider and active scanning
 
 ---
 
 ## 📊 Results & Reports
 
-After scanning, results are available in the `results/` directory:
+After scanning, results are available in the `results/[project]_[timestamp]/` directory:
 
 - **`security-summary.html`** - Unified HTML report with all findings
-- **`semgrep.json`** - Detailed code analysis results
-- **`semgrep-security-deep.json`** - Additional security-focused scan
-- **`trivy.json`** - Dependency and vulnerability scan results
-- **`trivy-secrets-config.json`** - Secrets and misconfiguration scan
-- **`zap-report.xml`** - Web application vulnerability report
-- **`zap-report.html`** - Web application vulnerability report (HTML)
+- **`semgrep.json`** - Detailed code analysis results (code scans only)
+- **`trivy.json`** - Dependency and vulnerability scan results (code scans only)
+- **`zap-report.xml`** - Web application vulnerability report (web scans only)
 - **`security-check.log`** - Complete scan log
+
+Open the HTML report in your browser for the best experience!
 
 ---
 
 ## 🛡️ Security Rules
 
-SecuLite includes comprehensive security rules:
+SimpleSecCheck includes comprehensive security rules:
 
 - **Code Bugs** (`rules/code-bugs.yml`) - Common programming errors
 - **Secrets Detection** (`rules/secrets.yml`) - API keys, passwords, tokens
@@ -133,35 +126,27 @@ echo "    patterns:" >> rules/custom.yml
 echo "      - pattern: dangerous_function(...)" >> rules/custom.yml
 ```
 
-### Trivy Configuration
+### Direct Docker Compose Usage
 
-Customize Trivy scanning in `trivy/config.yaml`:
+For advanced users who want more control:
 
-```yaml
-format: json
-severity: [CRITICAL,HIGH,MEDIUM,LOW]
-scanners: [vuln,secret,config]
-```
+```bash
+# Code scan with custom settings
+docker-compose run --rm -v /path/to/code:/target:ro scanner
 
-### ZAP Configuration
-
-Modify ZAP scanning behavior in `zap/baseline.conf`:
-
-```ini
-# Extended spider settings
-spider.maxDuration=10
-scanner.maxDuration=30
-scanner.maxRuleTimeInMs=60000
+# Web scan with custom URL
+TARGET_URL=https://your-site.com docker-compose run --rm scanner
 ```
 
 ---
 
 ## 🚨 Security Considerations
 
-- **Docker Socket Access:** Only during scan execution, not persistent
-- **No Persistent Data:** All scans are stateless and isolated
-- **Minimal Attack Surface:** No web interfaces or persistent services
-- **Read-Only Mounts:** Target code is mounted read-only
+- **Single-Shot Execution:** No persistent services or monitoring
+- **Isolated Environment:** Docker containers are destroyed after scanning
+- **Read-Only Access:** Target code is mounted read-only
+- **No Data Retention:** All scan data is temporary and local
+- **Minimal Attack Surface:** No web interfaces or persistent processes
 
 ---
 
@@ -176,4 +161,4 @@ scanner.maxRuleTimeInMs=60000
 
 ## 📄 License
 
-SecuLite is Open Source, MIT-licensed.
+SimpleSecCheck is Open Source, MIT-licensed.

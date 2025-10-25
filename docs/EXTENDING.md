@@ -1,4 +1,4 @@
-# Extending & Contributing to SecuLite
+# Extending & Contributing to SimpleSecCheck
 
 ## Adding New Rules
 - **Semgrep:**

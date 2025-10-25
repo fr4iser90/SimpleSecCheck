@@ -1,4 +1,4 @@
-# SecuLite Roles & Rules Index
+# SimpleSecCheck Roles & Rules Index
 
 | Role/Rule                | Purpose                                      | When Active         | Dependencies         |
 |--------------------------|----------------------------------------------|---------------------|----------------------|

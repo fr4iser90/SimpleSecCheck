@@ -78,6 +78,6 @@ def generate_zap_html_section(zap_alerts, zap_html_path, Path_module, os_module)
     # Path_module and os_module are used here as direct replacements for Path and os.path
     if Path_module(zap_html_path).exists():
         html_parts.append(f'<p>See full ZAP report: <a href="zap-report.xml.html">zap-report.xml.html</a></p>')
-    elif Path_module(os_module.path.join(os_module.environ.get('RESULTS_DIR', '/seculite/results'), "zap-report.html")).exists():
+    elif Path_module(os_module.path.join(os_module.environ.get('RESULTS_DIR', '/SimpleSecCheck/results'), "zap-report.html")).exists():
         html_parts.append(f'<p>See full ZAP report: <a href="zap-report.html">zap-report.html</a></p>')
     return "".join(html_parts) 

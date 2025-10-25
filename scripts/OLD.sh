@@ -1,5 +1,5 @@
 #!/bin/bash
-# SecuLite Security Check Script
+# SimpleSecCheck Security Check Script
 # Usage:
 #   ZAP_TARGET="http://dein-ziel:port" HTML_REPORT=1 ./scripts/security-check.sh
 #   oder
@@ -27,8 +27,8 @@ HTML_REPORT="${HTML_REPORT:-0}"
 # Usage: ./scripts/security-check.sh [TARGET_PATH]
 # Set scan target to /target (App-Code im Container)
 TARGET_PATH="/target"
-RESULTS_DIR="/seculite/results"
-LOGS_DIR="/seculite/logs"
+RESULTS_DIR="/SimpleSecCheck/results"
+LOGS_DIR="/SimpleSecCheck/logs"
 LOG_FILE="$LOGS_DIR/security-check.log"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 SUMMARY_JSON="$RESULTS_DIR/security-summary.json"
@@ -54,20 +54,20 @@ for tool in semgrep trivy; do
   fi
 done
 if [ ${#MISSING_TOOLS[@]} -ne 0 ]; then
-  echo "[SecuLite] Missing required tools: ${MISSING_TOOLS[*]}" | tee -a "$LOG_FILE"
+  echo "[SimpleSecCheck] Missing required tools: ${MISSING_TOOLS[*]}" | tee -a "$LOG_FILE"
   echo "Please install all required tools before running the script." | tee -a "$LOG_FILE"
   # Do not exit, continue
 fi
 
 # Ensure jq is installed
 if ! command -v jq &>/dev/null; then
-  echo "[SecuLite] jq not found, installing jq..." | tee -a "$LOG_FILE"
+  echo "[SimpleSecCheck] jq not found, installing jq..." | tee -a "$LOG_FILE"
   if command -v apt-get &>/dev/null; then
     sudo apt-get update && sudo apt-get install -y jq
   elif command -v yum &>/dev/null; then
     sudo yum install -y jq
   else
-    echo "[SecuLite] Please install jq manually." | tee -a "$LOG_FILE"
+    echo "[SimpleSecCheck] Please install jq manually." | tee -a "$LOG_FILE"
     # Do not exit, continue
   fi
 fi
@@ -128,8 +128,8 @@ fi
 # Run Semgrep
 if command -v semgrep &>/dev/null; then
   echo "[Semgrep] Running code scan on $TARGET_PATH..." | tee -a "$LOG_FILE"
-  semgrep --config /seculite/rules $TARGET_PATH --json > "$RESULTS_DIR/semgrep.json" 2>>"$LOG_FILE" || echo "[Semgrep] Scan failed" >> "$LOG_FILE"
-  semgrep --config /seculite/rules $TARGET_PATH --text > "$RESULTS_DIR/semgrep.txt" 2>>"$LOG_FILE"
+  semgrep --config /SimpleSecCheck/rules $TARGET_PATH --json > "$RESULTS_DIR/semgrep.json" 2>>"$LOG_FILE" || echo "[Semgrep] Scan failed" >> "$LOG_FILE"
+  semgrep --config /SimpleSecCheck/rules $TARGET_PATH --text > "$RESULTS_DIR/semgrep.txt" 2>>"$LOG_FILE"
   echo "[Semgrep] Code scan complete." | tee -a "$SUMMARY_TXT"
 else
   echo "[Semgrep] semgrep not found, skipping code scan." | tee -a "$LOG_FILE"
@@ -138,8 +138,8 @@ fi
 # Run Trivy
 if command -v trivy &>/dev/null; then
   echo "[Trivy] Running dependency/container scan on $TARGET_PATH..." | tee -a "$LOG_FILE"
-  trivy fs --config /seculite/trivy/config.yaml --format json -o "$RESULTS_DIR/trivy.json" $TARGET_PATH 2>>"$LOG_FILE"
-  trivy fs --config /seculite/trivy/config.yaml --format table -o "$RESULTS_DIR/trivy.txt" $TARGET_PATH 2>>"$LOG_FILE"
+  trivy fs --config /SimpleSecCheck/trivy/config.yaml --format json -o "$RESULTS_DIR/trivy.json" $TARGET_PATH 2>>"$LOG_FILE"
+  trivy fs --config /SimpleSecCheck/trivy/config.yaml --format table -o "$RESULTS_DIR/trivy.txt" $TARGET_PATH 2>>"$LOG_FILE"
   echo "[Trivy] Dependency/container scan complete." | tee -a "$SUMMARY_TXT"
 else
   echo "[Trivy] trivy not found, skipping dependency/container scan." | tee -a "$LOG_FILE"
@@ -166,14 +166,14 @@ fi
 jq -s 'reduce .[] as $item ({}; . * $item)' "$RESULTS_DIR/semgrep.json" "$RESULTS_DIR/trivy.json" 2>/dev/null > "$SUMMARY_JSON" || echo '{"error": "Could not aggregate JSON results"}' > "$SUMMARY_JSON"
 
 # Always generate the unified HTML report inside the container
-python3 /seculite/scripts/generate-html-report.py
+python3 /SimpleSecCheck/scripts/generate-html-report.py
 
-echo "[SecuLite] Security checks complete. See $SUMMARY_TXT, $SUMMARY_JSON, and security-summary.html for results." | tee -a "$LOG_FILE" 
+echo "[SimpleSecCheck] Security checks complete. See $SUMMARY_TXT, $SUMMARY_JSON, and security-summary.html for results." | tee -a "$LOG_FILE" 
 
 # At the very end, before exit 0
 rm -f "$LOCK_FILE"
 
 # Ensure webui.js is always present in the results directory
-cp /seculite/scripts/webui.js /seculite/results/webui.js 2>/dev/null || cp scripts/webui.js results/webui.js 2>/dev/null
+cp /SimpleSecCheck/scripts/webui.js /SimpleSecCheck/results/webui.js 2>/dev/null || cp scripts/webui.js results/webui.js 2>/dev/null
 
 exit 0 
