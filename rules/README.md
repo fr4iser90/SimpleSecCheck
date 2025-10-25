@@ -1,4 +1,4 @@
-# SecuLite Rules Directory
+# SimpleSecCheck Rules Directory
 
 This directory contains Semgrep rules for automated static code and AI security analysis.
 

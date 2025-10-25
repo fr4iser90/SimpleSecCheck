@@ -1,6 +1,6 @@
 # Web Vulnerability Checks (ZAP)
 
-SecuLite automatically checks your web application for common vulnerabilities.
+SimpleSecCheck automatically checks your web application for common vulnerabilities.
 
 ## What is checked?
 - XSS (Cross-Site Scripting)

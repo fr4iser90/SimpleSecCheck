@@ -1,18 +1,18 @@
 #!/bin/bash
-# Individual Trivy Scan Script for SecuLite Plugin System
+# Individual Trivy Scan Script for SimpleSecCheck Plugin System
 
 # Expected Environment Variables or Arguments:
 # TARGET_PATH: Path to scan (e.g., /target for filesystem, or image name)
-# RESULTS_DIR: Directory to store results (e.g., /seculite/results)
-# LOG_FILE: Path to the main log file (e.g., /seculite/logs/security-check.log)
+# RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
 # TRIVY_SCAN_TYPE: Type of scan, e.g., 'fs' for filesystem, 'image' for image. Defaults to 'fs'.
 # TRIVY_CONFIG_PATH: Path to Trivy configuration file.
 
 TARGET_PATH="${TARGET_PATH:-/target}"
-RESULTS_DIR="${RESULTS_DIR:-/seculite/results}"
-LOG_FILE="${LOG_FILE:-/seculite/logs/security-check.log}"
+RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
 TRIVY_SCAN_TYPE="${TRIVY_SCAN_TYPE:-fs}"
-TRIVY_CONFIG_PATH="${TRIVY_CONFIG_PATH:-/seculite/trivy/config.yaml}"
+TRIVY_CONFIG_PATH="${TRIVY_CONFIG_PATH:-/SimpleSecCheck/trivy/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

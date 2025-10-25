@@ -5,32 +5,32 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: seculite_scanner
+    container_name: SimpleSecCheck_scanner
     volumes:
-      - ./results:/seculite/results
-      - ./logs:/seculite/logs
-      - ./conf:/seculite/conf
-      - ./rules:/seculite/rules
-      - ./trivy:/seculite/trivy
-      - ./zap:/seculite/zap
+      - ./results:/SimpleSecCheck/results
+      - ./logs:/SimpleSecCheck/logs
+      - ./conf:/SimpleSecCheck/conf
+      - ./rules:/SimpleSecCheck/rules
+      - ./trivy:/SimpleSecCheck/trivy
+      - ./zap:/SimpleSecCheck/zap
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - TARGET_URL=${TARGET_URL:-http://host.docker.internal:8000}
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
-      - RESULTS_DIR_IN_CONTAINER=/seculite/results
-      - LOGS_DIR_IN_CONTAINER=/seculite/logs
-      - SEMGREP_RULES_PATH_IN_CONTAINER=/seculite/rules
-      - TRIVY_CONFIG_PATH_IN_CONTAINER=/seculite/trivy/config.yaml
-      - ZAP_CONFIG_PATH_IN_CONTAINER=/seculite/zap/baseline.conf
+      - RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results
+      - LOGS_DIR_IN_CONTAINER=/SimpleSecCheck/logs
+      - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/rules
+      - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/trivy/config.yaml
+      - ZAP_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/zap/baseline.conf
       - TRIVY_SCAN_TYPE=fs
-      - FP_WHITELIST_FILE=/seculite/conf/fp_whitelist.json
-    command: ["bash", "/seculite/scripts/security-check.sh"]
+      - FP_WHITELIST_FILE=/SimpleSecCheck/conf/fp_whitelist.json
+    command: ["bash", "/SimpleSecCheck/scripts/security-check.sh"]
     networks:
-      - seculite_network
+      - SimpleSecCheck_network
     restart: "no"
 
 networks:
-  seculite_network:
+  SimpleSecCheck_network:
     driver: bridge
 
 volumes:

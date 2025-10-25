@@ -1,6 +1,6 @@
 # Code Issues Checks (Semgrep)
 
-SecuLite checks your code for common bugs, unsafe patterns, and hardcoded secrets.
+SimpleSecCheck checks your code for common bugs, unsafe patterns, and hardcoded secrets.
 
 ## What is checked?
 - Dangerous functions (e.g. eval, exec)

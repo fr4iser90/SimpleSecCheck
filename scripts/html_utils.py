@@ -118,14 +118,14 @@ body.darkmode .row-INFO td, body.darkmode .row-INFO th, body.darkmode .row-INFOR
 body.darkmode .row-PASSED td, body.darkmode .row-PASSED th {{ color: #155724 !important; background: #b7f7d8 !important; }}
 </style>\n<script>\nfunction toggleDarkMode() {{
   document.body.classList.toggle('darkmode');
-  localStorage.setItem('seculite-darkmode', document.body.classList.contains('darkmode'));
+  localStorage.setItem('SimpleSecCheck-darkmode', document.body.classList.contains('darkmode'));
 }}
 window.onload = function() {{
-  if (localStorage.getItem('seculite-darkmode') === 'true') {{
+  if (localStorage.getItem('SimpleSecCheck-darkmode') === 'true') {{
     document.body.classList.add('darkmode');
   }}
 }};
-</script>\n<script src="webui.js"></script>\n</head>\n<body>\n<div class="header">\n  <h1>SecuLite Security Scan Summary</h1>\n  <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n</div>\n<div class="summary-box">'''
+</script>\n<script src="webui.js"></script>\n</head>\n<body>\n<div class="header">\n  <h1>SimpleSecCheck Security Scan Summary</h1>\n  <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n</div>\n<div class="summary-box">'''
 
 def html_footer():
     # Content of html_footer function (lines 299-300 from the original generate-html-report.py)

@@ -1,6 +1,6 @@
 # Dependency & Container Checks (Trivy)
 
-SecuLite checks your dependencies and containers for known vulnerabilities.
+SimpleSecCheck checks your dependencies and containers for known vulnerabilities.
 
 ## What is checked?
 - Open source libraries (Python, JS, etc.)

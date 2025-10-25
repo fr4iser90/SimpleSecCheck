@@ -1,5 +1,5 @@
 #!/bin/bash
-# SecuLite - Main Security Check Orchestrator (NEW)
+# SimpleSecCheck - Main Security Check Orchestrator (NEW)
 # Purpose: Coordinates various security scanning tools and generates a consolidated report,
 # using the user-provided tool scripts.
 
@@ -13,7 +13,7 @@ TOOL_SCRIPTS_DIR="$ORCHESTRATOR_SCRIPT_DIR/tools"
 
 # --- Define Core Paths (these are absolute paths INSIDE the container) ---
 # These align with Dockerfile COPY commands and docker-compose.yml volume mounts.
-export BASE_PROJECT_DIR="/seculite" # Base directory where all project files are copied in Docker
+export BASE_PROJECT_DIR="/SimpleSecCheck" # Base directory where all project files are copied in Docker
 export TARGET_PATH_IN_CONTAINER="/target" # Where host code is mounted for scanning
 export RESULTS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results"
 export LOGS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/logs"
@@ -41,7 +41,7 @@ LOCK_FILE="$RESULTS_DIR_IN_CONTAINER/.scan-running"
 # === Script Functions ===
 log_message() {
     # Appends to the central log file
-    echo "[SecuLite Orchestrator] ($(date '+%Y-%m-%d %H:%M:%S')) ($BASHPID) $1" | tee -a "$LOG_FILE"
+    echo "[SimpleSecCheck Orchestrator] ($(date '+%Y-%m-%d %H:%M:%S')) ($BASHPID) $1" | tee -a "$LOG_FILE"
 }
 
 cleanup_lock() {
@@ -57,7 +57,7 @@ mkdir -p "$RESULTS_DIR_IN_CONTAINER" "$LOGS_DIR_IN_CONTAINER"
 
 # Initialize log file for this run
 # Note: Your tool scripts also use `tee -a "$LOG_FILE"` so they will append.
-echo "----- SecuLite Scan Run Initialized: $(date '+%Y-%m-%d %H:%M:%S') -----" > "$LOG_FILE"
+echo "----- SimpleSecCheck Scan Run Initialized: $(date '+%Y-%m-%d %H:%M:%S') -----" > "$LOG_FILE"
 log_message "Orchestrator script started."
 log_message "Scan Type: $SCAN_TYPE"
 log_message "Container Base Project Dir (BASE_PROJECT_DIR): $BASE_PROJECT_DIR"
@@ -86,72 +86,87 @@ OVERALL_SUCCESS=true
 
 # --- Execute Tool Scripts ---
 
-# Set environment variables specifically for run_semgrep.sh before calling it
-log_message "--- Orchestrating Semgrep Scan ---"
-export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
-export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
-# LOG_FILE is already exported and used by run_semgrep.sh's `tee -a`
-export SEMGREP_RULES_PATH="$SEMGREP_RULES_PATH_IN_CONTAINER"
-if [ -f "$TOOL_SCRIPTS_DIR/run_semgrep.sh" ]; then
-    log_message "Executing $TOOL_SCRIPTS_DIR/run_semgrep.sh..."
-    # Output of run_semgrep.sh (which uses `tee -a "$LOG_FILE"`) will go to the log.
-    # We also capture its stdout/stderr here for additional orchestrator logging if needed, though it might be redundant.
-    if /bin/bash "$TOOL_SCRIPTS_DIR/run_semgrep.sh"; then
-        log_message "run_semgrep.sh completed successfully (exit code 0)."
+# Only run code analysis tools for code scans
+if [ "$SCAN_TYPE" = "code" ]; then
+    # Set environment variables specifically for run_semgrep.sh before calling it
+    log_message "--- Orchestrating Semgrep Scan ---"
+    export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
+    export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
+    # LOG_FILE is already exported and used by run_semgrep.sh's `tee -a`
+    export SEMGREP_RULES_PATH="$SEMGREP_RULES_PATH_IN_CONTAINER"
+    if [ -f "$TOOL_SCRIPTS_DIR/run_semgrep.sh" ]; then
+        log_message "Executing $TOOL_SCRIPTS_DIR/run_semgrep.sh..."
+        # Output of run_semgrep.sh (which uses `tee -a "$LOG_FILE"`) will go to the log.
+        # We also capture its stdout/stderr here for additional orchestrator logging if needed, though it might be redundant.
+        if /bin/bash "$TOOL_SCRIPTS_DIR/run_semgrep.sh"; then
+            log_message "run_semgrep.sh completed successfully (exit code 0)."
+        else
+            EXIT_CODE=$?
+            log_message "[ORCHESTRATOR ERROR] run_semgrep.sh failed with exit code $EXIT_CODE."
+            OVERALL_SUCCESS=false
+        fi
     else
-        EXIT_CODE=$?
-        log_message "[ORCHESTRATOR ERROR] run_semgrep.sh failed with exit code $EXIT_CODE."
+        log_message "[ORCHESTRATOR ERROR] $TOOL_SCRIPTS_DIR/run_semgrep.sh not found!"
         OVERALL_SUCCESS=false
     fi
+    log_message "--- Semgrep Scan Orchestration Finished ---"
 else
-    log_message "[ORCHESTRATOR ERROR] $TOOL_SCRIPTS_DIR/run_semgrep.sh not found!"
-    OVERALL_SUCCESS=false
+    log_message "--- Skipping Semgrep Scan (Website scan mode) ---"
 fi
-log_message "--- Semgrep Scan Orchestration Finished ---"
 
-# Set environment variables specifically for run_trivy.sh
-log_message "--- Orchestrating Trivy Scan ---"
-export TARGET_PATH="$TARGET_PATH_IN_CONTAINER" # Re-export for clarity, though it's the same
-export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
-# LOG_FILE is exported
-export TRIVY_CONFIG_PATH="$TRIVY_CONFIG_PATH_IN_CONTAINER"
-# TRIVY_SCAN_TYPE is exported
-if [ -f "$TOOL_SCRIPTS_DIR/run_trivy.sh" ]; then
-    log_message "Executing $TOOL_SCRIPTS_DIR/run_trivy.sh..."
-    if /bin/bash "$TOOL_SCRIPTS_DIR/run_trivy.sh"; then
-        log_message "run_trivy.sh completed successfully (exit code 0)."
+# Only run Trivy for code scans
+if [ "$SCAN_TYPE" = "code" ]; then
+    # Set environment variables specifically for run_trivy.sh
+    log_message "--- Orchestrating Trivy Scan ---"
+    export TARGET_PATH="$TARGET_PATH_IN_CONTAINER" # Re-export for clarity, though it's the same
+    export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
+    # LOG_FILE is exported
+    export TRIVY_CONFIG_PATH="$TRIVY_CONFIG_PATH_IN_CONTAINER"
+    # TRIVY_SCAN_TYPE is exported
+    if [ -f "$TOOL_SCRIPTS_DIR/run_trivy.sh" ]; then
+        log_message "Executing $TOOL_SCRIPTS_DIR/run_trivy.sh..."
+        if /bin/bash "$TOOL_SCRIPTS_DIR/run_trivy.sh"; then
+            log_message "run_trivy.sh completed successfully (exit code 0)."
+        else
+            EXIT_CODE=$?
+            log_message "[ORCHESTRATOR ERROR] run_trivy.sh failed with exit code $EXIT_CODE."
+            OVERALL_SUCCESS=false
+        fi
     else
-        EXIT_CODE=$?
-        log_message "[ORCHESTRATOR ERROR] run_trivy.sh failed with exit code $EXIT_CODE."
+        log_message "[ORCHESTRATOR ERROR] $TOOL_SCRIPTS_DIR/run_trivy.sh not found!"
         OVERALL_SUCCESS=false
     fi
+    log_message "--- Trivy Scan Orchestration Finished ---"
 else
-    log_message "[ORCHESTRATOR ERROR] $TOOL_SCRIPTS_DIR/run_trivy.sh not found!"
-    OVERALL_SUCCESS=false
+    log_message "--- Skipping Trivy Scan (Website scan mode) ---"
 fi
-log_message "--- Trivy Scan Orchestration Finished ---"
 
-# Set environment variables specifically for run_zap.sh
-log_message "--- Orchestrating ZAP Scan ---"
-# ZAP_TARGET is exported
-export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
-# LOG_FILE is exported
-# ZAP_CONFIG_PATH_IN_CONTAINER is available if run_zap.sh decides to use it via an env var instead of hardcoding.
-# Your current run_zap.sh hardcodes /seculite/zap/baseline.conf, which matches ZAP_CONFIG_PATH_IN_CONTAINER.
-if [ -f "$TOOL_SCRIPTS_DIR/run_zap.sh" ]; then
-    log_message "Executing $TOOL_SCRIPTS_DIR/run_zap.sh..."
-    if /bin/bash "$TOOL_SCRIPTS_DIR/run_zap.sh"; then
-        log_message "run_zap.sh completed successfully (exit code 0)."
+# Only run ZAP for website scans
+if [ "$SCAN_TYPE" = "website" ]; then
+    # Set environment variables specifically for run_zap.sh
+    log_message "--- Orchestrating ZAP Scan ---"
+    # ZAP_TARGET is exported
+    export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
+    # LOG_FILE is exported
+    # ZAP_CONFIG_PATH_IN_CONTAINER is available if run_zap.sh decides to use it via an env var instead of hardcoding.
+    # Your current run_zap.sh hardcodes /SimpleSecCheck/zap/baseline.conf, which matches ZAP_CONFIG_PATH_IN_CONTAINER.
+    if [ -f "$TOOL_SCRIPTS_DIR/run_zap.sh" ]; then
+        log_message "Executing $TOOL_SCRIPTS_DIR/run_zap.sh..."
+        if /bin/bash "$TOOL_SCRIPTS_DIR/run_zap.sh"; then
+            log_message "run_zap.sh completed successfully (exit code 0)."
+        else
+            EXIT_CODE=$?
+            log_message "[ORCHESTRATOR ERROR] run_zap.sh failed with exit code $EXIT_CODE."
+            OVERALL_SUCCESS=false
+        fi
     else
-        EXIT_CODE=$?
-        log_message "[ORCHESTRATOR ERROR] run_zap.sh failed with exit code $EXIT_CODE."
+        log_message "[ORCHESTRATOR ERROR] $TOOL_SCRIPTS_DIR/run_zap.sh not found!"
         OVERALL_SUCCESS=false
     fi
+    log_message "--- ZAP Scan Orchestration Finished ---"
 else
-    log_message "[ORCHESTRATOR ERROR] $TOOL_SCRIPTS_DIR/run_zap.sh not found!"
-    OVERALL_SUCCESS=false
+    log_message "--- Skipping ZAP Scan (Code scan mode) ---"
 fi
-log_message "--- ZAP Scan Orchestration Finished ---"
 
 # --- Reporting Phase ---
 HTML_REPORT_PY_SCRIPT="$ORCHESTRATOR_SCRIPT_DIR/generate-html-report.py"
@@ -190,7 +205,7 @@ else
     log_message "[WARN] webui.js not found at $WEBUI_JS_SOURCE, not copied."
 fi
 
-log_message "SecuLite Security Scan Sequence Completed."
+log_message "SimpleSecCheck Security Scan Sequence Completed."
 if [ "$OVERALL_SUCCESS" = true ]; then
     log_message "All tool scripts and reporting completed successfully."
     exit 0

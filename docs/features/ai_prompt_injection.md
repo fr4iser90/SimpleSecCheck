@@ -1,6 +1,6 @@
 # AI/Prompt Injection Checks
 
-SecuLite checks your code for prompt injection vulnerabilities in AI/LLM applications.
+SimpleSecCheck checks your code for prompt injection vulnerabilities in AI/LLM applications.
 
 ## What is checked?
 - Unsafe string concatenation or interpolation in prompt construction
