@@ -95,6 +95,7 @@ log_message "Starting Docker container for security scan..."
 
 # Set environment variables for Docker
 export TARGET_URL="$ZAP_TARGET"
+export ZAP_TARGET="$ZAP_TARGET"
 export TARGET_PATH_IN_CONTAINER="/target"
 export PROJECT_RESULTS_DIR="$RESULTS_DIR"
 export SCAN_TYPE="$SCAN_TYPE"
@@ -103,10 +104,13 @@ export SCAN_TYPE="$SCAN_TYPE"
 if [ "$SCAN_TYPE" = "code" ]; then
     # Code scan: mount code directory
     if docker-compose -f docker-compose.yml run --rm \
+        -e SCAN_TYPE="$SCAN_TYPE" \
+        -e ZAP_TARGET="$ZAP_TARGET" \
+        -e TARGET_URL="$ZAP_TARGET" \
         -v "$TARGET_PATH:/target:ro" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
-        scanner; then
+        scanner /SimpleSecCheck/scripts/security-check.sh; then
         log_success "Code security scan completed successfully!"
         OVERALL_SUCCESS=true
     else
@@ -116,9 +120,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
 else
     # Website scan: no code mount needed
     if docker-compose -f docker-compose.yml run --rm \
+        -e SCAN_TYPE="$SCAN_TYPE" \
+        -e ZAP_TARGET="$ZAP_TARGET" \
+        -e TARGET_URL="$ZAP_TARGET" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
-        scanner; then
+        scanner /SimpleSecCheck/scripts/security-check.sh; then
         log_success "Website security scan completed successfully!"
         OVERALL_SUCCESS=true
     else

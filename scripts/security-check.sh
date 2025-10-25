@@ -24,10 +24,8 @@ export SEMGREP_RULES_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/rules"
 export TRIVY_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/trivy/config.yaml"
 export ZAP_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/zap/baseline.conf" # Note: your run_zap.sh hardcodes this.
 
-# --- DAST Target URL (from .env, passed to ZAP script) ---
-# TARGET_URL is from .env (e.g. http://host.docker.internal:8000)
-# Your run_zap.sh expects ZAP_TARGET as the env var.
-export ZAP_TARGET="${TARGET_URL:-http://host.docker.internal:8000}"
+# ZAP_TARGET is passed from run-docker.sh
+export ZAP_TARGET="${ZAP_TARGET:-http://host.docker.internal:8000}"
 
 # --- Determine scan type ---
 export SCAN_TYPE="${SCAN_TYPE:-code}" # Default to code scan

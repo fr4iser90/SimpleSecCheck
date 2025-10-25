@@ -10,6 +10,7 @@ import traceback
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from scripts.html_utils import html_header, html_footer, generate_visual_summary_section, generate_overall_summary_and_links_section
 from scripts.zap_processor import zap_summary, generate_zap_html_section
+from scripts.zap_xml_parser import parse_zap_xml, generate_html_report
 from scripts.semgrep_processor import semgrep_summary, generate_semgrep_html_section
 from scripts.trivy_processor import trivy_summary, generate_trivy_html_section
 from scripts.llm_connector import llm_client
@@ -34,7 +35,7 @@ def read_json(path):
 def main():
     debug(f"Starting HTML report generation. Output: {OUTPUT_FILE}")
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    target = os.environ.get('ZAP_TARGET', 'Unknown')
+    target = os.environ.get('ZAP_TARGET', os.environ.get('TARGET_URL', 'Unknown'))
     zap_html_path = os.path.join(RESULTS_DIR, 'zap-report.xml.html')
     zap_xml_path = os.path.join(RESULTS_DIR, 'zap-report.xml')
     semgrep_json_path = os.path.join(RESULTS_DIR, 'semgrep.json')
@@ -55,20 +56,18 @@ def main():
             f.write('''\n<!-- WebUI Controls -->\n<div style="margin: 1em 0;">\n  <button id="scan-btn">Jetzt neuen Scan starten</button>\n  <button id="refresh-status-btn">Status aktualisieren</button>\n  <span id="scan-status" style="margin-left:1em; color: #007bff;">Status wird geladen...</span>\n</div>\n<!-- Hinweis: Scan-Status und Trigger laufen über Port 9100 (Watchdog) -->\n''')
 
             # --- Visual summary with icons/colors for each tool ---
-            f.write(generate_visual_summary_section(zap_alerts, semgrep_findings, trivy_vulns))
+            f.write(generate_visual_summary_section(zap_alerts.get('summary', zap_alerts), semgrep_findings, trivy_vulns))
 
             # --- Overall Summary and Links ---
-            f.write(generate_overall_summary_and_links_section(zap_alerts, semgrep_findings, trivy_vulns, RESULTS_DIR, Path, os))
+            f.write(generate_overall_summary_and_links_section(zap_alerts.get('summary', zap_alerts), semgrep_findings, trivy_vulns, RESULTS_DIR, Path, os))
 
-            # ZAP Section
+            # ZAP Section - pass the full zap_alerts data structure
             f.write(generate_zap_html_section(zap_alerts, zap_html_path, Path, os))
 
             # Semgrep Section
-            f.write('<h2>Semgrep Static Code Analysis</h2>')
             f.write(generate_semgrep_html_section(semgrep_findings))
 
             # Trivy Section
-            f.write('<h2>Trivy Dependency & Container Scan</h2>')
             f.write(generate_trivy_html_section(trivy_vulns))
 
             f.write(html_footer())
