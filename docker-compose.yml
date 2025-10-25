@@ -5,7 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: SimpleSecCheck_scanner
+      args:
+        VERSION: 1.0.0
+    container_name: SimpleSecCheck_scanner_v1.0.0
     volumes:
       - ./results:/SimpleSecCheck/results
       - ./logs:/SimpleSecCheck/logs
