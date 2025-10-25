@@ -1,5 +1,10 @@
 FROM ubuntu:22.04
 
+# Version information
+ARG VERSION=1.0.0
+LABEL version=$VERSION
+LABEL maintainer="SimpleSecCheck Team"
+
 # Install dependencies
 RUN apt-get update && \
     apt-get install -y python3-pip wget curl jq git openjdk-17-jre && \
