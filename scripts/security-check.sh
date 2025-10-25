@@ -29,6 +29,9 @@ export ZAP_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/zap/baseline.conf" # Note
 # Your run_zap.sh expects ZAP_TARGET as the env var.
 export ZAP_TARGET="${TARGET_URL:-http://host.docker.internal:8000}"
 
+# --- Determine scan type ---
+export SCAN_TYPE="${SCAN_TYPE:-code}" # Default to code scan
+
 # --- Other Environment Variables for Tool Scripts ---
 export TRIVY_SCAN_TYPE="${TRIVY_SCAN_TYPE:-fs}" # Default scan type for Trivy
 
@@ -56,13 +59,20 @@ mkdir -p "$RESULTS_DIR_IN_CONTAINER" "$LOGS_DIR_IN_CONTAINER"
 # Note: Your tool scripts also use `tee -a "$LOG_FILE"` so they will append.
 echo "----- SecuLite Scan Run Initialized: $(date '+%Y-%m-%d %H:%M:%S') -----" > "$LOG_FILE"
 log_message "Orchestrator script started."
+log_message "Scan Type: $SCAN_TYPE"
 log_message "Container Base Project Dir (BASE_PROJECT_DIR): $BASE_PROJECT_DIR"
-log_message "Host Code Mount for Scanning (TARGET_PATH_IN_CONTAINER): $TARGET_PATH_IN_CONTAINER"
+if [ "$SCAN_TYPE" = "code" ]; then
+    log_message "Host Code Mount for Scanning (TARGET_PATH_IN_CONTAINER): $TARGET_PATH_IN_CONTAINER"
+fi
 log_message "Results Directory (RESULTS_DIR_IN_CONTAINER): $RESULTS_DIR_IN_CONTAINER"
 log_message "Logs Directory (LOGS_DIR_IN_CONTAINER): $LOGS_DIR_IN_CONTAINER"
-log_message "Semgrep Rules Path (SEMGREP_RULES_PATH_IN_CONTAINER): $SEMGREP_RULES_PATH_IN_CONTAINER"
-log_message "Trivy Config Path (TRIVY_CONFIG_PATH_IN_CONTAINER): $TRIVY_CONFIG_PATH_IN_CONTAINER"
-log_message "ZAP DAST Target (ZAP_TARGET): $ZAP_TARGET"
+if [ "$SCAN_TYPE" = "code" ]; then
+    log_message "Semgrep Rules Path (SEMGREP_RULES_PATH_IN_CONTAINER): $SEMGREP_RULES_PATH_IN_CONTAINER"
+    log_message "Trivy Config Path (TRIVY_CONFIG_PATH_IN_CONTAINER): $TRIVY_CONFIG_PATH_IN_CONTAINER"
+fi
+if [ "$SCAN_TYPE" = "website" ]; then
+    log_message "ZAP DAST Target (ZAP_TARGET): $ZAP_TARGET"
+fi
 
 # Lock File Management
 if [ -f "$LOCK_FILE" ]; then

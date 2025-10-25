@@ -1,159 +1,38 @@
+version: '3.8'
+
 services:
-  db:
-    image: postgres:15-alpine
-    container_name: seculite_db
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    env_file:
-      - .env
-    ports:
-      - "5432:5432"
-    networks:
-      - seculite_network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  redis:
-    image: redis:7-alpine
-    container_name: seculite_redis
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
-    networks:
-      - seculite_network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: seculite_backend
-    entrypoint: /app/entrypoint.sh
-    # The command for celery worker/beat will be prefixed with celery_worker/celery_beat to be handled by entrypoint.sh
-    command: ["gunicorn", "seculite_api.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--log-level", "info"]
-    volumes:
-      - ./backend:/app
-      - backend_static_collected:/app/staticfiles_collected
-      - backend_media_data:/app/media
-      - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - seculite_network
-    restart: unless-stopped
-
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: seculite_worker
-    # Prefixing with 'celery_worker' for entrypoint.sh to handle
-    command: ["celery_worker", "celery", "-A", "seculite_api", "worker", "-l", "info", "-Q", "default,scans", "-c", "2"]
-    volumes:
-      - ./backend:/app
-      - backend_media_data:/app/media
-    env_file:
-      - .env
-    depends_on:
-      backend:
-        condition: service_started
-      # db:
-      #   condition: service_healthy # Alternative direct dependency
-      # redis:
-      #   condition: service_healthy # Alternative direct dependency
-    networks:
-      - seculite_network
-    restart: unless-stopped
-
-  beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: seculite_beat
-    # Prefixing with 'celery_beat' for entrypoint.sh to handle
-    # Note: django-celery-beat was removed from pyproject.toml, this command will fail until it's restored and working.
-    # Placeholder command for now, or adjust entrypoint to not require it if django-celery-beat is not yet installed.
-    # For now, assuming it might be added back. If not, this service might not be started or its command changed.
-    command: >
-      sh -c "poetry run python manage.py migrate --noinput && \
-             rm -f /tmp/celerybeat.pid && \
-             celery -A seculite_api beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
-    volumes:
-      - ./backend:/app
-    env_file:
-      - .env
-    depends_on:
-      backend:
-        condition: service_started
-      # db:
-      #   condition: service_healthy # Alternative direct dependency
-      # redis:
-      #   condition: service_healthy # Alternative direct dependency
-    networks:
-      - seculite_network
-    restart: unless-stopped
-
-  nginx:
-    # Use the custom Dockerfile in the nginx directory
+  scanner:
     build:
       context: .
-      dockerfile: nginx/Dockerfile
-    container_name: seculite_nginx
-    ports:
-      - "80:80"
-      - "443:443"
+      dockerfile: Dockerfile
+    container_name: seculite_scanner
     volumes:
-      # Mounts the Nginx configuration file (still needed if you want to easily modify it without rebuild)
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # REMOVE the frontend dist volume mount:
-      # - ./frontend/dist:/var/www/frontend:ro
-      # Keep Django static/media volume mounts:
-      - backend_static_collected:/var/www/django_static:ro
-      - backend_media_data:/var/www/media:ro # Keep if Nginx serves media
-      # Keep certs volume mount if needed:
-      # - ./nginx/certs:/etc/nginx/certs:ro
-    depends_on:
-      backend:
-        condition: service_started
+      - ./results:/seculite/results
+      - ./logs:/seculite/logs
+      - ./conf:/seculite/conf
+      - ./rules:/seculite/rules
+      - ./trivy:/seculite/trivy
+      - ./zap:/seculite/zap
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TARGET_URL=${TARGET_URL:-http://host.docker.internal:8000}
+      - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
+      - RESULTS_DIR_IN_CONTAINER=/seculite/results
+      - LOGS_DIR_IN_CONTAINER=/seculite/logs
+      - SEMGREP_RULES_PATH_IN_CONTAINER=/seculite/rules
+      - TRIVY_CONFIG_PATH_IN_CONTAINER=/seculite/trivy/config.yaml
+      - ZAP_CONFIG_PATH_IN_CONTAINER=/seculite/zap/baseline.conf
+      - TRIVY_SCAN_TYPE=fs
+      - FP_WHITELIST_FILE=/seculite/conf/fp_whitelist.json
+    command: ["bash", "/seculite/scripts/security-check.sh"]
     networks:
       - seculite_network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "nginx", "-t"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
-
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  backend_static_collected:
-    driver: local
-  backend_media_data:
-    driver: local
+    restart: "no"
 
 networks:
   seculite_network:
     driver: bridge
+
+volumes:
+  results_data:
+  logs_data:
