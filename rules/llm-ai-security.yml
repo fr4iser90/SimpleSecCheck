@@ -10,10 +10,10 @@ rules:
               GOOGLE_API_KEY = "AIza..."
       - pattern-inside: |
           ... = os.environ.get("...") # Good: loaded from env
-        message: "Potential hardcoded LLM API key. Load keys from environment variables or a secure vault."
-        languages:
-          - python
-        severity: CRITICAL
+    message: "Potential hardcoded LLM API key. Load keys from environment variables or a secure vault."
+    languages:
+      - python
+    severity: CRITICAL
 
   - id: llm-direct-html-output
     patterns:

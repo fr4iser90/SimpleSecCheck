@@ -51,7 +51,5 @@ RUN ln -s /zap/zap.sh /zap/zap-x.sh
 
 COPY scripts/webui.js /SimpleSecCheck/results/webui.js
 
-COPY web/loading.html /SimpleSecCheck/web/loading.html
-
 WORKDIR /zap/wrk
-ENTRYPOINT ["/SimpleSecCheck/scripts/security-check.sh"]
+CMD ["bash"]
