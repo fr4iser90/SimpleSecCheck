@@ -1,116 +1,176 @@
-# SecuLite
+# SecuLite - Deep Security Scanner
 
-> **Unified, Zero-Config Security for Modern Development**
+> **Single-Shot Deep Security Analysis for Modern Development**
 
-SecuLite is an all-in-one security toolkit for modern software projects. It combines automated web, code, and dependency scans in a single CLI workflow – and optionally offers a ZAP WebUI for manual tests.
-
----
-
-**Note:** Before starting, adjust the `.env` file to set your local database connection, target URL, and any other environment-specific settings.
+SecuLite is a powerful, single-shot security scanner that performs comprehensive deep analysis of your codebase and web applications. It combines automated web, code, and dependency scans with aggressive scanning policies for maximum security coverage.
 
 ---
 
 ## 🚀 Features
 
-- **All-in-One CLI:** One command, everything automated (ZAP, Semgrep, Trivy)
-- **Web Vulnerability Scanning:** OWASP ZAP (Baseline, Headless, optional WebUI)
-- **Static Code Analysis:** Semgrep (code bugs, secrets, AI/prompt injection)
-- **Dependency & Container Scanning:** Trivy (SCA, OS, Docker)
-- **Unified Reporting:** Results as TXT/JSON, clearly aggregated
-- **Extensible & Open:** Easily add your own rules, tools, workflows
-- **CI/CD-ready:** Docker-based, GitHub Actions workflow included
-- **Email Notifications:** Optional email alerts for critical/high severity findings.
+- **Single-Shot Deep Analysis:** One command, comprehensive security scan
+- **Aggressive Web Scanning:** OWASP ZAP with extended spider and scanner settings
+- **Deep Code Analysis:** Semgrep with multiple rule sets (custom + auto + security-focused)
+- **Comprehensive Dependency Scanning:** Trivy with all vulnerability databases and scanners
+- **Intelligent Reporting:** AI-powered analysis with LLM integration
+- **Zero Infrastructure:** No databases, no persistent services, no security risks
+- **Docker-Based:** Isolated, secure scanning environment
 
 ---
 
 ## ⚙️ Configuration
 
-SecuLite can be configured using environment variables. Create a `.env` file in the project root or set them in your shell.
+### Environment Variables
 
-### Core Configuration
+Create a `.env` file in the project root or set these variables:
 
-- `ZAP_TARGET`: The target URL for ZAP to scan (e.g., `http://localhost:8000`). Can also be passed as an argument to `security-check.sh`.
-- `HTML_REPORT`: Set to `1` to generate an HTML report (default is `0` for console-only, though the Docker setup typically generates it).
+- `TARGET_URL`: Target URL for web scanning (default: `http://host.docker.internal:8000`)
+- `SCAN_DEPTH`: Scan depth level (default: `deep`)
 
-### Email Notification Configuration (Optional)
+### LLM Integration (Optional)
 
-To enable email notifications for critical/high severity findings, set the following environment variables:
+For AI-powered vulnerability analysis:
 
-- `NOTIFICATION_EMAIL_RECIPIENT`: Email address to send notifications to.
-- `SMTP_SERVER`: SMTP server address (e.g., `smtp.example.com`).
-- `SMTP_PORT`: SMTP server port (e.g., `587` or `465`).
-- `SMTP_USER`: Username for SMTP authentication.
-- `SMTP_PASSWORD`: Password for SMTP authentication.
-- `SMTP_SENDER_EMAIL`: The "From" email address for notifications (defaults to `SMTP_USER` if not set).
-
-### LLM Provider Configuration (Optional)
-
-For AI-powered explanations of findings in the HTML report:
-
-- `LLM_PROVIDER`: Choose from `openai`, `gemini`, `huggingface`, `groq`, `mistral`, `anthropic` (defaults to `openai`).
-- `<PROVIDER>_API_KEY`: API key for the chosen provider (e.g., `OPENAI_API_KEY`).
-- `<PROVIDER>_MODEL`: Specific model for the chosen provider (e.g., `OPENAI_MODEL=gpt-4`).
+- `LLM_PROVIDER`: Choose from `openai`, `gemini`, `huggingface`, `groq`, `mistral`, `anthropic`
+- `<PROVIDER>_API_KEY`: API key for the chosen provider
+- `<PROVIDER>_MODEL`: Specific model (e.g., `OPENAI_MODEL=gpt-4`)
 
 ---
 
 ## 🏁 Quick Start
 
-```sh
+### Prerequisites
+
+- Docker and Docker Compose
+- Target codebase or web application to scan
+
+### Basic Usage
+
+```bash
 # Clone the repository
 git clone https://github.com/fr4iser90/SimpleSecCheck.git
 cd SimpleSecCheck
+
+# Scan a local project
+./run-docker.sh /path/to/your/project
+
+# Scan with custom web target
+./run-docker.sh /path/to/your/project http://localhost:3000
 ```
 
-1. **Web Dashboard (Recommended):**
-   - Start the web service:
-     ```sh
-     docker compose up --build web
-     ```
-   - **Note:** On the very first start, it may take several minutes before the dashboard is available. The web service waits until the initial scan is complete and results are generated. During this time, the page will not be reachable (404). A loading page or placeholder will be implemented in the future.
-   - Once the scan is finished, the dashboard is available at [http://localhost:5000/](http://localhost:5000/).
-   - Reports: in the `results/` folder
-   - Log files: in the `logs/` folder
-   - Aggregated summary: `results/security-summary.txt` and `.json`
-   - **Unified HTML Report:** `results/security-summary.html` (combines ZAP, Semgrep, Trivy)
+### Docker Compose Usage
 
-2. **Headless CLI (Console Only):**
-   - Run the all-in-one scan directly:
-     ```sh
-     # Default target (localhost:8000)
-     docker compose up --build seculite
-     # With custom target URL (e.g., for a web app in a container/network)
-     ZAP_TARGET="http://your-target:port" docker compose up seculite
-     # Or as an argument:
-     docker compose run seculite ./scripts/security-check.sh http://your-target:port
-     ```
-   - Results as above in the `results/` folder and as HTML report.
+```bash
+# Scan with default settings
+docker-compose run --rm -v /path/to/target:/target:ro scanner
 
-3. **ZAP WebUI (Optional, for manual web testing):**
-   - Start the ZAP WebUI:
-     ```sh
-     docker compose up --build zap-webui
-     ```
-   - WebUI available at: [http://localhost:8080](http://localhost:8080)
-
-## 🛠️ Available Scans & Rules
-
-SecuLite utilizes the following tools and rule categories:
-
-- **OWASP ZAP:** Web application vulnerabilities (baseline scan).
-- **Semgrep:** Static code analysis for:
-    - Code Bugs (`rules/code-bugs.yml`)
-    - Secrets Detection (`rules/secrets.yml`)
-    - Prompt Injection (`rules/prompt-injection.yml`)
-    - API Security (`rules/api-security.yml`)
-    - LLM/AI Security (`rules/llm-ai-security.yml`)
-- **Trivy:** Dependency and container image scanning.
+# Scan with custom environment
+TARGET_URL=http://your-app:8080 docker-compose run --rm -v /path/to/target:/target:ro scanner
+```
 
 ---
 
-## 🤝 Contributing & Extending
+## 🔍 Deep Analysis Features
 
-- See [`doc/EXTENDING.md`](doc/EXTENDING.md) for adding your own rules, tools, workflows.
-- Pull requests, issues, and feature suggestions are welcome!
+### Web Application Scanning (ZAP)
+- **Aggressive Spider:** Extended crawling with JavaScript execution
+- **Deep Scanner:** Comprehensive vulnerability detection
+- **Extended Timeouts:** More thorough analysis
+- **Multiple Report Formats:** XML and HTML outputs
+
+### Code Analysis (Semgrep)
+- **Multi-Rule Scanning:** Custom rules + auto rules + security-focused rules
+- **Comprehensive Coverage:** All severity levels (ERROR, WARNING, INFO)
+- **Security-Focused Rules:** OWASP Top 10, secrets detection, security audit
+- **Verbose Output:** Detailed analysis results
+
+### Dependency Scanning (Trivy)
+- **All Scanners:** Vulnerabilities, secrets, misconfigurations
+- **All Severities:** CRITICAL, HIGH, MEDIUM, LOW
+- **Multiple Formats:** JSON and table outputs
+- **Comprehensive Coverage:** Filesystem and container image scanning
+
+---
+
+## 📊 Results & Reports
+
+After scanning, results are available in the `results/` directory:
+
+- **`security-summary.html`** - Unified HTML report with all findings
+- **`semgrep.json`** - Detailed code analysis results
+- **`semgrep-security-deep.json`** - Additional security-focused scan
+- **`trivy.json`** - Dependency and vulnerability scan results
+- **`trivy-secrets-config.json`** - Secrets and misconfiguration scan
+- **`zap-report.xml`** - Web application vulnerability report
+- **`zap-report.html`** - Web application vulnerability report (HTML)
+- **`security-check.log`** - Complete scan log
+
+---
+
+## 🛡️ Security Rules
+
+SecuLite includes comprehensive security rules:
+
+- **Code Bugs** (`rules/code-bugs.yml`) - Common programming errors
+- **Secrets Detection** (`rules/secrets.yml`) - API keys, passwords, tokens
+- **API Security** (`rules/api-security.yml`) - API vulnerabilities
+- **LLM/AI Security** (`rules/llm-ai-security.yml`) - AI-specific vulnerabilities
+- **Prompt Injection** (`rules/prompt-injection.yml`) - LLM prompt attacks
+
+---
+
+## 🔧 Advanced Usage
+
+### Custom Rule Sets
+
+Add your own Semgrep rules to the `rules/` directory:
+
+```bash
+# Add custom rules
+echo "rules:" >> rules/custom.yml
+echo "  - id: my-custom-rule" >> rules/custom.yml
+echo "    patterns:" >> rules/custom.yml
+echo "      - pattern: dangerous_function(...)" >> rules/custom.yml
+```
+
+### Trivy Configuration
+
+Customize Trivy scanning in `trivy/config.yaml`:
+
+```yaml
+format: json
+severity: [CRITICAL,HIGH,MEDIUM,LOW]
+scanners: [vuln,secret,config]
+```
+
+### ZAP Configuration
+
+Modify ZAP scanning behavior in `zap/baseline.conf`:
+
+```ini
+# Extended spider settings
+spider.maxDuration=10
+scanner.maxDuration=30
+scanner.maxRuleTimeInMs=60000
+```
+
+---
+
+## 🚨 Security Considerations
+
+- **Docker Socket Access:** Only during scan execution, not persistent
+- **No Persistent Data:** All scans are stateless and isolated
+- **Minimal Attack Surface:** No web interfaces or persistent services
+- **Read-Only Mounts:** Target code is mounted read-only
+
+---
+
+## 🤝 Contributing
+
+- Add new security rules to `rules/`
+- Extend scanning capabilities in `scripts/tools/`
+- Improve report generation in `scripts/`
+- Submit issues and feature requests
 
 ---
 

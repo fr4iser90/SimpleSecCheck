@@ -22,12 +22,24 @@ if command -v semgrep &>/dev/null; then
   SEMOLINA_JSON="$RESULTS_DIR/semgrep.json"
   SEMOLINA_TEXT="$RESULTS_DIR/semgrep.txt"
   
-  semgrep --config "$SEMGREP_RULES_PATH" "$TARGET_PATH" --json -o "$SEMOLINA_JSON" 2>>"$LOG_FILE" || {
+  # Deep analysis with multiple rule sets and aggressive scanning
+  echo "[run_semgrep.sh][Semgrep] Running DEEP analysis with multiple rule sets..." | tee -a "$LOG_FILE"
+  
+  # Run with custom rules + auto rules for comprehensive coverage
+  semgrep --config "$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --json -o "$SEMOLINA_JSON" --severity=ERROR --severity=WARNING --severity=INFO 2>>"$LOG_FILE" || {
     echo "[run_semgrep.sh][Semgrep] JSON report generation failed." >> "$LOG_FILE"
     # Still try to generate text report
   }
-  semgrep --config "$SEMGREP_RULES_PATH" "$TARGET_PATH" --text -o "$SEMOLINA_TEXT" 2>>"$LOG_FILE" || {
+  
+  # Generate detailed text report with verbose output
+  semgrep --config "$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --text -o "$SEMOLINA_TEXT" --severity=ERROR --severity=WARNING --severity=INFO --verbose 2>>"$LOG_FILE" || {
     echo "[run_semgrep.sh][Semgrep] Text report generation failed." >> "$LOG_FILE"
+  }
+  
+  # Additional deep scan with specific security-focused rules
+  echo "[run_semgrep.sh][Semgrep] Running additional security-focused deep scan..." | tee -a "$LOG_FILE"
+  semgrep --config "p/security-audit" --config "p/secrets" --config "p/owasp-top-ten" "$TARGET_PATH" --json -o "$RESULTS_DIR/semgrep-security-deep.json" 2>>"$LOG_FILE" || {
+    echo "[run_semgrep.sh][Semgrep] Security deep scan failed." >> "$LOG_FILE"
   }
   
   if [ -f "$SEMOLINA_JSON" ] || [ -f "$SEMOLINA_TEXT" ]; then

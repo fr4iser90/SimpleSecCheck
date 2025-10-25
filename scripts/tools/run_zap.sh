@@ -60,7 +60,10 @@ export ZAP_PATH=${ZAP_PATH:-/opt/ZAP_2.16.1}
 export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}
 
 log_zap_action "[ZAP ENV] ZAP_PATH=$ZAP_PATH, JAVA_HOME=$JAVA_HOME"
-log_zap_action "[ZAP] Starting baseline scan on $ZAP_TARGET (without explicit -c config file)..."
+log_zap_action "[ZAP] Starting DEEP baseline scan on $ZAP_TARGET with aggressive policies..."
+
+# Set ZAP to use more aggressive scanning policies for deeper analysis
+export ZAP_OPTIONS="-config api.disablekey=true -config spider.maxDuration=10 -config scanner.maxDuration=30 -config scanner.maxRuleTimeInMs=60000"
 
 # Expected absolute paths for final reports
 ZAP_REPORT_XML_ABS="$RESULTS_DIR/zap-report.xml"
@@ -77,16 +80,17 @@ log_zap_action "Current PWD before ZAP XML: $ORIGINAL_PWD. Changing to $RESULTS_
 cd "$RESULTS_DIR"
 
 # Attempt to generate reports using relative names, assuming ZAP writes to CWD ($RESULTS_DIR)
-log_zap_action "[ZAP CMD XML] Executing from $(pwd): python3 $ZAP_BASELINE_SCRIPT -d -t \"$ZAP_TARGET\" -x \"zap-report.xml\""
-if python3 "$ZAP_BASELINE_SCRIPT" -d -t "$ZAP_TARGET" -x "zap-report.xml" 2>>"$LOG_FILE"; then
+# Deep scan with aggressive spider and scanner settings
+log_zap_action "[ZAP CMD XML] Executing DEEP scan from $(pwd): python3 $ZAP_BASELINE_SCRIPT -d -t \"$ZAP_TARGET\" -x \"zap-report.xml\" -J -a"
+if python3 "$ZAP_BASELINE_SCRIPT" -d -t "$ZAP_TARGET" -x "zap-report.xml" -J -a 2>>"$LOG_FILE"; then
     log_zap_action "[ZAP CMD XML] zap-baseline.py for XML exited with 0."
 else
     ZAP_XML_EXIT_CODE=$?
     log_zap_action "[ZAP CMD XML WARN] zap-baseline.py for XML exited with $ZAP_XML_EXIT_CODE."
 fi
 
-log_zap_action "[ZAP CMD HTML] Executing from $(pwd): python3 $ZAP_BASELINE_SCRIPT -d -t \"$ZAP_TARGET\" -f html -o \"zap-report.html\""
-if python3 "$ZAP_BASELINE_SCRIPT" -d -t "$ZAP_TARGET" -f html -o "zap-report.html" 2>>"$LOG_FILE"; then
+log_zap_action "[ZAP CMD HTML] Executing DEEP scan from $(pwd): python3 $ZAP_BASELINE_SCRIPT -d -t \"$ZAP_TARGET\" -f html -o \"zap-report.html\" -J -a"
+if python3 "$ZAP_BASELINE_SCRIPT" -d -t "$ZAP_TARGET" -f html -o "zap-report.html" -J -a 2>>"$LOG_FILE"; then
     log_zap_action "[ZAP CMD HTML] zap-baseline.py for HTML exited with 0."
 else
     ZAP_HTML_EXIT_CODE=$?

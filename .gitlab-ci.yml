@@ -1,7 +1,0 @@
-stages:
-  - test
-
-security_check:
-  stage: test
-  script:
-    - sh scripts/security-check.sh 

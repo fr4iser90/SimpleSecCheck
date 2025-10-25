@@ -20,16 +20,26 @@ mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"
 echo "[run_trivy.sh] Initializing Trivy scan..." | tee -a "$LOG_FILE"
 
 if command -v trivy &>/dev/null; then
-  echo "[run_trivy.sh][Trivy] Running $TRIVY_SCAN_TYPE scan on $TARGET_PATH..." | tee -a "$LOG_FILE"
+  echo "[run_trivy.sh][Trivy] Running DEEP $TRIVY_SCAN_TYPE scan on $TARGET_PATH..." | tee -a "$LOG_FILE"
   
   TRIVY_JSON="$RESULTS_DIR/trivy.json"
   TRIVY_TEXT="$RESULTS_DIR/trivy.txt"
   
-  trivy "$TRIVY_SCAN_TYPE" --config "$TRIVY_CONFIG_PATH" --format json -o "$TRIVY_JSON" "$TARGET_PATH" 2>>"$LOG_FILE" || {
+  # Deep scan with all vulnerability databases and comprehensive checks
+  echo "[run_trivy.sh][Trivy] Running comprehensive vulnerability scan..." | tee -a "$LOG_FILE"
+  trivy "$TRIVY_SCAN_TYPE" --config "$TRIVY_CONFIG_PATH" --format json -o "$TRIVY_JSON" --severity HIGH,CRITICAL,MEDIUM,LOW --scanners vuln,secret,config "$TARGET_PATH" 2>>"$LOG_FILE" || {
     echo "[run_trivy.sh][Trivy] JSON report generation failed." >> "$LOG_FILE"
   }
-  trivy "$TRIVY_SCAN_TYPE" --config "$TRIVY_CONFIG_PATH" --format table -o "$TRIVY_TEXT" "$TARGET_PATH" 2>>"$LOG_FILE" || {
+  
+  # Generate detailed text report with all severities
+  trivy "$TRIVY_SCAN_TYPE" --config "$TRIVY_CONFIG_PATH" --format table -o "$TRIVY_TEXT" --severity HIGH,CRITICAL,MEDIUM,LOW --scanners vuln,secret,config "$TARGET_PATH" 2>>"$LOG_FILE" || {
     echo "[run_trivy.sh][Trivy] Text report generation failed." >> "$LOG_FILE"
+  }
+  
+  # Additional deep scan for secrets and misconfigurations
+  echo "[run_trivy.sh][Trivy] Running additional secrets and misconfiguration scan..." | tee -a "$LOG_FILE"
+  trivy "$TRIVY_SCAN_TYPE" --scanners secret,config --format json -o "$RESULTS_DIR/trivy-secrets-config.json" "$TARGET_PATH" 2>>"$LOG_FILE" || {
+    echo "[run_trivy.sh][Trivy] Secrets/config scan failed." >> "$LOG_FILE"
   }
 
   if [ -f "$TRIVY_JSON" ] || [ -f "$TRIVY_TEXT" ]; then
