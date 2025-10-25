@@ -32,8 +32,8 @@ def html_header(title):
   --sev-bg-info-dark: #4a5568;
 }}
 body {{
-  background: var(--bg-dark);
-  color: var(--text-dark);
+  background: var(--bg-light);
+  color: var(--text-light);
   font-family: 'Segoe UI', Arial, sans-serif;
   margin: 0; padding: 0;
   transition: background 0.2s, color 0.2s;
@@ -55,6 +55,10 @@ body.darkmode {{
 body.darkmode .header {{
   background: var(--bg-dark);
   border-bottom: 1px solid var(--table-border-dark);
+}}
+body.lightmode .header {{
+  background: var(--bg-light);
+  border-bottom: 1px solid var(--table-border);
 }}
 .toggle-btn {{
   background: var(--accent);
