@@ -24,13 +24,23 @@ def html_header(title):
   --sev-bg-low: #e5f6fa;
   --sev-bg-info: #f0f0f0;
   --sev-bg-passed: #e6f9ed;
+  /* Dark mode alert backgrounds */
+  --sev-bg-critical-dark: #742a2a;
+  --sev-bg-high-dark: #744210;
+  --sev-bg-medium-dark: #744210;
+  --sev-bg-low-dark: #2a4365;
+  --sev-bg-info-dark: #4a5568;
 }}
 body {{
-  background: var(--bg-light);
-  color: var(--text-light);
+  background: var(--bg-dark);
+  color: var(--text-dark);
   font-family: 'Segoe UI', Arial, sans-serif;
   margin: 0; padding: 0;
   transition: background 0.2s, color 0.2s;
+}}
+body.lightmode {{
+  background: var(--bg-light);
+  color: var(--text-light);
 }}
 body.darkmode {{
   background: var(--bg-dark);
@@ -109,6 +119,108 @@ body.darkmode .summary-box {{
 .row-PASSED {{ background: var(--sev-bg-passed); }}
 .all-clear {{ background: var(--sev-bg-passed); color: var(--sev-passed); border-radius: 0.5em; padding: 1em; margin: 1em 0; font-weight: bold; display: flex; align-items: center; gap: 0.7em; font-size: 1.2em; }}
 .icon {{ font-size: 1.2em; vertical-align: middle; margin-right: 0.3em; }}
+/* --- Alert Detail Cards --- */
+.alert-detail {{
+  margin: 1.5em 0;
+  padding: 1.5em;
+  border: 2px solid var(--sev-medium);
+  background: var(--sev-bg-medium);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}}
+.alert-detail:hover {{
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+}}
+.alert-detail.high {{
+  border-color: var(--sev-high);
+  background: var(--sev-bg-high);
+}}
+.alert-detail.medium {{
+  border-color: var(--sev-medium);
+  background: var(--sev-bg-medium);
+}}
+.alert-detail.low {{
+  border-color: var(--sev-low);
+  background: var(--sev-bg-low);
+}}
+.alert-detail.informational {{
+  border-color: var(--sev-info);
+  background: var(--sev-bg-info);
+}}
+.alert-detail h4 {{
+  margin: 0 0 0.5em 0;
+  font-size: 1.2em;
+  font-weight: 600;
+}}
+.alert-meta {{
+  display: flex;
+  gap: 1em;
+  margin-bottom: 1em;
+  flex-wrap: wrap;
+}}
+.risk-badge {{
+  padding: 0.3em 0.8em;
+  border-radius: 20px;
+  font-size: 0.9em;
+  font-weight: 600;
+  text-transform: uppercase;
+}}
+.risk-badge.high {{
+  background: var(--sev-high);
+  color: white;
+}}
+.risk-badge.medium {{
+  background: var(--sev-medium);
+  color: white;
+}}
+.risk-badge.low {{
+  background: var(--sev-low);
+  color: white;
+}}
+.risk-badge.informational {{
+  background: var(--sev-info);
+  color: white;
+}}
+.alert-count {{
+  padding: 0.3em 0.8em;
+  background: #f8f9fa;
+  border-radius: 20px;
+  font-size: 0.9em;
+  font-weight: 500;
+}}
+body.darkmode .alert-count {{
+  background: #343a40;
+  color: var(--text-dark);
+}}
+body.darkmode .alert-detail {{
+  background: var(--sev-bg-medium-dark);
+  border-color: #4a5568;
+}}
+body.darkmode .alert-detail.high {{
+  background: var(--sev-bg-high-dark);
+  border-color: var(--sev-high);
+}}
+body.darkmode .alert-detail.medium {{
+  background: var(--sev-bg-medium-dark);
+  border-color: var(--sev-medium);
+}}
+body.darkmode .alert-detail.low {{
+  background: var(--sev-bg-low-dark);
+  border-color: var(--sev-low);
+}}
+body.darkmode .alert-detail.informational {{
+  background: var(--sev-bg-info-dark);
+  border-color: var(--sev-info);
+}}
+.alert-description, .alert-solution {{
+  margin: 1em 0;
+}}
+.alert-description p, .alert-solution p {{
+  margin: 0.5em 0;
+  line-height: 1.6;
+}}
 /* --- Fix contrast in dark mode --- */
 body.darkmode .row-CRITICAL td, body.darkmode .row-CRITICAL th {{ color: #fff !important; background: #a94442 !important; }}
 body.darkmode .row-HIGH td, body.darkmode .row-HIGH th {{ color: #fff !important; background: #e67c00 !important; }}
@@ -121,9 +233,8 @@ body.darkmode .row-PASSED td, body.darkmode .row-PASSED th {{ color: #155724 !im
   localStorage.setItem('SimpleSecCheck-darkmode', document.body.classList.contains('darkmode'));
 }}
 window.onload = function() {{
-  if (localStorage.getItem('SimpleSecCheck-darkmode') === 'true') {{
-    document.body.classList.add('darkmode');
-  }}
+  // Always default to dark mode
+  document.body.classList.add('darkmode');
 }};
 </script>\n<script src="webui.js"></script>\n</head>\n<body>\n<div class="header">\n  <h1>SimpleSecCheck Security Scan Summary</h1>\n  <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n</div>\n<div class="summary-box">'''
 
