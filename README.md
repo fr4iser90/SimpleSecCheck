@@ -251,6 +251,48 @@ echo "    patterns:" >> rules/custom.yml
 echo "      - pattern: dangerous_function(...)" >> rules/custom.yml
 ```
 
+### Using Pre-built Docker Image
+
+You can pull the pre-built image from Docker Hub and use it directly without cloning the repository:
+
+**Option 1: Using the wrapper script (Recommended)**
+```bash
+# Clone the repository for the wrapper script
+git clone https://github.com/fr4iser90/SimpleSecCheck.git
+cd SimpleSecCheck
+
+# Pull the pre-built image instead of building
+docker pull fr4iser/simpleseccheck:latest
+
+# Use the wrapper script with the pre-built image
+./run-docker.sh /path/to/your/project
+```
+
+**Option 2: Using Docker directly (Advanced)**
+```bash
+# Pull the latest image
+docker pull fr4iser/simpleseccheck:latest
+
+# Scan a local code project
+docker run --rm \
+  -v /path/to/your/project:/target:ro \
+  -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/logs:/SimpleSecCheck/logs \
+  -e SCAN_TYPE=code \
+  fr4iser/simpleseccheck:latest \
+  /SimpleSecCheck/scripts/security-check.sh
+
+# Scan a website
+docker run --rm \
+  -e SCAN_TYPE=website \
+  -e ZAP_TARGET=https://example.com \
+  -v $(pwd)/results:/SimpleSecCheck/results \
+  fr4iser/simpleseccheck:latest \
+  /SimpleSecCheck/scripts/security-check.sh
+```
+
+**Note:** The pre-built image contains all necessary configurations. Option 1 is recommended as it handles all volume mounts and environment variables automatically.
+
 ### Direct Docker Compose Usage
 
 For advanced users who want more control:
