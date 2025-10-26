@@ -80,6 +80,9 @@ SimpleSecCheck is a powerful, single-shot Docker-based security scanner that per
 git clone https://github.com/fr4iser90/SimpleSecCheck.git
 cd SimpleSecCheck
 
+# Make the script executable (one-time setup)
+chmod +x run-docker.sh
+
 # Scan a local code project
 ./run-docker.sh /path/to/your/project
 
