@@ -34,13 +34,13 @@ if command -v eslint &>/dev/null; then
   
   # Run ESLint scan with JSON output
   # ESLint v9+ uses new flat config, skip config check with --no-config-lookup
-  eslint --format=json --output-file="$ESLINT_JSON" "$TARGET_PATH" 2>&1 || {
+  eslint --format=json --output-file="$ESLINT_JSON" "$TARGET_PATH" >/dev/null 2>&1 || {
     echo "[run_eslint.sh][ESLint] JSON report generation failed." >> "$LOG_FILE"
     echo '[]' > "$ESLINT_JSON"
   }
   
   # Run ESLint scan with text output
-  eslint --format=compact --output-file="$ESLINT_TEXT" "$TARGET_PATH" 2>&1 || {
+  eslint --format=compact --output-file="$ESLINT_TEXT" "$TARGET_PATH" >/dev/null 2>&1 || {
     echo "[run_eslint.sh][ESLint] Text report generation failed." >> "$LOG_FILE"
   }
   
