@@ -73,14 +73,19 @@ SimpleSecCheck is a powerful, single-shot Docker-based security scanner that per
 - Docker and Docker Compose
 - Target codebase or web application to scan
 
-### Easy Usage
+### Quick Start (Pre-built Image - Recommended)
+
+**Option 1: Using Pre-built Image from Docker Hub** ⭐ Recommended
 
 ```bash
 # Clone the repository
 git clone https://github.com/fr4iser90/SimpleSecCheck.git
 cd SimpleSecCheck
 
-# Make the script executable (one-time setup)
+# Pull the pre-built image
+docker pull fr4iser/simpleseccheck:latest
+
+# Make the script executable
 chmod +x run-docker.sh
 
 # Scan a local code project
@@ -88,6 +93,20 @@ chmod +x run-docker.sh
 
 # Scan a website
 ./run-docker.sh https://example.com
+```
+
+**Option 2: Build from Source**
+
+```bash
+# Clone the repository
+git clone https://github.com/fr4iser90/SimpleSecCheck.git
+cd SimpleSecCheck
+
+# Make the script executable
+chmod +x run-docker.sh
+
+# The script will automatically build the Docker image on first run
+./run-docker.sh /path/to/your/project
 ```
 
 That's it! Results will be available in the `results/` directory.
@@ -251,24 +270,10 @@ echo "    patterns:" >> rules/custom.yml
 echo "      - pattern: dangerous_function(...)" >> rules/custom.yml
 ```
 
-### Using Pre-built Docker Image
+### Using Docker Directly (Advanced)
 
-You can pull the pre-built image from Docker Hub and use it directly without cloning the repository:
+For advanced users who want to use Docker directly without the wrapper script:
 
-**Option 1: Using the wrapper script (Recommended)**
-```bash
-# Clone the repository for the wrapper script
-git clone https://github.com/fr4iser90/SimpleSecCheck.git
-cd SimpleSecCheck
-
-# Pull the pre-built image instead of building
-docker pull fr4iser/simpleseccheck:latest
-
-# Use the wrapper script with the pre-built image
-./run-docker.sh /path/to/your/project
-```
-
-**Option 2: Using Docker directly (Advanced)**
 ```bash
 # Pull the latest image
 docker pull fr4iser/simpleseccheck:latest
@@ -290,8 +295,6 @@ docker run --rm \
   fr4iser/simpleseccheck:latest \
   /SimpleSecCheck/scripts/security-check.sh
 ```
-
-**Note:** The pre-built image contains all necessary configurations. Option 1 is recommended as it handles all volume mounts and environment variables automatically.
 
 ### Direct Docker Compose Usage
 
