@@ -8,16 +8,23 @@ def debug(msg):
 def wapiti_summary(wapiti_json):
     findings = []
     if wapiti_json and isinstance(wapiti_json, dict):
-        vulnerabilities = wapiti_json.get('vulnerabilities', [])
-        for vuln in vulnerabilities:
-            finding = {
-                'category': vuln.get('category', ''),
-                'description': vuln.get('description', ''),
-                'reference': vuln.get('reference', ''),
-                'status': vuln.get('status', ''),
-                'target': vuln.get('target', '')
-            }
-            findings.append(finding)
+        # Wapiti JSON structure: vulnerabilities is a dict of {vuln_type: {url: [info]}}
+        vulnerabilities = wapiti_json.get('vulnerabilities', {})
+        if isinstance(vulnerabilities, dict):
+            for vuln_type, vuln_data in vulnerabilities.items():
+                if isinstance(vuln_data, dict):
+                    for url, vuln_details in vuln_data.items():
+                        if isinstance(vuln_details, list):
+                            for vuln in vuln_details:
+                                if isinstance(vuln, dict):
+                                    finding = {
+                                        'category': vuln_type,
+                                        'description': vuln.get('desc', vuln.get('description', '')),
+                                        'reference': str(vuln.get('ref', {})),
+                                        'target': url,
+                                        'info': vuln
+                                    }
+                                    findings.append(finding)
     else:
         debug("No Wapiti results found in JSON.")
     return findings
