@@ -73,19 +73,14 @@ SimpleSecCheck is a powerful, single-shot Docker-based security scanner that per
 - Docker and Docker Compose
 - Target codebase or web application to scan
 
-### Quick Start (Pre-built Image - Recommended)
-
-**Option 1: Using Pre-built Image from Docker Hub** ⭐ Recommended
+### Easy Usage
 
 ```bash
 # Clone the repository
 git clone https://github.com/fr4iser90/SimpleSecCheck.git
 cd SimpleSecCheck
 
-# Pull the pre-built image
-docker pull fr4iser/simpleseccheck:latest
-
-# Make the script executable
+# Make the script executable (one-time setup)
 chmod +x run-docker.sh
 
 # Scan a local code project
@@ -95,21 +90,33 @@ chmod +x run-docker.sh
 ./run-docker.sh https://example.com
 ```
 
-**Option 2: Build from Source**
+That's it! Results will be available in the `results/` directory.
+
+### Using Pre-built Docker Image Directly (Without Wrapper Script)
+
+**Pull and run the pre-built image from Docker Hub:**
 
 ```bash
-# Clone the repository
-git clone https://github.com/fr4iser90/SimpleSecCheck.git
-cd SimpleSecCheck
+# Pull the latest image
+docker pull fr4iser/simpleseccheck:latest
 
-# Make the script executable
-chmod +x run-docker.sh
+# Scan a local code project
+docker run --rm \
+  -v /path/to/your/project:/target:ro \
+  -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/logs:/SimpleSecCheck/logs \
+  -e SCAN_TYPE=code \
+  fr4iser/simpleseccheck:latest \
+  /SimpleSecCheck/scripts/security-check.sh
 
-# The script will automatically build the Docker image on first run
-./run-docker.sh /path/to/your/project
+# Scan a website
+docker run --rm \
+  -e SCAN_TYPE=website \
+  -e ZAP_TARGET=https://example.com \
+  -v $(pwd)/results:/SimpleSecCheck/results \
+  fr4iser/simpleseccheck:latest \
+  /SimpleSecCheck/scripts/security-check.sh
 ```
-
-That's it! Results will be available in the `results/` directory.
 
 ### Scan Examples
 
@@ -268,32 +275,6 @@ echo "rules:" >> rules/custom.yml
 echo "  - id: my-custom-rule" >> rules/custom.yml
 echo "    patterns:" >> rules/custom.yml
 echo "      - pattern: dangerous_function(...)" >> rules/custom.yml
-```
-
-### Using Docker Directly (Advanced)
-
-For advanced users who want to use Docker directly without the wrapper script:
-
-```bash
-# Pull the latest image
-docker pull fr4iser/simpleseccheck:latest
-
-# Scan a local code project
-docker run --rm \
-  -v /path/to/your/project:/target:ro \
-  -v $(pwd)/results:/SimpleSecCheck/results \
-  -v $(pwd)/logs:/SimpleSecCheck/logs \
-  -e SCAN_TYPE=code \
-  fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/scripts/security-check.sh
-
-# Scan a website
-docker run --rm \
-  -e SCAN_TYPE=website \
-  -e ZAP_TARGET=https://example.com \
-  -v $(pwd)/results:/SimpleSecCheck/results \
-  fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/scripts/security-check.sh
 ```
 
 ### Direct Docker Compose Usage
