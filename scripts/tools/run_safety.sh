@@ -56,11 +56,11 @@ if command -v safety &>/dev/null; then
   
   # Run Safety scan with JSON output
   echo "[run_safety.sh][Safety] Running Safety scan with JSON output..." | tee -a "$LOG_FILE"
-  safety check --json --output "$SAFETY_JSON" --file "${DEPENDENCY_FILES[0]}" 2>>"$LOG_FILE" || {
+  safety check --json --output "$SAFETY_JSON" --file "${DEPENDENCY_FILES[0]}" 2>/dev/null || {
     echo "[run_safety.sh][Safety] JSON report generation failed, trying alternative approach..." | tee -a "$LOG_FILE"
     
     # Try scanning the directory directly
-    cd "$TARGET_PATH" && safety check --json --output "$SAFETY_JSON" 2>>"$LOG_FILE" || {
+    cd "$TARGET_PATH" && safety check --json --output "$SAFETY_JSON" 2>/dev/null || {
       echo "[run_safety.sh][Safety] Directory scan also failed, creating minimal report..." | tee -a "$LOG_FILE"
       echo '{"vulnerabilities": [], "packages": [], "summary": {"total_packages": 0, "vulnerable_packages": 0, "total_vulnerabilities": 0}, "error": "Safety scan failed"}' > "$SAFETY_JSON"
     }
@@ -68,11 +68,11 @@ if command -v safety &>/dev/null; then
   
   # Generate text report
   echo "[run_safety.sh][Safety] Running Safety scan with text output..." | tee -a "$LOG_FILE"
-  safety check --output "$SAFETY_TEXT" --file "${DEPENDENCY_FILES[0]}" 2>>"$LOG_FILE" || {
+  safety check --output "$SAFETY_TEXT" --file "${DEPENDENCY_FILES[0]}" 2>/dev/null || {
     echo "[run_safety.sh][Safety] Text report generation failed, trying alternative approach..." | tee -a "$LOG_FILE"
     
     # Try scanning the directory directly
-    cd "$TARGET_PATH" && safety check --output "$SAFETY_TEXT" 2>>"$LOG_FILE" || {
+    cd "$TARGET_PATH" && safety check --output "$SAFETY_TEXT" 2>/dev/null || {
       echo "[run_safety.sh][Safety] Directory text scan also failed, creating minimal report..." | tee -a "$LOG_FILE"
       echo "Safety Scan Results" > "$SAFETY_TEXT"
       echo "===================" >> "$SAFETY_TEXT"
@@ -83,7 +83,7 @@ if command -v safety &>/dev/null; then
   
   # Additional scan with verbose output for debugging
   echo "[run_safety.sh][Safety] Running additional verbose scan..." | tee -a "$LOG_FILE"
-  safety check --verbose --file "${DEPENDENCY_FILES[0]}" >> "$SAFETY_TEXT" 2>>"$LOG_FILE" || {
+  safety check --verbose --file "${DEPENDENCY_FILES[0]}" >> "$SAFETY_TEXT" 2>/dev/null || {
     echo "[run_safety.sh][Safety] Verbose scan failed." >> "$LOG_FILE"
   }
   

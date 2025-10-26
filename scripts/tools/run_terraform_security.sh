@@ -35,12 +35,12 @@ if command -v checkov &>/dev/null; then
   echo "[run_terraform_security.sh][Checkov] Found ${#TERRAFORM_FILES[@]} Terraform file(s)." | tee -a "$LOG_FILE"
   
   # Generate JSON report
-  checkov -d "$TARGET_PATH" --framework terraform --output json --output-file "$CHECKOV_JSON" 2>>"$LOG_FILE" || {
+  checkov -d "$TARGET_PATH" --framework terraform --output json --output-file "$CHECKOV_JSON" 2>/dev/null || {
     echo "[run_terraform_security.sh][Checkov] JSON report generation failed." >> "$LOG_FILE"
   }
   
   # Generate text report
-  checkov -d "$TARGET_PATH" --framework terraform --output cli --output-file "$CHECKOV_TEXT" 2>>"$LOG_FILE" || {
+  checkov -d "$TARGET_PATH" --framework terraform --output cli --output-file "$CHECKOV_TEXT" 2>/dev/null || {
     echo "[run_terraform_security.sh][Checkov] Text report generation failed." >> "$LOG_FILE"
   }
   

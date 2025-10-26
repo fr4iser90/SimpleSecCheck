@@ -46,7 +46,7 @@ if command -v semgrep &>/dev/null; then
   
   # Additional deep scan with specific security-focused rules
   echo "[run_semgrep.sh][Semgrep] Running additional security-focused deep scan..." | tee -a "$LOG_FILE"
-  semgrep --disable-version-check --config "p/security-audit" --config "p/secrets" --config "p/owasp-top-ten" "$TARGET_PATH" --json -o "$RESULTS_DIR/semgrep-security-deep.json" 2>>"$LOG_FILE" || {
+  semgrep --disable-version-check --config "p/security-audit" --config "p/secrets" --config "p/owasp-top-ten" "$TARGET_PATH" --json -o "$RESULTS_DIR/semgrep-security-deep.json" 2>/dev/null || {
     echo "[run_semgrep.sh][Semgrep] Security deep scan failed." >> "$LOG_FILE"
   }
   

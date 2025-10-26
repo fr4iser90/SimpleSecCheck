@@ -26,12 +26,12 @@ if command -v wapiti &>/dev/null; then
   echo "[run_wapiti.sh][Wapiti] Running web vulnerability scan..." | tee -a "$LOG_FILE"
   
   # Generate JSON report
-  wapiti -u "$ZAP_TARGET" -f json -o "$WAPITI_JSON" 2>>"$LOG_FILE" || {
+  wapiti -u "$ZAP_TARGET" -f json -o "$WAPITI_JSON" 2>/dev/null || {
     echo "[run_wapiti.sh][Wapiti] JSON report generation failed." >> "$LOG_FILE"
   }
   
   # Generate text report
-  wapiti -u "$ZAP_TARGET" -o "$WAPITI_TEXT" 2>>"$LOG_FILE" || {
+  wapiti -u "$ZAP_TARGET" -o "$WAPITI_TEXT" 2>/dev/null || {
     echo "[run_wapiti.sh][Wapiti] Text report generation failed." >> "$LOG_FILE"
   }
   

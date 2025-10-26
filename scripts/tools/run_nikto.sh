@@ -26,12 +26,12 @@ if command -v nikto &>/dev/null; then
   echo "[run_nikto.sh][Nikto] Running web server scan..." | tee -a "$LOG_FILE"
   
   # Generate JSON report
-  nikto -h "$ZAP_TARGET" -Format json -output "$NIKTO_JSON" 2>>"$LOG_FILE" || {
+  nikto -h "$ZAP_TARGET" -Format json -output "$NIKTO_JSON" 2>/dev/null || {
     echo "[run_nikto.sh][Nikto] JSON report generation failed." >> "$LOG_FILE"
   }
   
   # Generate text report
-  nikto -h "$ZAP_TARGET" -output "$NIKTO_TEXT" 2>>"$LOG_FILE" || {
+  nikto -h "$ZAP_TARGET" -output "$NIKTO_TEXT" 2>/dev/null || {
     echo "[run_nikto.sh][Nikto] Text report generation failed." >> "$LOG_FILE"
   }
   

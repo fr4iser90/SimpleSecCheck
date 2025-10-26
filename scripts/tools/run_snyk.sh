@@ -40,11 +40,11 @@ if command -v snyk &>/dev/null; then
   
   # Run Snyk test with JSON output
   echo "[run_snyk.sh][Snyk] Running Snyk test with JSON output..." | tee -a "$LOG_FILE"
-  snyk test $SNYK_AUTH_FLAG --json --output-file="$SNYK_JSON" 2>>"$LOG_FILE" || {
+  snyk test $SNYK_AUTH_FLAG --json --output-file="$SNYK_JSON" 2>/dev/null || {
     echo "[run_snyk.sh][Snyk] JSON report generation failed, trying alternative approach..." | tee -a "$LOG_FILE"
     
     # Try with different options
-    snyk test $SNYK_AUTH_FLAG --json > "$SNYK_JSON" 2>>"$LOG_FILE" || {
+    snyk test $SNYK_AUTH_FLAG --json > "$SNYK_JSON" 2>/dev/null || {
       echo "[run_snyk.sh][Snyk] Alternative JSON scan also failed, creating minimal report..." | tee -a "$LOG_FILE"
       echo '{"vulnerabilities": [], "summary": {"total_packages": 0, "vulnerable_packages": 0, "total_vulnerabilities": 0}, "error": "Snyk scan failed"}' > "$SNYK_JSON"
     }
@@ -52,7 +52,7 @@ if command -v snyk &>/dev/null; then
   
   # Generate text report
   echo "[run_snyk.sh][Snyk] Running Snyk test with text output..." | tee -a "$LOG_FILE"
-  snyk test $SNYK_AUTH_FLAG > "$SNYK_TEXT" 2>>"$LOG_FILE" || {
+  snyk test $SNYK_AUTH_FLAG > "$SNYK_TEXT" 2>/dev/null || {
     echo "[run_snyk.sh][Snyk] Text report generation failed, trying alternative approach..." | tee -a "$LOG_FILE"
     
     # Try with different options
@@ -67,14 +67,14 @@ if command -v snyk &>/dev/null; then
   
   # Additional scan with verbose output for debugging
   echo "[run_snyk.sh][Snyk] Running additional verbose scan..." | tee -a "$LOG_FILE"
-  snyk test $SNYK_AUTH_FLAG --verbose >> "$SNYK_TEXT" 2>>"$LOG_FILE" || {
+  snyk test $SNYK_AUTH_FLAG --verbose >> "$SNYK_TEXT" 2>/dev/null || {
     echo "[run_snyk.sh][Snyk] Verbose scan failed." >> "$LOG_FILE"
   }
   
   # Try to run Snyk monitor if token is provided (for cloud integration)
   if [ -n "$SNYK_TOKEN" ]; then
     echo "[run_snyk.sh][Snyk] Running Snyk monitor for cloud integration..." | tee -a "$LOG_FILE"
-    snyk monitor $SNYK_AUTH_FLAG >> "$SNYK_TEXT" 2>>"$LOG_FILE" || {
+    snyk monitor $SNYK_AUTH_FLAG >> "$SNYK_TEXT" 2>/dev/null || {
       echo "[run_snyk.sh][Snyk] Snyk monitor failed." >> "$LOG_FILE"
     }
   fi

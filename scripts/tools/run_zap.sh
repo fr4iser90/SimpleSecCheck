@@ -82,7 +82,7 @@ cd "$RESULTS_DIR"
 # Attempt to generate reports using relative names, assuming ZAP writes to CWD ($RESULTS_DIR)
 # Deep scan with aggressive spider and scanner settings
 log_zap_action "[ZAP CMD XML] Executing DEEP scan from $(pwd): python3 $ZAP_BASELINE_SCRIPT -d -t \"$ZAP_TARGET\" -x \"zap-report.xml\" -J -a"
-if python3 "$ZAP_BASELINE_SCRIPT" -d -t "$ZAP_TARGET" -x "zap-report.xml" -J -a 2>>"$LOG_FILE"; then
+if python3 "$ZAP_BASELINE_SCRIPT" -d -t "$ZAP_TARGET" -x "zap-report.xml" -J -a 2>/dev/null; then
     log_zap_action "[ZAP CMD XML] zap-baseline.py for XML exited with 0."
 else
     ZAP_XML_EXIT_CODE=$?
@@ -90,7 +90,7 @@ else
 fi
 
 log_zap_action "[ZAP CMD HTML] Executing DEEP scan from $(pwd): python3 $ZAP_BASELINE_SCRIPT -d -t \"$ZAP_TARGET\" -f html -o \"zap-report.html\" -J -a"
-if python3 "$ZAP_BASELINE_SCRIPT" -d -t "$ZAP_TARGET" -f html -o "zap-report.html" -J -a 2>>"$LOG_FILE"; then
+if python3 "$ZAP_BASELINE_SCRIPT" -d -t "$ZAP_TARGET" -f html -o "zap-report.html" -J -a 2>/dev/null; then
     log_zap_action "[ZAP CMD HTML] zap-baseline.py for HTML exited with 0."
 else
     ZAP_HTML_EXIT_CODE=$?

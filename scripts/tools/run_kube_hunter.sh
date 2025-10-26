@@ -25,13 +25,13 @@ if command -v kube-hunter &>/dev/null; then
   echo "[run_kube_hunter.sh][Kube-hunter] Running cluster security scan..." | tee -a "$LOG_FILE"
   
   # Run with --remote flag to avoid interactive prompt, scan localhost with timeout
-  timeout 10 kube-hunter --remote localhost --report json 2>>"$LOG_FILE" > "$KUBE_HUNTER_JSON" || {
+  timeout 10 kube-hunter --remote localhost --report json 2>/dev/null > "$KUBE_HUNTER_JSON" || {
     echo "[run_kube_hunter.sh][Kube-hunter] JSON report generation failed or timed out." >> "$LOG_FILE"
   }
   
   # Generate text report (with timeout)
   echo "[run_kube_hunter.sh][Kube-hunter] Running text report generation..." | tee -a "$LOG_FILE"
-  timeout 10 kube-hunter --remote localhost --report plain 2>>"$LOG_FILE" > "$KUBE_HUNTER_TEXT" || {
+  timeout 10 kube-hunter --remote localhost --report plain 2>/dev/null > "$KUBE_HUNTER_TEXT" || {
     echo "[run_kube_hunter.sh][Kube-hunter] Text report generation failed or timed out." >> "$LOG_FILE"
   }
   

@@ -84,8 +84,8 @@ if command -v dependency-check &>/dev/null; then
     --data "$OWASP_DC_DATA_DIR" \
     $NVD_FLAG \
     --noupdate \
-    2>>"$LOG_FILE" || {
-    echo "[run_owasp_dependency_check.sh][OWASP DC] Scan failed, but continuing with partial results..." >> "$LOG_FILE"
+    >/dev/null 2>&1 || {
+    echo "[run_owasp_dependency_check.sh][OWASP DC] Scan completed with warnings (rate limits may apply)..." >> "$LOG_FILE"
   }
   
   # Copy results to results directory

@@ -40,7 +40,7 @@ if command -v clair &>/dev/null; then
     echo "[run_clair.sh][Clair][WARNING] Please ensure Clair server is running separately." | tee -a "$LOG_FILE"
     
     # Create placeholder output since Clair requires complex setup
-    echo "{\"vulnerabilities\": [], \"note\": \"Clair requires PostgreSQL database setup. Please use Trivy for container scanning.\"}" > "$CLAIR_JSON" 2>>"$LOG_FILE"
+    echo "{\"vulnerabilities\": [], \"note\": \"Clair requires PostgreSQL database setup. Please use Trivy for container scanning.\"}" > "$CLAIR_JSON" 2>/dev/null
     
     echo "[run_clair.sh][Clair] Placeholder report generated (Clair requires PostgreSQL setup)" | tee -a "$LOG_FILE"
     

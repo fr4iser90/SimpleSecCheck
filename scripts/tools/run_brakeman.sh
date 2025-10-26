@@ -41,14 +41,14 @@ if command -v brakeman &>/dev/null; then
   echo "[run_brakeman.sh][Brakeman] Found ${#RUBY_FILES[@]} Ruby/Rails file(s)." | tee -a "$LOG_FILE"
   
   # Generate JSON report with --force to scan anyway
-  if brakeman -q -f json -o "$BRAKEMAN_JSON" --force "$TARGET_PATH" 2>>"$LOG_FILE"; then
+  if brakeman -q -f json -o "$BRAKEMAN_JSON" --force "$TARGET_PATH" 2>/dev/null; then
     echo "[run_brakeman.sh][Brakeman] JSON report generation completed." | tee -a "$LOG_FILE"
   else
     echo "[run_brakeman.sh][Brakeman] JSON report generation failed." >> "$LOG_FILE"
   fi
   
   # Generate text report (without format option, outputs plaintext by default) with --force
-  if brakeman -q -o "$BRAKEMAN_TEXT" --force "$TARGET_PATH" 2>>"$LOG_FILE"; then
+  if brakeman -q -o "$BRAKEMAN_TEXT" --force "$TARGET_PATH" 2>/dev/null; then
     echo "[run_brakeman.sh][Brakeman] Text report generation completed." | tee -a "$LOG_FILE"
   else
     echo "[run_brakeman.sh][Brakeman] Text report generation failed." >> "$LOG_FILE"

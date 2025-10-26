@@ -40,12 +40,12 @@ if command -v bandit &>/dev/null; then
   echo "[run_bandit.sh][Bandit] Found $PYTHON_FILES Python file(s) to scan..." | tee -a "$LOG_FILE"
   
   # Run Bandit scan with JSON output
-  bandit -r "$TARGET_PATH" -f json -o "$BANDIT_JSON" 2>>"$LOG_FILE" || {
+  bandit -r "$TARGET_PATH" -f json -o "$BANDIT_JSON" 2>/dev/null || {
     echo "[run_bandit.sh][Bandit] JSON report generation encountered issues." >> "$LOG_FILE"
   }
   
   # Run Bandit scan with text output
-  bandit -r "$TARGET_PATH" > "$BANDIT_TEXT" 2>>"$LOG_FILE" || {
+  bandit -r "$TARGET_PATH" > "$BANDIT_TEXT" 2>/dev/null || {
     echo "[run_bandit.sh][Bandit] Text report generation encountered issues." >> "$LOG_FILE"
   }
   

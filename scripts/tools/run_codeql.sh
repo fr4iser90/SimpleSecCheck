@@ -70,12 +70,12 @@ if command -v codeql &>/dev/null; then
     # Disable autobuilder for C++ in Docker to avoid npm install issues with read-only filesystem
     if [ "$lang" = "cpp" ]; then
       echo "[run_codeql.sh][CodeQL] Creating C++ database without autobuilder (to avoid read-only filesystem issues)..." | tee -a "$LOG_FILE"
-      codeql database create "$CODEQL_DB_DIR-$lang" --language="$lang" --source-root="$TARGET_PATH" --command="" --threads=4 2>>"$LOG_FILE" || {
+      codeql database create "$CODEQL_DB_DIR-$lang" --language="$lang" --source-root="$TARGET_PATH" --command="" --threads=4 >/dev/null 2>&1 || {
         echo "[run_codeql.sh][CodeQL] Database creation failed for $lang" | tee -a "$LOG_FILE"
         continue
       }
     else
-      codeql database create "$CODEQL_DB_DIR-$lang" --language="$lang" --source-root="$TARGET_PATH" --threads=4 2>>"$LOG_FILE" || {
+      codeql database create "$CODEQL_DB_DIR-$lang" --language="$lang" --source-root="$TARGET_PATH" --threads=4 >/dev/null 2>&1 || {
         echo "[run_codeql.sh][CodeQL] Database creation failed for $lang" | tee -a "$LOG_FILE"
         continue
       }
@@ -93,7 +93,7 @@ if command -v codeql &>/dev/null; then
     # Convert SARIF to JSON for processing (using SARIF as JSON since they're compatible formats)
     if [ -f "$CODEQL_SARIF-$lang" ]; then
       echo "[run_codeql.sh][CodeQL] Copying SARIF as JSON for $lang..." | tee -a "$LOG_FILE"
-      cp "$CODEQL_SARIF-$lang" "$CODEQL_JSON-$lang" 2>>"$LOG_FILE" || {
+      cp "$CODEQL_SARIF-$lang" "$CODEQL_JSON-$lang" 2>/dev/null || {
         echo "[run_codeql.sh][CodeQL] Copy failed for $lang" | tee -a "$LOG_FILE"
       }
     fi
@@ -104,7 +104,7 @@ if command -v codeql &>/dev/null; then
       codeql database interpret-results "$CODEQL_DB_DIR-$lang" \
         --format=sarif-latest \
         "$CODEQL_SARIF-$lang" \
-        --output="$CODEQL_TEXT-$lang" 2>>"$LOG_FILE" || {
+        --output="$CODEQL_TEXT-$lang" >/dev/null 2>&1 || {
         echo "[run_codeql.sh][CodeQL] Text report generation failed for $lang" | tee -a "$LOG_FILE"
         # Create empty text file if interpretation fails
         echo "CodeQL analysis completed but report interpretation failed." > "$CODEQL_TEXT-$lang"
