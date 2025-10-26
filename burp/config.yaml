@@ -1,0 +1,21 @@
+# Burp Suite Configuration for SimpleSecCheck
+# Purpose: Configure Burp Suite for web application security scanning
+
+# Scan settings
+scan_mode: passive  # passive, active
+crawl_mode: directory_only  # directory_only, full_crawl
+max_links: 100
+max_depth: 5
+
+# Vulnerability detection
+enable_spider: true
+enable_scanner: true
+enable_parser: true
+
+# Report settings
+report_format: json
+generate_html: true
+
+# Scope configuration
+include_in_scope: true
+follow_redirects: true

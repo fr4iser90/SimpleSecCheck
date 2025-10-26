@@ -6,6 +6,53 @@ SimpleSecCheck is a powerful, single-shot Docker-based security scanner that per
 
 ---
 
+## ⚖️ Legal Notice
+
+**Important:** SimpleSecCheck performs active security scans. Ensure you have proper authorization before scanning any target.
+
+### 🌍 Europe (GDPR/DSGVO)
+
+**Germany:**
+- ✅ Scanning your own systems/domains is legal
+- ✅ Authorized targets with written consent (e.g., contracted pen-testing)
+- ❌ Unauthorized scanning violates German law (§202a, §202b, §202c StGB - Data Protection Act)
+
+**EU General (GDPR):**
+- Requires explicit consent for automated vulnerability scanning
+- May involve processing of personal data
+- Ensure compliance with GDPR Article 6 (lawful basis for processing)
+
+### 🇺🇸 United States
+
+**Federal Law (CFAA):**
+- Unauthorized access to computer systems is illegal (18 U.S.C. § 1030)
+- Scanning systems without permission may constitute a felony
+- Legal only with explicit written authorization or ownership
+
+**State Variations:**
+- Some states have additional cybercrime laws
+- Always obtain written authorization before scanning third-party systems
+
+### 🌐 General Best Practices
+
+**Always Legal:**
+- ✅ Your own systems/domains
+- ✅ Systems you explicitly own or control
+
+**Requires Authorization:**
+- ✅ Contracted penetration testing
+- ✅ Bug bounty programs (follow program rules)
+- ✅ Staging/test environments (verify ownership/authorization)
+
+**Never Scan Without Permission:**
+- ❌ Third-party systems without explicit consent
+- ❌ Public websites/applications you don't own
+- ❌ Systems outside bug bounty scope
+
+**⚠️ Disclaimer:** This tool is for authorized security testing only. Users are responsible for ensuring they have proper authorization before scanning any system. Unauthorized scanning is illegal and may result in criminal prosecution.
+
+---
+
 ## 🚀 Features
 
 - **Single-Shot Analysis:** One command, complete security scan
@@ -48,6 +95,7 @@ That's it! Results will be available in the `results/` directory.
 - Static code analysis with Semgrep
 - Dependency vulnerabilities with Trivy
 - Security rule violations
+- Docker daemon compliance with Docker Bench
 
 **Websites:**
 - Web application vulnerabilities with OWASP ZAP
@@ -70,19 +118,69 @@ TARGET_URL=https://your-website.com
 SCAN_TYPE=code
 ```
 
+### API Tokens (Optional)
+
+Some tools can benefit from API tokens for enhanced functionality:
+
+**Copy the example file and add your tokens:**
+```bash
+cp env.example .env
+nano .env  # Or use your favorite editor
+```
+
+**Available API Tokens:**
+
+| Token | Tool | Purpose | Get it from |
+|-------|------|---------|-------------|
+| `NVD_API_KEY` | OWASP Dependency Check | Higher rate limits for vulnerability database lookups | https://nvd.nist.gov/developers/request-an-api-key |
+| `SNYK_TOKEN` | Snyk | Cloud-based vulnerability scanning with Snyk | https://snyk.io/user/api |
+
+**Note:** All API tokens are optional. Tools will work in their basic modes without tokens. Tokens are stored locally in your `.env` file (which is git-ignored) and are never uploaded or shared.
+
 ---
 
 ## 🔍 Analysis Details
 
-### Code Analysis Tools
+### Code Analysis Tools (26 Integrated Security Tools)
+**Static Code Analysis:**
 - **Semgrep:** Static code analysis with security-focused rules
-- **Trivy:** Dependency vulnerability scanning
-- **Custom Rules:** OWASP Top 10, secrets detection, API security
+- **CodeQL:** Advanced code analysis and vulnerability detection
+- **ESLint:** JavaScript/TypeScript security linting
+- **Brakeman:** Ruby on Rails security scanning
+- **Bandit:** Python security linting
 
-### Web Analysis Tools
+**Dependency & Container Scanning:**
+- **Trivy:** Container and dependency vulnerability scanning
+- **Clair:** Container image vulnerability analysis
+- **Anchore:** Container image security scanning
+- **OWASP Dependency Check:** Dependency vulnerability analysis
+- **Safety:** Python dependency security checker
+- **Snyk:** Dependency and container vulnerability scanner
+- **npm audit:** Node.js package vulnerability scanning
+
+**Infrastructure as Code:**
+- **Checkov:** Infrastructure security scanning (AWS, Azure, GCP)
+- **Terraform Security:** Terraform-specific security checks
+
+**Secret Detection:**
+- **TruffleHog:** Secret and credential detection
+- **GitLeaks:** Git repository secret scanning
+- **Detect-secrets:** Yelp's secret detection tool
+
+**Code Quality:**
+- **SonarQube:** Code quality and security analysis
+
+### Web Application Security Tools
 - **OWASP ZAP:** Web application vulnerability scanning
-- **Comprehensive Coverage:** Common web attacks and misconfigurations
-- **Automated Testing:** Spider and active scanning
+- **Nuclei:** Fast web vulnerability scanning with custom templates
+- **Wapiti:** Web application security scanner
+- **Nikto:** Web server security scanner
+- **Burp Suite:** Web application security testing
+
+### Container & Kubernetes Security
+- **Kube-hunter:** Kubernetes cluster security scanner
+- **Kube-bench:** Kubernetes CIS benchmark compliance testing
+- **Docker Bench:** Docker daemon CIS benchmark compliance testing
 
 ---
 
@@ -93,6 +191,7 @@ After scanning, results are available in the `results/[project]_[timestamp]/` di
 - **`security-summary.html`** - Unified HTML report with all findings
 - **`semgrep.json`** - Detailed code analysis results (code scans only)
 - **`trivy.json`** - Dependency and vulnerability scan results (code scans only)
+- **`docker-bench.json`** - Docker daemon compliance results (code scans only)
 - **`zap-report.xml`** - Web application vulnerability report (web scans only)
 - **`security-check.log`** - Complete scan log
 

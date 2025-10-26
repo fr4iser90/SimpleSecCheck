@@ -1,0 +1,70 @@
+# CodeQL Configuration for SimpleSecCheck
+
+# CodeQL CLI Configuration
+codeql:
+  # Default query suites for different languages
+  query_suites:
+    java: "java-security-and-quality.qls"
+    python: "python-security-and-quality.qls"
+    javascript: "javascript-security-and-quality.qls"
+    cpp: "cpp-security-and-quality.qls"
+    csharp: "csharp-security-and-quality.qls"
+    go: "go-security-and-quality.qls"
+    
+  # Analysis settings
+  analysis:
+    # Timeout for database creation (in seconds)
+    database_timeout: 1800  # 30 minutes
+    
+    # Timeout for query execution (in seconds)
+    query_timeout: 600      # 10 minutes
+    
+    # Memory limit for CodeQL processes (in MB)
+    memory_limit: 4096      # 4GB
+    
+    # Number of threads for parallel processing
+    threads: 4
+    
+  # Output settings
+  output:
+    # Generate SARIF format
+    sarif: true
+    
+    # Generate JSON format
+    json: true
+    
+    # Generate text format
+    text: true
+    
+    # Include source code snippets
+    include_source: true
+    
+  # Language detection
+  languages:
+    # Auto-detect languages in the project
+    auto_detect: true
+    
+    # Fallback languages if auto-detection fails
+    fallback_languages: ["python", "javascript", "java"]
+    
+  # Security-focused queries
+  security:
+    # Enable security-specific query suites
+    enable_security_queries: true
+    
+    # Custom security query paths
+    custom_query_paths: []
+    
+    # Severity levels to include
+    severity_levels: ["error", "warning", "note"]
+    
+  # Performance settings
+  performance:
+    # Enable caching
+    enable_cache: true
+    
+    # Cache directory
+    cache_dir: "/tmp/codeql-cache"
+    
+    # Clean cache after analysis
+    clean_cache: true

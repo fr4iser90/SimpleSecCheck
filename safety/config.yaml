@@ -1,0 +1,85 @@
+# Safety Configuration for SimpleSecCheck
+# Safety is a Python security scanner that checks for known security vulnerabilities
+# in Python dependencies
+
+# Output formats
+output_formats:
+  - json
+  - text
+
+# Scan options
+scan_options:
+  # Check for known security vulnerabilities
+  check_vulnerabilities: true
+  
+  # Check for insecure packages
+  check_insecure: true
+  
+  # Check for packages with known issues
+  check_issues: true
+  
+  # Include packages with no known vulnerabilities
+  include_safe: false
+  
+  # Output format for reports
+  output_format: json
+  
+  # Verbose output
+  verbose: true
+
+# File patterns to scan
+file_patterns:
+  - "requirements.txt"
+  - "requirements-*.txt"
+  - "requirements/*.txt"
+  - "Pipfile"
+  - "Pipfile.lock"
+  - "pyproject.toml"
+  - "setup.py"
+  - "environment.yml"
+  - "conda.yml"
+
+# Exclude patterns
+exclude_patterns:
+  - "*/test*"
+  - "*/tests/*"
+  - "*/__pycache__/*"
+  - "*/venv/*"
+  - "*/env/*"
+  - "*/virtualenv/*"
+
+# Report settings
+report_settings:
+  # Include detailed vulnerability information
+  detailed: true
+  
+  # Include remediation suggestions
+  remediation: true
+  
+  # Include package information
+  package_info: true
+  
+  # Include vulnerability references
+  references: true
+
+# Safety database settings
+database:
+  # Use local database if available
+  local_db: false
+  
+  # Update database before scan
+  update_db: true
+  
+  # Database timeout (seconds)
+  timeout: 30
+
+# Integration settings
+integration:
+  # Exit code on vulnerabilities found
+  exit_on_vulnerabilities: false
+  
+  # Include in HTML report
+  include_in_html: true
+  
+  # Generate separate report files
+  generate_files: true

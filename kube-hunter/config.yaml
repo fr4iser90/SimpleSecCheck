@@ -1,0 +1,32 @@
+kube-hunter:
+  # Enable or disable Kube-hunter scanning
+  enabled: true
+  
+  # Target cluster endpoint (leave empty for automatic detection)
+  cluster_endpoint: ""
+  
+  # Scan mode: active or passive
+  # active: Performs active scanning and attempts to exploit vulnerabilities
+  # passive: Only performs passive reconnaissance
+  mode: passive
+  
+  # Remote scanning mode
+  # If true, performs remote scanning without requiring cluster access
+  # If false, runs in local/on-cluster mode
+  remote: true
+  
+  # Report format
+  report_format: json
+  
+  # Include in report
+  include: true
+  
+  # Log file
+  log_file: ""
+  
+  # Network CIDR to scan
+  cidr: ""
+  
+  # Interface to bind to
+  interface: ""
+

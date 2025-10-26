@@ -1,0 +1,45 @@
+# TruffleHog Configuration for SimpleSecCheck
+
+# Detectors to use
+detectors:
+  # Cloud Provider Credentials
+  - aws
+  - azure
+  - gcp
+  - google_api_key
+  
+  # Git Provider Credentials
+  - github
+  - gitlab
+  - bitbucket
+  
+  # Secrets and Keys
+  - git_secret
+  - private_key
+  - jwt
+  - ssh_key
+  
+  # API Keys and Tokens
+  - slack
+  - stripe
+  - twilio
+  - sendgrid
+  
+  # Database Credentials
+  - postgres
+  - mysql
+  
+  # High Entropy Strings (potential secrets)
+  - high_entropy_string
+  
+  # Additional Security Checks
+  - discord
+  - dockerhub
+  - npm
+  - redis
+
+# Verification settings
+verify: true
+
+# Options
+json_output: true

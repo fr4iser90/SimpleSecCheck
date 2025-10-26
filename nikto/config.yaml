@@ -1,0 +1,47 @@
+nikto:
+  # Enable or disable Nikto scanning
+  enabled: true
+  
+  # Target host to scan
+  host: ""
+  
+  # Port to scan
+  port: 80
+  
+  # Use SSL/HTTPS
+  ssl: false
+  
+  # User agent string
+  user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+  
+  # Display output level (0=quiet, 1=normal, 2=verbose)
+  display: 1
+  
+  # Scan options
+  # - 1 = Find and handle keywords in error messages
+  # - 2 = Perform HTML analysis
+  # - 3 = Perform HTTP analysis
+  # - 4 = Perform HTTP methods analysis
+  scans: "1234"
+  
+  # Evasion techniques (1-9, default 1)
+  evasion: 1
+  
+  # Timeout for requests (in seconds)
+  timeout: 60
+  
+  # Maximum age of cached scans (in hours)
+  max_age: 8
+  
+  # Output format
+  output_format: "json"
+  
+  # Ignore specified ports
+  no_reserved: false
+  
+  # Don't request SSL/TLS extensions
+  no_ssl: false
+  
+  # Pause time between requests (in ms)
+  pause: 10
+

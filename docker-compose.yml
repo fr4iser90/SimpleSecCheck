@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   scanner:
     build:
@@ -14,8 +12,11 @@ services:
       - ./conf:/SimpleSecCheck/conf
       - ./rules:/SimpleSecCheck/rules
       - ./trivy:/SimpleSecCheck/trivy
+      - ./anchore:/SimpleSecCheck/anchore
       - ./zap:/SimpleSecCheck/zap
-      - /var/run/docker.sock:/var/run/docker.sock
+      # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
+      - ./owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
+      - /var/run/docker.sock:/var/run/docker.sock # For Docker Bench
     environment:
       - TARGET_URL=${TARGET_URL:-http://host.docker.internal:8000}
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
@@ -23,13 +24,19 @@ services:
       - LOGS_DIR_IN_CONTAINER=/SimpleSecCheck/logs
       - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/rules
       - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/trivy/config.yaml
+      - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/anchore/config.yaml
+      - ANCHORE_IMAGE=${ANCHORE_IMAGE:-}
       - ZAP_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/zap/baseline.conf
       - TRIVY_SCAN_TYPE=fs
       - FP_WHITELIST_FILE=/SimpleSecCheck/conf/fp_whitelist.json
-    command: ["bash", "/SimpleSecCheck/scripts/security-check.sh"]
+      # Optional API Tokens (loaded from .env file if present)
+      - NVD_API_KEY=${NVD_API_KEY:-}
+      - SNYK_TOKEN=${SNYK_TOKEN:-}
     networks:
       - SimpleSecCheck_network
     restart: "no"
+    stdin_open: true
+    tty: true
 
 networks:
   SimpleSecCheck_network:

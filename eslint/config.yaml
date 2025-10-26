@@ -1,0 +1,31 @@
+# ESLint Configuration for SimpleSecCheck
+
+eslint:
+  # Enable security rules
+  security:
+    enable_security_rules: true
+    security_plugin: true
+    
+  # Output formats
+  output:
+    json: true
+    text: true
+    html: false
+    
+  # Severity levels to include
+  severity:
+    error: true
+    warning: true
+    info: true
+    
+  # File extensions to scan
+  extensions:
+    - .js
+    - .jsx
+    - .ts
+    - .tsx
+    
+  # Additional configuration
+  config:
+    use_default: true
+    custom_rules: []

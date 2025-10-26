@@ -1,0 +1,21 @@
+# Kube-bench Configuration File
+# SimpleSecCheck - Kubernetes Cluster Compliance Testing
+
+# Kube-bench benchmark version
+benchmark_version: "1.28"
+
+# Target cluster configuration
+cluster_type: "managed"  # Options: managed, self-managed, ocp
+run_type: "all"  # Options: all, master, node, etcd
+
+# Output format configuration
+json_output: true
+text_output: true
+
+# Test configuration
+include_tests: []
+exclude_tests: []
+
+# Compliance level
+compliance_level: "medium"  # Options: low, medium, high, critical
+

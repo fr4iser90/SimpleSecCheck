@@ -1,0 +1,52 @@
+version: 0.2.0
+baseline:
+  path: .secrets.baseline
+plugins:
+  # High entropy string detection
+  - name: HexHighEntropyString
+    path: detect_secrets.plugins.high_entropy
+    limit: 4.5
+  - name: Base64HighEntropyString
+    path: detect_secrets.plugins.high_entropy
+    limit: 4.5
+  # AWS detection
+  - name: AWSKeyDetector
+    path: detect_secrets.plugins.aws
+    verify: false
+  - name: AWSSecretKeyDetector
+    path: detect_secrets.plugins.aws_secret
+  # GitHub token detection
+  - name: GitHubTokenDetector
+    path: detect_secrets.plugins.github
+  # Slack token detection
+  - name: SlackDetector
+    path: detect_secrets.plugins.slack
+  # Generic password detection
+  - name: PrivateKeyDetector
+    path: detect_secrets.plugins.private_key
+  # API key patterns
+  - name: ArtifactoryDetector
+    path: detect_secrets.plugins.artifactory
+  - name: DiscordDetector
+    path: detect_secrets.plugins.discord
+  - name: StripeDetector
+    path: detect_secrets.plugins.stripe
+  - name: TwilioKeyDetector
+    path: detect_secrets.plugins.twilio
+  # Database credentials
+  - name: PostgreSQLPasswordDetector
+    path: detect_secrets.plugins.postgres
+  - name: MySQLDetector
+    path: detect_secrets.plugins.mysql
+  # Certificate detection
+  - name: PEMKeyDetector
+    path: detect_secrets.plugins.pem
+exclude_regexes:
+  - '(?i)(comment|example|test|sample|demo|placeholder)'
+  - '\.baseline$'
+  - '\.lock$'
+  - 'node_modules'
+  - '\.git'
+  - '\.venv'
+  - '\.cache'
+

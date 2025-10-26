@@ -3,6 +3,9 @@ logs/*
 .env
 .vscode/
 
+# OWASP Dependency Check database (downloaded at runtime, cached via volume mount)
+owasp-dependency-check-data/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -139,4 +142,4 @@ yarn-error.log*
 *.project
 *.tmproj
 *.sublime-workspace
-*.sublime-project
+*.sublime-projectscan-all.sh
