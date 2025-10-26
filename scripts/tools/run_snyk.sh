@@ -56,7 +56,7 @@ if command -v snyk &>/dev/null; then
     echo "[run_snyk.sh][Snyk] Text report generation failed, trying alternative approach..." | tee -a "$LOG_FILE"
     
     # Try with different options
-    snyk test $SNYK_AUTH_FLAG 2>&1 > "$SNYK_TEXT" || {
+    snyk test $SNYK_AUTH_FLAG > "$SNYK_TEXT" 2>&1 || {
       echo "[run_snyk.sh][Snyk] Alternative text scan also failed, creating minimal report..." | tee -a "$LOG_FILE"
       echo "Snyk Scan Results" > "$SNYK_TEXT"
       echo "=================" >> "$SNYK_TEXT"
