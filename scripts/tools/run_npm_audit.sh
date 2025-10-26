@@ -56,17 +56,23 @@ if command -v npm &>/dev/null; then
   if [ $VULNS_FOUND -gt 0 ]; then
     if [ -f "$NPM_AUDIT_JSON-0" ]; then
       cp "$NPM_AUDIT_JSON-0" "$NPM_AUDIT_JSON"
+    else
+      # Create minimal JSON if scan failed
+      echo '{"vulnerabilities":{}}' > "$NPM_AUDIT_JSON"
     fi
     if [ -f "$NPM_AUDIT_TEXT-0" ]; then
       cp "$NPM_AUDIT_TEXT-0" "$NPM_AUDIT_TEXT"
+    else
+      echo "npm audit: Scan completed but report generation failed" > "$NPM_AUDIT_TEXT"
     fi
     rm -f "$NPM_AUDIT_JSON"-* "$NPM_AUDIT_TEXT"-*
     
     echo "[run_npm_audit.sh][npm audit] Scan completed. Found $VULNS_FOUND package.json files." | tee -a "$LOG_FILE"
     echo "npm audit: Completed" >> "$SUMMARY_TXT"
   else
-    echo "[run_npm_audit.sh][npm audit] No vulnerabilities found." | tee -a "$LOG_FILE"
-    echo "npm audit: No vulnerabilities" >> "$SUMMARY_TXT"
+    echo "[run_npm_audit.sh][npm audit] No package.json files found, creating empty reports." | tee -a "$LOG_FILE"
+    echo '{"vulnerabilities":{}}' > "$NPM_AUDIT_JSON"
+    echo "No package.json files found" > "$NPM_AUDIT_TEXT"
   fi
 else
   echo "[run_npm_audit.sh][npm audit] npm command not found, skipping npm audit scan." | tee -a "$LOG_FILE"

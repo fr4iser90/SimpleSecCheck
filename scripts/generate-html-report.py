@@ -38,7 +38,7 @@ from scripts.brakeman_processor import brakeman_summary, generate_brakeman_html_
 from scripts.bandit_processor import bandit_summary, generate_bandit_html_section
 
 RESULTS_DIR = os.environ.get('RESULTS_DIR', '/SimpleSecCheck/results')
-OUTPUT_FILE = '/SimpleSecCheck/results/security-summary.html'
+OUTPUT_FILE = os.environ.get('OUTPUT_FILE', os.path.join(RESULTS_DIR, 'security-summary.html'))
 
 def debug(msg):
     print(f"[generate-html-report] {msg}", file=sys.stderr)
@@ -57,8 +57,20 @@ def read_json(path):
 def main():
     debug(f"Starting HTML report generation. Output: {OUTPUT_FILE}")
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    target = os.environ.get('ZAP_TARGET', os.environ.get('TARGET_URL', 'Unknown'))
     scan_type = os.environ.get('SCAN_TYPE', 'code')
+    
+    # For code scans, use better target description
+    if scan_type == 'code':
+        # Try to get the actual project name from the results directory path
+        # e.g., /SimpleSecCheck/results/NoServerConvert_20251026_170126 -> NoServerConvert
+        results_path = RESULTS_DIR
+        project_name = os.path.basename(results_path)
+        if project_name and project_name != 'results':
+            target = project_name.split('_')[0]  # Remove timestamp suffix
+        else:
+            target = 'Code scan'
+    else:
+        target = os.environ.get('ZAP_TARGET', os.environ.get('TARGET_URL', 'Unknown'))
     zap_html_path = os.path.join(RESULTS_DIR, 'zap-report.xml.html')
     zap_xml_path = os.path.join(RESULTS_DIR, 'zap-report.xml')
     semgrep_json_path = os.path.join(RESULTS_DIR, 'semgrep.json')

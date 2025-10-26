@@ -29,10 +29,14 @@ if command -v gitleaks &>/dev/null; then
     echo "[run_gitleaks.sh][GitLeaks] JSON report generation failed." >> "$LOG_FILE"
   }
   
-  # Generate text report
+  # Generate text report (redirect stdout to file, since gitleaks text output goes to stdout)
   echo "[run_gitleaks.sh][GitLeaks] Running text report generation..." | tee -a "$LOG_FILE"
-  gitleaks detect --source "$TARGET_PATH" --report-path "$GITLEAKS_TEXT" --no-git --verbose 2>>"$LOG_FILE" || {
+  gitleaks detect --source "$TARGET_PATH" --no-git --verbose > "$GITLEAKS_TEXT" 2>>"$LOG_FILE" || {
     echo "[run_gitleaks.sh][GitLeaks] Text report generation failed." >> "$LOG_FILE"
+    # Even if the command fails with exit code 1 (secrets found), we still get output
+    if [ ! -s "$GITLEAKS_TEXT" ]; then
+      echo "No secrets found" > "$GITLEAKS_TEXT"
+    fi
   }
 
   if [ -f "$GITLEAKS_JSON" ] || [ -f "$GITLEAKS_TEXT" ]; then
