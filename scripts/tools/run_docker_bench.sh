@@ -34,7 +34,7 @@ if command -v docker-bench-security &>/dev/null; then
   
   # Run docker-bench-security from its directory with JSON and text outputs
   cd /opt/docker-bench-security
-  ./docker-bench-security.sh > "$DOCKER_BENCH_TEXT" 2>>"$LOG_FILE" || {
+  ./docker-bench-security.sh > "$DOCKER_BENCH_TEXT" 2>/dev/null || {
     echo "[run_docker_bench.sh][Docker Bench] Text report generation failed." >> "$LOG_FILE"
   }
   cd "$(dirname "$0")/../.."
@@ -42,7 +42,7 @@ if command -v docker-bench-security &>/dev/null; then
   # Convert text output to JSON format (basic conversion)
   if [ -f "$DOCKER_BENCH_TEXT" ]; then
     # Parse text output and convert to JSON
-    python3 - "$DOCKER_BENCH_TEXT" > "$DOCKER_BENCH_JSON" 2>>"$LOG_FILE" << 'PYEOF'
+    python3 - "$DOCKER_BENCH_TEXT" > "$DOCKER_BENCH_JSON" 2>/dev/null << 'PYEOF'
 import json
 import re
 import sys

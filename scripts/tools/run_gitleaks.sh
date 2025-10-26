@@ -25,13 +25,13 @@ if command -v gitleaks &>/dev/null; then
   
   # Run secret detection scan with JSON output
   echo "[run_gitleaks.sh][GitLeaks] Running secret detection scan..." | tee -a "$LOG_FILE"
-  gitleaks detect --source "$TARGET_PATH" --report-path "$GITLEAKS_JSON" --no-git 2>>"$LOG_FILE" || {
+  gitleaks detect --source "$TARGET_PATH" --report-path "$GITLEAKS_JSON" --no-git 2>/dev/null || {
     echo "[run_gitleaks.sh][GitLeaks] JSON report generation failed." >> "$LOG_FILE"
   }
   
   # Generate text report (redirect stdout to file, since gitleaks text output goes to stdout)
   echo "[run_gitleaks.sh][GitLeaks] Running text report generation..." | tee -a "$LOG_FILE"
-  gitleaks detect --source "$TARGET_PATH" --no-git --verbose > "$GITLEAKS_TEXT" 2>>"$LOG_FILE" || {
+  gitleaks detect --source "$TARGET_PATH" --no-git --verbose > "$GITLEAKS_TEXT" 2>/dev/null || {
     echo "[run_gitleaks.sh][GitLeaks] Text report generation failed." >> "$LOG_FILE"
     # Even if the command fails with exit code 1 (secrets found), we still get output
     if [ ! -s "$GITLEAKS_TEXT" ]; then

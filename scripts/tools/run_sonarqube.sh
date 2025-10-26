@@ -29,7 +29,7 @@ if command -v sonar-scanner &>/dev/null; then
   if [ ! -f "$SONARQUBE_PROJECT_PROPERTIES" ]; then
     echo "[run_sonarqube.sh][SonarQube] Creating sonar-project.properties..." | tee -a "$LOG_FILE"
     # Try to create the file, but if it fails due to readonly, continue with existing or skip
-    cat > "$SONARQUBE_PROJECT_PROPERTIES" 2>>"$LOG_FILE" <<'EOF'
+    cat > "$SONARQUBE_PROJECT_PROPERTIES" 2>/dev/null <<'EOF'
 sonar.projectKey=SimpleSecCheck-Analysis
 sonar.projectName=SimpleSecCheck-Analysis
 sonar.projectVersion=1.0.0
@@ -52,7 +52,7 @@ EOF
   
   # Run SonarQube scan
   echo "[run_sonarqube.sh][SonarQube] Running SonarQube analysis..." | tee -a "$LOG_FILE"
-  cd "$TARGET_PATH" && sonar-scanner -X 2>>"$LOG_FILE" || {
+  cd "$TARGET_PATH" && sonar-scanner -X 2>/dev/null || {
     echo "[run_sonarqube.sh][SonarQube] SonarQube scan failed." | tee -a "$LOG_FILE"
     
     # Create minimal reports on failure

@@ -40,12 +40,12 @@ if command -v npm &>/dev/null; then
     echo "[run_npm_audit.sh][npm audit] Scanning directory: $dir" | tee -a "$LOG_FILE"
     
     # Generate JSON report
-    cd "$dir" && npm audit --json > "$NPM_AUDIT_JSON-$VULNS_FOUND" 2>>"$LOG_FILE" || {
+    cd "$dir" && npm audit --json > "$NPM_AUDIT_JSON-$VULNS_FOUND" 2>/dev/null || {
       echo "[run_npm_audit.sh][npm audit] JSON report generation failed for $dir" >> "$LOG_FILE"
     }
     
     # Generate text report
-    cd "$dir" && npm audit > "$NPM_AUDIT_TEXT-$VULNS_FOUND" 2>>"$LOG_FILE" || {
+    cd "$dir" && npm audit > "$NPM_AUDIT_TEXT-$VULNS_FOUND" 2>/dev/null || {
       echo "[run_npm_audit.sh][npm audit] Text report generation failed for $dir" >> "$LOG_FILE"
     }
     

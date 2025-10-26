@@ -25,13 +25,13 @@ if command -v detect-secrets &>/dev/null; then
   
   # Run secret detection scan with JSON output
   echo "[run_detect_secrets.sh][Detect-secrets] Running secret detection scan..." | tee -a "$LOG_FILE"
-  detect-secrets scan --all-files "$TARGET_PATH" > "$DETECT_SECRETS_JSON" 2>>"$LOG_FILE" || {
+  detect-secrets scan --all-files "$TARGET_PATH" > "$DETECT_SECRETS_JSON" 2>/dev/null || {
     echo "[run_detect_secrets.sh][Detect-secrets] JSON report generation failed." >> "$LOG_FILE"
   }
   
   # Generate text report
   echo "[run_detect_secrets.sh][Detect-secrets] Running text report generation..." | tee -a "$LOG_FILE"
-  detect-secrets scan --all-files "$TARGET_PATH" > "$DETECT_SECRETS_TEXT" 2>>"$LOG_FILE" || {
+  detect-secrets scan --all-files "$TARGET_PATH" > "$DETECT_SECRETS_TEXT" 2>/dev/null || {
     echo "[run_detect_secrets.sh][Detect-secrets] Text report generation failed." >> "$LOG_FILE"
   }
 

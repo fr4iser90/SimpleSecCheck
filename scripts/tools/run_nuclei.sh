@@ -26,18 +26,18 @@ if command -v nuclei &>/dev/null; then
   echo "[run_nuclei.sh][Nuclei] Running comprehensive web application scan..." | tee -a "$LOG_FILE"
   
   # Generate JSON report
-  nuclei -u "$ZAP_TARGET" -config "$NUCLEI_CONFIG_PATH" -json -o "$NUCLEI_JSON" 2>>"$LOG_FILE" || {
+  nuclei -u "$ZAP_TARGET" -config "$NUCLEI_CONFIG_PATH" -json -o "$NUCLEI_JSON" 2>/dev/null || {
     echo "[run_nuclei.sh][Nuclei] JSON report generation failed." >> "$LOG_FILE"
   }
   
   # Generate text report
-  nuclei -u "$ZAP_TARGET" -config "$NUCLEI_CONFIG_PATH" -o "$NUCLEI_TEXT" 2>>"$LOG_FILE" || {
+  nuclei -u "$ZAP_TARGET" -config "$NUCLEI_CONFIG_PATH" -o "$NUCLEI_TEXT" 2>/dev/null || {
     echo "[run_nuclei.sh][Nuclei] Text report generation failed." >> "$LOG_FILE"
   }
   
   # Additional focused scan for critical vulnerabilities
   echo "[run_nuclei.sh][Nuclei] Running additional critical vulnerability scan..." | tee -a "$LOG_FILE"
-  nuclei -u "$ZAP_TARGET" -severity critical,high -json -o "$RESULTS_DIR/nuclei-critical.json" 2>>"$LOG_FILE" || {
+  nuclei -u "$ZAP_TARGET" -severity critical,high -json -o "$RESULTS_DIR/nuclei-critical.json" 2>/dev/null || {
     echo "[run_nuclei.sh][Nuclei] Critical scan failed." >> "$LOG_FILE"
   }
 

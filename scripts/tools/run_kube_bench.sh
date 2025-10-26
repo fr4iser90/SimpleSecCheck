@@ -26,13 +26,13 @@ if command -v kube-bench &>/dev/null; then
   echo "[run_kube_bench.sh][Kube-bench] Running compliance scan..." | tee -a "$LOG_FILE"
   
   # Run kube-bench with JSON and text outputs
-  kube-bench --json > "$KUBE_BENCH_JSON" 2>>"$LOG_FILE" || {
+  kube-bench --json > "$KUBE_BENCH_JSON" 2>/dev/null || {
     echo "[run_kube_bench.sh][Kube-bench] JSON report generation failed." >> "$LOG_FILE"
   }
   
   # Generate text report
   echo "[run_kube_bench.sh][Kube-bench] Running text report generation..." | tee -a "$LOG_FILE"
-  kube-bench --version 1.28 > "$KUBE_BENCH_TEXT" 2>>"$LOG_FILE" || {
+  kube-bench --version 1.28 > "$KUBE_BENCH_TEXT" 2>/dev/null || {
     echo "[run_kube_bench.sh][Kube-bench] Text report generation failed." >> "$LOG_FILE"
   }
 

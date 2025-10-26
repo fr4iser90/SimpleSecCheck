@@ -29,12 +29,12 @@ if command -v grype &>/dev/null; then
     # Run Anchore Grype scan on container image
     echo "[run_anchore.sh][Anchore] Running container image vulnerability scan..." | tee -a "$LOG_FILE"
     
-    grype --config "$ANCHORE_CONFIG_PATH" --output json "$ANCHORE_IMAGE" > "$ANCHORE_JSON" 2>>"$LOG_FILE" || {
+    grype --config "$ANCHORE_CONFIG_PATH" --output json "$ANCHORE_IMAGE" > "$ANCHORE_JSON" 2>/dev/null || {
       echo "[run_anchore.sh][Anchore] Scan failed, continuing..." | tee -a "$LOG_FILE"
     }
     
     # Generate text output
-    grype --config "$ANCHORE_CONFIG_PATH" "$ANCHORE_IMAGE" > "$ANCHORE_TEXT" 2>>"$LOG_FILE" || {
+    grype --config "$ANCHORE_CONFIG_PATH" "$ANCHORE_IMAGE" > "$ANCHORE_TEXT" 2>/dev/null || {
       echo "[run_anchore.sh][Anchore] Text output generation failed, continuing..." | tee -a "$LOG_FILE"
     }
     

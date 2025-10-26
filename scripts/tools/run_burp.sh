@@ -29,14 +29,14 @@ if [ -f "/opt/burp/burp-suite.jar" ]; then
   # Note: Burp Suite Community Edition has limited CLI capabilities
   # For now, we'll run basic scan and generate reports
   # Generate JSON report (if supported)
-  if java -jar /opt/burp/burp-suite.jar -c "$BURP_CONFIG_PATH" -u "$ZAP_TARGET" -o "$BURP_JSON" 2>>"$LOG_FILE"; then
+  if java -jar /opt/burp/burp-suite.jar -c "$BURP_CONFIG_PATH" -u "$ZAP_TARGET" -o "$BURP_JSON" 2>/dev/null; then
     echo "[run_burp.sh][Burp] JSON report generation completed." | tee -a "$LOG_FILE"
   else
     echo "[run_burp.sh][Burp] JSON report generation failed." >> "$LOG_FILE"
   fi
   
   # Generate text report (fallback)
-  if java -jar /opt/burp/burp-suite.jar -c "$BURP_CONFIG_PATH" -u "$ZAP_TARGET" -o "$BURP_TEXT" 2>>"$LOG_FILE"; then
+  if java -jar /opt/burp/burp-suite.jar -c "$BURP_CONFIG_PATH" -u "$ZAP_TARGET" -o "$BURP_TEXT" 2>/dev/null; then
     echo "[run_burp.sh][Burp] Text report generation completed." | tee -a "$LOG_FILE"
   else
     echo "[run_burp.sh][Burp] Text report generation failed." >> "$LOG_FILE"
