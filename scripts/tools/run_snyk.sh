@@ -40,11 +40,11 @@ if command -v snyk &>/dev/null; then
   
   # Run Snyk test with JSON output
   echo "[run_snyk.sh][Snyk] Running Snyk test with JSON output..." | tee -a "$LOG_FILE"
-  snyk test $SNYK_AUTH_FLAG --json --output-file="$SNYK_JSON" 2>/dev/null || {
+  snyk test $SNYK_AUTH_FLAG --json --output-file="$SNYK_JSON" >/dev/null 2>&1 || {
     echo "[run_snyk.sh][Snyk] JSON report generation failed, trying alternative approach..." | tee -a "$LOG_FILE"
     
     # Try with different options
-    snyk test $SNYK_AUTH_FLAG --json > "$SNYK_JSON" 2>/dev/null || {
+    snyk test $SNYK_AUTH_FLAG --json > "$SNYK_JSON" 2>&1 || {
       echo "[run_snyk.sh][Snyk] Alternative JSON scan also failed, creating minimal report..." | tee -a "$LOG_FILE"
       echo '{"vulnerabilities": [], "summary": {"total_packages": 0, "vulnerable_packages": 0, "total_vulnerabilities": 0}, "error": "Snyk scan failed"}' > "$SNYK_JSON"
     }
