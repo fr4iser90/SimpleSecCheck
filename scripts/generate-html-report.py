@@ -149,83 +149,109 @@ def main():
             # --- Visual summary with icons/colors for each tool ---
             f.write(generate_visual_summary_section(zap_alerts.get('summary', zap_alerts), semgrep_findings, trivy_vulns, codeql_findings, nuclei_findings, owasp_dc_vulns, safety_findings, snyk_findings, sonarqube_findings, checkov_comprehensive_findings, trufflehog_findings, gitleaks_findings, detect_secrets_findings, npm_audit_findings, wapiti_findings, nikto_findings, burp_findings, kube_hunter_findings, kube_bench_findings, docker_bench_findings, eslint_findings, clair_vulns, anchore_vulns, brakeman_findings, bandit_findings))
 
-            # ZAP Section - pass the full zap_alerts data structure
-            f.write(generate_zap_html_section(zap_alerts, zap_html_path, Path, os))
+            # ZAP Section (only if findings exist)
+            if sum(zap_alerts.get('summary', zap_alerts).values()) > 0:
+                f.write(generate_zap_html_section(zap_alerts, zap_html_path, Path, os))
 
-            # Semgrep Section
-            f.write(generate_semgrep_html_section(semgrep_findings))
+            # Semgrep Section (only if findings exist)
+            if len(semgrep_findings) > 0:
+                f.write(generate_semgrep_html_section(semgrep_findings))
 
-            # Trivy Section
-            f.write(generate_trivy_html_section(trivy_vulns))
+            # Trivy Section (only if findings exist)
+            if len(trivy_vulns) > 0:
+                f.write(generate_trivy_html_section(trivy_vulns))
 
-            # CodeQL Section
-            f.write(generate_codeql_html_section(codeql_findings))
+            # CodeQL Section (only if findings exist)
+            if len(codeql_findings) > 0:
+                f.write(generate_codeql_html_section(codeql_findings))
 
-            # Nuclei Section
-            f.write(generate_nuclei_html_section(nuclei_findings))
+            # Nuclei Section (only if findings exist)
+            if len(nuclei_findings) > 0:
+                f.write(generate_nuclei_html_section(nuclei_findings))
 
-            # OWASP Dependency Check Section
-            f.write(generate_owasp_dependency_check_html_section(owasp_dc_vulns))
+            # OWASP Dependency Check Section (only if findings exist)
+            if len(owasp_dc_vulns) > 0:
+                f.write(generate_owasp_dependency_check_html_section(owasp_dc_vulns))
 
-            # Safety Section
-            f.write(generate_safety_html_section(safety_findings))
+            # Safety Section (only if findings exist)
+            if len(safety_findings) > 0:
+                f.write(generate_safety_html_section(safety_findings))
 
-            # Snyk Section
-            f.write(generate_snyk_html_section(snyk_findings))
+            # Snyk Section (only if findings exist)
+            if len(snyk_findings) > 0:
+                f.write(generate_snyk_html_section(snyk_findings))
 
-            # SonarQube Section
-            f.write(generate_sonarqube_html_section(sonarqube_findings))
+            # SonarQube Section (only if findings exist)
+            if len(sonarqube_findings) > 0:
+                f.write(generate_sonarqube_html_section(sonarqube_findings))
 
-            # Terraform Security (Checkov) Section
-            f.write(generate_terraform_checkov_html_section(checkov_findings))
+            # Terraform Security (Checkov) Section (only if findings exist)
+            if len(checkov_findings) > 0:
+                f.write(generate_terraform_checkov_html_section(checkov_findings))
 
-            # Checkov Comprehensive Infrastructure Security Section
-            f.write(generate_checkov_html_section(checkov_comprehensive_findings))
+            # Checkov Comprehensive Infrastructure Security Section (only if findings exist)
+            if len(checkov_comprehensive_findings) > 0:
+                f.write(generate_checkov_html_section(checkov_comprehensive_findings))
 
-            # TruffleHog Section
-            f.write(generate_trufflehog_html_section(trufflehog_findings))
+            # TruffleHog Section (only if findings exist)
+            if len(trufflehog_findings) > 0:
+                f.write(generate_trufflehog_html_section(trufflehog_findings))
 
-            # GitLeaks Section
-            f.write(generate_gitleaks_html_section(gitleaks_findings))
+            # GitLeaks Section (only if findings exist)
+            if len(gitleaks_findings) > 0:
+                f.write(generate_gitleaks_html_section(gitleaks_findings))
 
-            # Detect-secrets Section
-            f.write(generate_detect_secrets_html_section(detect_secrets_findings))
+            # Detect-secrets Section (only if findings exist)
+            if len(detect_secrets_findings) > 0:
+                f.write(generate_detect_secrets_html_section(detect_secrets_findings))
 
-            # npm audit Section
-            f.write(generate_npm_audit_html_section(npm_audit_findings))
+            # npm audit Section (only if findings exist)
+            if len(npm_audit_findings) > 0:
+                f.write(generate_npm_audit_html_section(npm_audit_findings))
 
-            # Wapiti Section
-            f.write(generate_wapiti_html_section(wapiti_findings))
+            # Wapiti Section (only if findings exist)
+            if len(wapiti_findings) > 0:
+                f.write(generate_wapiti_html_section(wapiti_findings))
 
-            # Nikto Section
-            f.write(generate_nikto_html_section(nikto_findings))
+            # Nikto Section (only if findings exist)
+            if len(nikto_findings) > 0:
+                f.write(generate_nikto_html_section(nikto_findings))
 
-            # Burp Suite Section
-            f.write(generate_burp_html_section(burp_findings))
+            # Burp Suite Section (only if findings exist)
+            if len(burp_findings) > 0:
+                f.write(generate_burp_html_section(burp_findings))
 
-            # Kube-hunter Section
-            f.write(generate_kube_hunter_html_section(kube_hunter_findings))
+            # Kube-hunter Section (only if findings exist)
+            if len(kube_hunter_findings) > 0:
+                f.write(generate_kube_hunter_html_section(kube_hunter_findings))
 
-            # Kube-bench Section
-            f.write(generate_kube_bench_html_section(kube_bench_findings))
+            # Kube-bench Section (only if findings exist)
+            if len(kube_bench_findings) > 0:
+                f.write(generate_kube_bench_html_section(kube_bench_findings))
 
-            # Docker Bench Section
-            f.write(generate_docker_bench_html_section(docker_bench_findings))
+            # Docker Bench Section (only if findings exist)
+            if len(docker_bench_findings) > 0:
+                f.write(generate_docker_bench_html_section(docker_bench_findings))
 
-            # ESLint Section
-            f.write(generate_eslint_html_section(eslint_findings))
+            # ESLint Section (only if findings exist)
+            if len(eslint_findings) > 0:
+                f.write(generate_eslint_html_section(eslint_findings))
 
-            # Clair Section
-            f.write(generate_clair_html_section(clair_vulns))
+            # Clair Section (only if findings exist)
+            if len(clair_vulns) > 0:
+                f.write(generate_clair_html_section(clair_vulns))
 
-            # Anchore Section
-            f.write(generate_anchore_html_section(anchore_vulns))
+            # Anchore Section (only if findings exist)
+            if len(anchore_vulns) > 0:
+                f.write(generate_anchore_html_section(anchore_vulns))
 
-            # Brakeman Section
-            f.write(generate_brakeman_html_section(brakeman_findings))
+            # Brakeman Section (only if findings exist)
+            if len(brakeman_findings) > 0:
+                f.write(generate_brakeman_html_section(brakeman_findings))
 
-            # Bandit Section
-            f.write(generate_bandit_html_section(bandit_findings))
+            # Bandit Section (only if findings exist)
+            if len(bandit_findings) > 0:
+                f.write(generate_bandit_html_section(bandit_findings))
 
             f.write(html_footer())
         debug(f"HTML report successfully written to {OUTPUT_FILE}")

@@ -59,12 +59,11 @@ def generate_docker_bench_html_section(docker_bench_findings):
     html_parts = []
     html_parts.append('<h2>Docker Bench Docker Daemon Compliance Scan</h2>')
     if docker_bench_findings:
-        html_parts.append('<table><tr><th>Check</th><th>Result</th><th>Group</th><th>Description</th></tr>')
+        html_parts.append('<table><tr><th>Check</th><th>Result</th><th>Group</th></tr>')
         for finding in docker_bench_findings:
             test_escaped = html.escape(str(finding.get('test', '')))
             result_escaped = html.escape(str(finding.get('result', '')))
             group_escaped = html.escape(str(finding.get('group', '')))
-            description_escaped = html.escape(str(finding.get('description', '')))
             
             # Color-code result
             result_class = "sev-MEDIUM"
@@ -82,7 +81,7 @@ def generate_docker_bench_html_section(docker_bench_findings):
                 result_class = "sev-LOW"
                 icon = 'ℹ️'
             
-            html_parts.append(f'<tr class="row-{finding.get("result", "WARN").upper()}"><td>{test_escaped}</td><td class="{result_class}">{icon} {result_escaped}</td><td>{group_escaped}</td><td>{description_escaped}</td></tr>')
+            html_parts.append(f'<tr class="row-{finding.get("result", "WARN").upper()}"><td>{test_escaped}</td><td class="{result_class}">{icon} {result_escaped}</td><td>{group_escaped}</td></tr>')
         html_parts.append('</table>')
     else:
         html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No Docker compliance issues found.</div>')
