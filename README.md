@@ -89,6 +89,29 @@ cd SimpleSecCheck
 
 That's it! Results will be available in the `results/` directory.
 
+### Scan Examples
+
+#### 🌐 Website/Domain Scanning
+Scan any public website or application:
+```bash
+./run-docker.sh https://example.com
+```
+![Website Scan Example](assets/1.png)
+
+#### 💻 Local Codebase Scanning
+Scan your local project for security issues:
+```bash
+./run-docker.sh /path/to/your/project
+```
+![Codebase Scan Example](assets/2.png)
+
+#### 🏠 Local Network Scanning
+Scan applications in your local Docker network (e.g., `http://host.docker.internal:8000`):
+```bash
+./run-docker.sh network
+```
+![Local Network Scan Example](assets/3.png)
+
 ### What Gets Scanned
 
 **Code Projects:**
