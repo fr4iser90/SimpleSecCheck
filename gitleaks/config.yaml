@@ -1,0 +1,59 @@
+# GitLeaks Configuration for SimpleSecCheck
+
+# Global settings
+[global]
+  numWorkers = 10
+  verbose = false
+  verboseResults = false
+
+# Rules for different secret types
+[[rules]]
+  description = "Generic API Key"
+  id = "generic-api-key"
+  regex = '''(?i)(api[_-]?key|apikey)\s*[=:]\s*['"]?([a-z0-9]{20,})['"]?'''
+
+[[rules]]
+  description = "AWS Access Key"
+  id = "aws-access-key"
+  regex = '''AKIA[0-9A-Z]{16}'''
+
+[[rules]]
+  description = "GitHub Token"
+  id = "github-token"
+  regex = '''ghp_[0-9a-zA-Z]{36}'''
+
+[[rules]]
+  description = "Private Key"
+  id = "private-key"
+  regex = '''-----BEGIN\s+(?:RSA|EC|DSA)\s+PRIVATE\s+KEY-----'''
+
+[[rules]]
+  description = "JWT Token"
+  id = "jwt-token"
+  regex = '''eyJ[A-Za-z0-9-_=]+\.eyJ[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*'''
+
+[[rules]]
+  description = "Database Password"
+  id = "database-password"
+  regex = '''(?i)(password|pwd|pass)[\s=:]+['"]?([a-zA-Z0-9!@#$%^&*]{8,})['"]?'''
+
+[[rules]]
+  description = "Slack Token"
+  id = "slack-token"
+  regex = '''xox[baprs]-([0-9a-zA-Z-]{10,48})'''
+
+[[rules]]
+  description = "Stripe API Key"
+  id = "stripe-key"
+  regex = '''sk_live_[0-9a-zA-Z]{24,}'''
+
+[[rules]]
+  description = "Google API Key"
+  id = "google-api-key"
+  regex = '''AIza[0-9A-Za-z-_]{35}'''
+
+[[rules]]
+  description = "Mailgun API Key"
+  id = "mailgun-key"
+  regex = '''key-[0-9a-zA-Z]{32}'''
+

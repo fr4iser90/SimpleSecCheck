@@ -25,5 +25,67 @@
     "package_name": "example-lib",
     "package_version_pattern": "1.0.*",
     "reason": "This CVE is for a feature not used in our project, risk accepted after review for v1.0.x."
+  },
+  {
+    "tool": "codeql",
+    "check_id": "example-codeql-rule",
+    "path_pattern": "src/examples/.*",
+    "line_content_pattern": "example_code",
+    "reason": "This is an example CodeQL finding in a demonstration file, not a real security issue."
+  },
+  {
+    "tool": "nuclei",
+    "template_id": "example-nuclei-template",
+    "host_pattern": "localhost.*",
+    "matched_at_pattern": ".*test.*",
+    "reason": "This is an example Nuclei finding on localhost test environment, not a real security issue."
+  },
+  {
+    "tool": "safety",
+    "vulnerability_id": "example-safety-vuln",
+    "package_name": "example-package",
+    "package_version_pattern": "1.0.*",
+    "reason": "This is an example Safety vulnerability in a demonstration package, not a real security issue."
+  },
+  {
+    "tool": "sonarqube",
+    "rule": "example-sonarqube-rule",
+    "path_pattern": "src/examples/.*",
+    "line_content_pattern": "example_code",
+    "reason": "This is an example SonarQube finding in a demonstration file, not a real code quality issue."
+  },
+  {
+    "tool": "checkov",
+    "check_id": "CKV_AWS_79",
+    "resource_pattern": "aws_s3_bucket.*",
+    "reason": "This is an example Checkov finding for S3 bucket encryption, acceptable in non-sensitive environments."
+  },
+  {
+    "tool": "npm_audit",
+    "vulnerability_id": "example-npm-audit-vuln",
+    "package_name": "example-npm-package",
+    "package_version_pattern": "1.0.*",
+    "reason": "This is an example npm audit vulnerability in a demonstration package, not a real security issue."
+  },
+  {
+    "tool": "brakeman",
+    "warning_type": "example-warning-type",
+    "warning_code": "example-warning-code",
+    "path_pattern": "app/examples/.*",
+    "reason": "This is an example Brakeman finding in a demonstration file, not a real Ruby security issue."
+  },
+  {
+    "tool": "bandit",
+    "test_id": "B101",
+    "path_pattern": "tests/.*",
+    "line_content_pattern": "assert.*",
+    "reason": "This is an example Bandit finding in a test file, not a real Python security issue."
+  },
+  {
+    "tool": "anchore",
+    "vulnerability_id": "CVE-2020-12345",
+    "package_name": "example-lib",
+    "package_version_pattern": "1.0.*",
+    "reason": "This Anchore finding is for a feature not used in our project, risk accepted after review."
   }
 ] 

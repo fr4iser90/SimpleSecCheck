@@ -1,0 +1,30 @@
+# Checkov Configuration for SimpleSecCheck
+version: "1.0"
+
+# Scan settings
+scan:
+  # Terraform file patterns to scan
+  file_patterns:
+    - "*.tf"
+    - "*.tfvars"
+    - "*.tfstate"
+  
+  # Severity levels to include
+  severity_levels:
+    - CRITICAL
+    - HIGH
+    - MEDIUM
+    - LOW
+  
+  # Output formats
+  output_formats:
+    - json
+    - text
+  
+  # Framework support
+  frameworks:
+    - terraform
+  
+  # Skip checks by ID (configured via whitelist)
+  skip_checks: []
+

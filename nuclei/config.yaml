@@ -1,0 +1,38 @@
+# Nuclei Configuration for SimpleSecCheck
+# Purpose: Configure Nuclei for web application security scanning
+
+# Template settings
+templates-directory: /SimpleSecCheck/nuclei/templates
+update-templates: true
+
+# Output settings
+json-export: true
+text-export: true
+verbose: true
+
+# Scan settings
+concurrency: 25
+rate-limit: 150
+timeout: 10
+retries: 1
+
+# Template categories to include
+include-tags:
+  - xss
+  - sqli
+  - rce
+  - lfi
+  - ssrf
+  - redirect
+  - cors
+  - misconfiguration
+  - cve
+  - exposure
+
+# Severity levels
+severity:
+  - critical
+  - high
+  - medium
+  - low
+  - info

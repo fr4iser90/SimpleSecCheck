@@ -1,0 +1,17 @@
+scope:
+  exclude:
+    - "logout"
+    - "error"
+  limit: 100
+
+filter:
+  sql: true
+  xss: true
+  xxe: true
+  ssti: true
+  backup: true
+  shellshock: true
+  ssl: true
+  ssrf: true
+  open_redirect: true
+

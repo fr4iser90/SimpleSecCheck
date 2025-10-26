@@ -6,6 +6,7 @@
 # Examples:
 #   ./run-docker.sh /home/user/my-project
 #   ./run-docker.sh https://fr4iser.com
+#   ./run-docker.sh network                              # Scan network/infrastructure
 
 set -e
 
@@ -20,8 +21,14 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="$1"
 
-# Determine if target is a URL or local path
-if [[ "$TARGET" =~ ^https?:// ]]; then
+# Determine scan type
+if [ "$TARGET" = "network" ]; then
+    # Network/infrastructure scan
+    SCAN_TYPE="network"
+    TARGET_PATH=""
+    ZAP_TARGET=""
+    PROJECT_NAME="network-infrastructure"
+elif [[ "$TARGET" =~ ^https?:// ]]; then
     # Website scan
     SCAN_TYPE="website"
     ZAP_TARGET="$TARGET"
@@ -41,6 +48,9 @@ PROJECT_DIR="${PROJECT_NAME}_${TIMESTAMP}"
 
 RESULTS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR"
 LOGS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR/logs"
+
+# Store original for later reference
+OVERALL_SUCCESS=false
 
 # Functions
 log_message() {
@@ -66,6 +76,7 @@ if [ -z "$TARGET" ]; then
     echo "Examples:"
     echo "  $0 /home/user/my-project          # Scan local code"
     echo "  $0 https://fr4iser.com            # Scan website"
+    echo "  $0 network                        # Scan network/infrastructure"
     exit 1
 fi
 
@@ -100,8 +111,32 @@ export TARGET_PATH_IN_CONTAINER="/target"
 export PROJECT_RESULTS_DIR="$RESULTS_DIR"
 export SCAN_TYPE="$SCAN_TYPE"
 
+# Load optional API tokens from .env file if it exists
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    echo -e "${BLUE}[INFO]${NC} Loading API tokens from .env file..."
+    set -a  # Export all variables
+    source "$SCRIPT_DIR/.env"
+    set +a  # Stop automatically exporting
+fi
+
 # Run Docker Compose with the scanner service
-if [ "$SCAN_TYPE" = "code" ]; then
+if [ "$SCAN_TYPE" = "network" ]; then
+    # Network scan: needs docker socket for docker-bench
+    if docker-compose -f docker-compose.yml run --rm \
+        -e SCAN_TYPE="$SCAN_TYPE" \
+        -e ZAP_TARGET="$ZAP_TARGET" \
+        -e TARGET_URL="$ZAP_TARGET" \
+        -v "$RESULTS_DIR:/SimpleSecCheck/results" \
+        -v "$LOGS_DIR:/SimpleSecCheck/logs" \
+        -v /var/run/docker.sock:/var/run/docker.sock:ro \
+        scanner /SimpleSecCheck/scripts/security-check.sh; then
+        log_success "Network security scan completed successfully!"
+        OVERALL_SUCCESS=true
+    else
+        log_warning "Network security scan completed with warnings"
+        OVERALL_SUCCESS=false
+    fi
+elif [ "$SCAN_TYPE" = "code" ]; then
     # Code scan: mount code directory
     if docker-compose -f docker-compose.yml run --rm \
         -e SCAN_TYPE="$SCAN_TYPE" \

@@ -26,15 +26,22 @@ if command -v semgrep &>/dev/null; then
   echo "[run_semgrep.sh][Semgrep] Running DEEP analysis with multiple rule sets..." | tee -a "$LOG_FILE"
   
   # Run with custom rules + auto rules for comprehensive coverage
-  semgrep --config "$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --json -o "$SEMOLINA_JSON" --severity=ERROR --severity=WARNING --severity=INFO 2>>"$LOG_FILE" || {
-    echo "[run_semgrep.sh][Semgrep] JSON report generation failed." >> "$LOG_FILE"
-    # Still try to generate text report
-  }
+  echo "[run_semgrep.sh][Semgrep] Generating JSON report..." | tee -a "$LOG_FILE"
+  if semgrep --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --json -o "$SEMOLINA_JSON" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
+    echo "[run_semgrep.sh][Semgrep] JSON report generated successfully." | tee -a "$LOG_FILE"
+  else
+    EXIT_CODE=$?
+    echo "[run_semgrep.sh][Semgrep][ERROR] JSON report generation failed with exit code $EXIT_CODE" | tee -a "$LOG_FILE"
+  fi
   
   # Generate detailed text report with verbose output
-  semgrep --config "$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --text -o "$SEMOLINA_TEXT" --severity=ERROR --severity=WARNING --severity=INFO --verbose 2>>"$LOG_FILE" || {
-    echo "[run_semgrep.sh][Semgrep] Text report generation failed." >> "$LOG_FILE"
-  }
+  echo "[run_semgrep.sh][Semgrep] Generating text report..." | tee -a "$LOG_FILE"
+  if semgrep --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --text -o "$SEMOLINA_TEXT" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
+    echo "[run_semgrep.sh][Semgrep] Text report generated successfully." | tee -a "$LOG_FILE"
+  else
+    EXIT_CODE=$?
+    echo "[run_semgrep.sh][Semgrep][ERROR] Text report generation failed with exit code $EXIT_CODE" | tee -a "$LOG_FILE"
+  fi
   
   # Additional deep scan with specific security-focused rules
   echo "[run_semgrep.sh][Semgrep] Running additional security-focused deep scan..." | tee -a "$LOG_FILE"

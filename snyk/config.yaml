@@ -1,0 +1,75 @@
+# Snyk Configuration for SimpleSecCheck
+# Configuration file for Snyk vulnerability scanning
+
+# Scan configuration
+scan:
+  # Enable/disable different scan types
+  code: true          # Source code analysis
+  dependencies: true  # Dependency vulnerability scanning
+  container: true     # Container image scanning
+  iac: true          # Infrastructure as Code scanning
+  
+  # Output formats
+  output:
+    json: true
+    text: true
+    html: false
+    
+  # Severity levels to include
+  severity:
+    critical: true
+    high: true
+    medium: true
+    low: true
+    
+  # Language support
+  languages:
+    javascript: true
+    python: true
+    java: true
+    csharp: true
+    go: true
+    php: true
+    ruby: true
+    swift: true
+    kotlin: true
+    scala: true
+    
+  # Package managers
+  package_managers:
+    npm: true
+    yarn: true
+    pip: true
+    pipenv: true
+    poetry: true
+    maven: true
+    gradle: true
+    nuget: true
+    composer: true
+    bundler: true
+    cargo: true
+    go_modules: true
+    
+  # Scan options
+  options:
+    fail_on_issues: false  # Don't fail the build on vulnerabilities
+    ignore_unknown: true   # Ignore unknown vulnerabilities
+    offline: false         # Allow online vulnerability database access
+    
+# Authentication (will be set via environment variables)
+auth:
+  api_token: "${SNYK_TOKEN}"  # Set via SNYK_TOKEN environment variable
+  
+# Reporting
+reporting:
+  # Include detailed vulnerability information
+  detailed: true
+  
+  # Include remediation advice
+  remediation: true
+  
+  # Include license information
+  licenses: true
+  
+  # Include dependency tree
+  dependency_tree: true

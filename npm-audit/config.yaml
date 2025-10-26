@@ -1,0 +1,23 @@
+npm_audit:
+  # Enable or disable npm audit scanning
+  enabled: true
+  
+  # Audit level: low, moderate, high, critical
+  audit_level: "moderate"
+  
+  # Scan all dependencies including devDependencies
+  include_dev_dependencies: true
+  
+  # Fix vulnerabilities automatically (use with caution)
+  auto_fix: false
+  
+  # Ignore specific packages or advisories
+  ignore_advisories: []
+  ignore_packages: []
+  
+  # Output format
+  output_format: "json"
+  
+  # Timeout for npm audit in seconds
+  timeout: 300
+

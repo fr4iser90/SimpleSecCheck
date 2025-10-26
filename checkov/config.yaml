@@ -1,0 +1,49 @@
+# Checkov Configuration for SimpleSecCheck
+# Purpose: Infrastructure security scanning for multiple frameworks
+version: "1.0"
+
+# Scan settings
+scan:
+  # Infrastructure file patterns to scan
+  file_patterns:
+    - "*.tf"
+    - "*.tfvars"
+    - "*.tfstate"
+    - "*.yml"
+    - "*.yaml"
+    - "Dockerfile"
+    - "*.json"
+    - "cloudformation.yaml"
+    - "cloudformation.yml"
+    - "serverless.yml"
+    - "serverless.yaml"
+  
+  # Severity levels to include
+  severity_levels:
+    - CRITICAL
+    - HIGH
+    - MEDIUM
+    - LOW
+  
+  # Output formats
+  output_formats:
+    - json
+    - text
+  
+  # Framework support (Checkov supports multiple frameworks)
+  frameworks:
+    - terraform
+    - cloudformation
+    - kubernetes
+    - docker
+    - arm
+  
+  # Skip checks by ID (configured via whitelist)
+  skip_checks: []
+  
+  # Enable soft fail mode (don't fail on errors)
+  soft_fail: true
+  
+  # Maximum parallel scanning workers
+  max_workers: 10
+

@@ -1,0 +1,52 @@
+# Clair Configuration for SimpleSecCheck
+# Note: Clair requires PostgreSQL database for vulnerability data
+# This is a minimal configuration for Clair container image vulnerability scanning
+
+# Clair version 4+ configuration
+version: 4
+
+# HTTP server configuration
+http_listen_addr: :6060
+introspection_addr: :8089
+
+# Indexer configuration (for scanning layers)
+indexer:
+  connstring: host=localhost port=5432 user=postgres password=postgres dbname=clair sslmode=disable
+  scanlock_retry: 10
+  layer_scan_concurrency: 5
+  migrations: true
+
+# Matcher configuration (for vulnerability matching)
+matcher:
+  connstring: host=localhost port=5432 user=postgres password=postgres dbname=clair sslmode=disable
+  max_conn_pool: 100
+  run: [updater]
+  update_interval: 2h
+  migrations: true
+
+# Notifier configuration (for notifications)
+notifier:
+  attempts: 3
+  renotify_interval: 2h
+  connstring: host=localhost port=5432 user=postgres password=postgres dbname=clair sslmode=disable
+  migrations: true
+
+# Scanner configuration
+scanner:
+  package:
+    - type: dpkg
+    - type: rpm
+  distributions:
+    - version: debian:10
+      updater: python
+    - version: ubuntu:22.04
+      updater: ubuntu
+  name: "string"
+  maximum_layer_size_bytes: 536870912
+
+# Default update configuration
+update:
+  disable_updaters: false
+  disable_updater_sets: []
+  interval: 2h
+

@@ -1,0 +1,19 @@
+# Docker Bench Configuration File
+# SimpleSecCheck - Docker Daemon Compliance Testing
+
+# Benchmark version
+benchmark_version: "20.10"  # Docker benchmark version
+
+# Test configuration
+run_type: "all"  # Options: all, host, daemon, container
+
+# Output format configuration
+json_output: true
+text_output: true
+
+# Compliance level
+compliance_level: "medium"  # Options: low, medium, high, critical
+
+# Docker socket configuration
+docker_socket: "/var/run/docker.sock"
+

@@ -1,0 +1,26 @@
+# Anchore Grype Configuration for SimpleSecCheck
+# Container image vulnerability scanning configuration
+
+# Global configuration
+# Only scan for packages with known vulnerabilities
+fail-on-severity: high  # Only fail on high severity
+
+# Vulnerability database update settings
+# Update vulnerability database on first run
+db:
+  update-url: https://toolbox-data.anchore.io/grype/databases/listing.json
+  cache-dir: /tmp/grype-db
+  auto-update: true
+
+# Output configuration
+output: json
+
+# Check configuration
+check-for-app-update: false
+
+# Scan configuration
+scope: AllLayers  # Scan all layers of the container image
+
+# File matching
+only-fixed: false  # Show both fixed and unfixed vulnerabilities
+

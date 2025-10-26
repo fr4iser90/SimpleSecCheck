@@ -1,0 +1,155 @@
+# SonarQube Configuration for SimpleSecCheck
+# Configuration file for SonarQube code quality and security scanning
+
+# Project configuration
+project:
+  name: SimpleSecCheck-Analysis
+  version: 1.0.0
+  
+# Analysis settings
+analysis:
+  # Source directory
+  source_dir: "/target"
+  
+  # Language detection
+  languages:
+    auto_detect: true
+    supported_languages:
+      - java
+      - python
+      - javascript
+      - typescript
+      - csharp
+      - go
+      - kotlin
+      - php
+      
+  # Quality gate settings
+  quality_gate:
+    # Pass threshold
+    pass_threshold: "default"
+    
+    # Severity levels to report
+    severity_levels:
+      - blocker
+      - critical
+      - major
+      - minor
+      - info
+      
+  # Analysis options
+  options:
+    # Analysis timeout (seconds)
+    timeout: 600
+    
+    # Memory limit (MB)
+    memory_limit: 4096
+    
+    # Thread count
+    threads: 4
+    
+    # Enable concurrent analysis
+    concurrent: true
+
+# Output settings
+output:
+  # Output formats
+  formats:
+    - json
+    - text
+  
+  # Include detailed issues
+  detailed: true
+  
+  # Include code snippets
+  code_snippets: true
+  
+  # Include metrics
+  metrics: true
+  
+# Exclusion patterns
+exclusions:
+  # Exclude patterns
+  patterns:
+    - "*/test*"
+    - "*/tests/*"
+    - "*/__pycache__/*"
+    - "*/node_modules/*"
+    - "*/venv/*"
+    - "*/env/*"
+    - "*/virtualenv/*"
+    - "*/target/*"
+    - "*/build/*"
+    - "*/dist/*"
+
+# Coverage settings
+coverage:
+  # Coverage report locations
+  report_paths:
+    - "**/coverage.xml"
+    - "**/jacoco.xml"
+    
+  # Minimum coverage threshold
+  minimum_coverage: 0.0
+
+# Security scanning settings
+security:
+  # Enable security analysis
+  enable_security: true
+  
+  # Security rules
+  rules:
+    # SonarQube security rules
+    sonarqube_rules: true
+    
+    # Custom security rules
+    custom_rules: []
+    
+  # Vulnerability detection
+  vulnerabilities:
+    # Detect SQL injection
+    sql_injection: true
+    
+    # Detect XSS vulnerabilities
+    xss: true
+    
+    # Detect path traversal
+    path_traversal: true
+    
+    # Detect insecure deserialization
+    deserialization: true
+    
+    # Detect weak cryptography
+    weak_crypto: true
+
+# Code quality settings
+quality:
+  # Code smells detection
+  code_smells: true
+  
+  # Duplication detection
+  duplication: true
+  
+  # Technical debt tracking
+  technical_debt: true
+  
+  # Code complexity metrics
+  complexity: true
+  
+  # Maintainability rating
+  maintainability: true
+
+# Integration settings
+integration:
+  # Exit code on issues found
+  exit_on_issues: false
+  
+  # Include in HTML report
+  include_in_html: true
+  
+  # Generate separate report files
+  generate_files: true
+  
+  # Fail on quality gate
+  fail_on_quality_gate: false
+

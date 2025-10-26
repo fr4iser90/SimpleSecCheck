@@ -1,0 +1,86 @@
+# OWASP Dependency Check Configuration
+# SimpleSecCheck Integration
+
+# Basic scan configuration
+scan:
+  # Enable all analyzers for comprehensive dependency scanning
+  analyzers:
+    - central
+    - nexus
+    - nuspec
+    - nugetconf
+    - assembly
+    - npm
+    - nodejs
+    - bower
+    - composer
+    - python
+    - pip
+    - pipfile
+    - poetry
+    - rubygems
+    - cocoapods
+    - swift
+    - autoconf
+    - cmake
+    - openssl
+    - archive
+    - jar
+    - msbuild
+    - nuget
+    - paket
+    - gradle
+    - sbt
+    - maven
+    - yarn
+    - pnpm
+    - retirejs
+    - ossindex
+    - vulnerability
+    - known_exploited
+
+  # Output formats
+  formats:
+    - JSON
+    - HTML
+    - XML
+    - CSV
+    - SARIF
+
+  # Scan depth and scope
+  depth: 10
+  follow_symlinks: true
+  
+  # Vulnerability database settings
+  database:
+    driver: "org.h2.Driver"
+    connection_string: "jdbc:h2:file:${data.directory}/odc;AUTOCOMMIT=ON;LOCK_TIMEOUT=10000;DB_CLOSE_ON_EXIT=FALSE"
+    
+  # Data directory for cache and database
+  data_directory: "/tmp/owasp-dependency-check-data"
+  
+  # Suppression file (optional)
+  suppression_file: ""
+  
+  # Additional settings
+  fail_on_cvss: 0
+  enable_retired: false
+  enable_experimental: false
+  
+# Report configuration
+report:
+  # Include dependency information
+  include_dependency_graph: true
+  include_license_information: true
+  
+  # Risk assessment
+  risk_assessment:
+    enable: true
+    threshold: 7.0
+    
+# Logging configuration
+logging:
+  level: INFO
+  console_logging: true
+  file_logging: true
+  log_file: "/tmp/owasp-dependency-check.log"
