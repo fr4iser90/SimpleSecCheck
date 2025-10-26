@@ -17,10 +17,14 @@ RUN apt-get update && \
     apt-get install -y python3 python3-pip && \
     ln -sf /usr/bin/python3 /usr/bin/python
 
-# Upgrade pip and install Semgrep
-RUN pip3 install --upgrade pip
-RUN pip3 uninstall -y typing_extensions || true && pip3 install --force-reinstall --no-cache-dir typing_extensions>=4.8.0  # Fix compatibility issue with pydantic_core - force reinstall to ensure latest version
-RUN pip3 install semgrep  # Install latest version (typing_extensions fix above should resolve compatibility)
+# Upgrade pip and install Semgrep with proper dependencies
+RUN pip3 install --upgrade pip setuptools wheel
+# Clean install to avoid conflicts
+RUN pip3 uninstall -y typing_extensions pydantic pydantic_core semgrep || true
+# Install with correct versions - must install pydantic requirements FIRST
+RUN pip3 install --force-reinstall --no-cache-dir "typing_extensions>=4.14.1" && \
+    pip3 install --force-reinstall --no-cache-dir "pydantic>=2.0.0" "pydantic-core>=2.0.0" && \
+    pip3 install semgrep
 RUN pip3 install pyyaml
 RUN pip3 install python-owasp-zap-v2.4
 RUN pip3 install beautifulsoup4
@@ -74,7 +78,8 @@ RUN pip3 install detect-secrets
 RUN pip3 install checkov  # typing_extensions already upgraded above
 
 # Install Wapiti (Web vulnerability scanner)
-RUN pip3 install wapiti3
+RUN pip3 install wapiti3 && \
+    pip3 install --force-reinstall --no-cache-dir "typing_extensions>=4.14.1"
 
 # Install TruffleHog CLI
 RUN export TRUFFLEHOG_URL=$(wget -qO- https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | grep browser_download_url | grep trufflehog.*linux.*amd64.tar.gz | cut -d '"' -f 4) && \

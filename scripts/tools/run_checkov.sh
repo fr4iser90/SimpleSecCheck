@@ -18,6 +18,12 @@ if command -v checkov &>/dev/null; then
   CHECKOV_JSON="$RESULTS_DIR/checkov-comprehensive.json"
   CHECKOV_TEXT="$RESULTS_DIR/checkov-comprehensive.txt"
   
+  # Remove old directory if it exists (from previous failed scans)
+  if [ -d "$CHECKOV_JSON" ]; then
+    rm -rf "$CHECKOV_JSON"
+    echo "[run_checkov.sh][Checkov] Removed old directory at $CHECKOV_JSON" >> "$LOG_FILE"
+  fi
+  
   # Check for infrastructure files (broader than just Terraform)
   INFRA_FILES=()
   
@@ -37,13 +43,16 @@ if command -v checkov &>/dev/null; then
   
   # Generate JSON report for multiple frameworks
   # Note: Not limiting to --framework terraform, using default auto-detection
-  checkov -d "$TARGET_PATH" --output json --output-file "$CHECKOV_JSON" 2>>"$LOG_FILE" || {
+  checkov -d "$TARGET_PATH" --output json --output-file "$CHECKOV_JSON" --quiet 2>>"$LOG_FILE" || {
     echo "[run_checkov.sh][Checkov] JSON report generation failed." >> "$LOG_FILE"
+    # Create minimal JSON if generation fails
+    echo '{"check_type":"","results":{"passed_checks":[],"failed_checks":[],"skipped_checks":[]},"summary":{"passed":0,"failed":0,"skipped":0}}' > "$CHECKOV_JSON"
   }
   
-  # Generate text report
-  checkov -d "$TARGET_PATH" --output cli --output-file "$CHECKOV_TEXT" 2>>"$LOG_FILE" || {
+  # Generate text report (output to stdout, redirect to file)
+  checkov -d "$TARGET_PATH" --output cli --quiet 2>>"$LOG_FILE" > "$CHECKOV_TEXT" || {
     echo "[run_checkov.sh][Checkov] Text report generation failed." >> "$LOG_FILE"
+    echo "Checkov scan completed but no results available." > "$CHECKOV_TEXT"
   }
   
   if [ -f "$CHECKOV_JSON" ] || [ -f "$CHECKOV_TEXT" ]; then

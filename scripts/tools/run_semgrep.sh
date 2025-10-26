@@ -26,8 +26,9 @@ if command -v semgrep &>/dev/null; then
   echo "[run_semgrep.sh][Semgrep] Running DEEP analysis with multiple rule sets..." | tee -a "$LOG_FILE"
   
   # Run with custom rules + auto rules for comprehensive coverage
+  # Disable git to avoid git errors when target is not a git repo
   echo "[run_semgrep.sh][Semgrep] Generating JSON report..." | tee -a "$LOG_FILE"
-  if semgrep --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --json -o "$SEMOLINA_JSON" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
+  if semgrep --disable-version-check --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --json -o "$SEMOLINA_JSON" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
     echo "[run_semgrep.sh][Semgrep] JSON report generated successfully." | tee -a "$LOG_FILE"
   else
     EXIT_CODE=$?
@@ -36,7 +37,7 @@ if command -v semgrep &>/dev/null; then
   
   # Generate detailed text report with verbose output
   echo "[run_semgrep.sh][Semgrep] Generating text report..." | tee -a "$LOG_FILE"
-  if semgrep --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --text -o "$SEMOLINA_TEXT" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
+  if semgrep --disable-version-check --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --text -o "$SEMOLINA_TEXT" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
     echo "[run_semgrep.sh][Semgrep] Text report generated successfully." | tee -a "$LOG_FILE"
   else
     EXIT_CODE=$?
@@ -45,7 +46,7 @@ if command -v semgrep &>/dev/null; then
   
   # Additional deep scan with specific security-focused rules
   echo "[run_semgrep.sh][Semgrep] Running additional security-focused deep scan..." | tee -a "$LOG_FILE"
-  semgrep --config "p/security-audit" --config "p/secrets" --config "p/owasp-top-ten" "$TARGET_PATH" --json -o "$RESULTS_DIR/semgrep-security-deep.json" 2>>"$LOG_FILE" || {
+  semgrep --disable-version-check --config "p/security-audit" --config "p/secrets" --config "p/owasp-top-ten" "$TARGET_PATH" --json -o "$RESULTS_DIR/semgrep-security-deep.json" 2>>"$LOG_FILE" || {
     echo "[run_semgrep.sh][Semgrep] Security deep scan failed." >> "$LOG_FILE"
   }
   

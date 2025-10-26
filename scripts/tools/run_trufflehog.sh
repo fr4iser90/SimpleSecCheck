@@ -25,8 +25,10 @@ if command -v trufflehog &>/dev/null; then
   
   # Run secret detection scan with JSON output (without --config to avoid protobuf issues)
   echo "[run_trufflehog.sh][TruffleHog] Running secret detection scan..." | tee -a "$LOG_FILE"
-  trufflehog filesystem --json "$TARGET_PATH" > "$TRUFFLEHOG_JSON" 2>>"$LOG_FILE" || {
+  trufflehog filesystem --json "$TARGET_PATH" 2>>"$LOG_FILE" | jq -s '.' > "$TRUFFLEHOG_JSON" 2>>"$LOG_FILE" || {
     echo "[run_trufflehog.sh][TruffleHog] JSON report generation failed." >> "$LOG_FILE"
+    # Create empty JSON array as fallback
+    echo '[]' > "$TRUFFLEHOG_JSON"
   }
   
   # Generate text report (without --config to avoid protobuf issues)

@@ -55,7 +55,9 @@ def generate_trufflehog_html_section(trufflehog_findings):
             icon = '🚨' if finding.get('verified', False) else '⚠️'
             detector_escaped = html.escape(str(finding.get("detector", "")))
             verified_escaped = html.escape(str(verified))
-            details_escaped = html.escape(str(finding.get("extra_data", {}).get("message", "")))
+            # Safely handle extra_data - it might be None or missing
+            extra_data = finding.get("extra_data") or {}
+            details_escaped = html.escape(str(extra_data.get("message", "") if isinstance(extra_data, dict) else ""))
             
             html_parts.append(f'<tr><td>{detector_escaped}</td><td>{verified_escaped} {icon}</td><td>{details_escaped}</td></tr>')
         html_parts.append('</table>')
