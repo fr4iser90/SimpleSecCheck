@@ -33,27 +33,27 @@ RUN pip3 install flask
 RUN pip3 install requests  # Added for LLM connector
 
 # Install Trivy (always latest)
-RUN export TRIVY_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep browser_download_url | grep Linux-64bit.deb | cut -d '"' -f 4) && \
+RUN export TRIVY_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r '.assets[] | select(.name | test("Linux-64bit.deb")) | .browser_download_url') && \
     wget -O trivy.deb $TRIVY_URL && \
     dpkg -i trivy.deb && \
     rm trivy.deb
 
 # Install CodeQL CLI
-RUN export CODEQL_URL=$(wget -qO- https://api.github.com/repos/github/codeql-cli-binaries/releases/latest | grep browser_download_url | grep codeql-linux64.zip | cut -d '"' -f 4) && \
+RUN export CODEQL_URL=$(wget -qO- https://api.github.com/repos/github/codeql-cli-binaries/releases/latest | jq -r '.assets[] | select(.name | test("codeql-linux64.zip")) | .browser_download_url') && \
     wget -O codeql.zip $CODEQL_URL && \
     unzip codeql.zip -d /opt && \
     rm codeql.zip && \
     ln -s /opt/codeql/codeql /usr/local/bin/codeql
 
 # Install Nuclei CLI
-RUN export NUCLEI_URL=$(wget -qO- https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep browser_download_url | grep nuclei.*linux.*amd64.zip | cut -d '"' -f 4) && \
+RUN export NUCLEI_URL=$(wget -qO- https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | jq -r '.assets[] | select(.name | test("nuclei.*linux.*amd64.zip")) | .browser_download_url') && \
     wget -O nuclei.zip $NUCLEI_URL && \
     unzip nuclei.zip -d /opt && \
     rm nuclei.zip && \
     ln -s /opt/nuclei /usr/local/bin/nuclei
 
 # Install OWASP Dependency Check
-RUN export OWASP_DC_URL=$(wget -qO- https://api.github.com/repos/jeremylong/DependencyCheck/releases/latest | grep browser_download_url | grep dependency-check-.*release.zip | grep -v ant | grep -v asc | cut -d '"' -f 4) && \
+RUN export OWASP_DC_URL=$(wget -qO- https://api.github.com/repos/jeremylong/DependencyCheck/releases/latest | jq -r '.assets[] | select(.name | test("dependency-check.*release.zip") and (test("ant") | not) and (test("asc") | not)) | .browser_download_url') && \
     wget -O dependency-check.zip $OWASP_DC_URL && \
     unzip dependency-check.zip -d /opt && \
     rm dependency-check.zip && \
@@ -82,14 +82,14 @@ RUN pip3 install wapiti3 && \
     pip3 install --force-reinstall --no-cache-dir "typing_extensions>=4.14.1"
 
 # Install TruffleHog CLI
-RUN export TRUFFLEHOG_URL=$(wget -qO- https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | grep browser_download_url | grep trufflehog.*linux.*amd64.tar.gz | cut -d '"' -f 4) && \
+RUN export TRUFFLEHOG_URL=$(wget -qO- https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | jq -r '.assets[] | select(.name | test("trufflehog.*linux.*amd64.tar.gz")) | .browser_download_url') && \
     wget -O trufflehog.tar.gz $TRUFFLEHOG_URL && \
     tar -xvzf trufflehog.tar.gz -C /opt && \
     rm trufflehog.tar.gz && \
     ln -s /opt/trufflehog /usr/local/bin/trufflehog
 
 # Install GitLeaks CLI
-RUN export GITLEAKS_URL=$(wget -qO- https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep browser_download_url | grep gitleaks.*linux_x64.tar.gz | cut -d '"' -f 4) && \
+RUN export GITLEAKS_URL=$(wget -qO- https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.assets[] | select(.name | test("gitleaks.*linux_x64.tar.gz")) | .browser_download_url') && \
     wget -O gitleaks.tar.gz $GITLEAKS_URL && \
     tar -xvzf gitleaks.tar.gz -C /opt && \
     rm gitleaks.tar.gz && \
@@ -133,7 +133,7 @@ RUN wget https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap_commo
 RUN pip3 install kube-hunter
 
 # Install Kube-bench (Kubernetes compliance testing tool)
-RUN export KUBE_BENCH_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/kube-bench/releases/latest | grep browser_download_url | grep kube-bench.*linux.*amd64.tar.gz | cut -d '"' -f 4) && \
+RUN export KUBE_BENCH_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/kube-bench/releases/latest | jq -r '.assets[] | select(.name | test("kube-bench.*linux.*amd64.tar.gz")) | .browser_download_url') && \
     wget -O kube-bench.tar.gz $KUBE_BENCH_URL && \
     tar -xvzf kube-bench.tar.gz -C /opt && \
     rm kube-bench.tar.gz && \
@@ -230,8 +230,6 @@ RUN mkdir -p /zap/wrk/zap && cp /SimpleSecCheck/zap/baseline.conf /zap/wrk/zap/b
 RUN cp -r /opt/ZAP_2.16.1/* /zap/
 # Symlink zap-x.sh to zap.sh for zap-baseline.py compatibility
 RUN ln -s /zap/zap.sh /zap/zap-x.sh
-
-COPY scripts/webui.js /SimpleSecCheck/results/webui.js
 
 WORKDIR /zap/wrk
 CMD ["bash"]

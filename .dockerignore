@@ -55,4 +55,9 @@ htmlcov/
 # Build artifacts
 build/
 dist/
-*.egg-info/ 
+*.egg-info/
+
+# Runtime data directories (mounted as volumes)
+results/
+logs/
+owasp-dependency-check-data/ 
