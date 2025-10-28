@@ -2,17 +2,18 @@ name: Build and Push Docker Image
 
 # Diese Pipeline startet bei:
 on:
-  push:
-    branches:
-      - main  # Nur bei pushes auf main branch
-    paths:
-      - 'Dockerfile'          # Oder Änderungen am Dockerfile
-      - '.github/workflows/**' # Oder an den Workflows selbst
-      - 'scripts/**'          # Oder an den Scripts
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch:  # Manueller Trigger via GitHub UI
+  # DEAKTIVIERT - Nur lokales Building
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'Dockerfile'
+  #     - '.github/workflows/**'
+  #     - 'scripts/**'
+  # pull_request:
+  #   branches:
+  #     - main
+  workflow_dispatch:  # Nur manuell
 
 # Umgebungsvariablen
 env:

@@ -1,12 +1,12 @@
 services:
   scanner:
-    # Use pre-built image from Docker Hub, or uncomment below to build locally
-    image: fr4iser/simpleseccheck:latest
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
-    #   args:
-    #     VERSION: 1.1.0
+    # LOKALES BUILDING AKTIVIERT
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: 1.1.0
+    # image: fr4iser/simpleseccheck:latest  # Aus Docker Hub (auskommentiert für lokales Building)
     container_name: SimpleSecCheck_scanner_v1.1.0
     volumes:
       - ./results:/SimpleSecCheck/results

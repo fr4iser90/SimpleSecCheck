@@ -205,7 +205,7 @@ nano .env  # Or use your favorite editor
 
 ## 🔍 Analysis Details
 
-### Code Analysis Tools (26 Integrated Security Tools)
+### Code Analysis Tools (28 Integrated Security Tools)
 **Static Code Analysis:**
 - **Semgrep:** Static code analysis with security-focused rules
 - **CodeQL:** Advanced code analysis and vulnerability detection
@@ -236,7 +236,10 @@ nano .env  # Or use your favorite editor
 
 **Mobile App Security:**
 - **React Native Security:** React Native-specific security rules for AsyncStorage, WebView, deep linking, and more
+- **Android Manifest Scanner:** Automatically detects and scans AndroidManifest.xml files for dangerous permissions, cleartext traffic, backup settings, and debug configurations
+- **iOS Plist Scanner:** Automatically detects and scans Info.plist files for App Transport Security (ATS) misconfigurations, arbitrary loads, and security settings
 - JavaScript/TypeScript scanning works on React Native code
+- CodeQL supports Kotlin, Swift, and Objective-C for native mobile code analysis
 - npm audit for React Native dependencies
 
 ### Web Application Security Tools

@@ -246,7 +246,7 @@ def html_footer():
     # Content of html_footer function (lines 299-300 from the original generate-html-report.py)
     return '</div>\n</body></html>'
 
-def generate_visual_summary_section(zap_alerts, semgrep_findings, trivy_vulns, codeql_findings, nuclei_findings, owasp_dc_vulns, safety_findings, snyk_findings, sonarqube_findings, checkov_findings, trufflehog_findings, gitleaks_findings, detect_secrets_findings, npm_audit_findings, wapiti_findings, nikto_findings, burp_findings, kube_hunter_findings, kube_bench_findings, docker_bench_findings, eslint_findings, clair_findings, anchore_vulns, brakeman_findings, bandit_findings):
+def generate_visual_summary_section(zap_alerts, semgrep_findings, trivy_vulns, codeql_findings, nuclei_findings, owasp_dc_vulns, safety_findings, snyk_findings, sonarqube_findings, checkov_findings, trufflehog_findings, gitleaks_findings, detect_secrets_findings, npm_audit_findings, wapiti_findings, nikto_findings, burp_findings, kube_hunter_findings, kube_bench_findings, docker_bench_findings, eslint_findings, clair_findings, anchore_vulns, brakeman_findings, bandit_findings, android_findings=None, ios_findings=None):
     html_parts = []
     # ZAP Visual Summary
     zap_icon = '✅' if sum(zap_alerts.values()) == 0 else ''
@@ -644,9 +644,31 @@ def generate_visual_summary_section(zap_alerts, semgrep_findings, trivy_vulns, c
             bandit_icon = 'ℹ️'
         html_parts.append(f'<div class="tool-summary"><span class="icon sev-{"HIGH" if bandit_counts["HIGH"]>0 else ("MEDIUM" if bandit_counts["MEDIUM"]>0 else ("LOW" if bandit_counts["LOW"]>0 else "PASSED"))}">{bandit_icon}</span> <b>Bandit:</b> {bandit_counts["HIGH"]} High, {bandit_counts["MEDIUM"]} Medium, {bandit_counts["LOW"]} Low</div>')
     
+    # Android Manifest Visual Summary
+    if android_findings:
+        android_icon = '✅' if android_findings.get('total_issues', 0) == 0 else ''
+        if android_findings.get('high', 0) > 0:
+            android_icon = '🚨'
+        elif android_findings.get('medium', 0) > 0:
+            android_icon = '⚠️'
+        elif android_findings.get('info', 0) > 0:
+            android_icon = 'ℹ️'
+        html_parts.append(f'<div class="tool-summary"><span class="icon sev-{"HIGH" if android_findings.get("high", 0)>0 else ("MEDIUM" if android_findings.get("medium", 0)>0 else ("INFO" if android_findings.get("info", 0)>0 else "PASSED"))}">{android_icon}</span> <b>Android Manifest:</b> {android_findings.get("high", 0)} High, {android_findings.get("medium", 0)} Medium, {android_findings.get("info", 0)} Info</div>')
+    
+    # iOS Plist Visual Summary
+    if ios_findings:
+        ios_icon = '✅' if ios_findings.get('total_issues', 0) == 0 else ''
+        if ios_findings.get('high', 0) > 0:
+            ios_icon = '🚨'
+        elif ios_findings.get('medium', 0) > 0:
+            ios_icon = '⚠️'
+        elif ios_findings.get('info', 0) > 0:
+            ios_icon = 'ℹ️'
+        html_parts.append(f'<div class="tool-summary"><span class="icon sev-{"HIGH" if ios_findings.get("high", 0)>0 else ("MEDIUM" if ios_findings.get("medium", 0)>0 else ("INFO" if ios_findings.get("info", 0)>0 else "PASSED"))}">{ios_icon}</span> <b>iOS Plist:</b> {ios_findings.get("high", 0)} High, {ios_findings.get("medium", 0)} Medium, {ios_findings.get("info", 0)} Info</div>')
+    
     return "".join(html_parts)
 
-def generate_overall_summary_and_links_section(zap_alerts, semgrep_findings, trivy_vulns, codeql_findings, nuclei_findings, owasp_dc_vulns, safety_findings, snyk_findings, sonarqube_findings, checkov_findings, trufflehog_findings, gitleaks_findings, detect_secrets_findings, npm_audit_findings, wapiti_findings, nikto_findings, burp_findings, kube_hunter_findings, kube_bench_findings, docker_bench_findings, eslint_findings, clair_findings, anchore_vulns, brakeman_findings, bandit_findings, results_dir, path_module, os_module):
+def generate_overall_summary_and_links_section(zap_alerts, semgrep_findings, trivy_vulns, codeql_findings, nuclei_findings, owasp_dc_vulns, safety_findings, snyk_findings, sonarqube_findings, checkov_findings, trufflehog_findings, gitleaks_findings, detect_secrets_findings, npm_audit_findings, wapiti_findings, nikto_findings, burp_findings, kube_hunter_findings, kube_bench_findings, docker_bench_findings, eslint_findings, clair_findings, anchore_vulns, brakeman_findings, bandit_findings, results_dir, path_module, os_module, android_findings=None, ios_findings=None):
     html_parts = []
     html_parts.append('<h2>Overall Summary</h2>\n')
     html_parts.append('<ul>')
@@ -675,9 +697,13 @@ def generate_overall_summary_and_links_section(zap_alerts, semgrep_findings, tri
     html_parts.append(f'<li>Anchore Container Image Security Scan: {len(anchore_vulns)}</li>')
     html_parts.append(f'<li>Brakeman Ruby on Rails Security Scan: {len(brakeman_findings)}</li>')
     html_parts.append(f'<li>Bandit Python Code Security Scan: {len(bandit_findings)}</li>')
+    if android_findings:
+        html_parts.append(f'<li>Android Manifest Security Scan: {android_findings.get("total_issues", 0)} issues</li>')
+    if ios_findings:
+        html_parts.append(f'<li>iOS Plist Security Scan: {ios_findings.get("total_issues", 0)} issues</li>')
     html_parts.append('</ul>')
     html_parts.append('<h2>Links to Raw Reports</h2>\n<ul>')
-    for name in ['zap-report.html', 'zap-report.xml', 'semgrep.json', 'trivy.json', 'codeql.json', 'nuclei.json', 'owasp-dependency-check.json', 'owasp-dependency-check.html', 'owasp-dependency-check.xml', 'codeql.sarif', 'semgrep.txt', 'trivy.txt', 'codeql.txt', 'nuclei.txt', 'safety.json', 'safety.txt', 'snyk.json', 'snyk.txt', 'sonarqube.json', 'sonarqube.txt', 'checkov.json', 'checkov.txt', 'trufflehog.json', 'trufflehog.txt', 'gitleaks.json', 'gitleaks.txt', 'npm-audit.json', 'npm-audit.txt', 'wapiti.json', 'wapiti.txt', 'nikto.json', 'nikto.txt', 'kube-hunter.json', 'kube-hunter.txt', 'kube-bench.json', 'kube-bench.txt', 'docker-bench.json', 'docker-bench.txt', 'eslint.json', 'eslint.txt', 'clair.json', 'clair.txt', 'anchore.json', 'anchore.txt', 'brakeman.json', 'brakeman.txt', 'bandit.json', 'bandit.txt']:
+    for name in ['zap-report.html', 'zap-report.xml', 'semgrep.json', 'trivy.json', 'codeql.json', 'nuclei.json', 'owasp-dependency-check.json', 'owasp-dependency-check.html', 'owasp-dependency-check.xml', 'codeql.sarif', 'semgrep.txt', 'trivy.txt', 'codeql.txt', 'nuclei.txt', 'safety.json', 'safety.txt', 'snyk.json', 'snyk.txt', 'sonarqube.json', 'sonarqube.txt', 'checkov.json', 'checkov.txt', 'trufflehog.json', 'trufflehog.txt', 'gitleaks.json', 'gitleaks.txt', 'npm-audit.json', 'npm-audit.txt', 'wapiti.json', 'wapiti.txt', 'nikto.json', 'nikto.txt', 'kube-hunter.json', 'kube-hunter.txt', 'kube-bench.json', 'kube-bench.txt', 'docker-bench.json', 'docker-bench.txt', 'eslint.json', 'eslint.txt', 'clair.json', 'clair.txt', 'anchore.json', 'anchore.txt', 'brakeman.json', 'brakeman.txt', 'bandit.json', 'bandit.txt', 'android-manifest.json', 'android-manifest.txt', 'ios-plist.json', 'ios-plist.txt']:
         # Path_module and os_module are used here for consistency, though os_module.path.join is the key part
         path = os_module.path.join(results_dir, name)
         if Path_module(path).exists():

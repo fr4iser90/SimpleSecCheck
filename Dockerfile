@@ -153,9 +153,33 @@ RUN git clone https://github.com/docker/docker-bench-security.git /opt/docker-be
 # Install Anchore Grype (container image vulnerability scanner)
 RUN curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
 
-# Copy SimpleSecCheck files
+# Copy SimpleSecCheck files FIRST (as root)
 COPY . /SimpleSecCheck
 WORKDIR /SimpleSecCheck
+
+# Create required directories and set permissions
+RUN mkdir -p /SimpleSecCheck/results /SimpleSecCheck/logs /SimpleSecCheck/owasp-dependency-check-data /zap/wrk && \
+    mkdir -p /zap/wrk/zap && \
+    cp /SimpleSecCheck/zap/baseline.conf /zap/wrk/zap/baseline.conf && \
+    cp -r /opt/ZAP_2.16.1/* /zap/ && \
+    ln -sf /zap/zap.sh /zap/zap-x.sh
+
+# Create non-root user (1000:1000 matches typical host user)
+RUN useradd -m -u 1000 -s /bin/bash scanner && \
+    (groupadd -g 999 docker || true) && \
+    usermod -aG docker scanner && \
+    chown -R scanner:scanner /SimpleSecCheck /zap
+
+# Make scripts executable
+RUN chmod +x /SimpleSecCheck/scripts/security-check.sh
+RUN chmod +x /SimpleSecCheck/scripts/configure.py
+
+# Install sudo and configure passwordless sudo for scanner user
+RUN apt-get install -y sudo && \
+    echo 'scanner ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+
+# Switch to non-root user
+USER scanner
 
 # Set CodeQL environment variables
 ENV CODEQL_HOME=/opt/codeql
@@ -224,18 +248,6 @@ ENV BANDIT_CONFIG_PATH=/SimpleSecCheck/bandit/config.yaml
 
 # Set Anchore environment variables
 ENV ANCHORE_CONFIG_PATH=/SimpleSecCheck/anchore/config.yaml
-
-# Make scripts executable
-RUN chmod +x scripts/security-check.sh
-RUN chmod +x scripts/configure.py
-
-RUN mkdir -p /zap/wrk
-RUN mkdir -p /zap/wrk/zap && cp /SimpleSecCheck/zap/baseline.conf /zap/wrk/zap/baseline.conf
-
-# Copy ZAP files to /zap for zap-baseline.py compatibility
-RUN cp -r /opt/ZAP_2.16.1/* /zap/
-# Symlink zap-x.sh to zap.sh for zap-baseline.py compatibility
-RUN ln -s /zap/zap.sh /zap/zap-x.sh
 
 WORKDIR /zap/wrk
 CMD ["bash"]
