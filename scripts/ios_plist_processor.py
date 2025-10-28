@@ -10,39 +10,37 @@ from pathlib import Path
 
 def ios_plist_summary(json_path):
     """
-    Extract summary from iOS plist JSON.
+    Extract findings from iOS plist JSON.
     
     Args:
         json_path: Path to the iOS plist JSON file
         
     Returns:
-        Summary dictionary with counts
+        List of finding dictionaries with 'severity' field for executive summary
     """
     if not json_path or not Path(json_path).exists():
-        return {"total_issues": 0, "high": 0, "medium": 0, "info": 0}
+        return []
     
     try:
         with open(json_path) as f:
             data = json.load(f)
         
-        issues_by_severity = {"HIGH": 0, "MEDIUM": 0, "INFO": 0}
+        findings = []
         
-        for finding in data.get("findings", []):
-            for issue in finding.get("security_issues", []):
-                severity = issue.get("severity", "INFO")
-                issues_by_severity[severity] = issues_by_severity.get(severity, 0) + 1
+        # Convert each security issue into a finding for executive summary
+        for plist_file in data.get("findings", []):
+            for issue in plist_file.get("security_issues", []):
+                finding = {
+                    "severity": issue.get("severity", "INFO"),
+                    "type": issue.get("type", "unknown"),
+                    "description": issue.get("description", ""),
+                    "file": plist_file.get("file", "unknown")
+                }
+                findings.append(finding)
         
-        total = sum(issues_by_severity.values())
-        
-        return {
-            "total_issues": total,
-            "high": issues_by_severity.get("HIGH", 0),
-            "medium": issues_by_severity.get("MEDIUM", 0),
-            "info": issues_by_severity.get("INFO", 0),
-            "file_count": data.get("file_count", 0)
-        }
+        return findings
     except Exception:
-        return {"total_issues": 0, "high": 0, "medium": 0, "info": 0}
+        return []
 
 
 def generate_ios_plist_html_section(findings):
