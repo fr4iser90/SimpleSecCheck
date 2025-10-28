@@ -187,6 +187,8 @@ def main():
             'Anchore': anchore_vulns,
             'Brakeman': brakeman_findings,
             'Bandit': bandit_findings,
+            'Android': android_findings_summary,
+            'iOS': ios_findings_summary,
         }
         
         # Determine which tools were executed

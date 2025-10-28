@@ -169,7 +169,7 @@ if [ $ANDROID_PY_EXIT -eq 0 ]; then
     echo "[run_android_manifest_scanner.sh][Android] JSON report: $ANDROID_JSON" | tee -a "$LOG_FILE"
     
     # Generate text report
-    python3 << 'EOFTEXT' > "$ANDROID_TEXT" 2>>"$LOG_FILE"
+    python3 << 'EOFTEXT' - "$ANDROID_JSON" > "$ANDROID_TEXT" 2>>"$LOG_FILE"
 import json
 import sys
 
@@ -190,7 +190,7 @@ for finding in data.get('findings', []):
         print(f"\n  [{issue['severity']}] {issue['type']}")
         print(f"    Description: {issue['description']}")
         print(f"    Recommendation: {issue['recommendation']}")
-EOFTEXT "$ANDROID_JSON"
+EOFTEXT
     
     echo "[Android] Manifest scan complete." >> "$SUMMARY_TXT"
     exit 0

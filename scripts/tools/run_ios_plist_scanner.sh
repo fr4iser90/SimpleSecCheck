@@ -175,7 +175,7 @@ if [ $IOS_PY_EXIT -eq 0 ]; then
     echo "[run_ios_plist_scanner.sh][iOS] JSON report: $IOS_JSON" | tee -a "$LOG_FILE"
     
     # Generate text report
-    python3 << 'EOFTEXT' > "$IOS_TEXT" 2>>"$LOG_FILE"
+    python3 << 'EOFTEXT' - "$IOS_JSON" > "$IOS_TEXT" 2>>"$LOG_FILE"
 import json
 import sys
 
@@ -196,7 +196,7 @@ for finding in data.get('findings', []):
         print(f"\n  [{issue['severity']}] {issue['type']}")
         print(f"    Description: {issue['description']}")
         print(f"    Recommendation: {issue['recommendation']}")
-EOFTEXT "$IOS_JSON"
+EOFTEXT
     
     echo "[iOS] Plist scan complete." >> "$SUMMARY_TXT"
     exit 0
