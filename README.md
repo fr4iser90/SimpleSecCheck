@@ -105,6 +105,13 @@ docker run --rm \
   -v /path/to/your/project:/target:ro \
   -v $(pwd)/results:/SimpleSecCheck/results \
   -v $(pwd)/logs:/SimpleSecCheck/logs \
+  -v $(pwd)/conf:/SimpleSecCheck/conf \
+  -v $(pwd)/rules:/SimpleSecCheck/rules \
+  -v $(pwd)/trivy:/SimpleSecCheck/trivy \
+  -v $(pwd)/anchore:/SimpleSecCheck/anchore \
+  -v $(pwd)/zap:/SimpleSecCheck/zap \
+  -v $(pwd)/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   -e SCAN_TYPE=code \
   fr4iser/simpleseccheck:latest \
   /SimpleSecCheck/scripts/security-check.sh
@@ -114,6 +121,10 @@ docker run --rm \
   -e SCAN_TYPE=website \
   -e ZAP_TARGET=https://example.com \
   -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/logs:/SimpleSecCheck/logs \
+  -v $(pwd)/conf:/SimpleSecCheck/conf \
+  -v $(pwd)/rules:/SimpleSecCheck/rules \
+  -v $(pwd)/zap:/SimpleSecCheck/zap \
   fr4iser/simpleseccheck:latest \
   /SimpleSecCheck/scripts/security-check.sh
 ```
