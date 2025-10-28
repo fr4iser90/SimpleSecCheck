@@ -127,6 +127,17 @@ docker run --rm \
   -v $(pwd)/zap:/SimpleSecCheck/zap \
   fr4iser/simpleseccheck:latest \
   /SimpleSecCheck/scripts/security-check.sh
+
+# Scan local network/Docker infrastructure
+docker run --rm \
+  -e SCAN_TYPE=network \
+  -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/logs:/SimpleSecCheck/logs \
+  -v $(pwd)/conf:/SimpleSecCheck/conf \
+  -v $(pwd)/rules:/SimpleSecCheck/rules \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  fr4iser/simpleseccheck:latest \
+  /SimpleSecCheck/scripts/security-check.sh
 ```
 
 ### Scan Examples
@@ -260,10 +271,15 @@ nano .env  # Or use your favorite editor
 
 After scanning, results are available in the `results/[project]_[timestamp]/` directory:
 
+- **Code scans:** `results/[ProjectName]_[timestamp]/` (e.g., `SimplePDFEditor_20251028_175751/`)
+- **Website scans:** `results/[domain]_[timestamp]/`
+- **Network scans:** `results/network-infrastructure_[timestamp]/`
+
+**Results files:**
 - **`security-summary.html`** - Unified HTML report with all findings
 - **`semgrep.json`** - Detailed code analysis results (code scans only)
 - **`trivy.json`** - Dependency and vulnerability scan results (code scans only)
-- **`docker-bench.json`** - Docker daemon compliance results (code scans only)
+- **`docker-bench.json`** - Docker daemon compliance results (network scans only)
 - **`zap-report.xml`** - Web application vulnerability report (web scans only)
 - **`security-check.log`** - Complete scan log
 
