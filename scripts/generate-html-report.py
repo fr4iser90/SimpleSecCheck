@@ -36,6 +36,8 @@ from scripts.anchore_processor import anchore_summary, generate_anchore_html_sec
 from scripts.burp_processor import burp_summary, generate_burp_html_section
 from scripts.brakeman_processor import brakeman_summary, generate_brakeman_html_section
 from scripts.bandit_processor import bandit_summary, generate_bandit_html_section
+from scripts.android_manifest_processor import android_manifest_summary, generate_android_manifest_html
+from scripts.ios_plist_processor import ios_plist_summary, generate_ios_plist_html
 
 RESULTS_DIR = os.environ.get('RESULTS_DIR', '/SimpleSecCheck/results')
 OUTPUT_FILE = os.environ.get('OUTPUT_FILE', os.path.join(RESULTS_DIR, 'security-summary.html'))
@@ -98,6 +100,8 @@ def main():
     anchore_json_path = os.path.join(RESULTS_DIR, 'anchore.json')
     brakeman_json_path = os.path.join(RESULTS_DIR, 'brakeman.json')
     bandit_json_path = os.path.join(RESULTS_DIR, 'bandit.json')
+    android_manifest_json_path = os.path.join(RESULTS_DIR, 'android-manifest.json')
+    ios_plist_json_path = os.path.join(RESULTS_DIR, 'ios-plist.json')
 
     semgrep_json = read_json(semgrep_json_path)
     trivy_json = read_json(trivy_json_path)
@@ -149,6 +153,8 @@ def main():
     anchore_vulns = anchore_summary(anchore_json)
     brakeman_findings = brakeman_summary(brakeman_json)
     bandit_findings = bandit_summary(read_json(bandit_json_path))
+    android_findings_summary = android_manifest_summary(android_manifest_json_path)
+    ios_findings_summary = ios_plist_summary(ios_plist_json_path)
 
     try:
         with open(OUTPUT_FILE, 'w') as f:
@@ -159,7 +165,7 @@ def main():
             f.write('''\n<!-- WebUI Controls -->\n<div style="margin: 1em 0;">\n  <button id="scan-btn">Jetzt neuen Scan starten</button>\n  <button id="refresh-status-btn">Status aktualisieren</button>\n  <span id="scan-status" style="margin-left:1em; color: #007bff;">Status wird geladen...</span>\n</div>\n<!-- Hinweis: Scan-Status und Trigger laufen über Port 9100 (Watchdog) -->\n''')
 
             # --- Visual summary with icons/colors for each tool ---
-            f.write(generate_visual_summary_section(zap_alerts.get('summary', zap_alerts), semgrep_findings, trivy_vulns, codeql_findings, nuclei_findings, owasp_dc_vulns, safety_findings, snyk_findings, sonarqube_findings, checkov_comprehensive_findings, trufflehog_findings, gitleaks_findings, detect_secrets_findings, npm_audit_findings, wapiti_findings, nikto_findings, burp_findings, kube_hunter_findings, kube_bench_findings, docker_bench_findings, eslint_findings, clair_vulns, anchore_vulns, brakeman_findings, bandit_findings))
+            f.write(generate_visual_summary_section(zap_alerts.get('summary', zap_alerts), semgrep_findings, trivy_vulns, codeql_findings, nuclei_findings, owasp_dc_vulns, safety_findings, snyk_findings, sonarqube_findings, checkov_comprehensive_findings, trufflehog_findings, gitleaks_findings, detect_secrets_findings, npm_audit_findings, wapiti_findings, nikto_findings, burp_findings, kube_hunter_findings, kube_bench_findings, docker_bench_findings, eslint_findings, clair_vulns, anchore_vulns, brakeman_findings, bandit_findings, android_findings_summary, ios_findings_summary))
 
             # ZAP Section (only if findings exist)
             if sum(zap_alerts.get('summary', zap_alerts).values()) > 0:
@@ -264,6 +270,16 @@ def main():
             # Bandit Section (only if findings exist)
             if len(bandit_findings) > 0:
                 f.write(generate_bandit_html_section(bandit_findings))
+
+            # Android Manifest Section (only if findings exist)
+            android_html = generate_android_manifest_html(android_manifest_json_path)
+            if android_html:
+                f.write(android_html)
+
+            # iOS Plist Section (only if findings exist)
+            ios_html = generate_ios_plist_html(ios_plist_json_path)
+            if ios_html:
+                f.write(ios_html)
 
             f.write(html_footer())
         debug(f"HTML report successfully written to {OUTPUT_FILE}")

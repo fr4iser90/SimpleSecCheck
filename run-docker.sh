@@ -126,6 +126,7 @@ if [ "$SCAN_TYPE" = "network" ]; then
         -e SCAN_TYPE="$SCAN_TYPE" \
         -e ZAP_TARGET="$ZAP_TARGET" \
         -e TARGET_URL="$ZAP_TARGET" \
+        -e PROJECT_RESULTS_DIR="$RESULTS_DIR" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
         -v /var/run/docker.sock:/var/run/docker.sock:ro \
@@ -142,6 +143,7 @@ elif [ "$SCAN_TYPE" = "code" ]; then
         -e SCAN_TYPE="$SCAN_TYPE" \
         -e ZAP_TARGET="$ZAP_TARGET" \
         -e TARGET_URL="$ZAP_TARGET" \
+        -e PROJECT_RESULTS_DIR="$RESULTS_DIR" \
         -v "$TARGET_PATH:/target:ro" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
@@ -158,6 +160,7 @@ else
         -e SCAN_TYPE="$SCAN_TYPE" \
         -e ZAP_TARGET="$ZAP_TARGET" \
         -e TARGET_URL="$ZAP_TARGET" \
+        -e PROJECT_RESULTS_DIR="$RESULTS_DIR" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
         scanner /SimpleSecCheck/scripts/security-check.sh; then

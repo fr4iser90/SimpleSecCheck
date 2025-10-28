@@ -34,13 +34,17 @@ if command -v codeql &>/dev/null; then
   if [ -z "$DETECTED_LANGUAGES" ]; then
     echo "[run_codeql.sh][CodeQL] Auto-detection failed, trying common languages..." | tee -a "$LOG_FILE"
     # Try common languages if auto-detection fails
-    if find "$TARGET_PATH" -name "*.py" -o -name "*.js" -o -name "*.java" -o -name "*.cpp" -o -name "*.c" -o -name "*.cs" -o -name "*.go" | head -1 | grep -q .; then
+    if find "$TARGET_PATH" -name "*.py" -o -name "*.js" -o -name "*.java" -o -name "*.cpp" -o -name "*.c" -o -name "*.cs" -o -name "*.go" -o -name "*.kt" -o -name "*.swift" -o -name "*.m" | head -1 | grep -q .; then
       if find "$TARGET_PATH" -name "*.py" | head -1 | grep -q .; then DETECTED_LANGUAGES="python"; fi
       if find "$TARGET_PATH" -name "*.js" -o -name "*.ts" | head -1 | grep -q .; then DETECTED_LANGUAGES="$DETECTED_LANGUAGES javascript"; fi
       if find "$TARGET_PATH" -name "*.java" | head -1 | grep -q .; then DETECTED_LANGUAGES="$DETECTED_LANGUAGES java"; fi
       if find "$TARGET_PATH" -name "*.cpp" -o -name "*.c" -o -name "*.h" | head -1 | grep -q .; then DETECTED_LANGUAGES="$DETECTED_LANGUAGES cpp"; fi
       if find "$TARGET_PATH" -name "*.cs" | head -1 | grep -q .; then DETECTED_LANGUAGES="$DETECTED_LANGUAGES csharp"; fi
       if find "$TARGET_PATH" -name "*.go" | head -1 | grep -q .; then DETECTED_LANGUAGES="$DETECTED_LANGUAGES go"; fi
+      # Add mobile native languages
+      if find "$TARGET_PATH" -name "*.kt" -o -name "*.kts" | head -1 | grep -q .; then DETECTED_LANGUAGES="$DETECTED_LANGUAGES kotlin"; fi
+      if find "$TARGET_PATH" -name "*.swift" | head -1 | grep -q .; then DETECTED_LANGUAGES="$DETECTED_LANGUAGES swift"; fi
+      if find "$TARGET_PATH" -name "*.m" -o -name "*.mm" | head -1 | grep -q .; then DETECTED_LANGUAGES="$DETECTED_LANGUAGES objectivec"; fi
     fi
   fi
   

@@ -76,6 +76,49 @@ cleanup_lock() {
 trap cleanup_lock EXIT SIGINT SIGTERM
 
 # === Main Execution Start ===
+# Check if we need to create a timestamp subdirectory (when running via direct docker run)
+if [ -z "${PROJECT_RESULTS_DIR:-}" ]; then
+    # Running directly via docker run, create timestamp subdirectory
+    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    
+    if [ -n "${PROJECT_NAME:-}" ]; then
+        # PROJECT_NAME explicitly provided
+        SCAN_DIR="${PROJECT_NAME}_${TIMESTAMP}"
+    elif [ "$SCAN_TYPE" = "code" ] && [ -d "$TARGET_PATH_IN_CONTAINER" ]; then
+        # Try to get project name from /proc/self/mountinfo (Docker mount)
+        if [ -f /proc/self/mountinfo ]; then
+            # Format: mount_id parent_id major:minor root mount_point options - filesystem_type mount_source
+            # Example: 2119 2110 259:2 /home/user/project /target ro,relatime - ext4 /dev/...
+            # root (field 4) contains the host path!
+            MOUNT_LINE=$(grep " $TARGET_PATH_IN_CONTAINER " /proc/self/mountinfo 2>/dev/null | tail -1)
+            if [ -n "$MOUNT_LINE" ]; then
+                # Extract field 4 (root directory - the host path)
+                HOST_PATH=$(echo "$MOUNT_LINE" | awk '{print $4}')
+                if [ -n "$HOST_PATH" ] && [ "$HOST_PATH" != "/" ]; then
+                    # Clean up escaped spaces and get basename
+                    HOST_PATH=$(echo "$HOST_PATH" | sed 's/\\040/ /g')
+                    PROJECT_NAME=$(basename "$HOST_PATH" 2>/dev/null || echo "target")
+                else
+                    PROJECT_NAME="target"
+                fi
+            else
+                PROJECT_NAME="target"
+            fi
+        else
+            PROJECT_NAME="target"
+        fi
+        SCAN_DIR="${PROJECT_NAME}_${TIMESTAMP}"
+    else
+        SCAN_DIR="scan_${TIMESTAMP}"
+    fi
+    RESULTS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results/$SCAN_DIR"
+    LOGS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results/$SCAN_DIR/logs"
+    LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log"
+    LOCK_FILE="$RESULTS_DIR_IN_CONTAINER/.scan-running"
+fi
+
+# Fix ownership on mounted volumes to allow scanner user to write
+sudo chown -R scanner:scanner "$RESULTS_DIR_IN_CONTAINER" "$LOGS_DIR_IN_CONTAINER" 2>/dev/null || true
 mkdir -p "$RESULTS_DIR_IN_CONTAINER" "$LOGS_DIR_IN_CONTAINER"
 
 # Initialize log file for this run
@@ -146,6 +189,8 @@ SCANNER_STATUS["npm_audit"]="SKIPPED"
 SCANNER_STATUS["ESLint"]="SKIPPED"
 SCANNER_STATUS["Brakeman"]="SKIPPED"
 SCANNER_STATUS["Bandit"]="SKIPPED"
+SCANNER_STATUS["Android"]="SKIPPED"
+SCANNER_STATUS["iOS"]="SKIPPED"
 SCANNER_STATUS["ZAP"]="SKIPPED"
 SCANNER_STATUS["Nuclei"]="SKIPPED"
 SCANNER_STATUS["Wapiti"]="SKIPPED"
@@ -746,6 +791,62 @@ else
     log_message "--- Skipping Bandit Scan (Website scan mode) ---"
 fi
 
+# Only run native app scanners for code scans with detected native projects
+if [ "$SCAN_TYPE" = "code" ]; then
+    log_message "--- Detecting Native Mobile App Projects ---"
+    IS_NATIVE=$(python3 "$BASE_PROJECT_DIR/scripts/project_detector.py" --target "$TARGET_PATH_IN_CONTAINER" --format json | jq -r '.has_native' 2>/dev/null || echo "false")
+    
+    if [ "$IS_NATIVE" = "true" ]; then
+        log_message "--- Native app project detected, running mobile scanners ---"
+        
+        # Run Android Manifest Scanner
+        log_message "--- Orchestrating Android Manifest Scan ---"
+        export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
+        export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
+        if [ -f "$TOOL_SCRIPTS_DIR/run_android_manifest_scanner.sh" ]; then
+            log_message "Executing $TOOL_SCRIPTS_DIR/run_android_manifest_scanner.sh..."
+            if /bin/bash "$TOOL_SCRIPTS_DIR/run_android_manifest_scanner.sh"; then
+                log_message "run_android_manifest_scanner.sh completed successfully (exit code 0)."
+                SCANNER_STATUS["Android"]="SUCCESS"
+            else
+                EXIT_CODE=$?
+                log_message "[ORCHESTRATOR ERROR] run_android_manifest_scanner.sh failed with exit code $EXIT_CODE."
+                SCANNER_STATUS["Android"]="FAILED"
+                OVERALL_SUCCESS=false
+            fi
+        else
+            log_message "[ORCHESTRATOR ERROR] $TOOL_SCRIPTS_DIR/run_android_manifest_scanner.sh not found!"
+            OVERALL_SUCCESS=false
+        fi
+        log_message "--- Android Manifest Scan Orchestration Finished ---"
+        
+        # Run iOS Plist Scanner
+        log_message "--- Orchestrating iOS Plist Scan ---"
+        export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
+        export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
+        if [ -f "$TOOL_SCRIPTS_DIR/run_ios_plist_scanner.sh" ]; then
+            log_message "Executing $TOOL_SCRIPTS_DIR/run_ios_plist_scanner.sh..."
+            if /bin/bash "$TOOL_SCRIPTS_DIR/run_ios_plist_scanner.sh"; then
+                log_message "run_ios_plist_scanner.sh completed successfully (exit code 0)."
+                SCANNER_STATUS["iOS"]="SUCCESS"
+            else
+                EXIT_CODE=$?
+                log_message "[ORCHESTRATOR ERROR] run_ios_plist_scanner.sh failed with exit code $EXIT_CODE."
+                SCANNER_STATUS["iOS"]="FAILED"
+                OVERALL_SUCCESS=false
+            fi
+        else
+            log_message "[ORCHESTRATOR ERROR] $TOOL_SCRIPTS_DIR/run_ios_plist_scanner.sh not found!"
+            OVERALL_SUCCESS=false
+        fi
+        log_message "--- iOS Plist Scan Orchestration Finished ---"
+    else
+        log_message "--- No native app project detected, skipping mobile scanners ---"
+    fi
+else
+    log_message "--- Skipping Native App Scanners (Website scan mode) ---"
+fi
+
 # Only run ZAP for website scans
 if [ "$SCAN_TYPE" = "website" ]; then
     # Set environment variables specifically for run_zap.sh
@@ -950,6 +1051,8 @@ log_message "  npm_audit:     ${SCANNER_STATUS[npm_audit]:-N/A}"
 log_message "  ESLint:        ${SCANNER_STATUS[ESLint]:-N/A}"
 log_message "  Brakeman:      ${SCANNER_STATUS[Brakeman]:-N/A}"
 log_message "  Bandit:        ${SCANNER_STATUS[Bandit]:-N/A}"
+log_message "  Android:       ${SCANNER_STATUS[Android]:-N/A}"
+log_message "  iOS:           ${SCANNER_STATUS[iOS]:-N/A}"
 log_message "  ZAP:           ${SCANNER_STATUS[ZAP]:-N/A}"
 log_message "  Nuclei:        ${SCANNER_STATUS[Nuclei]:-N/A}"
 log_message "  Wapiti:        ${SCANNER_STATUS[Wapiti]:-N/A}"
