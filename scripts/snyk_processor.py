@@ -9,6 +9,10 @@ def debug(msg):
 def snyk_summary(snyk_json):
     findings = []
     if snyk_json and isinstance(snyk_json, dict):
+        # Check if Snyk was skipped
+        if snyk_json.get('skipped'):
+            return None  # Return None to indicate skipped
+        
         # Handle Snyk JSON format
         vulnerabilities = snyk_json.get('vulnerabilities', [])
         
@@ -47,7 +51,13 @@ def snyk_summary(snyk_json):
 def generate_snyk_html_section(snyk_findings):
     html_parts = []
     html_parts.append('<h2>Snyk Vulnerability Scan</h2>')
-    if snyk_findings:
+    
+    # Check if Snyk was skipped
+    if snyk_findings is None:
+        html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">⏭️</span> Snyk scan was skipped. Set SNYK_TOKEN environment variable to enable Snyk vulnerability scanning.</div>')
+        return "".join(html_parts)
+    
+    if snyk_findings and len(snyk_findings) > 0:
         html_parts.append('<table><tr><th>Package</th><th>Version</th><th>Vulnerability ID</th><th>Severity</th><th>Title</th><th>CVSS Score</th></tr>')
         for finding in snyk_findings:
             sev = finding['severity'].upper()

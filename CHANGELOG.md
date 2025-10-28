@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2025-10-28
+
+### Added
+- **Native Mobile Apps Support** - Android and iOS manifest analysis
+  - Android: Manifest parsing for permissions, exported components, and vulnerabilities
+  - iOS: Plist analysis for security configurations
+  - Automatic detection of mobile app projects
+
+### Enhanced - UI/UX Improvements
+- **Collapsible Tool Categories** - Auto-collapse clean categories, expand only those with issues
+- **Categorized Tool Grid** - Tools grouped by functionality (Static Analysis, Dependencies, Secrets, etc.)
+- **Visual Status Indicators** - Color-coded left borders (Green=Clean, Yellow=Issues, Gray=Skipped)
+- **Compact Tool Cards** - More efficient space usage with modern card-based layout
+- **Tool Status Badges** - Clear indication of findings count
+- **Category Statistics** - Shows count of tools with issues per category
+
+### Fixed
+- **Snyk Scanner** - No longer fails when SNYK_TOKEN is not provided
+  - Gracefully skips with clear message
+  - Prevents authentication errors (401)
+  - Shows skipped status in report
+
+### Removed
+- **LLM Chat Integration** - Removed for single-shot scan compatibility
+- **WebUI Interactive Buttons** - Removed scan/refresh controls for standalone reports
+
+### Changed
+- **Single-Shot Focus** - Reports are now fully standalone with no backend dependencies
+- **Simplified Architecture** - Removed all interactive web features
+
 ## [1.1.0] - 2025-10-26
 
 ### Added - Major Scanner Expansion

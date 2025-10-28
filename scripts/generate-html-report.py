@@ -8,7 +8,7 @@ from xml.etree import ElementTree as ET
 from bs4 import BeautifulSoup
 import traceback
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from scripts.html_utils import html_header, html_footer, generate_visual_summary_section, generate_overall_summary_and_links_section
+from scripts.html_utils import html_header, html_footer, generate_visual_summary_section, generate_overall_summary_and_links_section, generate_executive_summary, generate_tool_status_section
 from scripts.zap_processor import zap_summary, generate_zap_html_section
 from scripts.zap_xml_parser import parse_zap_xml, generate_html_report
 from scripts.semgrep_processor import semgrep_summary, generate_semgrep_html_section
@@ -157,12 +157,58 @@ def main():
     ios_findings_summary = ios_plist_summary(ios_plist_json_path)
 
     try:
+        # Extract ZAP alerts list if available, otherwise use empty list
+        zap_findings_list = zap_alerts.get('alerts', []) if isinstance(zap_alerts, dict) else []
+        
+        # Collect all findings for executive summary
+        all_findings = {
+            'ZAP': zap_findings_list,
+            'Semgrep': semgrep_findings,
+            'Trivy': trivy_vulns,
+            'CodeQL': codeql_findings,
+            'Nuclei': nuclei_findings,
+            'OWASP DC': owasp_dc_vulns,
+            'Safety': safety_findings,
+            'Snyk': snyk_findings,
+            'SonarQube': sonarqube_findings,
+            'Checkov': checkov_comprehensive_findings,
+            'TruffleHog': trufflehog_findings,
+            'GitLeaks': gitleaks_findings,
+            'Detect-secrets': detect_secrets_findings,
+            'npm audit': npm_audit_findings,
+            'Wapiti': wapiti_findings,
+            'Nikto': nikto_findings,
+            'Burp Suite': burp_findings,
+            'Kube-hunter': kube_hunter_findings,
+            'Kube-bench': kube_bench_findings,
+            'Docker Bench': docker_bench_findings,
+            'ESLint': eslint_findings,
+            'Clair': clair_vulns,
+            'Anchore': anchore_vulns,
+            'Brakeman': brakeman_findings,
+            'Bandit': bandit_findings,
+        }
+        
+        # Determine which tools were executed
+        # A tool was executed if it has actual findings or if it was run but found nothing
+        # We need to check if findings exist AND are not None
+        # None means skipped, [] or items means executed but may have no findings
+        executed_tools = {}
+        for tool, findings in all_findings.items():
+            # Tools that have findings (even if empty list) or ZAP with alerts should show as executed
+            if findings is not None:
+                executed_tools[tool] = {'status': 'complete'}
+            elif tool == 'ZAP' and isinstance(zap_alerts, dict):
+                # ZAP returns a dict, not a list
+                executed_tools[tool] = {'status': 'complete'}
+        
         with open(OUTPUT_FILE, 'w') as f:
-            f.write(html_header('SimpleSecCheck Security Scan Summary'))
-            f.write(f'<p><b>Scan Date:</b> {now}<br>')
-            f.write(f'<b>Target:</b> {target}</p>\n')
+            f.write(html_header(f'{target} - {now}'))
             # WebUI Controls Block
-            f.write('''\n<!-- WebUI Controls -->\n<div style="margin: 1em 0;">\n  <button id="scan-btn">Jetzt neuen Scan starten</button>\n  <button id="refresh-status-btn">Status aktualisieren</button>\n  <span id="scan-status" style="margin-left:1em; color: #007bff;">Status wird geladen...</span>\n</div>\n<!-- Hinweis: Scan-Status und Trigger laufen über Port 9100 (Watchdog) -->\n''')
+            # WebUI Controls removed - using single-shot scans only
+
+            # Executive Summary Dashboard
+            f.write(generate_executive_summary(all_findings))
 
             # --- Visual summary with icons/colors for each tool ---
             f.write(generate_visual_summary_section(zap_alerts.get('summary', zap_alerts), semgrep_findings, trivy_vulns, codeql_findings, nuclei_findings, owasp_dc_vulns, safety_findings, snyk_findings, sonarqube_findings, checkov_comprehensive_findings, trufflehog_findings, gitleaks_findings, detect_secrets_findings, npm_audit_findings, wapiti_findings, nikto_findings, burp_findings, kube_hunter_findings, kube_bench_findings, docker_bench_findings, eslint_findings, clair_vulns, anchore_vulns, brakeman_findings, bandit_findings, android_findings_summary, ios_findings_summary))
@@ -195,8 +241,8 @@ def main():
             if len(safety_findings) > 0:
                 f.write(generate_safety_html_section(safety_findings))
 
-            # Snyk Section (only if findings exist)
-            if len(snyk_findings) > 0:
+            # Snyk Section - show if skipped (None) or if there are findings
+            if snyk_findings is None or len(snyk_findings) > 0:
                 f.write(generate_snyk_html_section(snyk_findings))
 
             # SonarQube Section (only if findings exist)
