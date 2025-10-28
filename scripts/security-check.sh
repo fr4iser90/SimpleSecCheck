@@ -15,8 +15,9 @@ TOOL_SCRIPTS_DIR="$ORCHESTRATOR_SCRIPT_DIR/tools"
 # These align with Dockerfile COPY commands and docker-compose.yml volume mounts.
 export BASE_PROJECT_DIR="/SimpleSecCheck" # Base directory where all project files are copied in Docker
 export TARGET_PATH_IN_CONTAINER="/target" # Where host code is mounted for scanning
-export RESULTS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results"
-export LOGS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/logs"
+# RESULTS_DIR_IN_CONTAINER and LOGS_DIR_IN_CONTAINER will be set based on PROJECT_RESULTS_DIR or derived below
+export RESULTS_DIR_IN_CONTAINER="${PROJECT_RESULTS_DIR:-$BASE_PROJECT_DIR/results}"
+export LOGS_DIR_IN_CONTAINER="${PROJECT_LOGS_DIR:-$BASE_PROJECT_DIR/logs}"
 export LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log" # Central log file
 
 # --- Tool Specific Configurations (absolute paths INSIDE container) ---
@@ -59,7 +60,7 @@ export SCAN_TYPE="${SCAN_TYPE:-code}" # Default to code scan
 export TRIVY_SCAN_TYPE="${TRIVY_SCAN_TYPE:-fs}" # Default scan type for Trivy
 
 # --- Script Control & Setup ---
-LOCK_FILE="$RESULTS_DIR_IN_CONTAINER/.scan-running"
+# LOCK_FILE will be set based on RESULTS_DIR_IN_CONTAINER below
 
 # === Script Functions ===
 log_message() {
@@ -84,7 +85,7 @@ if [ -z "${PROJECT_RESULTS_DIR:-}" ]; then
     if [ -n "${PROJECT_NAME:-}" ]; then
         # PROJECT_NAME explicitly provided
         SCAN_DIR="${PROJECT_NAME}_${TIMESTAMP}"
-    elif [ "$SCAN_TYPE" = "code" ] && [ -d "$TARGET_PATH_IN_CONTAINER" ]; then
+    elif [ "$SCAN_TYPE" = "code" ]; then
         # Try to get project name from /proc/self/mountinfo (Docker mount)
         if [ -f /proc/self/mountinfo ]; then
             # Format: mount_id parent_id major:minor root mount_point options - filesystem_type mount_source
@@ -108,6 +109,22 @@ if [ -z "${PROJECT_RESULTS_DIR:-}" ]; then
             PROJECT_NAME="target"
         fi
         SCAN_DIR="${PROJECT_NAME}_${TIMESTAMP}"
+    elif [ "$SCAN_TYPE" = "network" ]; then
+        # Network scan - use network-infrastructure as project name
+        SCAN_DIR="network-infrastructure_${TIMESTAMP}"
+    elif [ "$SCAN_TYPE" = "website" ]; then
+        # Website scan - use domain name from ZAP_TARGET
+        if [ -n "${ZAP_TARGET:-}" ]; then
+            # Extract domain from URL (e.g., http://example.com/path -> example.com)
+            DOMAIN=$(echo "$ZAP_TARGET" | sed -e 's|http://||' -e 's|https://||' -e 's|/.*$||' -e 's|:.*$||')
+            if [ -n "$DOMAIN" ]; then
+                SCAN_DIR="${DOMAIN}_${TIMESTAMP}"
+            else
+                SCAN_DIR="website_${TIMESTAMP}"
+            fi
+        else
+            SCAN_DIR="website_${TIMESTAMP}"
+        fi
     else
         SCAN_DIR="scan_${TIMESTAMP}"
     fi
@@ -116,6 +133,9 @@ if [ -z "${PROJECT_RESULTS_DIR:-}" ]; then
     LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log"
     LOCK_FILE="$RESULTS_DIR_IN_CONTAINER/.scan-running"
 fi
+
+# Set LOCK_FILE if not already set (when PROJECT_RESULTS_DIR was provided)
+LOCK_FILE="${LOCK_FILE:-$RESULTS_DIR_IN_CONTAINER/.scan-running}"
 
 # Fix ownership on mounted volumes to allow scanner user to write
 sudo chown -R scanner:scanner "$RESULTS_DIR_IN_CONTAINER" "$LOGS_DIR_IN_CONTAINER" 2>/dev/null || true
