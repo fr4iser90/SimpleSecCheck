@@ -38,12 +38,18 @@ RUN export TRIVY_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/trivy
     dpkg -i trivy.deb && \
     rm trivy.deb
 
-# Install CodeQL CLI
+# Install CodeQL CLI and Query Packs
 RUN export CODEQL_URL=$(wget -qO- https://api.github.com/repos/github/codeql-cli-binaries/releases/latest | jq -r '.assets[] | select(.name | test("codeql-linux64.zip")) | .browser_download_url') && \
     wget -O codeql.zip $CODEQL_URL && \
     unzip codeql.zip -d /opt && \
     rm codeql.zip && \
-    ln -s /opt/codeql/codeql /usr/local/bin/codeql
+    ln -s /opt/codeql/codeql /usr/local/bin/codeql && \
+    codeql pack download codeql/python-queries && \
+    codeql pack download codeql/javascript-queries && \
+    codeql pack download codeql/java-queries && \
+    codeql pack download codeql/cpp-queries && \
+    codeql pack download codeql/csharp-queries && \
+    codeql pack download codeql/go-queries
 
 # Install Nuclei CLI
 RUN export NUCLEI_URL=$(wget -qO- https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | jq -r '.assets[] | select(.name | test("nuclei.*linux.*amd64.zip")) | .browser_download_url') && \

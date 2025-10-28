@@ -1,0 +1,308 @@
+rules:
+  # AsyncStorage Security Issues
+  - id: asyncstorage-sensitivity-data
+    patterns:
+      - pattern-either:
+          - pattern: |
+              AsyncStorage.setItem($KEY, $VALUE)
+          - pattern: |
+              AsyncStorage.setItem(...)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)(password|token|secret|key|credential|auth|api_key)
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: .*\$\{|.*\+
+    message: >-
+      Sensitive data (passwords, tokens, secrets) being stored in AsyncStorage.
+      AsyncStorage is not encrypted and can be easily accessed. Use encrypted storage
+      libraries like react-native-keychain or expo-secure-store for sensitive data.
+    languages: [javascript, typescript]
+    severity: HIGH
+
+  - id: asyncstorage-no-encryption
+    patterns:
+      - pattern: |
+          await AsyncStorage.setItem(...)
+      - pattern-not: |
+          import EncryptedStorage from ...
+    message: >-
+      Using AsyncStorage without encryption for storing data. AsyncStorage is a
+      plain text storage mechanism. Consider using react-native-keychain,
+      expo-secure-store, or react-native-encrypted-storage for sensitive data.
+    languages: [javascript, typescript]
+    severity: MEDIUM
+
+  # Insecure WebView Usage
+  - id: webview-javascript-enabled
+    patterns:
+      - pattern: |
+          <WebView
+            ...
+            javaScriptEnabled={true}
+            ...
+          />
+      - pattern-not: |
+          source={{ uri: ... }}
+    message: >-
+      WebView has JavaScript enabled without proper source validation. This can lead to
+      XSS attacks. Only enable JavaScript for trusted sources and consider using
+      originWhitelist to restrict allowed domains.
+    languages: [javascript, typescript]
+    severity: HIGH
+
+  - id: webview-allow-universal-access
+    patterns:
+      - pattern: |
+          <WebView
+            ...
+            allowUniversalAccessFromFileURLs={true}
+            ...
+          />
+    message: >-
+      WebView allows universal access from file URLs. This can expose local files and
+      lead to security vulnerabilities. Set allowUniversalAccessFromFileURLs to false
+      or remove it entirely.
+    languages: [javascript, typescript]
+    severity: HIGH
+
+  - id: webview-mixed-content-allowed
+    patterns:
+      - pattern: |
+          <WebView
+            ...
+            mixedContentMode="always"
+            ...
+          />
+    message: >-
+      WebView allows mixed content (HTTP resources on HTTPS pages). This can expose
+      the app to man-in-the-middle attacks. Use mixedContentMode="never" or "compatibility".
+    languages: [javascript, typescript]
+    severity: MEDIUM
+
+  # Deep Linking Security
+  - id: deep-link-no-validation
+    patterns:
+      - pattern: |
+          Linking.addEventListener('url', (event) => {
+            ... = event.url
+            ...
+          })
+      - pattern-not: |
+          if (!isValidDeepLink(event.url)) {
+            ...
+          }
+    message: >-
+      Deep link URL used without validation. Validate deep link URLs to prevent
+      malicious URLs from executing unwanted actions. Check URL scheme, domain,
+      and path before processing.
+    languages: [javascript, typescript]
+    severity: MEDIUM
+
+  # Insecure Network Requests
+  - id: no-https-enforcement
+    patterns:
+      - pattern: |
+          fetch('http://...')
+      - pattern: |
+          axios.get('http://...')
+      - pattern: |
+          fetch($URL)
+          ...
+          method: 'POST',
+          url: 'http://...'
+    message: >-
+      Using HTTP instead of HTTPS for network requests. HTTP traffic can be intercepted
+      and modified. Always use HTTPS for sensitive data transmission. Consider using
+      SSL pinning for additional security.
+    languages: [javascript, typescript]
+    severity: HIGH
+
+  # Insecure Logging
+  - id: insecure-logging-sensitive-data
+    patterns:
+      - pattern-either:
+          - pattern: |
+              console.log($DATA)
+          - pattern: |
+              console.warn($DATA)
+          - pattern: |
+              console.error($DATA)
+          - pattern: |
+              __DEV__ && console.log($DATA)
+      - metavariable-regex:
+          metavariable: $DATA
+          regex: (?i)(password|token|secret|key|credential|auth|api_key|ssn|credit_card)
+    message: >-
+      Logging sensitive data (passwords, tokens, credentials). Logs can be read by
+      malicious apps or tools. Remove sensitive data from logs or use secure logging
+      mechanisms. Never log passwords, tokens, or personally identifiable information.
+    languages: [javascript, typescript]
+    severity: HIGH
+
+  # Insecure Random Number Generation
+  - id: insecure-random-generation
+    patterns:
+      - pattern: |
+          Math.random() * $MAX
+      - pattern: |
+          Math.floor(Math.random() * $MAX)
+    message: >-
+      Using Math.random() for security-critical purposes. Math.random() is not
+      cryptographically secure and predictable. Use crypto.randomBytes() or a
+      cryptographically secure random number generator for tokens, session IDs, etc.
+    languages: [javascript, typescript]
+    severity: MEDIUM
+
+  # React Native Bridge Security
+  - id: native-module-no-input-validation
+    patterns:
+      - pattern: |
+          NativeModules.$MODULE.$METHOD($PARAMS)
+      - pattern-not: |
+          if (!isValidInput($PARAMS)) {
+            return;
+          }
+    message: >-
+      Native module method called without input validation. Validate and sanitize
+      all inputs to native modules to prevent malicious data from reaching native code.
+      Implement proper input validation on both JS and native side.
+    languages: [javascript, typescript]
+    severity: MEDIUM
+
+  # Screen Capture Prevention
+  - id: no-screenshot-prevention
+    patterns:
+      - pattern: |
+          import { Screenshot } from '...'
+      - pattern-not: |
+          Screenshot.prevent($)
+    message: >-
+      Consider implementing screenshot prevention for screens displaying sensitive
+      information (login credentials, payment details, etc). Use libraries like
+      react-native-prevent-screenshot to protect sensitive content.
+    languages: [javascript, typescript]
+    severity: INFO
+
+  # Insecure App State Management
+  - id: no-appstate-background-security
+    patterns:
+      - pattern: |
+          AppState.addEventListener('change', ...)
+      - pattern-not: |
+          if (nextAppState === 'background') {
+            // Security measure implemented
+            ...
+          }
+    message: >-
+      No security measures implemented when app goes to background. Sensitive data should
+      be cleared or encrypted when the app moves to background state to prevent data
+      exposure if the device is lost or compromised.
+    languages: [javascript, typescript]
+    severity: MEDIUM
+
+  # Bundle Identifier Exposure
+  - id: bundle-id-in-code
+    patterns:
+      - pattern: 'com.example.app'
+    message: >-
+      Hardcoded bundle identifier in code. Bundle identifiers in JavaScript code can
+      be easily extracted and used maliciously. Use environment variables or build-time
+      configuration for bundle identifiers.
+    languages: [javascript, typescript]
+    severity: LOW
+
+  # Insecure Credential Storage
+  - id: plaintext-credential-storage
+    patterns:
+      - pattern: |
+          $obj.$credentialField = $password
+    message: >-
+      Storing credentials in plain object without encryption. Credentials should never
+      be stored in plain text. Use secure storage like react-native-keychain or
+      expo-secure-store for credential storage.
+    languages: [javascript, typescript]
+    severity: HIGH
+
+  # Dangerous React Native Props
+  - id: dangerouslySetInnerHTML-with-user-input
+    patterns:
+      - pattern: |
+          <View dangerouslySetInnerHTML={{ __html: $HTML }} />
+      - metavariable-regex:
+          metavariable: $HTML
+          regex: .*\$\{|.*\+
+    message: >-
+      Using dangerouslySetInnerHTML with unvalidated user input. This can lead to XSS
+      attacks. Always sanitize HTML content before rendering with dangerouslySetInnerHTML.
+      Consider using DOMPurify or similar sanitization library.
+    languages: [javascript, typescript]
+    severity: HIGH
+
+  # React Native URL Scheme Issues
+  - id: custom-url-scheme-overwrite
+    patterns:
+      - pattern: |
+          Linking.openURL($URL)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: (.*:.*://)
+    message: >-
+      Opening custom URL scheme without validation. Malicious apps can intercept
+      custom URL schemes. Always validate URL schemes before opening them to prevent
+      malicious actors from hijacking URL handling.
+    languages: [javascript, typescript]
+    severity: MEDIUM
+
+  # Platform-Specific Insecure Practices
+  - id: platform-conditional-security-bypass
+    patterns:
+      - pattern: |
+          if (Platform.OS === 'ios') {
+            // iOS specific secure code
+          } else {
+            // Android insecure fallback
+          }
+      - pattern-not: |
+          // Both platforms use secure implementation
+    message: >-
+      Platform-specific security bypass detected. Security measures should be consistent
+      across platforms. Ensure that security-critical code is implemented on both iOS
+      and Android platforms equally.
+    languages: [javascript, typescript]
+    severity: MEDIUM
+
+  # Insecure Network Configuration
+  - id: network-config-cleartext-traffic
+    patterns:
+      - pattern: |
+          const config = {
+            networkSecurityConfig: {
+              cleartextTraffic: true
+            }
+          }
+    message: >-
+      Allowing cleartext traffic in network security configuration. This disables
+      Android's cleartext traffic protections. Only enable for development/testing,
+      never for production builds.
+    languages: [javascript, typescript]
+    severity: HIGH
+
+  # React Native Debugger Exposure
+  - id: debugger-enabled-in-production
+    patterns:
+      - pattern: |
+          if (__DEV__) {
+            global.DEBUG_ENABLED = true;
+          }
+      - pattern: |
+          if (__DEV__) {
+            require('react-native-debugger');
+          }
+    message: >-
+      Debugger configuration in code. While wrapped in __DEV__, ensure debuggers are
+      completely disabled in production builds. Debugger tools can expose sensitive
+      information and should never be accessible in production apps.
+    languages: [javascript, typescript]
+    severity: INFO
+
