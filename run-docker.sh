@@ -75,7 +75,7 @@ if [ -z "$TARGET" ]; then
     echo ""
     echo "Examples:"
     echo "  $0 /home/user/my-project          # Scan local code"
-    echo "  $0 https://fr4iser.com            # Scan website"
+    echo "  $0 https://example.com            # Scan website"
     echo "  $0 network                        # Scan network/infrastructure"
     exit 1
 fi
