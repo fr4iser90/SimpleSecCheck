@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 
 # Version information
-ARG VERSION=1.0.0
+ARG VERSION=1.2.0
 LABEL version=$VERSION
 LABEL maintainer="SimpleSecCheck Team"
 
