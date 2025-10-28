@@ -155,10 +155,11 @@ Scan applications in your local Docker network (e.g., `http://host.docker.intern
 ### What Gets Scanned
 
 **Code Projects:**
-- Static code analysis with Semgrep
+- Static code analysis with Semgrep (including React Native-specific security rules)
 - Dependency vulnerabilities with Trivy
 - Security rule violations
 - Docker daemon compliance with Docker Bench
+- **React Native Support:** Mobile app security patterns including AsyncStorage security, WebView vulnerabilities, deep linking issues, and more
 
 **Websites:**
 - Web application vulnerabilities with OWASP ZAP
@@ -233,6 +234,11 @@ nano .env  # Or use your favorite editor
 **Code Quality:**
 - **SonarQube:** Code quality and security analysis
 
+**Mobile App Security:**
+- **React Native Security:** React Native-specific security rules for AsyncStorage, WebView, deep linking, and more
+- JavaScript/TypeScript scanning works on React Native code
+- npm audit for React Native dependencies
+
 ### Web Application Security Tools
 - **OWASP ZAP:** Web application vulnerability scanning
 - **Nuclei:** Fast web vulnerability scanning with custom templates
@@ -271,6 +277,7 @@ SimpleSecCheck includes comprehensive security rules:
 - **API Security** (`rules/api-security.yml`) - API vulnerabilities
 - **LLM/AI Security** (`rules/llm-ai-security.yml`) - AI-specific vulnerabilities
 - **Prompt Injection** (`rules/prompt-injection.yml`) - LLM prompt attacks
+- **React Native Security** (`rules/react-native-security.yml`) - Mobile app security issues (AsyncStorage, WebView, deep linking, etc.)
 
 ---
 
