@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/background.png" alt="SimpleSecCheck Preview" width="100%">
+</p>
+
 # SimpleSecCheck - Single-Shot Security Scanner
 
 <div align="center">
