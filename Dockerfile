@@ -178,6 +178,10 @@ RUN chmod +x /SimpleSecCheck/scripts/configure.py
 RUN apt-get install -y sudo && \
     echo 'scanner ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
 
+# Copy and set up entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Switch to non-root user
 USER scanner
 
@@ -250,4 +254,5 @@ ENV BANDIT_CONFIG_PATH=/SimpleSecCheck/bandit/config.yaml
 ENV ANCHORE_CONFIG_PATH=/SimpleSecCheck/anchore/config.yaml
 
 WORKDIR /zap/wrk
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]

@@ -25,8 +25,18 @@ if command -v snyk &>/dev/null; then
   
   # Check if SNYK_TOKEN is provided
   if [ -z "$SNYK_TOKEN" ]; then
-    echo "[run_snyk.sh][Snyk] No SNYK_TOKEN provided, running in offline mode..." | tee -a "$LOG_FILE"
-    SNYK_AUTH_FLAG=""
+    echo "[run_snyk.sh][Snyk] No SNYK_TOKEN provided, skipping Snyk scan..." | tee -a "$LOG_FILE"
+    echo "[run_snyk.sh][Snyk] Snyk requires authentication. Set SNYK_TOKEN environment variable to use Snyk." | tee -a "$LOG_FILE"
+    # Create empty reports to indicate Snyk was skipped
+    echo '{"vulnerabilities": [], "summary": {"total_packages": 0, "vulnerable_packages": 0, "total_vulnerabilities": 0}, "skipped": "No SNYK_TOKEN provided"}' > "$SNYK_JSON"
+    echo "Snyk Scan Results" > "$SNYK_TEXT"
+    echo "=================" >> "$SNYK_TEXT"
+    echo "Skipped: Snyk requires authentication (SNYK_TOKEN environment variable)." >> "$SNYK_TEXT"
+    echo "Scan completed at: $(date)" >> "$SNYK_TEXT"
+    echo "[run_snyk.sh][Snyk] Report(s) successfully generated:" | tee -a "$LOG_FILE"
+    [ -f "$SNYK_JSON" ] && echo "  - $SNYK_JSON" | tee -a "$LOG_FILE"
+    [ -f "$SNYK_TEXT" ] && echo "  - $SNYK_TEXT" | tee -a "$LOG_FILE"
+    exit 0
   else
     echo "[run_snyk.sh][Snyk] Using provided SNYK_TOKEN for authentication..." | tee -a "$LOG_FILE"
     SNYK_AUTH_FLAG="--token=$SNYK_TOKEN"
