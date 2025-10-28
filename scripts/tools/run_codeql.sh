@@ -81,14 +81,19 @@ if command -v codeql &>/dev/null; then
       }
     fi
     
-    # Note: CodeQL database created but query execution skipped
-    # Query suites need to be properly configured in the CodeQL installation
-    # For now, we create the database which can be analyzed later with:
-    # codeql database analyze <database> --format=sarif-latest --output=results.sarif
-    echo "[run_codeql.sh][CodeQL] Database created for $lang, but query execution skipped (needs CodeQL query packs configuration)" | tee -a "$LOG_FILE"
+    # Define query suite based on language
+    QUERY_SUITE="codeql/$lang-queries"
     
-    # Create empty SARIF file to satisfy the workflow
-    echo '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"CodeQL"}}}]}' > "$CODEQL_SARIF-$lang"
+    # Run CodeQL analysis on the database with query suite
+    echo "[run_codeql.sh][CodeQL] Running security analysis for $lang with $QUERY_SUITE..." | tee -a "$LOG_FILE"
+    codeql database analyze "$CODEQL_DB_DIR-$lang" "$QUERY_SUITE" \
+      --format=sarif-latest \
+      --output="$CODEQL_SARIF-$lang" \
+      --threads=4 >/dev/null 2>&1 || {
+      echo "[run_codeql.sh][CodeQL][WARNING] Query execution failed for $lang (query suite: $QUERY_SUITE)" | tee -a "$LOG_FILE"
+      # Create empty SARIF file as fallback
+      echo '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"CodeQL"}}}]}' > "$CODEQL_SARIF-$lang"
+    }
     
     # Convert SARIF to JSON for processing (using SARIF as JSON since they're compatible formats)
     if [ -f "$CODEQL_SARIF-$lang" ]; then
