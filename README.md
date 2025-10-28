@@ -1,6 +1,9 @@
 # SimpleSecCheck - Single-Shot Security Scanner
 
-> **One Command, Complete Security Analysis**
+<div align="center">
+  <img src="assets/transparent.png" alt="SimpleSecCheck Logo" width="128">
+  <p><strong>One Command, Complete Security Analysis</strong></p>
+</div>
 
 SimpleSecCheck is a powerful, single-shot Docker-based security scanner that performs comprehensive analysis of your codebase or web applications. Simply run one command and get detailed security reports with no permanent monitoring or infrastructure required.
 
