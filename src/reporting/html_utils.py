@@ -724,9 +724,8 @@ def generate_executive_summary(all_findings):
                     high_count += 1
                 elif 'MEDIUM' in sev or 'MED' in sev or 'WARN' in sev or 'MODERATE' in sev:
                     medium_count += 1
-                elif 'INFO' in sev or 'INFORMATIONAL' in sev or 'LOW' in sev:
-                    # Count low/info findings as medium for display purposes
-                    medium_count += 1
+                # LOW/INFO are intentionally not counted as MEDIUM to keep
+                # the dashboard focused on higher-priority risk.
     
     # Calculate security score (0-100)
     if tools_executed > 0:
@@ -846,11 +845,18 @@ def generate_visual_summary_section(zap_alerts, semgrep_findings, trivy_vulns, c
     
     html = '<div class="tools-grid-container">'
     
+    seen_tools = set()
     for category, tools in tool_categories.items():
         category_html = []
         category_has_issues = False
         
         for tool_name, tool_findings in tools:
+            # Defensive dedupe: avoid showing the same tool card twice
+            # even if categories/config are accidentally duplicated.
+            if tool_name in seen_tools:
+                continue
+            seen_tools.add(tool_name)
+
             # Handle ZAP's dict structure
             if tool_name == 'ZAP':
                 count = sum(zap_alerts.values()) if isinstance(zap_alerts, dict) else 0
