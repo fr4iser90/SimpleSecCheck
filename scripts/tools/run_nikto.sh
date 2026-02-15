@@ -9,7 +9,7 @@
 ZAP_TARGET="${ZAP_TARGET:-http://host.docker.internal:8000}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-NIKTO_CONFIG_PATH="${NIKTO_CONFIG_PATH:-/SimpleSecCheck/nikto/config.yaml}"
+NIKTO_CONFIG_PATH="${NIKTO_CONFIG_PATH:-/SimpleSecCheck/config/tools/nikto/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

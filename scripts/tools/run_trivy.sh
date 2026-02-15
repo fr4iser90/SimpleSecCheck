@@ -12,7 +12,7 @@ TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
 TRIVY_SCAN_TYPE="${TRIVY_SCAN_TYPE:-fs}"
-TRIVY_CONFIG_PATH="${TRIVY_CONFIG_PATH:-/SimpleSecCheck/trivy/config.yaml}"
+TRIVY_CONFIG_PATH="${TRIVY_CONFIG_PATH:-/SimpleSecCheck/config/tools/trivy/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 

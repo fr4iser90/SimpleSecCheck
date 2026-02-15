@@ -1,0 +1,42 @@
+{
+  "semgrep": {
+    "severity_overrides": [
+      {
+        "check_id": "javascript.browser.security.insecure-document-method.insecure-document-method",
+        "path_regex": "^/target/frontend/src/shared/components/PreviewFrame\\.tsx$",
+        "new_severity": "INFO",
+        "reason": "PreviewFrame uses DOMPurify + iframe sandbox; tracked as accepted mitigation."
+      },
+      {
+        "check_id": "javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring",
+        "new_severity": "INFO",
+        "reason": "Downgraded by default because this rule is frequently noisy in structured logger usage."
+      }
+    ],
+    "accepted_findings": [
+      {
+        "check_id": "javascript.browser.security.insecure-document-method.insecure-document-method",
+        "path_regex": "^/target/frontend/src/shared/components/PreviewFrame\\.tsx$",
+        "message_regex": "innerHTML",
+        "reason": "Accepted with controls: DOMPurify sanitization and sandboxed iframe."
+      },
+      {
+        "check_id": "javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring",
+        "reason": "Accepted by default to reduce known low-signal log-format noise; review manually if needed."
+      }
+    ],
+    "dedupe": {
+      "enabled": true,
+      "line_window": 2
+    }
+  },
+  "gitleaks": {
+    "accepted_findings": [
+      {
+        "rule_id": "generic-api-key",
+        "file_regex": "^/target/backend/src/utils/SECRETS_ENCRYPTION\\.md$",
+        "reason": "Documentation examples only. Ensure production secrets are never committed."
+      }
+    ]
+  }
+}

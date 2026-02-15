@@ -11,7 +11,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-CLAIR_CONFIG_PATH="${CLAIR_CONFIG_PATH:-/SimpleSecCheck/clair/config.yaml}"
+CLAIR_CONFIG_PATH="${CLAIR_CONFIG_PATH:-/SimpleSecCheck/config/tools/clair/config.yaml}"
 CLAIR_IMAGE="${CLAIR_IMAGE:-}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 

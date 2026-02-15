@@ -11,7 +11,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-OWASP_DC_CONFIG_PATH="${OWASP_DC_CONFIG_PATH:-/SimpleSecCheck/owasp-dependency-check/config.yaml}"
+OWASP_DC_CONFIG_PATH="${OWASP_DC_CONFIG_PATH:-/SimpleSecCheck/config/tools/owasp-dependency-check/config.yaml}"
 OWASP_DC_DATA_DIR="${OWASP_DC_DATA_DIR:-/SimpleSecCheck/owasp-dependency-check-data}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"

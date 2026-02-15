@@ -8,7 +8,7 @@
 
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-KUBE_HUNTER_CONFIG_PATH="${KUBE_HUNTER_CONFIG_PATH:-/SimpleSecCheck/kube-hunter/config.yaml}"
+KUBE_HUNTER_CONFIG_PATH="${KUBE_HUNTER_CONFIG_PATH:-/SimpleSecCheck/config/tools/kube-hunter/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

@@ -108,7 +108,7 @@ RUN npm install -g eslint eslint-plugin-security @typescript-eslint/parser @type
 RUN apt-get update && apt-get install -y perl libwww-perl liblwp-protocol-https-perl unzip && \
     wget https://github.com/sullo/nikto/archive/master.zip -O nikto.zip && \
     unzip nikto.zip && \
-    mv nikto-master /opt/nikto && \
+    mv nikto-main /opt/nikto && \
     ln -s /opt/nikto/program/nikto.pl /usr/local/bin/nikto && \
     rm nikto.zip
 
@@ -160,7 +160,7 @@ WORKDIR /SimpleSecCheck
 # Create required directories and set permissions
 RUN mkdir -p /SimpleSecCheck/results /SimpleSecCheck/logs /SimpleSecCheck/owasp-dependency-check-data /zap/wrk && \
     mkdir -p /zap/wrk/zap && \
-    cp /SimpleSecCheck/zap/baseline.conf /zap/wrk/zap/baseline.conf && \
+    cp /SimpleSecCheck/config/tools/zap/baseline.conf /zap/wrk/zap/baseline.conf && \
     cp -r /opt/ZAP_2.16.1/* /zap/ && \
     ln -sf /zap/zap.sh /zap/zap-x.sh
 
@@ -171,8 +171,8 @@ RUN useradd -m -u 1000 -s /bin/bash scanner && \
     chown -R scanner:scanner /SimpleSecCheck /zap
 
 # Make scripts executable
-RUN chmod +x /SimpleSecCheck/scripts/security-check.sh
-RUN chmod +x /SimpleSecCheck/scripts/configure.py
+RUN chmod +x /SimpleSecCheck/bin/security-check.sh
+RUN chmod +x /SimpleSecCheck/src/core/configure.py
 
 # Install sudo and configure passwordless sudo for scanner user
 RUN apt-get install -y sudo && \
@@ -187,71 +187,71 @@ USER scanner
 
 # Set CodeQL environment variables
 ENV CODEQL_HOME=/opt/codeql
-ENV CODEQL_CONFIG_PATH=/SimpleSecCheck/codeql/config.yaml
-ENV CODEQL_QUERIES_PATH=/SimpleSecCheck/codeql/queries
+ENV CODEQL_CONFIG_PATH=/SimpleSecCheck/config/tools/codeql/config.yaml
+ENV CODEQL_QUERIES_PATH=/SimpleSecCheck/config/tools/codeql/queries
 
 # Set Nuclei environment variables
 ENV NUCLEI_HOME=/opt/nuclei
-ENV NUCLEI_CONFIG_PATH=/SimpleSecCheck/nuclei/config.yaml
-ENV NUCLEI_TEMPLATES_PATH=/SimpleSecCheck/nuclei/templates
+ENV NUCLEI_CONFIG_PATH=/SimpleSecCheck/config/tools/nuclei/config.yaml
+ENV NUCLEI_TEMPLATES_PATH=/SimpleSecCheck/config/tools/nuclei/templates
 
 # Set OWASP Dependency Check environment variables
 ENV OWASP_DC_HOME=/opt/dependency-check
-ENV OWASP_DC_CONFIG_PATH=/SimpleSecCheck/owasp-dependency-check/config.yaml
+ENV OWASP_DC_CONFIG_PATH=/SimpleSecCheck/config/tools/owasp-dependency-check/config.yaml
 ENV OWASP_DC_DATA_DIR=/SimpleSecCheck/owasp-dependency-check-data
 
 # Set Safety environment variables
-ENV SAFETY_CONFIG_PATH=/SimpleSecCheck/safety/config.yaml
+ENV SAFETY_CONFIG_PATH=/SimpleSecCheck/config/tools/safety/config.yaml
 
 # Set Snyk environment variables
-ENV SNYK_CONFIG_PATH=/SimpleSecCheck/snyk/config.yaml
+ENV SNYK_CONFIG_PATH=/SimpleSecCheck/config/tools/snyk/config.yaml
 
 # Set SonarQube environment variables
-ENV SONARQUBE_CONFIG_PATH=/SimpleSecCheck/sonarqube/config.yaml
+ENV SONARQUBE_CONFIG_PATH=/SimpleSecCheck/config/tools/sonarqube/config.yaml
 ENV SONARQUBE_SCANNER_HOME=/opt/sonar-scanner
 
 # Set Checkov environment variables
-ENV TERRAFORM_SECURITY_CONFIG_PATH=/SimpleSecCheck/terraform-security/config.yaml
+ENV TERRAFORM_SECURITY_CONFIG_PATH=/SimpleSecCheck/config/tools/terraform-security/config.yaml
 
 # Set TruffleHog environment variables
-ENV TRUFFLEHOG_CONFIG_PATH=/SimpleSecCheck/trufflehog/config.yaml
+ENV TRUFFLEHOG_CONFIG_PATH=/SimpleSecCheck/config/tools/trufflehog/config.yaml
 
 # Set GitLeaks environment variables
-ENV GITLEAKS_CONFIG_PATH=/SimpleSecCheck/gitleaks/config.yaml
+ENV GITLEAKS_CONFIG_PATH=/SimpleSecCheck/config/tools/gitleaks/config.yaml
 
 # Set Detect-secrets environment variables
-ENV DETECT_SECRETS_CONFIG_PATH=/SimpleSecCheck/detect-secrets/config.yaml
+ENV DETECT_SECRETS_CONFIG_PATH=/SimpleSecCheck/config/tools/detect-secrets/config.yaml
 
 # Set Wapiti environment variables
-ENV WAPITI_CONFIG_PATH=/SimpleSecCheck/wapiti/config.yaml
+ENV WAPITI_CONFIG_PATH=/SimpleSecCheck/config/tools/wapiti/config.yaml
 
 # Set Nikto environment variables
-ENV NIKTO_CONFIG_PATH=/SimpleSecCheck/nikto/config.yaml
+ENV NIKTO_CONFIG_PATH=/SimpleSecCheck/config/tools/nikto/config.yaml
 
 # Set Burp Suite environment variables
-ENV BURP_CONFIG_PATH=/SimpleSecCheck/burp/config.yaml
+ENV BURP_CONFIG_PATH=/SimpleSecCheck/config/tools/burp/config.yaml
 ENV BURP_HOME=/opt/burp
 
 # Set Kube-hunter environment variables
-ENV KUBE_HUNTER_CONFIG_PATH=/SimpleSecCheck/kube-hunter/config.yaml
+ENV KUBE_HUNTER_CONFIG_PATH=/SimpleSecCheck/config/tools/kube-hunter/config.yaml
 
 # Set Kube-bench environment variables
-ENV KUBE_BENCH_CONFIG_PATH=/SimpleSecCheck/kube-bench/config.yaml
+ENV KUBE_BENCH_CONFIG_PATH=/SimpleSecCheck/config/tools/kube-bench/config.yaml
 
 # Set Docker Bench environment variables
-ENV DOCKER_BENCH_CONFIG_PATH=/SimpleSecCheck/docker-bench/config.yaml
+ENV DOCKER_BENCH_CONFIG_PATH=/SimpleSecCheck/config/tools/docker-bench/config.yaml
 
 # Set ESLint environment variables
-ENV ESLINT_CONFIG_PATH=/SimpleSecCheck/eslint/config.yaml
+ENV ESLINT_CONFIG_PATH=/SimpleSecCheck/config/tools/eslint/config.yaml
 
 # Set Brakeman environment variables
-ENV BRAKEMAN_CONFIG_PATH=/SimpleSecCheck/brakeman/config.yaml
+ENV BRAKEMAN_CONFIG_PATH=/SimpleSecCheck/config/tools/brakeman/config.yaml
 
 # Set Bandit environment variables
-ENV BANDIT_CONFIG_PATH=/SimpleSecCheck/bandit/config.yaml
+ENV BANDIT_CONFIG_PATH=/SimpleSecCheck/config/tools/bandit/config.yaml
 
 # Set Anchore environment variables
-ENV ANCHORE_CONFIG_PATH=/SimpleSecCheck/anchore/config.yaml
+ENV ANCHORE_CONFIG_PATH=/SimpleSecCheck/config/tools/anchore/config.yaml
 
 WORKDIR /zap/wrk
 ENTRYPOINT ["/entrypoint.sh"]

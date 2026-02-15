@@ -10,7 +10,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-TRUFFLEHOG_CONFIG_PATH="${TRUFFLEHOG_CONFIG_PATH:-/SimpleSecCheck/trufflehog/config.yaml}"
+TRUFFLEHOG_CONFIG_PATH="${TRUFFLEHOG_CONFIG_PATH:-/SimpleSecCheck/config/tools/trufflehog/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

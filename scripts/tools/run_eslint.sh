@@ -4,7 +4,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-ESLINT_CONFIG_PATH="${ESLINT_CONFIG_PATH:-/SimpleSecCheck/eslint/config.yaml}"
+ESLINT_CONFIG_PATH="${ESLINT_CONFIG_PATH:-/SimpleSecCheck/config/tools/eslint/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 
