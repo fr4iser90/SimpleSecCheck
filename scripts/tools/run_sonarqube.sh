@@ -9,7 +9,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-SONARQUBE_CONFIG_PATH="${SONARQUBE_CONFIG_PATH:-/SimpleSecCheck/sonarqube/config.yaml}"
+SONARQUBE_CONFIG_PATH="${SONARQUBE_CONFIG_PATH:-/SimpleSecCheck/config/tools/sonarqube/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"
@@ -22,14 +22,14 @@ if command -v sonar-scanner &>/dev/null; then
   SONARQUBE_JSON="$RESULTS_DIR/sonarqube.json"
   SONARQUBE_TEXT="$RESULTS_DIR/sonarqube.txt"
   
-  # Create SonarQube project properties
-  SONARQUBE_PROJECT_PROPERTIES="$TARGET_PATH/sonar-project.properties"
+  # Use a writable temporary properties file when target is mounted read-only.
+  SONARQUBE_PROJECT_PROPERTIES="$RESULTS_DIR/sonar-project.properties"
   
-  # Generate basic project properties if not exists
-  if [ ! -f "$SONARQUBE_PROJECT_PROPERTIES" ]; then
-    echo "[run_sonarqube.sh][SonarQube] Creating sonar-project.properties..." | tee -a "$LOG_FILE"
-    # Try to create the file, but if it fails due to readonly, continue with existing or skip
-    cat > "$SONARQUBE_PROJECT_PROPERTIES" 2>/dev/null <<'EOF'
+  if [ -f "$TARGET_PATH/sonar-project.properties" ]; then
+    SONARQUBE_PROJECT_PROPERTIES="$TARGET_PATH/sonar-project.properties"
+  else
+    echo "[run_sonarqube.sh][SonarQube] Creating temporary sonar-project.properties..." | tee -a "$LOG_FILE"
+    cat > "$SONARQUBE_PROJECT_PROPERTIES" <<'EOF'
 sonar.projectKey=SimpleSecCheck-Analysis
 sonar.projectName=SimpleSecCheck-Analysis
 sonar.projectVersion=1.0.0
@@ -37,22 +37,11 @@ sonar.sources=.
 sonar.sourceEncoding=UTF-8
 sonar.exclusions=**/test*,**/tests/**,**/__pycache__/**,**/node_modules/**,**/venv/**
 EOF
-    
-    if [ $? -ne 0 ]; then
-      echo "[run_sonarqube.sh][SonarQube] Could not create sonar-project.properties, file system may be readonly. Skipping SonarQube scan." | tee -a "$LOG_FILE"
-      # Create minimal reports and exit
-      echo '{"issues": [], "summary": {"total_issues": 0, "blocker": 0, "critical": 0, "major": 0, "minor": 0, "info": 0}}' > "$SONARQUBE_JSON"
-      echo "SonarQube Scan Results" > "$SONARQUBE_TEXT"
-      echo "===================" >> "$SONARQUBE_TEXT"
-      echo "SonarQube scan skipped (readonly file system)." >> "$SONARQUBE_TEXT"
-      echo "[SonarQube] Code quality and security scan complete." >> "$SUMMARY_TXT"
-      exit 0
-    fi
   fi
   
   # Run SonarQube scan
   echo "[run_sonarqube.sh][SonarQube] Running SonarQube analysis..." | tee -a "$LOG_FILE"
-  cd "$TARGET_PATH" && sonar-scanner -X 2>/dev/null || {
+  cd "$TARGET_PATH" && sonar-scanner -X -Dproject.settings="$SONARQUBE_PROJECT_PROPERTIES" 2>/dev/null || {
     echo "[run_sonarqube.sh][SonarQube] SonarQube scan failed." | tee -a "$LOG_FILE"
     
     # Create minimal reports on failure

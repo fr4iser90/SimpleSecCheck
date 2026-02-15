@@ -4,7 +4,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-TERRAFORM_SECURITY_CONFIG_PATH="${TERRAFORM_SECURITY_CONFIG_PATH:-/SimpleSecCheck/terraform-security/config.yaml}"
+TERRAFORM_SECURITY_CONFIG_PATH="${TERRAFORM_SECURITY_CONFIG_PATH:-/SimpleSecCheck/config/tools/terraform-security/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

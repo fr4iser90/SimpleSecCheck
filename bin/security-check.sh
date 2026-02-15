@@ -9,11 +9,11 @@ set -e
 # === Configuration ===
 # Script's own directory to reliably find other scripts
 ORCHESTRATOR_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TOOL_SCRIPTS_DIR="$ORCHESTRATOR_SCRIPT_DIR/tools"
 
 # --- Define Core Paths (these are absolute paths INSIDE the container) ---
 # These align with Dockerfile COPY commands and docker-compose.yml volume mounts.
 export BASE_PROJECT_DIR="/SimpleSecCheck" # Base directory where all project files are copied in Docker
+TOOL_SCRIPTS_DIR="$BASE_PROJECT_DIR/scripts/tools"
 export TARGET_PATH_IN_CONTAINER="/target" # Where host code is mounted for scanning
 export RESULTS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results"
 export LOGS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/logs"
@@ -21,31 +21,31 @@ export LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log" # Central log file
 
 # --- Tool Specific Configurations (absolute paths INSIDE container) ---
 export SEMGREP_RULES_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/rules"
-export TRIVY_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/trivy/config.yaml"
-export CODEQL_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/codeql/config.yaml"
-export CODEQL_QUERIES_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/codeql/queries"
-export OWASP_DC_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/owasp-dependency-check/config.yaml"
+export TRIVY_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/trivy/config.yaml"
+export CODEQL_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/codeql/config.yaml"
+export CODEQL_QUERIES_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/codeql/queries"
+export OWASP_DC_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/owasp-dependency-check/config.yaml"
 export OWASP_DC_DATA_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/owasp-dependency-check-data"
-export SAFETY_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/safety/config.yaml"
-export SNYK_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/snyk/config.yaml"
-export SONARQUBE_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/sonarqube/config.yaml"
-export TERRAFORM_SECURITY_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/terraform-security/config.yaml"
-export CHECKOV_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/checkov/config.yaml"
-export TRUFFLEHOG_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/trufflehog/config.yaml"
-export GITLEAKS_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/gitleaks/config.yaml"
-export DETECT_SECRETS_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/detect-secrets/config.yaml"
-export NPM_AUDIT_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/npm-audit/config.yaml"
-export ZAP_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/zap/baseline.conf" # Note: your run_zap.sh hardcodes this.
-export WAPITI_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/wapiti/config.yaml"
-export KUBE_HUNTER_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/kube-hunter/config.yaml"
-export KUBE_BENCH_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/kube-bench/config.yaml"
-export DOCKER_BENCH_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/docker-bench/config.yaml"
-export ESLINT_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/eslint/config.yaml"
-export CLAIR_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/clair/config.yaml"
-export ANCHORE_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/anchore/config.yaml"
-export BURP_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/burp/config.yaml"
-export BRAKEMAN_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/brakeman/config.yaml"
-export BANDIT_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/bandit/config.yaml"
+export SAFETY_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/safety/config.yaml"
+export SNYK_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/snyk/config.yaml"
+export SONARQUBE_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/sonarqube/config.yaml"
+export TERRAFORM_SECURITY_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/terraform-security/config.yaml"
+export CHECKOV_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/checkov/config.yaml"
+export TRUFFLEHOG_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/trufflehog/config.yaml"
+export GITLEAKS_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/gitleaks/config.yaml"
+export DETECT_SECRETS_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/detect-secrets/config.yaml"
+export NPM_AUDIT_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/npm-audit/config.yaml"
+export ZAP_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/zap/baseline.conf" # Note: run_zap.sh currently hardcodes this same path.
+export WAPITI_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/wapiti/config.yaml"
+export KUBE_HUNTER_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/kube-hunter/config.yaml"
+export KUBE_BENCH_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/kube-bench/config.yaml"
+export DOCKER_BENCH_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/docker-bench/config.yaml"
+export ESLINT_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/eslint/config.yaml"
+export CLAIR_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/clair/config.yaml"
+export ANCHORE_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/anchore/config.yaml"
+export BURP_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/burp/config.yaml"
+export BRAKEMAN_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/brakeman/config.yaml"
+export BANDIT_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/bandit/config.yaml"
 export CLAIR_IMAGE="${CLAIR_IMAGE:-}"
 export ANCHORE_IMAGE="${ANCHORE_IMAGE:-}"
 
@@ -797,7 +797,7 @@ fi
 # Only run native app scanners for code scans with detected native projects
 if [ "$SCAN_TYPE" = "code" ]; then
     log_message "--- Detecting Native Mobile App Projects ---"
-    IS_NATIVE=$(python3 "$BASE_PROJECT_DIR/scripts/project_detector.py" --target "$TARGET_PATH_IN_CONTAINER" --format json | jq -r '.has_native' 2>/dev/null || echo "false")
+    IS_NATIVE=$(python3 "$BASE_PROJECT_DIR/src/core/project_detector.py" --target "$TARGET_PATH_IN_CONTAINER" --format json | jq -r '.has_native' 2>/dev/null || echo "false")
     
     if [ "$IS_NATIVE" = "true" ]; then
         log_message "--- Native app project detected, running mobile scanners ---"
@@ -858,7 +858,7 @@ if [ "$SCAN_TYPE" = "website" ]; then
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
     # ZAP_CONFIG_PATH_IN_CONTAINER is available if run_zap.sh decides to use it via an env var instead of hardcoding.
-    # Your current run_zap.sh hardcodes /SimpleSecCheck/zap/baseline.conf, which matches ZAP_CONFIG_PATH_IN_CONTAINER.
+    # Your current run_zap.sh hardcodes /SimpleSecCheck/config/tools/zap/baseline.conf, which matches ZAP_CONFIG_PATH_IN_CONTAINER.
     if [ -f "$TOOL_SCRIPTS_DIR/run_zap.sh" ]; then
         log_message "Executing $TOOL_SCRIPTS_DIR/run_zap.sh..."
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_zap.sh"; then
@@ -886,7 +886,7 @@ if [ "$SCAN_TYPE" = "website" ]; then
     # ZAP_TARGET is exported
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
-    export NUCLEI_CONFIG_PATH="$BASE_PROJECT_DIR/nuclei/config.yaml"
+    export NUCLEI_CONFIG_PATH="$BASE_PROJECT_DIR/config/tools/nuclei/config.yaml"
     if [ -f "$TOOL_SCRIPTS_DIR/run_nuclei.sh" ]; then
         log_message "Executing $TOOL_SCRIPTS_DIR/run_nuclei.sh..."
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_nuclei.sh"; then
@@ -914,7 +914,7 @@ if [ "$SCAN_TYPE" = "website" ]; then
     # ZAP_TARGET is exported
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
-    export WAPITI_CONFIG_PATH="$BASE_PROJECT_DIR/wapiti/config.yaml"
+    export WAPITI_CONFIG_PATH="$BASE_PROJECT_DIR/config/tools/wapiti/config.yaml"
     if [ -f "$TOOL_SCRIPTS_DIR/run_wapiti.sh" ]; then
         log_message "Executing $TOOL_SCRIPTS_DIR/run_wapiti.sh..."
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_wapiti.sh"; then
@@ -942,7 +942,7 @@ if [ "$SCAN_TYPE" = "website" ]; then
     # ZAP_TARGET is exported
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
-    export NIKTO_CONFIG_PATH="$BASE_PROJECT_DIR/nikto/config.yaml"
+    export NIKTO_CONFIG_PATH="$BASE_PROJECT_DIR/config/tools/nikto/config.yaml"
     if [ -f "$TOOL_SCRIPTS_DIR/run_nikto.sh" ]; then
         log_message "Executing $TOOL_SCRIPTS_DIR/run_nikto.sh..."
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_nikto.sh"; then
@@ -970,7 +970,7 @@ if [ "$SCAN_TYPE" = "website" ]; then
     # ZAP_TARGET is exported
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
-    export BURP_CONFIG_PATH="$BASE_PROJECT_DIR/burp/config.yaml"
+    export BURP_CONFIG_PATH="$BASE_PROJECT_DIR/config/tools/burp/config.yaml"
     if [ -f "$TOOL_SCRIPTS_DIR/run_burp.sh" ]; then
         log_message "Executing $TOOL_SCRIPTS_DIR/run_burp.sh..."
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_burp.sh"; then
@@ -992,15 +992,15 @@ else
 fi
 
 # --- Reporting Phase ---
-HTML_REPORT_PY_SCRIPT="$ORCHESTRATOR_SCRIPT_DIR/generate-html-report.py"
+HTML_REPORT_PY_SCRIPT="$BASE_PROJECT_DIR/src/reporting/generate-html-report.py"
 HTML_REPORT_OUTPUT_FILE="$RESULTS_DIR_IN_CONTAINER/security-summary.html"
 
 # generate-html-report.py expects RESULTS_DIR and ZAP_TARGET as env vars.
 # RESULTS_DIR is already exported as RESULTS_DIR_IN_CONTAINER.
 # ZAP_TARGET is already exported.
 # It also uses FP_WHITELIST_FILE if set.
-export FP_WHITELIST_FILE="${FP_WHITELIST_FILE:-$BASE_PROJECT_DIR/conf/fp_whitelist.json}" # Default if not set
-export FINDING_POLICY_FILE="${FINDING_POLICY_FILE:-$BASE_PROJECT_DIR/conf/finding_policy.json}"
+export FP_WHITELIST_FILE="${FP_WHITELIST_FILE:-$BASE_PROJECT_DIR/config/policy/fp_whitelist.json}" # Default if not set
+export FINDING_POLICY_FILE="${FINDING_POLICY_FILE:-$BASE_PROJECT_DIR/config/policy/finding_policy.json}"
 
 log_message "Checking for HTML report generator: $HTML_REPORT_PY_SCRIPT"
 if [ -f "$HTML_REPORT_PY_SCRIPT" ]; then
@@ -1022,7 +1022,7 @@ else
 fi
 
 # Copy webui.js (if it exists in the orchestrator's script directory)
-WEBUI_JS_SOURCE="$ORCHESTRATOR_SCRIPT_DIR/webui.js"
+WEBUI_JS_SOURCE="$BASE_PROJECT_DIR/src/reporting/webui.js"
 WEBUI_JS_DEST="$RESULTS_DIR_IN_CONTAINER/webui.js"
 if [ -f "$WEBUI_JS_SOURCE" ]; then
     cp "$WEBUI_JS_SOURCE" "$WEBUI_JS_DEST"

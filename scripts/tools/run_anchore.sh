@@ -11,7 +11,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-ANCHORE_CONFIG_PATH="${ANCHORE_CONFIG_PATH:-/SimpleSecCheck/anchore/config.yaml}"
+ANCHORE_CONFIG_PATH="${ANCHORE_CONFIG_PATH:-/SimpleSecCheck/config/tools/anchore/config.yaml}"
 ANCHORE_IMAGE="${ANCHORE_IMAGE:-}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 

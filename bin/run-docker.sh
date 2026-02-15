@@ -20,7 +20,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCAN_SCOPE="${SCAN_SCOPE:-full}" # full | tracked
 SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 CI_MODE=false
@@ -191,7 +191,7 @@ if [ "$SCAN_TYPE" = "network" ]; then
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
         -v /var/run/docker.sock:/var/run/docker.sock:ro \
-        scanner /SimpleSecCheck/scripts/security-check.sh; then
+        scanner /SimpleSecCheck/bin/security-check.sh; then
         log_success "Network security scan completed successfully!"
         OVERALL_SUCCESS=true
     else
@@ -231,6 +231,13 @@ elif [ "$SCAN_TYPE" = "code" ]; then
         else
             if [ -f "$TARGET_MOUNT_PATH/$FINDING_POLICY_ARG" ]; then
                 FINDING_POLICY_FILE_IN_CONTAINER="/target/$FINDING_POLICY_ARG"
+            elif [ "$TARGET_MOUNT_PATH" != "$TARGET_PATH" ] && [ -f "$TARGET_PATH/$FINDING_POLICY_ARG" ]; then
+                # SCAN_SCOPE=tracked uses a git snapshot; explicitly requested policy files may be untracked.
+                # Copy the policy into the snapshot so explicit user input still works.
+                mkdir -p "$(dirname "$TARGET_MOUNT_PATH/$FINDING_POLICY_ARG")"
+                cp "$TARGET_PATH/$FINDING_POLICY_ARG" "$TARGET_MOUNT_PATH/$FINDING_POLICY_ARG"
+                FINDING_POLICY_FILE_IN_CONTAINER="/target/$FINDING_POLICY_ARG"
+                log_message "Copied explicit finding policy into tracked snapshot: $FINDING_POLICY_FILE_IN_CONTAINER"
             else
                 log_warning "--finding-policy file not found in target: $FINDING_POLICY_ARG. Falling back to autodetect/default."
             fi
@@ -238,7 +245,15 @@ elif [ "$SCAN_TYPE" = "code" ]; then
     fi
 
     if [ -z "$FINDING_POLICY_FILE_IN_CONTAINER" ]; then
-        for policy_candidate in "config/finding-policy.json" "security/finding-policy.json" ".security/finding-policy.json"; do
+        for policy_candidate in \
+            "config/finding-policy.json" \
+            "config/finding_policy.json" \
+            "config/policy/finding-policy.json" \
+            "config/policy/finding_policy.json" \
+            "security/finding-policy.json" \
+            "security/finding_policy.json" \
+            ".security/finding-policy.json" \
+            ".security/finding_policy.json"; do
             if [ -f "$TARGET_MOUNT_PATH/$policy_candidate" ]; then
                 FINDING_POLICY_FILE_IN_CONTAINER="/target/$policy_candidate"
                 log_message "Auto-detected finding policy: $FINDING_POLICY_FILE_IN_CONTAINER"
@@ -262,7 +277,7 @@ elif [ "$SCAN_TYPE" = "code" ]; then
         -v "$TARGET_MOUNT_PATH:/target:ro" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
-        scanner /SimpleSecCheck/scripts/security-check.sh; then
+        scanner /SimpleSecCheck/bin/security-check.sh; then
         log_success "Code security scan completed successfully!"
         OVERALL_SUCCESS=true
     else
@@ -282,7 +297,7 @@ else
         -e PROJECT_RESULTS_DIR="$RESULTS_DIR" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
-        scanner /SimpleSecCheck/scripts/security-check.sh; then
+        scanner /SimpleSecCheck/bin/security-check.sh; then
         log_success "Website security scan completed successfully!"
         OVERALL_SUCCESS=true
     else

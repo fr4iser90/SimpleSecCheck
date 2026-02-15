@@ -9,7 +9,7 @@
 ZAP_TARGET="${ZAP_TARGET:-http://host.docker.internal:8000}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-WAPITI_CONFIG_PATH="${WAPITI_CONFIG_PATH:-/SimpleSecCheck/wapiti/config.yaml}"
+WAPITI_CONFIG_PATH="${WAPITI_CONFIG_PATH:-/SimpleSecCheck/config/tools/wapiti/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

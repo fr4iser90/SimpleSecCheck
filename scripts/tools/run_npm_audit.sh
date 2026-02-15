@@ -4,7 +4,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-NPM_AUDIT_CONFIG_PATH="${NPM_AUDIT_CONFIG_PATH:-/SimpleSecCheck/npm-audit/config.yaml}"
+NPM_AUDIT_CONFIG_PATH="${NPM_AUDIT_CONFIG_PATH:-/SimpleSecCheck/config/tools/npm-audit/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 

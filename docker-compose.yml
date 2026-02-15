@@ -11,11 +11,8 @@ services:
     volumes:
       - ./results:/SimpleSecCheck/results
       - ./logs:/SimpleSecCheck/logs
-      - ./conf:/SimpleSecCheck/conf
+      - ./config:/SimpleSecCheck/config
       - ./rules:/SimpleSecCheck/rules
-      - ./trivy:/SimpleSecCheck/trivy
-      - ./anchore:/SimpleSecCheck/anchore
-      - ./zap:/SimpleSecCheck/zap
       # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
       - ./owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
       - /var/run/docker.sock:/var/run/docker.sock # For Docker Bench
@@ -25,12 +22,12 @@ services:
       - RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results
       - LOGS_DIR_IN_CONTAINER=/SimpleSecCheck/logs
       - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/rules
-      - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/trivy/config.yaml
-      - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/anchore/config.yaml
+      - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/trivy/config.yaml
+      - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/anchore/config.yaml
       - ANCHORE_IMAGE=${ANCHORE_IMAGE:-}
-      - ZAP_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/zap/baseline.conf
+      - ZAP_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/zap/baseline.conf
       - TRIVY_SCAN_TYPE=fs
-      - FP_WHITELIST_FILE=/SimpleSecCheck/conf/fp_whitelist.json
+      - FP_WHITELIST_FILE=/SimpleSecCheck/config/policy/fp_whitelist.json
       # Optional API Tokens (loaded from .env file if present)
       - NVD_API_KEY=${NVD_API_KEY:-}
       - SNYK_TOKEN=${SNYK_TOKEN:-}

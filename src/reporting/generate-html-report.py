@@ -7,38 +7,43 @@ import html
 from pathlib import Path
 from xml.etree import ElementTree as ET
 import traceback
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from scripts.html_utils import html_header, html_footer, generate_visual_summary_section, generate_overall_summary_and_links_section, generate_executive_summary, generate_tool_status_section
-from scripts.zap_processor import zap_summary, generate_zap_html_section
-from scripts.zap_xml_parser import parse_zap_xml, generate_html_report
-from scripts.semgrep_processor import semgrep_summary, generate_semgrep_html_section
-from scripts.trivy_processor import trivy_summary, generate_trivy_html_section
-from scripts.codeql_processor import codeql_summary, generate_codeql_html_section
-from scripts.nuclei_processor import nuclei_summary, generate_nuclei_html_section
-from scripts.owasp_dependency_check_processor import owasp_dependency_check_summary, generate_owasp_dependency_check_html_section
-from scripts.safety_processor import safety_summary, generate_safety_html_section
-from scripts.snyk_processor import snyk_summary, generate_snyk_html_section
-from scripts.sonarqube_processor import sonarqube_summary, generate_sonarqube_html_section
-from scripts.terraform_security_processor import checkov_summary as terraform_checkov_summary, generate_checkov_html_section as generate_terraform_checkov_html_section
-from scripts.checkov_processor import checkov_summary, generate_checkov_html_section
-from scripts.trufflehog_processor import trufflehog_summary, generate_trufflehog_html_section
-from scripts.gitleaks_processor import gitleaks_summary, generate_gitleaks_html_section
-from scripts.detect_secrets_processor import detect_secrets_summary, generate_detect_secrets_html_section
-from scripts.npm_audit_processor import npm_audit_summary, generate_npm_audit_html_section
-from scripts.wapiti_processor import wapiti_summary, generate_wapiti_html_section
-from scripts.nikto_processor import nikto_summary, generate_nikto_html_section
-from scripts.kube_hunter_processor import kube_hunter_summary, generate_kube_hunter_html_section
-from scripts.kube_bench_processor import kube_bench_summary, generate_kube_bench_html_section
-from scripts.docker_bench_processor import docker_bench_summary, generate_docker_bench_html_section
-from scripts.eslint_processor import eslint_summary, generate_eslint_html_section
-from scripts.clair_processor import clair_summary, generate_clair_html_section
-from scripts.anchore_processor import anchore_summary, generate_anchore_html_section
-from scripts.burp_processor import burp_summary, generate_burp_html_section
-from scripts.brakeman_processor import brakeman_summary, generate_brakeman_html_section
-from scripts.bandit_processor import bandit_summary, generate_bandit_html_section
-from scripts.android_manifest_processor import android_manifest_summary, generate_android_manifest_html
-from scripts.ios_plist_processor import ios_plist_summary, generate_ios_plist_html
-from scripts.finding_policy import load_policy, apply_semgrep_policy, apply_gitleaks_policy
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.join(BASE_DIR, "processors"))
+sys.path.insert(0, os.path.join(BASE_DIR, "core"))
+sys.path.insert(0, "/SimpleSecCheck/scripts")
+
+from html_utils import html_header, html_footer, generate_visual_summary_section, generate_overall_summary_and_links_section, generate_executive_summary, generate_tool_status_section
+from zap_processor import zap_summary, generate_zap_html_section
+from zap_xml_parser import parse_zap_xml, generate_html_report
+from semgrep_processor import semgrep_summary, generate_semgrep_html_section
+from trivy_processor import trivy_summary, generate_trivy_html_section
+from codeql_processor import codeql_summary, generate_codeql_html_section
+from nuclei_processor import nuclei_summary, generate_nuclei_html_section
+from owasp_dependency_check_processor import owasp_dependency_check_summary, generate_owasp_dependency_check_html_section
+from safety_processor import safety_summary, generate_safety_html_section
+from snyk_processor import snyk_summary, generate_snyk_html_section
+from sonarqube_processor import sonarqube_summary, generate_sonarqube_html_section
+from terraform_security_processor import checkov_summary as terraform_checkov_summary, generate_checkov_html_section as generate_terraform_checkov_html_section
+from checkov_processor import checkov_summary, generate_checkov_html_section
+from trufflehog_processor import trufflehog_summary, generate_trufflehog_html_section
+from gitleaks_processor import gitleaks_summary, generate_gitleaks_html_section
+from detect_secrets_processor import detect_secrets_summary, generate_detect_secrets_html_section
+from npm_audit_processor import npm_audit_summary, generate_npm_audit_html_section
+from wapiti_processor import wapiti_summary, generate_wapiti_html_section
+from nikto_processor import nikto_summary, generate_nikto_html_section
+from kube_hunter_processor import kube_hunter_summary, generate_kube_hunter_html_section
+from kube_bench_processor import kube_bench_summary, generate_kube_bench_html_section
+from docker_bench_processor import docker_bench_summary, generate_docker_bench_html_section
+from eslint_processor import eslint_summary, generate_eslint_html_section
+from clair_processor import clair_summary, generate_clair_html_section
+from anchore_processor import anchore_summary, generate_anchore_html_section
+from burp_processor import burp_summary, generate_burp_html_section
+from brakeman_processor import brakeman_summary, generate_brakeman_html_section
+from bandit_processor import bandit_summary, generate_bandit_html_section
+from android_manifest_processor import android_manifest_summary, generate_android_manifest_html
+from ios_plist_processor import ios_plist_summary, generate_ios_plist_html
+from finding_policy import load_policy, apply_semgrep_policy, apply_gitleaks_policy
 
 RESULTS_DIR = os.environ.get('RESULTS_DIR', '/SimpleSecCheck/results')
 OUTPUT_FILE = os.environ.get('OUTPUT_FILE', os.path.join(RESULTS_DIR, 'security-summary.html'))
@@ -49,6 +54,12 @@ def debug(msg):
 def read_json(path):
     if not Path(path).exists():
         debug(f"Missing JSON file: {path}")
+        return None
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception as e:
+        debug(f"Error reading JSON file {path}: {e}")
         return None
 
 
@@ -70,12 +81,6 @@ def generate_accepted_findings_section(accepted_findings):
         )
     html_parts.append("</table>")
     return "".join(html_parts)
-    try:
-        with open(path) as f:
-            return json.load(f)
-    except Exception as e:
-        debug(f"Error reading JSON file {path}: {e}")
-        return None
 
 def main():
     debug(f"Starting HTML report generation. Output: {OUTPUT_FILE}")
@@ -178,7 +183,7 @@ def main():
     ios_findings_summary = ios_plist_summary(ios_plist_json_path)
     accepted_findings = []
 
-    policy_path = os.environ.get("FINDING_POLICY_FILE", "/SimpleSecCheck/conf/finding_policy.json")
+    policy_path = os.environ.get("FINDING_POLICY_FILE", "/SimpleSecCheck/config/policy/finding_policy.json")
     finding_policy = load_policy(policy_path)
     semgrep_findings, semgrep_accepted = apply_semgrep_policy(semgrep_findings, finding_policy.get("semgrep", {}))
     gitleaks_findings, gitleaks_accepted = apply_gitleaks_policy(gitleaks_findings, finding_policy.get("gitleaks", {}))

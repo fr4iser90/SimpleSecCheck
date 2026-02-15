@@ -11,8 +11,8 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-CODEQL_CONFIG_PATH="${CODEQL_CONFIG_PATH:-/SimpleSecCheck/codeql/config.yaml}"
-CODEQL_QUERIES_PATH="${CODEQL_QUERIES_PATH:-/SimpleSecCheck/codeql/queries}"
+CODEQL_CONFIG_PATH="${CODEQL_CONFIG_PATH:-/SimpleSecCheck/config/tools/codeql/config.yaml}"
+CODEQL_QUERIES_PATH="${CODEQL_QUERIES_PATH:-/SimpleSecCheck/config/tools/codeql/queries}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

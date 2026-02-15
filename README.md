@@ -118,7 +118,7 @@ docker run --rm \
   -v /path/to/your/project:/target:ro \
   -v $(pwd)/results:/SimpleSecCheck/results \
   -v $(pwd)/logs:/SimpleSecCheck/logs \
-  -v $(pwd)/conf:/SimpleSecCheck/conf \
+  -v $(pwd)/config:/SimpleSecCheck/config \
   -v $(pwd)/rules:/SimpleSecCheck/rules \
   -v $(pwd)/trivy:/SimpleSecCheck/trivy \
   -v $(pwd)/anchore:/SimpleSecCheck/anchore \
@@ -127,7 +127,7 @@ docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e SCAN_TYPE=code \
   fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/scripts/security-check.sh
+  /SimpleSecCheck/bin/security-check.sh
 
 # Scan a website
 docker run --rm \
@@ -135,22 +135,22 @@ docker run --rm \
   -e ZAP_TARGET=https://example.com \
   -v $(pwd)/results:/SimpleSecCheck/results \
   -v $(pwd)/logs:/SimpleSecCheck/logs \
-  -v $(pwd)/conf:/SimpleSecCheck/conf \
+  -v $(pwd)/config:/SimpleSecCheck/config \
   -v $(pwd)/rules:/SimpleSecCheck/rules \
   -v $(pwd)/zap:/SimpleSecCheck/zap \
   fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/scripts/security-check.sh
+  /SimpleSecCheck/bin/security-check.sh
 
 # Scan local network/Docker infrastructure
 docker run --rm \
   -e SCAN_TYPE=network \
   -v $(pwd)/results:/SimpleSecCheck/results \
   -v $(pwd)/logs:/SimpleSecCheck/logs \
-  -v $(pwd)/conf:/SimpleSecCheck/conf \
+  -v $(pwd)/config:/SimpleSecCheck/config \
   -v $(pwd)/rules:/SimpleSecCheck/rules \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/scripts/security-check.sh
+  /SimpleSecCheck/bin/security-check.sh
 ```
 
 ### Scan Examples
@@ -215,7 +215,7 @@ SCAN_SCOPE=tracked
 SIMPLESECCHECK_EXCLUDE_PATHS=.git,node_modules,dist,build,coverage,.next,.cache,results,logs
 
 # Optional policy file for triage (rule severity overrides, accepted findings, dedupe behavior)
-FINDING_POLICY_FILE=/SimpleSecCheck/conf/finding_policy.json
+FINDING_POLICY_FILE=/SimpleSecCheck/config/policy/finding_policy.json
 ```
 
 ### Finding Policy (False-Positive Tuning)
