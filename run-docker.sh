@@ -1,10 +1,11 @@
 #!/bin/bash
 # SimpleSecCheck - Docker Single-Shot Security Scanner
-# Usage: 
-#   ./run-docker.sh <target-path>                    # Scan local code
-#   ./run-docker.sh <website-url>                    # Scan website
+# Usage:
+#   ./run-docker.sh [--ci] <target-path>             # Scan local code
+#   ./run-docker.sh [--ci] <website-url>             # Scan website
 # Examples:
 #   ./run-docker.sh /home/user/my-project
+#   ./run-docker.sh --ci /home/user/my-project
 #   ./run-docker.sh https://fr4iser.com
 #   ./run-docker.sh network                              # Scan network/infrastructure
 
@@ -19,7 +20,59 @@ NC='\033[0m' # No Color
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET="$1"
+SCAN_SCOPE="${SCAN_SCOPE:-full}" # full | tracked
+SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
+CI_MODE=false
+TARGET=""
+
+print_usage() {
+    echo "Usage: $0 [--ci] <target>"
+    echo ""
+    echo "Examples:"
+    echo "  $0 /home/user/my-project          # Scan local code"
+    echo "  $0 --ci /home/user/my-project     # CI-friendly code scan"
+    echo "  $0 https://example.com            # Scan website"
+    echo "  $0 network                        # Scan network/infrastructure"
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --ci)
+            CI_MODE=true
+            shift
+            ;;
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo -e "${RED}[ERROR]${NC} Unknown option: $1"
+            print_usage
+            exit 1
+            ;;
+        *)
+            if [ -z "$TARGET" ]; then
+                TARGET="$1"
+                shift
+            else
+                echo -e "${RED}[ERROR]${NC} Unexpected extra argument: $1"
+                print_usage
+                exit 1
+            fi
+            ;;
+    esac
+done
+
+if [ "$CI_MODE" = true ]; then
+    SCAN_SCOPE="tracked"
+    if [ -z "$SIMPLESECCHECK_EXCLUDE_PATHS" ]; then
+        SIMPLESECCHECK_EXCLUDE_PATHS=".git,node_modules,dist,build,coverage,.next,.nuxt,.cache,results,logs,reddit-browser-data,browser-data,playwright-report,.scannerwork"
+    fi
+fi
 
 # Determine scan type
 if [ "$TARGET" = "network" ]; then
@@ -71,12 +124,7 @@ log_error() {
 
 # Check if target is provided
 if [ -z "$TARGET" ]; then
-    echo "Usage: $0 <target>"
-    echo ""
-    echo "Examples:"
-    echo "  $0 /home/user/my-project          # Scan local code"
-    echo "  $0 https://example.com            # Scan website"
-    echo "  $0 network                        # Scan network/infrastructure"
+    print_usage
     exit 1
 fi
 
@@ -138,13 +186,29 @@ if [ "$SCAN_TYPE" = "network" ]; then
         OVERALL_SUCCESS=false
     fi
 elif [ "$SCAN_TYPE" = "code" ]; then
+    TARGET_MOUNT_PATH="$TARGET_PATH"
+    TEMP_TRACKED_SNAPSHOT_DIR=""
+
+    # CI-friendly mode: scan only git-tracked files to avoid local artifact noise.
+    if [ "$SCAN_SCOPE" = "tracked" ]; then
+        if git -C "$TARGET_PATH" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            TEMP_TRACKED_SNAPSHOT_DIR="$(mktemp -d /tmp/simpleseccheck-tracked-XXXXXX)"
+            git -C "$TARGET_PATH" archive --format=tar HEAD | tar -xf - -C "$TEMP_TRACKED_SNAPSHOT_DIR"
+            TARGET_MOUNT_PATH="$TEMP_TRACKED_SNAPSHOT_DIR"
+            log_message "Using tracked-only snapshot for scan input: $TARGET_MOUNT_PATH"
+        else
+            log_warning "SCAN_SCOPE=tracked requested, but target is not a git repository. Falling back to full scan scope."
+        fi
+    fi
+
     # Code scan: mount code directory
     if docker-compose -f docker-compose.yml run --rm \
         -e SCAN_TYPE="$SCAN_TYPE" \
         -e ZAP_TARGET="$ZAP_TARGET" \
         -e TARGET_URL="$ZAP_TARGET" \
         -e PROJECT_RESULTS_DIR="$RESULTS_DIR" \
-        -v "$TARGET_PATH:/target:ro" \
+        -e SIMPLESECCHECK_EXCLUDE_PATHS="$SIMPLESECCHECK_EXCLUDE_PATHS" \
+        -v "$TARGET_MOUNT_PATH:/target:ro" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
         scanner /SimpleSecCheck/scripts/security-check.sh; then
@@ -153,6 +217,10 @@ elif [ "$SCAN_TYPE" = "code" ]; then
     else
         log_warning "Code security scan completed with warnings"
         OVERALL_SUCCESS=false
+    fi
+
+    if [ -n "$TEMP_TRACKED_SNAPSHOT_DIR" ] && [ -d "$TEMP_TRACKED_SNAPSHOT_DIR" ]; then
+        rm -rf "$TEMP_TRACKED_SNAPSHOT_DIR"
     fi
 else
     # Website scan: no code mount needed

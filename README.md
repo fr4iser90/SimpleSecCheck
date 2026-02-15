@@ -93,6 +93,9 @@ chmod +x run-docker.sh
 # Scan a local code project
 ./run-docker.sh /path/to/your/project
 
+# CI-friendly code scan (tracked files only + noise-reduction defaults)
+./run-docker.sh --ci /path/to/your/project
+
 # Scan a website
 ./run-docker.sh https://example.com
 ```
@@ -198,7 +201,29 @@ TARGET_URL=https://your-website.com
 
 # For code scanning (default: auto-detected)
 SCAN_TYPE=code
+
+# Scan scope for code scans:
+# - full (default): scan mounted target path as-is
+# - tracked: scan only git-tracked files (recommended for CI to reduce local artifact noise)
+SCAN_SCOPE=tracked
+
+# Optional comma-separated exclude paths for code scanners
+# (defaults already include common noise directories such as node_modules, dist, build, results, logs)
+SIMPLESECCHECK_EXCLUDE_PATHS=.git,node_modules,dist,build,coverage,.next,.cache,results,logs
+
+# Optional policy file for triage (rule severity overrides, accepted findings, dedupe behavior)
+FINDING_POLICY_FILE=/SimpleSecCheck/conf/finding_policy.json
 ```
+
+### Finding Policy (False-Positive Tuning)
+
+SimpleSecCheck supports a policy file at `conf/finding_policy.json` to reduce scanner noise without hiding real risks.
+
+- **Rule-level severity overrides:** downgrade noisy checks (e.g. a specific rule/path to `INFO`)
+- **Accepted findings with rationale:** keep an auditable reason for accepted risks
+- **Duplicate consolidation:** merge near-identical Semgrep findings on adjacent lines
+
+Use this carefully: accepted findings should include clear justifications and periodic revalidation.
 
 ### API Tokens (Optional)
 

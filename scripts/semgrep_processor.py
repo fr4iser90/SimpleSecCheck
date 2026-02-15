@@ -38,7 +38,14 @@ def generate_semgrep_html_section(semgrep_findings):
             check_id_escaped = html.escape(str(finding.get("check_id", "")))
             path_escaped = html.escape(str(finding.get("path", "")))
             start_escaped = html.escape(str(finding.get("start", "")))
-            message_escaped = html.escape(str(finding.get("message", "")))
+            message = str(finding.get("message", ""))
+            if finding.get("consolidated_count", 1) > 1:
+                span = finding.get("line_span", "")
+                message = f'{message} [Consolidated {finding.get("consolidated_count")} similar findings'
+                if span:
+                    message += f' around lines {span}'
+                message += ']'
+            message_escaped = html.escape(message)
             sev_escaped = html.escape(str(sev))
 
             html_parts.append(f'<tr class="row-{sev_escaped}"><td>{check_id_escaped}</td><td>{path_escaped}</td><td>{start_escaped}</td><td>{message_escaped}</td><td class="severity-{sev_escaped}">{icon} {sev_escaped}</td></tr>')

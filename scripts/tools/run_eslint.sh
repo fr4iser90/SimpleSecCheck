@@ -6,6 +6,7 @@ RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
 ESLINT_CONFIG_PATH="${ESLINT_CONFIG_PATH:-/SimpleSecCheck/eslint/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
+SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"
 
@@ -19,9 +20,19 @@ if command -v eslint &>/dev/null; then
   
   # Check for JavaScript/TypeScript files
   JS_FILES=()
+  FIND_EXCLUDE_ARGS=()
+  ESLINT_IGNORE_ARGS=()
+  IFS=',' read -r -a EXCLUDE_PATHS_ARRAY <<< "$SIMPLESECCHECK_EXCLUDE_PATHS"
+  for exclude_path in "${EXCLUDE_PATHS_ARRAY[@]}"; do
+    exclude_path="$(echo "$exclude_path" | xargs)"
+    if [ -n "$exclude_path" ]; then
+      FIND_EXCLUDE_ARGS+=(-not -path "*/$exclude_path/*")
+      ESLINT_IGNORE_ARGS+=(--ignore-pattern "**/$exclude_path/**")
+    fi
+  done
   while IFS= read -r -d '' file; do
     JS_FILES+=("$file")
-  done < <(find "$TARGET_PATH" -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \) -print0 2>/dev/null)
+  done < <(find "$TARGET_PATH" "${FIND_EXCLUDE_ARGS[@]}" -type f \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \) -print0 2>/dev/null)
   
   if [ ${#JS_FILES[@]} -eq 0 ]; then
     echo "[run_eslint.sh][ESLint] No JavaScript/TypeScript files found, skipping scan." | tee -a "$LOG_FILE"
@@ -34,13 +45,13 @@ if command -v eslint &>/dev/null; then
   
   # Run ESLint scan with JSON output
   # ESLint v9+ uses new flat config, skip config check with --no-config-lookup
-  eslint --format=json --output-file="$ESLINT_JSON" "$TARGET_PATH" >/dev/null 2>&1 || {
+  eslint "${ESLINT_IGNORE_ARGS[@]}" --format=json --output-file="$ESLINT_JSON" "$TARGET_PATH" >/dev/null 2>&1 || {
     echo "[run_eslint.sh][ESLint] JSON report generation failed." >> "$LOG_FILE"
     echo '[]' > "$ESLINT_JSON"
   }
   
   # Run ESLint scan with text output
-  eslint --format=compact --output-file="$ESLINT_TEXT" "$TARGET_PATH" >/dev/null 2>&1 || {
+  eslint "${ESLINT_IGNORE_ARGS[@]}" --format=compact --output-file="$ESLINT_TEXT" "$TARGET_PATH" >/dev/null 2>&1 || {
     echo "[run_eslint.sh][ESLint] Text report generation failed." >> "$LOG_FILE"
   }
   

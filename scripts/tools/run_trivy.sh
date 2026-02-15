@@ -14,6 +14,7 @@ LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
 TRIVY_SCAN_TYPE="${TRIVY_SCAN_TYPE:-fs}"
 TRIVY_CONFIG_PATH="${TRIVY_CONFIG_PATH:-/SimpleSecCheck/trivy/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
+SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"
 
@@ -27,19 +28,28 @@ if command -v trivy &>/dev/null; then
   
   # Deep scan with all vulnerability databases and comprehensive checks
   # Skip large log files and node_modules to avoid memory issues
+  TRIVY_SKIP_ARGS=(--skip-files "**/*.log" --skip-dirs "*/node_modules")
+  IFS=',' read -r -a EXCLUDE_PATHS_ARRAY <<< "$SIMPLESECCHECK_EXCLUDE_PATHS"
+  for exclude_path in "${EXCLUDE_PATHS_ARRAY[@]}"; do
+    exclude_path="$(echo "$exclude_path" | xargs)"
+    if [ -n "$exclude_path" ]; then
+      TRIVY_SKIP_ARGS+=(--skip-dirs "*/$exclude_path")
+    fi
+  done
+
   echo "[run_trivy.sh][Trivy] Running comprehensive vulnerability scan..." | tee -a "$LOG_FILE"
-  trivy "$TRIVY_SCAN_TYPE" --config "$TRIVY_CONFIG_PATH" --format json -o "$TRIVY_JSON" --severity HIGH,CRITICAL,MEDIUM,LOW --scanners vuln,secret,config --skip-files "**/*.log" --skip-dirs "*/node_modules" "$TARGET_PATH" 2>&1 | tee -a "$LOG_FILE" || {
+  trivy "$TRIVY_SCAN_TYPE" --config "$TRIVY_CONFIG_PATH" --format json -o "$TRIVY_JSON" --severity HIGH,CRITICAL,MEDIUM,LOW --scanners vuln,secret,config "${TRIVY_SKIP_ARGS[@]}" "$TARGET_PATH" 2>&1 | tee -a "$LOG_FILE" || {
     echo "[run_trivy.sh][Trivy] JSON report generation failed." | tee -a "$LOG_FILE"
   }
   
   # Generate detailed text report with all severities
-  trivy "$TRIVY_SCAN_TYPE" --config "$TRIVY_CONFIG_PATH" --format table -o "$TRIVY_TEXT" --severity HIGH,CRITICAL,MEDIUM,LOW --scanners vuln,secret,config --skip-files "**/*.log" --skip-dirs "*/node_modules" "$TARGET_PATH" 2>&1 | tee -a "$LOG_FILE" || {
+  trivy "$TRIVY_SCAN_TYPE" --config "$TRIVY_CONFIG_PATH" --format table -o "$TRIVY_TEXT" --severity HIGH,CRITICAL,MEDIUM,LOW --scanners vuln,secret,config "${TRIVY_SKIP_ARGS[@]}" "$TARGET_PATH" 2>&1 | tee -a "$LOG_FILE" || {
     echo "[run_trivy.sh][Trivy] Text report generation failed." | tee -a "$LOG_FILE"
   }
   
   # Additional deep scan for secrets and misconfigurations
   echo "[run_trivy.sh][Trivy] Running additional secrets and misconfiguration scan..." | tee -a "$LOG_FILE"
-  trivy "$TRIVY_SCAN_TYPE" --scanners secret,config --format json -o "$RESULTS_DIR/trivy-secrets-config.json" --skip-files "**/*.log" --skip-dirs "*/node_modules" "$TARGET_PATH" 2>&1 | tee -a "$LOG_FILE" || {
+  trivy "$TRIVY_SCAN_TYPE" --scanners secret,config --format json -o "$RESULTS_DIR/trivy-secrets-config.json" "${TRIVY_SKIP_ARGS[@]}" "$TARGET_PATH" 2>&1 | tee -a "$LOG_FILE" || {
     echo "[run_trivy.sh][Trivy] Secrets/config scan failed." | tee -a "$LOG_FILE"
   }
 
