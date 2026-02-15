@@ -8,7 +8,7 @@
 
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-KUBE_BENCH_CONFIG_PATH="${KUBE_BENCH_CONFIG_PATH:-/SimpleSecCheck/kube-bench/config.yaml}"
+KUBE_BENCH_CONFIG_PATH="${KUBE_BENCH_CONFIG_PATH:-/SimpleSecCheck/config/tools/kube-bench/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

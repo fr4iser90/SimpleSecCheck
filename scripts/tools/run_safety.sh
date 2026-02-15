@@ -9,7 +9,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-SAFETY_CONFIG_PATH="${SAFETY_CONFIG_PATH:-/SimpleSecCheck/safety/config.yaml}"
+SAFETY_CONFIG_PATH="${SAFETY_CONFIG_PATH:-/SimpleSecCheck/config/tools/safety/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

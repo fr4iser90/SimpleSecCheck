@@ -8,7 +8,7 @@
 
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-DOCKER_BENCH_CONFIG_PATH="${DOCKER_BENCH_CONFIG_PATH:-/SimpleSecCheck/docker-bench/config.yaml}"
+DOCKER_BENCH_CONFIG_PATH="${DOCKER_BENCH_CONFIG_PATH:-/SimpleSecCheck/config/tools/docker-bench/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

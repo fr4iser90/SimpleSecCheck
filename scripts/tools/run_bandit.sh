@@ -4,7 +4,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-BANDIT_CONFIG_PATH="${BANDIT_CONFIG_PATH:-/SimpleSecCheck/bandit/config.yaml}"
+BANDIT_CONFIG_PATH="${BANDIT_CONFIG_PATH:-/SimpleSecCheck/config/tools/bandit/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"

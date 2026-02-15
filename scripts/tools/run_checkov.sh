@@ -5,7 +5,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-CHECKOV_CONFIG_PATH="${CHECKOV_CONFIG_PATH:-/SimpleSecCheck/checkov/config.yaml}"
+CHECKOV_CONFIG_PATH="${CHECKOV_CONFIG_PATH:-/SimpleSecCheck/config/tools/checkov/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 
@@ -52,16 +52,16 @@ if command -v checkov &>/dev/null; then
   
   echo "[run_checkov.sh][Checkov] Found ${#INFRA_FILES[@]} infrastructure file(s)." | tee -a "$LOG_FILE"
   
-  # Generate JSON report for multiple frameworks
-  # Note: Not limiting to --framework terraform, using default auto-detection
-  checkov -d "$TARGET_PATH" "${CHECKOV_SKIP_ARGS[@]}" --output json --output-file "$CHECKOV_JSON" --quiet >/dev/null 2>&1 || {
+  # Generate JSON report for multiple frameworks via stdout to avoid output path quirks.
+  # Note: Not limiting to --framework terraform, using default auto-detection.
+  checkov -d "$TARGET_PATH" "${CHECKOV_SKIP_ARGS[@]}" --output json --quiet > "$CHECKOV_JSON" 2>/dev/null || {
     echo "[run_checkov.sh][Checkov] JSON report generation failed." >> "$LOG_FILE"
     # Create minimal JSON if generation fails
     echo '{"check_type":"","results":{"passed_checks":[],"failed_checks":[],"skipped_checks":[]},"summary":{"passed":0,"failed":0,"skipped":0}}' > "$CHECKOV_JSON"
   }
   
   # Generate text report (output to stdout, redirect to file)
-  checkov -d "$TARGET_PATH" "${CHECKOV_SKIP_ARGS[@]}" --output cli --quiet >/dev/null 2>&1 > "$CHECKOV_TEXT" || {
+  checkov -d "$TARGET_PATH" "${CHECKOV_SKIP_ARGS[@]}" --output cli --quiet > "$CHECKOV_TEXT" 2>/dev/null || {
     echo "[run_checkov.sh][Checkov] Text report generation failed." >> "$LOG_FILE"
     echo "Checkov scan completed but no results available." > "$CHECKOV_TEXT"
   }
