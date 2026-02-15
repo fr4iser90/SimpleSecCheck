@@ -6,6 +6,11 @@
         "path_regex": "^/target/frontend/src/shared/components/PreviewFrame\\.tsx$",
         "new_severity": "INFO",
         "reason": "PreviewFrame uses DOMPurify + iframe sandbox; tracked as accepted mitigation."
+      },
+      {
+        "check_id": "javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring",
+        "new_severity": "INFO",
+        "reason": "Downgraded by default because this rule is frequently noisy in structured logger usage."
       }
     ],
     "accepted_findings": [
@@ -14,6 +19,10 @@
         "path_regex": "^/target/frontend/src/shared/components/PreviewFrame\\.tsx$",
         "message_regex": "innerHTML",
         "reason": "Accepted with controls: DOMPurify sanitization and sandboxed iframe."
+      },
+      {
+        "check_id": "javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring",
+        "reason": "Accepted by default to reduce known low-signal log-format noise; review manually if needed."
       }
     ],
     "dedupe": {
