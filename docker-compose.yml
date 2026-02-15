@@ -5,9 +5,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: 1.2.0
+        VERSION: 1.3.0
     # image: fr4iser/simpleseccheck:latest  # Aus Docker Hub (auskommentiert für lokales Building)
-    container_name: SimpleSecCheck_scanner_v1.2.0
+    container_name: SimpleSecCheck_scanner_v1.3.0
     volumes:
       - ./results:/SimpleSecCheck/results
       - ./logs:/SimpleSecCheck/logs
