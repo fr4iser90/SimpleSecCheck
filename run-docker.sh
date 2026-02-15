@@ -6,6 +6,7 @@
 # Examples:
 #   ./run-docker.sh /home/user/my-project
 #   ./run-docker.sh --ci /home/user/my-project
+#   ./run-docker.sh --finding-policy config/finding-policy.json /home/user/my-project
 #   ./run-docker.sh https://fr4iser.com
 #   ./run-docker.sh network                              # Scan network/infrastructure
 
@@ -24,13 +25,16 @@ SCAN_SCOPE="${SCAN_SCOPE:-full}" # full | tracked
 SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 CI_MODE=false
 TARGET=""
+FINDING_POLICY_ARG=""
+FINDING_POLICY_FILE_IN_CONTAINER=""
 
 print_usage() {
-    echo "Usage: $0 [--ci] <target>"
+    echo "Usage: $0 [--ci] [--finding-policy <path>] <target>"
     echo ""
     echo "Examples:"
     echo "  $0 /home/user/my-project          # Scan local code"
     echo "  $0 --ci /home/user/my-project     # CI-friendly code scan"
+    echo "  $0 --finding-policy config/finding-policy.json /home/user/my-project"
     echo "  $0 https://example.com            # Scan website"
     echo "  $0 network                        # Scan network/infrastructure"
 }
@@ -40,6 +44,15 @@ while [ $# -gt 0 ]; do
         --ci)
             CI_MODE=true
             shift
+            ;;
+        --finding-policy)
+            if [ -z "${2:-}" ]; then
+                echo -e "${RED}[ERROR]${NC} Missing value for --finding-policy"
+                print_usage
+                exit 1
+            fi
+            FINDING_POLICY_ARG="$2"
+            shift 2
             ;;
         -h|--help)
             print_usage
@@ -201,6 +214,43 @@ elif [ "$SCAN_TYPE" = "code" ]; then
         fi
     fi
 
+    # Finding policy resolution priority:
+    # 1) Explicit --finding-policy
+    # 2) Autodetect in target repo
+    # 3) Scanner default in container (handled by security-check.sh)
+    if [ -n "$FINDING_POLICY_ARG" ]; then
+        if [[ "$FINDING_POLICY_ARG" = /target/* ]]; then
+            FINDING_POLICY_FILE_IN_CONTAINER="$FINDING_POLICY_ARG"
+        elif [[ "$FINDING_POLICY_ARG" = /* ]]; then
+            # Absolute host path: only valid if it's inside the mounted target path.
+            if [[ "$FINDING_POLICY_ARG" == "$TARGET_MOUNT_PATH"* ]] && [ -f "$FINDING_POLICY_ARG" ]; then
+                FINDING_POLICY_FILE_IN_CONTAINER="/target${FINDING_POLICY_ARG#$TARGET_MOUNT_PATH}"
+            else
+                log_warning "--finding-policy absolute path is outside mounted target or does not exist. Falling back to autodetect/default."
+            fi
+        else
+            if [ -f "$TARGET_MOUNT_PATH/$FINDING_POLICY_ARG" ]; then
+                FINDING_POLICY_FILE_IN_CONTAINER="/target/$FINDING_POLICY_ARG"
+            else
+                log_warning "--finding-policy file not found in target: $FINDING_POLICY_ARG. Falling back to autodetect/default."
+            fi
+        fi
+    fi
+
+    if [ -z "$FINDING_POLICY_FILE_IN_CONTAINER" ]; then
+        for policy_candidate in "config/finding-policy.json" "security/finding-policy.json" ".security/finding-policy.json"; do
+            if [ -f "$TARGET_MOUNT_PATH/$policy_candidate" ]; then
+                FINDING_POLICY_FILE_IN_CONTAINER="/target/$policy_candidate"
+                log_message "Auto-detected finding policy: $FINDING_POLICY_FILE_IN_CONTAINER"
+                break
+            fi
+        done
+    fi
+
+    if [ -n "$FINDING_POLICY_FILE_IN_CONTAINER" ]; then
+        log_message "Using finding policy: $FINDING_POLICY_FILE_IN_CONTAINER"
+    fi
+
     # Code scan: mount code directory
     if docker-compose -f docker-compose.yml run --rm \
         -e SCAN_TYPE="$SCAN_TYPE" \
@@ -208,6 +258,7 @@ elif [ "$SCAN_TYPE" = "code" ]; then
         -e TARGET_URL="$ZAP_TARGET" \
         -e PROJECT_RESULTS_DIR="$RESULTS_DIR" \
         -e SIMPLESECCHECK_EXCLUDE_PATHS="$SIMPLESECCHECK_EXCLUDE_PATHS" \
+        -e FINDING_POLICY_FILE="$FINDING_POLICY_FILE_IN_CONTAINER" \
         -v "$TARGET_MOUNT_PATH:/target:ro" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
