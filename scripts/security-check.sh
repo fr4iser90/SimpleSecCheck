@@ -57,6 +57,8 @@ export SCAN_TYPE="${SCAN_TYPE:-code}" # Default to code scan
 
 # --- Other Environment Variables for Tool Scripts ---
 export TRIVY_SCAN_TYPE="${TRIVY_SCAN_TYPE:-fs}" # Default scan type for Trivy
+DEFAULT_EXCLUDE_PATHS=".git,node_modules,dist,build,coverage,.next,.nuxt,.cache,results,logs,reddit-browser-data,browser-data,playwright-report,.scannerwork"
+export SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-$DEFAULT_EXCLUDE_PATHS}"
 
 # --- Script Control & Setup ---
 LOCK_FILE="$RESULTS_DIR_IN_CONTAINER/.scan-running"
@@ -129,6 +131,7 @@ log_message "Scan Type: $SCAN_TYPE"
 log_message "Container Base Project Dir (BASE_PROJECT_DIR): $BASE_PROJECT_DIR"
 if [ "$SCAN_TYPE" = "code" ]; then
     log_message "Host Code Mount for Scanning (TARGET_PATH_IN_CONTAINER): $TARGET_PATH_IN_CONTAINER"
+    log_message "Exclude Paths (SIMPLESECCHECK_EXCLUDE_PATHS): $SIMPLESECCHECK_EXCLUDE_PATHS"
 fi
 log_message "Results Directory (RESULTS_DIR_IN_CONTAINER): $RESULTS_DIR_IN_CONTAINER"
 log_message "Logs Directory (LOGS_DIR_IN_CONTAINER): $LOGS_DIR_IN_CONTAINER"
@@ -997,6 +1000,7 @@ HTML_REPORT_OUTPUT_FILE="$RESULTS_DIR_IN_CONTAINER/security-summary.html"
 # ZAP_TARGET is already exported.
 # It also uses FP_WHITELIST_FILE if set.
 export FP_WHITELIST_FILE="${FP_WHITELIST_FILE:-$BASE_PROJECT_DIR/conf/fp_whitelist.json}" # Default if not set
+export FINDING_POLICY_FILE="${FINDING_POLICY_FILE:-$BASE_PROJECT_DIR/conf/finding_policy.json}"
 
 log_message "Checking for HTML report generator: $HTML_REPORT_PY_SCRIPT"
 if [ -f "$HTML_REPORT_PY_SCRIPT" ]; then

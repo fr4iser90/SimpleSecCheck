@@ -12,6 +12,7 @@ RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
 DETECT_SECRETS_CONFIG_PATH="${DETECT_SECRETS_CONFIG_PATH:-/SimpleSecCheck/detect-secrets/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
+SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"
 
@@ -22,16 +23,24 @@ if command -v detect-secrets &>/dev/null; then
   
   DETECT_SECRETS_JSON="$RESULTS_DIR/detect-secrets.json"
   DETECT_SECRETS_TEXT="$RESULTS_DIR/detect-secrets.txt"
+  DETECT_SECRETS_EXCLUDE_ARGS=()
+  IFS=',' read -r -a EXCLUDE_PATHS_ARRAY <<< "$SIMPLESECCHECK_EXCLUDE_PATHS"
+  for exclude_path in "${EXCLUDE_PATHS_ARRAY[@]}"; do
+    exclude_path="$(echo "$exclude_path" | xargs)"
+    if [ -n "$exclude_path" ]; then
+      DETECT_SECRETS_EXCLUDE_ARGS+=(--exclude-files ".*/$exclude_path/.*")
+    fi
+  done
   
   # Run secret detection scan with JSON output
   echo "[run_detect_secrets.sh][Detect-secrets] Running secret detection scan..." | tee -a "$LOG_FILE"
-  detect-secrets scan --all-files "$TARGET_PATH" > "$DETECT_SECRETS_JSON" 2>/dev/null || {
+  detect-secrets scan --all-files "${DETECT_SECRETS_EXCLUDE_ARGS[@]}" "$TARGET_PATH" > "$DETECT_SECRETS_JSON" 2>/dev/null || {
     echo "[run_detect_secrets.sh][Detect-secrets] JSON report generation failed." >> "$LOG_FILE"
   }
   
   # Generate text report
   echo "[run_detect_secrets.sh][Detect-secrets] Running text report generation..." | tee -a "$LOG_FILE"
-  detect-secrets scan --all-files "$TARGET_PATH" > "$DETECT_SECRETS_TEXT" 2>/dev/null || {
+  detect-secrets scan --all-files "${DETECT_SECRETS_EXCLUDE_ARGS[@]}" "$TARGET_PATH" > "$DETECT_SECRETS_TEXT" 2>/dev/null || {
     echo "[run_detect_secrets.sh][Detect-secrets] Text report generation failed." >> "$LOG_FILE"
   }
 

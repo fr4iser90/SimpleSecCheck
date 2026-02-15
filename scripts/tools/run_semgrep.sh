@@ -11,6 +11,7 @@ RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
 SEMGREP_RULES_PATH="${SEMGREP_RULES_PATH:-/SimpleSecCheck/rules}" # Default rules path
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
+SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"
 
@@ -24,11 +25,20 @@ if command -v semgrep &>/dev/null; then
   
   # Deep analysis with multiple rule sets and aggressive scanning
   echo "[run_semgrep.sh][Semgrep] Running DEEP analysis with multiple rule sets..." | tee -a "$LOG_FILE"
+
+  SEMGREP_EXCLUDE_ARGS=()
+  IFS=',' read -r -a EXCLUDE_PATHS_ARRAY <<< "$SIMPLESECCHECK_EXCLUDE_PATHS"
+  for exclude_path in "${EXCLUDE_PATHS_ARRAY[@]}"; do
+    exclude_path="$(echo "$exclude_path" | xargs)"
+    if [ -n "$exclude_path" ]; then
+      SEMGREP_EXCLUDE_ARGS+=(--exclude "$exclude_path")
+    fi
+  done
   
   # Run with custom rules + auto rules for comprehensive coverage
   # Disable git to avoid git errors when target is not a git repo
   echo "[run_semgrep.sh][Semgrep] Generating JSON report..." | tee -a "$LOG_FILE"
-  if semgrep --disable-version-check --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --json -o "$SEMOLINA_JSON" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
+  if semgrep --disable-version-check --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" "${SEMGREP_EXCLUDE_ARGS[@]}" --json -o "$SEMOLINA_JSON" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
     echo "[run_semgrep.sh][Semgrep] JSON report generated successfully." | tee -a "$LOG_FILE"
   else
     EXIT_CODE=$?
@@ -37,7 +47,7 @@ if command -v semgrep &>/dev/null; then
   
   # Generate detailed text report with verbose output
   echo "[run_semgrep.sh][Semgrep] Generating text report..." | tee -a "$LOG_FILE"
-  if semgrep --disable-version-check --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" --text -o "$SEMOLINA_TEXT" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
+  if semgrep --disable-version-check --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" "${SEMGREP_EXCLUDE_ARGS[@]}" --text -o "$SEMOLINA_TEXT" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
     echo "[run_semgrep.sh][Semgrep] Text report generated successfully." | tee -a "$LOG_FILE"
   else
     EXIT_CODE=$?
@@ -46,7 +56,7 @@ if command -v semgrep &>/dev/null; then
   
   # Additional deep scan with specific security-focused rules
   echo "[run_semgrep.sh][Semgrep] Running additional security-focused deep scan..." | tee -a "$LOG_FILE"
-  semgrep --disable-version-check --config "p/security-audit" --config "p/secrets" --config "p/owasp-top-ten" "$TARGET_PATH" --json -o "$RESULTS_DIR/semgrep-security-deep.json" 2>/dev/null || {
+  semgrep --disable-version-check --config "p/security-audit" --config "p/secrets" --config "p/owasp-top-ten" "$TARGET_PATH" "${SEMGREP_EXCLUDE_ARGS[@]}" --json -o "$RESULTS_DIR/semgrep-security-deep.json" 2>/dev/null || {
     echo "[run_semgrep.sh][Semgrep] Security deep scan failed." >> "$LOG_FILE"
   }
   

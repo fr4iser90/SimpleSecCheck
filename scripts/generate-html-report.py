@@ -3,9 +3,9 @@ import os
 import json
 import datetime
 import sys
+import html
 from pathlib import Path
 from xml.etree import ElementTree as ET
-from bs4 import BeautifulSoup
 import traceback
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from scripts.html_utils import html_header, html_footer, generate_visual_summary_section, generate_overall_summary_and_links_section, generate_executive_summary, generate_tool_status_section
@@ -38,6 +38,7 @@ from scripts.brakeman_processor import brakeman_summary, generate_brakeman_html_
 from scripts.bandit_processor import bandit_summary, generate_bandit_html_section
 from scripts.android_manifest_processor import android_manifest_summary, generate_android_manifest_html
 from scripts.ios_plist_processor import ios_plist_summary, generate_ios_plist_html
+from scripts.finding_policy import load_policy, apply_semgrep_policy, apply_gitleaks_policy
 
 RESULTS_DIR = os.environ.get('RESULTS_DIR', '/SimpleSecCheck/results')
 OUTPUT_FILE = os.environ.get('OUTPUT_FILE', os.path.join(RESULTS_DIR, 'security-summary.html'))
@@ -49,6 +50,26 @@ def read_json(path):
     if not Path(path).exists():
         debug(f"Missing JSON file: {path}")
         return None
+
+
+def generate_accepted_findings_section(accepted_findings):
+    if not accepted_findings:
+        return ""
+
+    html_parts = []
+    html_parts.append("<h2>Accepted Findings (With Rationale)</h2>")
+    html_parts.append("<table><tr><th>Tool</th><th>ID</th><th>File</th><th>Line</th><th>Reason</th></tr>")
+    for finding in accepted_findings:
+        tool = html.escape(str(finding.get("tool", "")))
+        fid = html.escape(str(finding.get("id", "")))
+        path = html.escape(str(finding.get("path", "")))
+        line = html.escape(str(finding.get("line", "")))
+        reason = html.escape(str(finding.get("reason", "Accepted by policy")))
+        html_parts.append(
+            f"<tr><td>{tool}</td><td>{fid}</td><td>{path}</td><td>{line}</td><td>{reason}</td></tr>"
+        )
+    html_parts.append("</table>")
+    return "".join(html_parts)
     try:
         with open(path) as f:
             return json.load(f)
@@ -155,6 +176,14 @@ def main():
     bandit_findings = bandit_summary(read_json(bandit_json_path))
     android_findings_summary = android_manifest_summary(android_manifest_json_path)
     ios_findings_summary = ios_plist_summary(ios_plist_json_path)
+    accepted_findings = []
+
+    policy_path = os.environ.get("FINDING_POLICY_FILE", "/SimpleSecCheck/conf/finding_policy.json")
+    finding_policy = load_policy(policy_path)
+    semgrep_findings, semgrep_accepted = apply_semgrep_policy(semgrep_findings, finding_policy.get("semgrep", {}))
+    gitleaks_findings, gitleaks_accepted = apply_gitleaks_policy(gitleaks_findings, finding_policy.get("gitleaks", {}))
+    accepted_findings.extend(semgrep_accepted)
+    accepted_findings.extend(gitleaks_accepted)
 
     try:
         # Extract ZAP alerts list if available, otherwise use empty list
@@ -266,6 +295,10 @@ def main():
             # GitLeaks Section (only if findings exist)
             if len(gitleaks_findings) > 0:
                 f.write(generate_gitleaks_html_section(gitleaks_findings))
+
+            # Accepted Findings Section (only if policy accepted any findings)
+            if len(accepted_findings) > 0:
+                f.write(generate_accepted_findings_section(accepted_findings))
 
             # Detect-secrets Section (only if findings exist)
             if len(detect_secrets_findings) > 0:

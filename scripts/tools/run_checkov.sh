@@ -7,6 +7,7 @@ RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
 CHECKOV_CONFIG_PATH="${CHECKOV_CONFIG_PATH:-/SimpleSecCheck/checkov/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
+SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"
 
@@ -26,12 +27,22 @@ if command -v checkov &>/dev/null; then
   
   # Check for infrastructure files (broader than just Terraform)
   INFRA_FILES=()
+  FIND_EXCLUDE_ARGS=()
+  CHECKOV_SKIP_ARGS=()
+  IFS=',' read -r -a EXCLUDE_PATHS_ARRAY <<< "$SIMPLESECCHECK_EXCLUDE_PATHS"
+  for exclude_path in "${EXCLUDE_PATHS_ARRAY[@]}"; do
+    exclude_path="$(echo "$exclude_path" | xargs)"
+    if [ -n "$exclude_path" ]; then
+      FIND_EXCLUDE_ARGS+=(-not -path "*/$exclude_path/*")
+      CHECKOV_SKIP_ARGS+=(--skip-path "$exclude_path")
+    fi
+  done
   
   # Look for common infrastructure files across multiple frameworks
   for pattern in "*.tf" "*.tfvars" "*.yml" "*.yaml" "Dockerfile" "docker-compose.yml" "docker-compose.yaml" "*.json" "*.tfstate" "cloudformation.yaml" "cloudformation.yml" "serverless.yml" "serverless.yaml"; do
     while IFS= read -r -d '' file; do
       INFRA_FILES+=("$file")
-    done < <(find "$TARGET_PATH" -name "$pattern" -type f -print0 2>/dev/null)
+    done < <(find "$TARGET_PATH" "${FIND_EXCLUDE_ARGS[@]}" -name "$pattern" -type f -print0 2>/dev/null)
   done
   
   if [ ${#INFRA_FILES[@]} -eq 0 ]; then
@@ -43,14 +54,14 @@ if command -v checkov &>/dev/null; then
   
   # Generate JSON report for multiple frameworks
   # Note: Not limiting to --framework terraform, using default auto-detection
-  checkov -d "$TARGET_PATH" --output json --output-file "$CHECKOV_JSON" --quiet >/dev/null 2>&1 || {
+  checkov -d "$TARGET_PATH" "${CHECKOV_SKIP_ARGS[@]}" --output json --output-file "$CHECKOV_JSON" --quiet >/dev/null 2>&1 || {
     echo "[run_checkov.sh][Checkov] JSON report generation failed." >> "$LOG_FILE"
     # Create minimal JSON if generation fails
     echo '{"check_type":"","results":{"passed_checks":[],"failed_checks":[],"skipped_checks":[]},"summary":{"passed":0,"failed":0,"skipped":0}}' > "$CHECKOV_JSON"
   }
   
   # Generate text report (output to stdout, redirect to file)
-  checkov -d "$TARGET_PATH" --output cli --quiet >/dev/null 2>&1 > "$CHECKOV_TEXT" || {
+  checkov -d "$TARGET_PATH" "${CHECKOV_SKIP_ARGS[@]}" --output cli --quiet >/dev/null 2>&1 > "$CHECKOV_TEXT" || {
     echo "[run_checkov.sh][Checkov] Text report generation failed." >> "$LOG_FILE"
     echo "Checkov scan completed but no results available." > "$CHECKOV_TEXT"
   }

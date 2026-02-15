@@ -14,6 +14,7 @@ LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
 OWASP_DC_CONFIG_PATH="${OWASP_DC_CONFIG_PATH:-/SimpleSecCheck/owasp-dependency-check/config.yaml}"
 OWASP_DC_DATA_DIR="${OWASP_DC_DATA_DIR:-/SimpleSecCheck/owasp-dependency-check-data}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
+SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")" "$OWASP_DC_DATA_DIR"
 
@@ -73,6 +74,15 @@ if command -v dependency-check &>/dev/null; then
   
   # Run OWASP Dependency Check with comprehensive scanning
   echo "[run_owasp_dependency_check.sh][OWASP DC] Running comprehensive dependency vulnerability scan..." | tee -a "$LOG_FILE"
+
+  OWASP_EXCLUDE_ARGS=()
+  IFS=',' read -r -a EXCLUDE_PATHS_ARRAY <<< "$SIMPLESECCHECK_EXCLUDE_PATHS"
+  for exclude_path in "${EXCLUDE_PATHS_ARRAY[@]}"; do
+    exclude_path="$(echo "$exclude_path" | xargs)"
+    if [ -n "$exclude_path" ]; then
+      OWASP_EXCLUDE_ARGS+=(--exclude "**/$exclude_path/**")
+    fi
+  done
   
   dependency-check \
     --project "SimpleSecCheck-Dependency-Scan" \
@@ -84,6 +94,7 @@ if command -v dependency-check &>/dev/null; then
     --data "$OWASP_DC_DATA_DIR" \
     $NVD_FLAG \
     --noupdate \
+    "${OWASP_EXCLUDE_ARGS[@]}" \
     >/dev/null 2>&1 || {
     echo "[run_owasp_dependency_check.sh][OWASP DC] Scan completed with warnings (rate limits may apply)..." >> "$LOG_FILE"
   }

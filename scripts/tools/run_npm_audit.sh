@@ -6,6 +6,7 @@ RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
 NPM_AUDIT_CONFIG_PATH="${NPM_AUDIT_CONFIG_PATH:-/SimpleSecCheck/npm-audit/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
+SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"
 
@@ -19,12 +20,20 @@ if command -v npm &>/dev/null; then
   
   # Check for Node.js/JavaScript dependency files
   DEPENDENCY_FILES=()
+  FIND_EXCLUDE_ARGS=(-not -path "*/node_modules/*")
+  IFS=',' read -r -a EXCLUDE_PATHS_ARRAY <<< "$SIMPLESECCHECK_EXCLUDE_PATHS"
+  for exclude_path in "${EXCLUDE_PATHS_ARRAY[@]}"; do
+    exclude_path="$(echo "$exclude_path" | xargs)"
+    if [ -n "$exclude_path" ] && [ "$exclude_path" != "node_modules" ]; then
+      FIND_EXCLUDE_ARGS+=(-not -path "*/$exclude_path/*")
+    fi
+  done
   
   # Look for root package.json files only (exclude node_modules)
   # npm audit already audits all dependencies, so we only need the main package.json per project
   while IFS= read -r -d '' file; do
     DEPENDENCY_FILES+=("$file")
-  done < <(find "$TARGET_PATH" -name "package.json" -type f -not -path "*/node_modules/*" -print0 2>/dev/null)
+  done < <(find "$TARGET_PATH" "${FIND_EXCLUDE_ARGS[@]}" -name "package.json" -type f -print0 2>/dev/null)
   
   if [ ${#DEPENDENCY_FILES[@]} -eq 0 ]; then
     echo "[run_npm_audit.sh][npm audit] No package.json files found, skipping scan." | tee -a "$LOG_FILE"
