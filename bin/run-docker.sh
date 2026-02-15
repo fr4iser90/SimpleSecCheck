@@ -142,9 +142,21 @@ if [ -z "$TARGET" ]; then
 fi
 
 # Check if target path exists (only for code scans)
-if [ "$SCAN_TYPE" = "code" ] && [ ! -d "$TARGET_PATH" ] && [ ! -f "$TARGET_PATH" ]; then
-    log_error "Target path does not exist: $TARGET_PATH"
-    exit 1
+# Note: Skip validation if running inside a container (e.g., WebUI container)
+# because host paths are not visible inside the container.
+# Docker Compose will fail with a clear error if the path doesn't exist on the host.
+if [ "$SCAN_TYPE" = "code" ]; then
+    # Check if we're running in a container (e.g., WebUI container at /app)
+    # If so, skip path validation - docker-compose will handle it
+    if [ -d "/app" ] || [ -f "/.dockerenv" ]; then
+        # Running in container: cannot validate host paths, let docker-compose handle it
+        log_message "Running in container - path validation will be done by docker-compose when mounting"
+    elif [ ! -d "$TARGET_PATH" ] && [ ! -f "$TARGET_PATH" ]; then
+        # Running on host: validate path exists
+        log_error "Target path does not exist: $TARGET_PATH"
+        log_error "Please ensure the path exists on the host system"
+        exit 1
+    fi
 fi
 
 # Create directories
@@ -180,16 +192,70 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
     set +a  # Stop automatically exporting
 fi
 
+# Determine docker-compose file and build context
+# If running in container (e.g., WebUI), use /project as build context
+# Otherwise use SCRIPT_DIR (host execution)
+if [ -d "/project" ] && [ -f "/project/docker-compose.yml" ]; then
+    # Running in container: use /project as build context
+    DOCKER_COMPOSE_FILE="/project/docker-compose.yml"
+    DOCKER_COMPOSE_CONTEXT="/project"
+else
+    # Running on host: use SCRIPT_DIR
+    DOCKER_COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+    DOCKER_COMPOSE_CONTEXT="$SCRIPT_DIR"
+fi
+
+# Determine OWASP data volume mount (needed when using -v flags, as they override docker-compose.yml volumes)
+if [ -d "/project" ] && [ -f "/project/docker-compose.yml" ]; then
+    # Running in container: get host path
+    log_message "[OWASP Volume] Running in container, determining host path..."
+    
+    # Method 1: Use environment variable if set
+    if [ -n "$HOST_PROJECT_ROOT" ]; then
+        log_message "[OWASP Volume] Using HOST_PROJECT_ROOT from environment: '$HOST_PROJECT_ROOT'"
+    else
+        # Method 2: Use docker inspect with container name
+        CONTAINER_NAME="SimpleSecCheck_webui"
+        log_message "[OWASP Volume] Trying container name: '$CONTAINER_NAME'"
+        HOST_PROJECT_ROOT=$(docker inspect --format='{{range .Mounts}}{{if eq .Destination "/project"}}{{.Source}}{{end}}{{end}}' "$CONTAINER_NAME" 2>/dev/null || echo "")
+        log_message "[OWASP Volume] docker inspect result: HOST_PROJECT_ROOT='$HOST_PROJECT_ROOT'"
+    fi
+    if [ -n "$HOST_PROJECT_ROOT" ]; then
+        OWASP_DATA_VOLUME="-v $HOST_PROJECT_ROOT/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data"
+        log_message "[OWASP Volume] Using host path: $OWASP_DATA_VOLUME"
+        log_message "[OWASP Volume] Checking if host path exists: $HOST_PROJECT_ROOT/owasp-dependency-check-data"
+        if [ -d "$HOST_PROJECT_ROOT/owasp-dependency-check-data" ]; then
+            log_message "[OWASP Volume] ✓ Host path exists"
+        else
+            log_warning "[OWASP Volume] ✗ Host path does NOT exist: $HOST_PROJECT_ROOT/owasp-dependency-check-data"
+        fi
+    else
+        # Fallback: use relative path (might not work)
+        OWASP_DATA_VOLUME="-v ./owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data"
+        log_warning "[OWASP Volume] Could not determine host project root, using relative path: $OWASP_DATA_VOLUME"
+    fi
+else
+    # Running on host: use absolute path
+    OWASP_DATA_VOLUME="-v $SCRIPT_DIR/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data"
+    log_message "[OWASP Volume] Running on host, using absolute path: $OWASP_DATA_VOLUME"
+    if [ -d "$SCRIPT_DIR/owasp-dependency-check-data" ]; then
+        log_message "[OWASP Volume] ✓ Host path exists"
+    else
+        log_warning "[OWASP Volume] ✗ Host path does NOT exist: $SCRIPT_DIR/owasp-dependency-check-data"
+    fi
+fi
+
 # Run Docker Compose with the scanner service
 if [ "$SCAN_TYPE" = "network" ]; then
     # Network scan: needs docker socket for docker-bench
-    if docker-compose -f docker-compose.yml run --rm \
+    if docker-compose -f "$DOCKER_COMPOSE_FILE" --project-directory "$DOCKER_COMPOSE_CONTEXT" run --rm \
         -e SCAN_TYPE="$SCAN_TYPE" \
         -e ZAP_TARGET="$ZAP_TARGET" \
         -e TARGET_URL="$ZAP_TARGET" \
         -e PROJECT_RESULTS_DIR="$RESULTS_DIR" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
+        $OWASP_DATA_VOLUME \
         -v /var/run/docker.sock:/var/run/docker.sock:ro \
         scanner /SimpleSecCheck/bin/security-check.sh; then
         log_success "Network security scan completed successfully!"
@@ -267,7 +333,19 @@ elif [ "$SCAN_TYPE" = "code" ]; then
     fi
 
     # Code scan: mount code directory
-    if docker-compose -f docker-compose.yml run --rm \
+    # If running in container (e.g., WebUI), use /project as build context
+    # Otherwise use SCRIPT_DIR (host execution)
+    if [ -d "/project" ] && [ -f "/project/docker-compose.yml" ]; then
+        # Running in container: use /project as build context
+        DOCKER_COMPOSE_FILE="/project/docker-compose.yml"
+        DOCKER_COMPOSE_CONTEXT="/project"
+    else
+        # Running on host: use SCRIPT_DIR
+        DOCKER_COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+        DOCKER_COMPOSE_CONTEXT="$SCRIPT_DIR"
+    fi
+    
+    if docker-compose -f "$DOCKER_COMPOSE_FILE" --project-directory "$DOCKER_COMPOSE_CONTEXT" run --rm \
         -e SCAN_TYPE="$SCAN_TYPE" \
         -e ZAP_TARGET="$ZAP_TARGET" \
         -e TARGET_URL="$ZAP_TARGET" \
@@ -277,6 +355,7 @@ elif [ "$SCAN_TYPE" = "code" ]; then
         -v "$TARGET_MOUNT_PATH:/target:ro" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
+        $OWASP_DATA_VOLUME \
         scanner /SimpleSecCheck/bin/security-check.sh; then
         log_success "Code security scan completed successfully!"
         OVERALL_SUCCESS=true
@@ -290,13 +369,14 @@ elif [ "$SCAN_TYPE" = "code" ]; then
     fi
 else
     # Website scan: no code mount needed
-    if docker-compose -f docker-compose.yml run --rm \
+    if docker-compose -f "$DOCKER_COMPOSE_FILE" --project-directory "$DOCKER_COMPOSE_CONTEXT" run --rm \
         -e SCAN_TYPE="$SCAN_TYPE" \
         -e ZAP_TARGET="$ZAP_TARGET" \
         -e TARGET_URL="$ZAP_TARGET" \
         -e PROJECT_RESULTS_DIR="$RESULTS_DIR" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
+        $OWASP_DATA_VOLUME \
         scanner /SimpleSecCheck/bin/security-check.sh; then
         log_success "Website security scan completed successfully!"
         OVERALL_SUCCESS=true

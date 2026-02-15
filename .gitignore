@@ -143,3 +143,5 @@ yarn-error.log*
 *.tmproj
 *.sublime-workspace
 *.sublime-projectscan-all.sh
+
+test-shell.nix
