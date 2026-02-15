@@ -96,6 +96,9 @@ chmod +x run-docker.sh
 # CI-friendly code scan (tracked files only + noise-reduction defaults)
 ./run-docker.sh --ci /path/to/your/project
 
+# Use a project-specific finding policy from target repo
+./run-docker.sh --finding-policy config/finding-policy.json /path/to/your/project
+
 # Scan a website
 ./run-docker.sh https://example.com
 ```
@@ -224,6 +227,14 @@ SimpleSecCheck supports a policy file at `conf/finding_policy.json` to reduce sc
 - **Duplicate consolidation:** merge near-identical Semgrep findings on adjacent lines
 
 Use this carefully: accepted findings should include clear justifications and periodic revalidation.
+
+Policy resolution order for code scans:
+- Explicit CLI arg: `--finding-policy <path>` (recommended for CI)
+- Auto-discovery in target repo:
+  - `config/finding-policy.json`
+  - `security/finding-policy.json`
+  - `.security/finding-policy.json`
+- Fallback: scanner default `conf/finding_policy.json`
 
 ### API Tokens (Optional)
 
