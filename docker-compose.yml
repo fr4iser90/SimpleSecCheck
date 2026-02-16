@@ -6,7 +6,7 @@ services:
       dockerfile: Dockerfile
       args:
         VERSION: 1.3.0
-    # image: fr4iser/simpleseccheck:latest  # Aus Docker Hub (auskommentiert für lokales Building)
+    image: fr4iser/simpleseccheck:latest
     container_name: SimpleSecCheck_scanner_v1.3.0
     volumes:
       - ./results:/SimpleSecCheck/results

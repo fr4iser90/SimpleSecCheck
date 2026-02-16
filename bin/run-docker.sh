@@ -112,8 +112,31 @@ fi
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 PROJECT_DIR="${PROJECT_NAME}_${TIMESTAMP}"
 
-RESULTS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR"
-LOGS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR/logs"
+# Determine host project root (needed when running from WebUI container)
+if [ -d "/project" ] && [ -f "/project/docker-compose.yml" ]; then
+    # Running in container: use HOST_PROJECT_ROOT if set, otherwise try to determine it
+    if [ -n "$HOST_PROJECT_ROOT" ]; then
+        HOST_SCRIPT_DIR="$HOST_PROJECT_ROOT"
+        echo "[Results Dir] Using HOST_PROJECT_ROOT: '$HOST_PROJECT_ROOT'"
+    else
+        # Fallback: try to get from docker inspect
+        CONTAINER_NAME="SimpleSecCheck_webui"
+        HOST_SCRIPT_DIR=$(docker inspect --format='{{range .Mounts}}{{if eq .Destination "/project"}}{{.Source}}{{end}}{{end}}' "$CONTAINER_NAME" 2>/dev/null || echo "")
+        if [ -z "$HOST_SCRIPT_DIR" ]; then
+            echo "[ERROR] Cannot determine host project root. Please set HOST_PROJECT_ROOT environment variable." >&2
+            exit 1
+        fi
+        echo "[Results Dir] Determined host project root from docker inspect: '$HOST_SCRIPT_DIR'"
+    fi
+    RESULTS_DIR="$HOST_SCRIPT_DIR/results/$PROJECT_DIR"
+    LOGS_DIR="$HOST_SCRIPT_DIR/results/$PROJECT_DIR/logs"
+    echo "[Results Dir] Using host path: RESULTS_DIR='$RESULTS_DIR'"
+else
+    # Running on host: use SCRIPT_DIR
+    RESULTS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR"
+    LOGS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR/logs"
+    echo "[Results Dir] Using script dir: RESULTS_DIR='$RESULTS_DIR'"
+fi
 
 # Store original for later reference
 OVERALL_SUCCESS=false
@@ -159,8 +182,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
     fi
 fi
 
-# Create directories
-mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
+# Create directories (only if running on host, not in container)
+# When running in container, docker-compose will create directories when mounting
+if [ ! -d "/project" ] || [ ! -f "/project/docker-compose.yml" ]; then
+    # Running on host: create directories
+    mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
+fi
 
 echo ""
 echo -e "${BLUE}🚀 SimpleSecCheck Docker Security Scanner${NC}"

@@ -23,19 +23,46 @@ export default function ScanView() {
   })
 
   useEffect(() => {
-    // Poll scan status
-    const interval = setInterval(async () => {
+    let retryCount = 0
+    const maxRetries = 3
+    
+    const pollStatus = async () => {
       try {
-        const response = await fetch('/api/scan/status')
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 Sekunden Timeout
+        
+        const response = await fetch('/api/scan/status', {
+          signal: controller.signal
+        })
+        
+        clearTimeout(timeoutId)
+        
         if (response.ok) {
           const data = await response.json()
           setStatus(data)
+          retryCount = 0 // Reset bei Erfolg
         }
       } catch (err) {
+        // Ignoriere AbortErrors (Timeout) - Backend ist möglicherweise beschäftigt
+        if (err instanceof Error && err.name === 'AbortError') {
+          // Timeout - Backend ist beschäftigt, das ist normal während des Scans
+          return
+        }
+        
         console.error('Failed to fetch scan status:', err)
+        retryCount++
+        
+        if (retryCount < maxRetries) {
+          // Retry mit exponential backoff
+          const delay = 1000 * Math.pow(2, retryCount)
+          setTimeout(pollStatus, delay)
+        }
       }
-    }, 2000) // Poll every 2 seconds
-
+    }
+    
+    const interval = setInterval(pollStatus, 2000) // Poll every 2 seconds
+    pollStatus() // Sofort ausführen
+    
     return () => clearInterval(interval)
   }, [])
 
@@ -53,7 +80,7 @@ export default function ScanView() {
         <ScanStatus status={status} />
       </div>
 
-      {(status.status === 'running' || (status.status === 'done' && !status.results_dir)) && (
+      {(status.status === 'running' || (status.status === 'done' && !status.results_dir) || (status.scan_id && status.status === 'idle')) && (
         <div className="card">
           <h2>Live Logs</h2>
           <LiveLogs />

@@ -69,6 +69,27 @@ log_message() {
     echo "[SimpleSecCheck Orchestrator] ($(date '+%Y-%m-%d %H:%M:%S')) ($BASHPID) $1" | tee -a "$LOG_FILE"
 }
 
+log_step() {
+    # Writes step directly to steps.log file (for frontend) - EXTRA LOG, does NOT replace log_message
+    # Usage: log_step <step_message>
+    CURRENT_STEP=$((CURRENT_STEP + 1))
+    local step_msg="$1"
+    # Use STEPS_LOG if defined, otherwise fallback to LOGS_DIR_IN_CONTAINER
+    local steps_log="${STEPS_LOG:-${LOGS_DIR_IN_CONTAINER}/steps.log}"
+    mkdir -p "$(dirname "$steps_log")"
+    echo "⏳ Step ${CURRENT_STEP}: ${step_msg}" >> "$steps_log"
+}
+
+log_step_complete() {
+    # Writes completed step to steps.log file - EXTRA LOG, does NOT replace log_message
+    # Usage: log_step_complete <step_message>
+    local step_msg="$1"
+    # Use STEPS_LOG if defined, otherwise fallback to LOGS_DIR_IN_CONTAINER
+    local steps_log="${STEPS_LOG:-${LOGS_DIR_IN_CONTAINER}/steps.log}"
+    mkdir -p "$(dirname "$steps_log")"
+    echo "✓ Step ${CURRENT_STEP}: ${step_msg}" >> "$steps_log"
+}
+
 cleanup_lock() {
     if [ -f "$LOCK_FILE" ]; then
         log_message "Removing lock file: $LOCK_FILE"
@@ -113,9 +134,18 @@ if [ -z "${PROJECT_RESULTS_DIR:-}" ]; then
     else
         SCAN_DIR="scan_${TIMESTAMP}"
     fi
-    RESULTS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results/$SCAN_DIR"
-    LOGS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results/$SCAN_DIR/logs"
-    LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log"
+    export RESULTS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results/$SCAN_DIR"
+    export LOGS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results/$SCAN_DIR/logs"
+    export LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log"
+    LOCK_FILE="$RESULTS_DIR_IN_CONTAINER/.scan-running"
+else
+    # Running via run-docker.sh: PROJECT_RESULTS_DIR is already the scan-specific directory
+    # The volume is mounted at /SimpleSecCheck/results (which is the scan dir on host)
+    # run-docker.sh mounts: -v "$RESULTS_DIR:/SimpleSecCheck/results"
+    # So /SimpleSecCheck/results is already the correct scan directory
+    export RESULTS_DIR_IN_CONTAINER="/SimpleSecCheck/results"
+    export LOGS_DIR_IN_CONTAINER="/SimpleSecCheck/results/logs"
+    export LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log"
     LOCK_FILE="$RESULTS_DIR_IN_CONTAINER/.scan-running"
 fi
 
@@ -126,8 +156,20 @@ mkdir -p "$RESULTS_DIR_IN_CONTAINER" "$LOGS_DIR_IN_CONTAINER"
 # Initialize log file for this run
 # Note: Your tool scripts also use `tee -a "$LOG_FILE"` so they will append.
 echo "----- SimpleSecCheck Scan Run Initialized: $(date '+%Y-%m-%d %H:%M:%S') -----" > "$LOG_FILE"
+
+# Initialize steps.log file for this run (parallel to security-check.log)
+STEPS_LOG="${LOGS_DIR_IN_CONTAINER}/steps.log"
+echo "----- SimpleSecCheck Steps Log Initialized: $(date '+%Y-%m-%d %H:%M:%S') -----" > "$STEPS_LOG"
+export STEPS_LOG
+
 log_message "Orchestrator script started."
 log_message "Scan Type: $SCAN_TYPE"
+
+# Initialize step counter for steps.log (EXTRA LOG for frontend)
+CURRENT_STEP=0
+mkdir -p "${RESULTS_DIR_IN_CONTAINER}/logs"
+log_step "Initializing scan..."
+
 log_message "Container Base Project Dir (BASE_PROJECT_DIR): $BASE_PROJECT_DIR"
 if [ "$SCAN_TYPE" = "code" ]; then
     log_message "Host Code Mount for Scanning (TARGET_PATH_IN_CONTAINER): $TARGET_PATH_IN_CONTAINER"
@@ -212,6 +254,7 @@ SCANNER_STATUS["Docker_bench"]="SKIPPED"
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_semgrep.sh before calling it
     log_message "--- Orchestrating Semgrep Scan ---"
+    log_step "Running Semgrep scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is already exported and used by run_semgrep.sh's `tee -a`
@@ -223,10 +266,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_semgrep.sh"; then
             log_message "run_semgrep.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Semgrep"]="SUCCESS"
+            log_step_complete "Semgrep scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_semgrep.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Semgrep"]="FAILED"
+            log_step_complete "Semgrep scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -242,6 +287,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_trivy.sh
     log_message "--- Orchestrating Trivy Scan ---"
+    log_step "Running Trivy scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER" # Re-export for clarity, though it's the same
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -252,10 +298,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_trivy.sh"; then
             log_message "run_trivy.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Trivy"]="SUCCESS"
+            log_step_complete "Trivy scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_trivy.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Trivy"]="FAILED"
+            log_step_complete "Trivy scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -270,6 +318,7 @@ fi
 # Only run Clair for code scans (if container image is specified)
 if [ "$SCAN_TYPE" = "code" ] && [ -n "$CLAIR_IMAGE" ]; then
     log_message "--- Orchestrating Clair Scan ---"
+    log_step "Running Clair scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     export CLAIR_CONFIG_PATH="$CLAIR_CONFIG_PATH_IN_CONTAINER"
@@ -279,10 +328,12 @@ if [ "$SCAN_TYPE" = "code" ] && [ -n "$CLAIR_IMAGE" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_clair.sh"; then
             log_message "run_clair.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Clair"]="SUCCESS"
+            log_step_complete "Clair scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_clair.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Clair"]="FAILED"
+            log_step_complete "Clair scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -301,6 +352,7 @@ fi
 # Only run Anchore for code scans (if container image is specified)
 if [ "$SCAN_TYPE" = "code" ] && [ -n "$ANCHORE_IMAGE" ]; then
     log_message "--- Orchestrating Anchore Scan ---"
+    log_step "Running Anchore scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     export ANCHORE_CONFIG_PATH="$ANCHORE_CONFIG_PATH_IN_CONTAINER"
@@ -310,10 +362,12 @@ if [ "$SCAN_TYPE" = "code" ] && [ -n "$ANCHORE_IMAGE" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_anchore.sh"; then
             log_message "run_anchore.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Anchore"]="SUCCESS"
+            log_step_complete "Anchore scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_anchore.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Anchore"]="FAILED"
+            log_step_complete "Anchore scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -333,6 +387,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_codeql.sh
     log_message "--- Orchestrating CodeQL Scan ---"
+    log_step "Running CodeQL scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -343,10 +398,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_codeql.sh"; then
             log_message "run_codeql.sh completed successfully (exit code 0)."
             SCANNER_STATUS["CodeQL"]="SUCCESS"
+            log_step_complete "CodeQL scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_codeql.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["CodeQL"]="FAILED"
+            log_step_complete "CodeQL scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -362,6 +419,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_owasp_dependency_check.sh
     log_message "--- Orchestrating OWASP Dependency Check Scan ---"
+    log_step "Running OWASP Dependency Check scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -372,10 +430,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_owasp_dependency_check.sh"; then
             log_message "run_owasp_dependency_check.sh completed successfully (exit code 0)."
             SCANNER_STATUS["OWASP_DC"]="SUCCESS"
+            log_step_complete "OWASP Dependency Check scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_owasp_dependency_check.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["OWASP_DC"]="FAILED"
+            log_step_complete "OWASP Dependency Check scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -391,6 +451,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_safety.sh
     log_message "--- Orchestrating Safety Scan ---"
+    log_step "Running Safety scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -400,10 +461,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_safety.sh"; then
             log_message "run_safety.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Safety"]="SUCCESS"
+            log_step_complete "Safety scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_safety.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Safety"]="FAILED"
+            log_step_complete "Safety scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -419,6 +482,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_snyk.sh
     log_message "--- Orchestrating Snyk Scan ---"
+    log_step "Running Snyk scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -428,10 +492,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_snyk.sh"; then
             log_message "run_snyk.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Snyk"]="SUCCESS"
+            log_step_complete "Snyk scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_snyk.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Snyk"]="FAILED"
+            log_step_complete "Snyk scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -447,6 +513,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_sonarqube.sh
     log_message "--- Orchestrating SonarQube Scan ---"
+    log_step "Running SonarQube scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -456,10 +523,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_sonarqube.sh"; then
             log_message "run_sonarqube.sh completed successfully (exit code 0)."
             SCANNER_STATUS["SonarQube"]="SUCCESS"
+            log_step_complete "SonarQube scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_sonarqube.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["SonarQube"]="FAILED"
+            log_step_complete "SonarQube scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -475,6 +544,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_terraform_security.sh
     log_message "--- Orchestrating Terraform Security Scan ---"
+    log_step "Running Terraform Security scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -484,10 +554,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_terraform_security.sh"; then
             log_message "run_terraform_security.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Terraform"]="SUCCESS"
+            log_step_complete "Terraform scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_terraform_security.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Terraform"]="FAILED"
+            log_step_complete "Terraform scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -503,6 +575,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_checkov.sh
     log_message "--- Orchestrating Checkov Infrastructure Security Scan ---"
+    log_step "Running Checkov Infrastructure Security scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     export CHECKOV_CONFIG_PATH="$CHECKOV_CONFIG_PATH_IN_CONTAINER"
@@ -511,10 +584,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_checkov.sh"; then
             log_message "run_checkov.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Checkov"]="SUCCESS"
+            log_step_complete "Checkov scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_checkov.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Checkov"]="FAILED"
+            log_step_complete "Checkov scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -530,6 +605,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_trufflehog.sh
     log_message "--- Orchestrating TruffleHog Scan ---"
+    log_step "Running TruffleHog scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -539,10 +615,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_trufflehog.sh"; then
             log_message "run_trufflehog.sh completed successfully (exit code 0)."
             SCANNER_STATUS["TruffleHog"]="SUCCESS"
+            log_step_complete "TruffleHog scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_trufflehog.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["TruffleHog"]="FAILED"
+            log_step_complete "TruffleHog scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -558,6 +636,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_gitleaks.sh
     log_message "--- Orchestrating GitLeaks Scan ---"
+    log_step "Running GitLeaks scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -567,10 +646,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_gitleaks.sh"; then
             log_message "run_gitleaks.sh completed successfully (exit code 0)."
             SCANNER_STATUS["GitLeaks"]="SUCCESS"
+            log_step_complete "GitLeaks scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_gitleaks.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["GitLeaks"]="FAILED"
+            log_step_complete "GitLeaks scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -586,6 +667,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_detect_secrets.sh
     log_message "--- Orchestrating Detect-secrets Scan ---"
+    log_step "Running Detect-secrets scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -595,10 +677,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_detect_secrets.sh"; then
             log_message "run_detect_secrets.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Detect-secrets"]="SUCCESS"
+            log_step_complete "Detect-secrets scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_detect_secrets.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Detect-secrets"]="FAILED"
+            log_step_complete "Detect-secrets scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -614,6 +698,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_npm_audit.sh
     log_message "--- Orchestrating npm audit Scan ---"
+    log_step "Running npm audit scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -623,10 +708,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_npm_audit.sh"; then
             log_message "run_npm_audit.sh completed successfully (exit code 0)."
             SCANNER_STATUS["npm_audit"]="SUCCESS"
+            log_step_complete "npm audit scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_npm_audit.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["npm_audit"]="FAILED"
+            log_step_complete "npm audit scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -642,6 +729,7 @@ fi
 if [ "$SCAN_TYPE" = "network" ]; then
     # Set environment variables specifically for run_kube_hunter.sh
     log_message "--- Orchestrating Kube-hunter Scan ---"
+    log_step "Running Kube-hunter scan..."
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
     export KUBE_HUNTER_CONFIG_PATH="$KUBE_HUNTER_CONFIG_PATH_IN_CONTAINER"
@@ -650,10 +738,12 @@ if [ "$SCAN_TYPE" = "network" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_kube_hunter.sh"; then
             log_message "run_kube_hunter.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Kube-hunter"]="SUCCESS"
+            log_step_complete "Kube-hunter scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_kube_hunter.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Kube-hunter"]="FAILED"
+            log_step_complete "Kube-hunter scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -667,6 +757,7 @@ fi
 if [ "$SCAN_TYPE" = "network" ]; then
     # Set environment variables specifically for run_kube_bench.sh
     log_message "--- Orchestrating Kube-bench Scan ---"
+    log_step "Running Kube-bench scan..."
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
     export KUBE_BENCH_CONFIG_PATH="$KUBE_BENCH_CONFIG_PATH_IN_CONTAINER"
@@ -675,10 +766,12 @@ if [ "$SCAN_TYPE" = "network" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_kube_bench.sh"; then
             log_message "run_kube_bench.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Kube-bench"]="SUCCESS"
+            log_step_complete "Kube-bench scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_kube_bench.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Kube-bench"]="FAILED"
+            log_step_complete "Kube-bench scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -692,6 +785,7 @@ fi
 if [ "$SCAN_TYPE" = "network" ]; then
     # Set environment variables specifically for run_docker_bench.sh
     log_message "--- Orchestrating Docker Bench Scan ---"
+    log_step "Running Docker Bench scan..."
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
     export DOCKER_BENCH_CONFIG_PATH="$DOCKER_BENCH_CONFIG_PATH_IN_CONTAINER"
@@ -700,10 +794,12 @@ if [ "$SCAN_TYPE" = "network" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_docker_bench.sh"; then
             log_message "run_docker_bench.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Docker_bench"]="SUCCESS"
+            log_step_complete "Docker Bench scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_docker_bench.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Docker_bench"]="FAILED"
+            log_step_complete "Docker Bench scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -717,6 +813,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_eslint.sh
     log_message "--- Orchestrating ESLint Scan ---"
+    log_step "Running ESLint scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     export ESLINT_CONFIG_PATH="$ESLINT_CONFIG_PATH_IN_CONTAINER"
@@ -725,10 +822,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_eslint.sh"; then
             log_message "run_eslint.sh completed successfully (exit code 0)."
             SCANNER_STATUS["ESLint"]="SUCCESS"
+            log_step_complete "ESLint scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_eslint.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["ESLint"]="FAILED"
+            log_step_complete "ESLint scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -744,6 +843,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_brakeman.sh
     log_message "--- Orchestrating Brakeman Scan ---"
+    log_step "Running Brakeman scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     export BRAKEMAN_CONFIG_PATH="$BRAKEMAN_CONFIG_PATH_IN_CONTAINER"
@@ -752,10 +852,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_brakeman.sh"; then
             log_message "run_brakeman.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Brakeman"]="SUCCESS"
+            log_step_complete "Brakeman scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_brakeman.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Brakeman"]="FAILED"
+            log_step_complete "Brakeman scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -771,6 +873,7 @@ fi
 if [ "$SCAN_TYPE" = "code" ]; then
     # Set environment variables specifically for run_bandit.sh
     log_message "--- Orchestrating Bandit Scan ---"
+    log_step "Running Bandit scan..."
     export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     export BANDIT_CONFIG_PATH="$BANDIT_CONFIG_PATH_IN_CONTAINER"
@@ -779,10 +882,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_bandit.sh"; then
             log_message "run_bandit.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Bandit"]="SUCCESS"
+            log_step_complete "Bandit scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_bandit.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Bandit"]="FAILED"
+            log_step_complete "Bandit scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -804,6 +909,7 @@ if [ "$SCAN_TYPE" = "code" ]; then
         
         # Run Android Manifest Scanner
         log_message "--- Orchestrating Android Manifest Scan ---"
+        log_step "Running Android Manifest scan..."
         export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
         export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
         if [ -f "$TOOL_SCRIPTS_DIR/run_android_manifest_scanner.sh" ]; then
@@ -811,10 +917,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
             if /bin/bash "$TOOL_SCRIPTS_DIR/run_android_manifest_scanner.sh"; then
                 log_message "run_android_manifest_scanner.sh completed successfully (exit code 0)."
                 SCANNER_STATUS["Android"]="SUCCESS"
+                log_step_complete "Android scan completed"
             else
                 EXIT_CODE=$?
                 log_message "[ORCHESTRATOR ERROR] run_android_manifest_scanner.sh failed with exit code $EXIT_CODE."
                 SCANNER_STATUS["Android"]="FAILED"
+                log_step_complete "Android scan failed"
                 OVERALL_SUCCESS=false
             fi
         else
@@ -825,6 +933,7 @@ if [ "$SCAN_TYPE" = "code" ]; then
         
         # Run iOS Plist Scanner
         log_message "--- Orchestrating iOS Plist Scan ---"
+        log_step "Running iOS Plist scan..."
         export TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
         export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
         if [ -f "$TOOL_SCRIPTS_DIR/run_ios_plist_scanner.sh" ]; then
@@ -832,10 +941,12 @@ if [ "$SCAN_TYPE" = "code" ]; then
             if /bin/bash "$TOOL_SCRIPTS_DIR/run_ios_plist_scanner.sh"; then
                 log_message "run_ios_plist_scanner.sh completed successfully (exit code 0)."
                 SCANNER_STATUS["iOS"]="SUCCESS"
+                log_step_complete "iOS scan completed"
             else
                 EXIT_CODE=$?
                 log_message "[ORCHESTRATOR ERROR] run_ios_plist_scanner.sh failed with exit code $EXIT_CODE."
                 SCANNER_STATUS["iOS"]="FAILED"
+                log_step_complete "iOS scan failed"
                 OVERALL_SUCCESS=false
             fi
         else
@@ -854,6 +965,7 @@ fi
 if [ "$SCAN_TYPE" = "website" ]; then
     # Set environment variables specifically for run_zap.sh
     log_message "--- Orchestrating ZAP Scan ---"
+    log_step "Running ZAP scan..."
     # ZAP_TARGET is exported
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -864,10 +976,12 @@ if [ "$SCAN_TYPE" = "website" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_zap.sh"; then
             log_message "run_zap.sh completed successfully (exit code 0)."
             SCANNER_STATUS["ZAP"]="SUCCESS"
+            log_step_complete "ZAP scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_zap.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["ZAP"]="FAILED"
+            log_step_complete "ZAP scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -883,6 +997,7 @@ fi
 if [ "$SCAN_TYPE" = "website" ]; then
     # Set environment variables specifically for run_nuclei.sh
     log_message "--- Orchestrating Nuclei Scan ---"
+    log_step "Running Nuclei scan..."
     # ZAP_TARGET is exported
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -892,10 +1007,12 @@ if [ "$SCAN_TYPE" = "website" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_nuclei.sh"; then
             log_message "run_nuclei.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Nuclei"]="SUCCESS"
+            log_step_complete "Nuclei scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_nuclei.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Nuclei"]="FAILED"
+            log_step_complete "Nuclei scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -911,6 +1028,7 @@ fi
 if [ "$SCAN_TYPE" = "website" ]; then
     # Set environment variables specifically for run_wapiti.sh
     log_message "--- Orchestrating Wapiti Scan ---"
+    log_step "Running Wapiti scan..."
     # ZAP_TARGET is exported
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -920,10 +1038,12 @@ if [ "$SCAN_TYPE" = "website" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_wapiti.sh"; then
             log_message "run_wapiti.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Wapiti"]="SUCCESS"
+            log_step_complete "Wapiti scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_wapiti.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Wapiti"]="FAILED"
+            log_step_complete "Wapiti scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -939,6 +1059,7 @@ fi
 if [ "$SCAN_TYPE" = "website" ]; then
     # Set environment variables specifically for run_nikto.sh
     log_message "--- Orchestrating Nikto Scan ---"
+    log_step "Running Nikto scan..."
     # ZAP_TARGET is exported
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -948,10 +1069,12 @@ if [ "$SCAN_TYPE" = "website" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_nikto.sh"; then
             log_message "run_nikto.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Nikto"]="SUCCESS"
+            log_step_complete "Nikto scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_nikto.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Nikto"]="FAILED"
+            log_step_complete "Nikto scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -967,6 +1090,7 @@ fi
 if [ "$SCAN_TYPE" = "website" ]; then
     # Set environment variables specifically for run_burp.sh
     log_message "--- Orchestrating Burp Suite Scan ---"
+    log_step "Running Burp Suite scan..."
     # ZAP_TARGET is exported
     export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # LOG_FILE is exported
@@ -976,10 +1100,12 @@ if [ "$SCAN_TYPE" = "website" ]; then
         if /bin/bash "$TOOL_SCRIPTS_DIR/run_burp.sh"; then
             log_message "run_burp.sh completed successfully (exit code 0)."
             SCANNER_STATUS["Burp"]="SUCCESS"
+            log_step_complete "Burp scan completed"
         else
             EXIT_CODE=$?
             log_message "[ORCHESTRATOR ERROR] run_burp.sh failed with exit code $EXIT_CODE."
             SCANNER_STATUS["Burp"]="FAILED"
+            log_step_complete "Burp scan failed"
             OVERALL_SUCCESS=false
         fi
     else
@@ -1011,6 +1137,7 @@ if [ -f "$HTML_REPORT_PY_SCRIPT" ]; then
     # To capture its stderr into the main log, you'd add 2>&1 after it.
     if PYTHONUNBUFFERED=1 python3 "$HTML_REPORT_PY_SCRIPT" >> "$LOG_FILE" 2>&1; then
         log_message "HTML report generation script completed successfully."
+        log_step_complete "Report generation completed"
     else
         EXIT_CODE=$?
         log_message "[ORCHESTRATOR ERROR] HTML report generation script ($HTML_REPORT_PY_SCRIPT) failed with exit code $EXIT_CODE."
@@ -1031,6 +1158,7 @@ else
     log_message "[WARN] webui.js not found at $WEBUI_JS_SOURCE, not copied."
 fi
 
+log_step_complete "Scan completed successfully"
 log_message "SimpleSecCheck Security Scan Sequence Completed."
 log_message ""
 log_message "=============================================="

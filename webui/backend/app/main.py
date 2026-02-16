@@ -68,6 +68,8 @@ current_scan = {
     "error_message": None,
     "process_output": [],  # Store process stdout/stderr lines for streaming
     "process_output_lock": threading.Lock(),  # Lock for thread-safe access
+    "step_counter": 0,  # Step counter for frontend
+    "step_names": {},  # Step names mapping
 }
 
 
@@ -204,18 +206,20 @@ async def start_scan(request: ScanRequest):
         from datetime import datetime
         scan_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Update state
-        current_scan = {
-            "process": process,
-            "status": "running",
-            "scan_id": scan_id,
-            "results_dir": None,  # Will be set when scan completes
-            "started_at": datetime.now().isoformat(),
-            "process_output": [],
-            "process_output_lock": threading.Lock(),
-            "step_counter": 0,  # Reset step counter
-            "step_names": {},  # Reset step names
-        }
+        # Update GLOBAL state (CRITICAL: update dict, don't reassign!)
+        current_scan["process"] = process
+        current_scan["status"] = "running"
+        current_scan["scan_id"] = scan_id
+        current_scan["results_dir"] = None  # Will be set when scan completes
+        current_scan["started_at"] = datetime.now().isoformat()
+        current_scan["process_output"] = []
+        current_scan["process_output_lock"] = threading.Lock()
+        current_scan["step_counter"] = 0  # Reset step counter
+        current_scan["step_names"] = {}  # Reset step names
+        current_scan["error_code"] = None
+        current_scan["error_message"] = None
+        
+        print(f"[Start Scan] Status set to 'running', scan_id={scan_id}, PID={process.pid}")
         
         # Start background task to capture process output
         asyncio.create_task(capture_process_output(process, scan_id))
@@ -233,10 +237,47 @@ async def start_scan(request: ScanRequest):
         raise HTTPException(status_code=500, detail=f"Failed to start scan: {str(e)}")
 
 
-def filter_and_format_log_line(line: str) -> Optional[str]:
+def write_step_to_log(step_line: str, scan_id: str):
+    """Write step to steps.log file"""
+    global current_scan
+    
+    # Try to find results_dir
+    results_dir = current_scan.get("results_dir")
+    
+    # If not set yet, try to find it by scan_id
+    if not results_dir and scan_id and RESULTS_DIR.exists():
+        for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
+            if scan_dir.is_dir() and scan_id in scan_dir.name:
+                results_dir = str(scan_dir)
+                current_scan["results_dir"] = results_dir
+                break
+    
+    # If still no results_dir, try to find most recent
+    if not results_dir and RESULTS_DIR.exists():
+        for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
+            if scan_dir.is_dir():
+                results_dir = str(scan_dir)
+                current_scan["results_dir"] = results_dir
+                break
+    
+    # Write to steps.log
+    if results_dir:
+        steps_log = Path(results_dir) / "logs" / "steps.log"
+        try:
+            steps_log.parent.mkdir(parents=True, exist_ok=True)
+            with open(steps_log, "a", encoding="utf-8") as f:
+                f.write(f"{step_line}\n")
+            print(f"[Step Log] Wrote step to {steps_log}: {step_line}")
+        except Exception as e:
+            print(f"[Step Log] ERROR writing to {steps_log}: {e}")
+
+
+def extract_steps_for_frontend(line: str) -> Optional[str]:
     """
-    Filter and format log lines to show only relevant scan steps.
-    Returns None if line should be filtered out, or formatted line if it should be shown.
+    Extract ONLY steps from log lines for frontend.
+    Returns formatted step line if it's a step, None otherwise.
+    Backend logs everything - this is ONLY for frontend display.
+    Also writes steps to steps.log file.
     """
     global current_scan
     
@@ -245,34 +286,12 @@ def filter_and_format_log_line(line: str) -> Optional[str]:
     if not clean_line:
         return None
     
-    # Filter out Docker build logs
-    docker_build_patterns = [
-        r'^Building\s',
-        r'^Step\s+\d+/\d+',
-        r'^Image\s+',
-        r'unable to prepare context',
-        r'Docker Compose requires buildx',
-        r'level=warning.*buildx',
-        r'^\s*-->',
-        r'^\s*RUN\s+',
-        r'^\s*COPY\s+',
-        r'^\s*FROM\s+',
-    ]
-    for pattern in docker_build_patterns:
-        if re.search(pattern, clean_line, re.IGNORECASE):
-            return None
+    # Calculate total steps (approximate - will be updated as we see more steps)
+    # Common tools: Semgrep, Trivy, CodeQL, OWASP, Safety, Snyk, SonarQube, Checkov, TruffleHog, GitLeaks, Detect-secrets, npm_audit, ESLint, Brakeman, Bandit
+    # Plus: Initialization, Report Generation, Completion
+    total_steps = max(15, current_scan.get("step_counter", 0) + 2)  # Dynamic based on what we've seen
     
-    # Filter out verbose Docker Compose output
-    if re.search(r'^Network\s+.*\s(Creating|Created|Removing|Removed)', clean_line):
-        return None
-    
-    # Filter out CodeQL extraction logs (these are normal, not errors)
-    # These come from unzip/tar extraction during CodeQL setup
-    # Match patterns like "inflating: /opt/codeql/..." or "creating: /opt/codeql/..."
-    if re.search(r'(inflating|creating|extracting):\s+/opt/codeql', clean_line, re.IGNORECASE):
-        return None
-    if re.search(r'^FINISHED\s+--', clean_line, re.IGNORECASE):
-        return None
+    formatted_line = None
     
     # Extract scan steps from orchestrator messages
     # Pattern: "--- Orchestrating X Scan ---"
@@ -284,81 +303,63 @@ def filter_and_format_log_line(line: str) -> Optional[str]:
                 current_scan["step_counter"] += 1
                 current_scan["step_names"][tool_name] = current_scan["step_counter"]
             step_num = current_scan["step_names"][tool_name]
-        return f"⏳ Step {step_num}: Running {tool_name} scan..."
+            # Update total steps based on what we've seen
+            total_steps = max(total_steps, current_scan["step_counter"] + 2)
+        formatted_line = f"⏳ Step {step_num}/{total_steps}: Running {tool_name} scan..."
     
     # Pattern: "--- X Scan Orchestration Finished ---"
-    finished_match = re.search(r'---\s*(.+?)\s+Scan\s+Orchestration\s+Finished\s+---', clean_line, re.IGNORECASE)
-    if finished_match:
-        tool_name = finished_match.group(1).strip()
-        with current_scan["process_output_lock"]:
-            step_num = current_scan["step_names"].get(tool_name, current_scan["step_counter"])
-        return f"✓ Step {step_num}: {tool_name} scan completed"
-    
-    # Pattern: "Executing .../run_X.sh..."
-    executing_match = re.search(r'Executing\s+.*/run_(\w+)\.sh', clean_line, re.IGNORECASE)
-    if executing_match:
-        # This is already covered by "Orchestrating", so we can skip or show as in-progress
-        return None
-    
-    # Pattern: "run_X.sh completed successfully"
-    completed_match = re.search(r'run_(\w+)\.sh\s+completed\s+successfully', clean_line, re.IGNORECASE)
-    if completed_match:
-        # This is already covered by "Finished", so we can skip
-        return None
+    if not formatted_line:
+        finished_match = re.search(r'---\s*(.+?)\s+Scan\s+Orchestration\s+Finished\s+---', clean_line, re.IGNORECASE)
+        if finished_match:
+            tool_name = finished_match.group(1).strip()
+            with current_scan["process_output_lock"]:
+                step_num = current_scan["step_names"].get(tool_name, current_scan["step_counter"])
+                total_steps = max(total_steps, current_scan["step_counter"] + 2)
+            formatted_line = f"✓ Step {step_num}/{total_steps}: {tool_name} scan completed"
     
     # Initialization messages
-    if re.search(r'SimpleSecCheck.*Scan.*Started|Orchestrator script started', clean_line, re.IGNORECASE):
-        with current_scan["process_output_lock"]:
-            if "Initialization" not in current_scan["step_names"]:
-                current_scan["step_counter"] = 1
-                current_scan["step_names"]["Initialization"] = 1
-        return "✓ Step 1: Initializing scan..."
+    if not formatted_line:
+        if re.search(r'SimpleSecCheck.*Scan.*Started|Orchestrator script started', clean_line, re.IGNORECASE):
+            with current_scan["process_output_lock"]:
+                if "Initialization" not in current_scan["step_names"]:
+                    current_scan["step_counter"] = 1
+                    current_scan["step_names"]["Initialization"] = 1
+            formatted_line = "✓ Step 1/15: Initializing scan..."
     
     # Report generation
-    if re.search(r'Generating.*HTML report|HTML report generation', clean_line, re.IGNORECASE):
-        with current_scan["process_output_lock"]:
-            if "Report Generation" not in current_scan["step_names"]:
-                current_scan["step_counter"] += 1
-                current_scan["step_names"]["Report Generation"] = current_scan["step_counter"]
-            step_num = current_scan["step_names"]["Report Generation"]
-        return f"⏳ Step {step_num}: Generating report..."
+    if not formatted_line:
+        if re.search(r'Generating.*HTML report|HTML report generation', clean_line, re.IGNORECASE):
+            with current_scan["process_output_lock"]:
+                if "Report Generation" not in current_scan["step_names"]:
+                    current_scan["step_counter"] += 1
+                    current_scan["step_names"]["Report Generation"] = current_scan["step_counter"]
+                step_num = current_scan["step_names"]["Report Generation"]
+                total_steps = max(total_steps, current_scan["step_counter"] + 1)
+            formatted_line = f"⏳ Step {step_num}/{total_steps}: Generating report..."
     
     # Scan completion
-    if re.search(r'SimpleSecCheck.*Scan.*Completed|Scan.*completed successfully', clean_line, re.IGNORECASE):
-        with current_scan["process_output_lock"]:
-            if "Completion" not in current_scan["step_names"]:
-                current_scan["step_counter"] += 1
-                current_scan["step_names"]["Completion"] = current_scan["step_counter"]
-            step_num = current_scan["step_names"]["Completion"]
-        return f"✓ Step {step_num}: Scan completed successfully"
+    if not formatted_line:
+        if re.search(r'SimpleSecCheck.*Scan.*Completed|Scan.*completed successfully', clean_line, re.IGNORECASE):
+            with current_scan["process_output_lock"]:
+                if "Completion" not in current_scan["step_names"]:
+                    current_scan["step_counter"] += 1
+                    current_scan["step_names"]["Completion"] = current_scan["step_counter"]
+                step_num = current_scan["step_names"]["Completion"]
+                total_steps = max(total_steps, current_scan["step_counter"])
+            formatted_line = f"✓ Step {step_num}/{total_steps}: Scan completed successfully"
     
-    # Error messages (always show) - but be careful not to match paths or normal output
-    # Only match actual error indicators, not words that happen to contain "error"
-    error_patterns = [
-        r'\[ERROR\]',
-        r'\[ORCHESTRATOR ERROR\]',
-        r'\berror:\s+',  # "error: " at word boundary
-        r'\bfailed\b',  # "failed" as whole word
-        r'\bfailure\b',  # "failure" as whole word
-        r'command not found',
-        r'permission denied',
-        r'cannot.*create|cannot.*access|cannot.*find',
-    ]
-    for pattern in error_patterns:
-        if re.search(pattern, clean_line, re.IGNORECASE):
-            return f"❌ {clean_line}"
+    # Errors (show as steps)
+    if not formatted_line:
+        if re.search(r'\[ERROR\]|\[ORCHESTRATOR ERROR\]', clean_line, re.IGNORECASE):
+            formatted_line = f"❌ {clean_line}"
     
-    # Warnings (show but mark as warning)
-    if re.search(r'\[WARNING\]|\[WARN\]|warning', clean_line, re.IGNORECASE):
-        return f"⚠️  {clean_line}"
+    # Write to steps.log file if we found a step
+    if formatted_line:
+        scan_id = current_scan.get("scan_id")
+        if scan_id:
+            write_step_to_log(formatted_line, scan_id)
     
-    # Skip other verbose output (tool-specific logs, etc.)
-    # Only show high-level orchestrator messages
-    if re.search(r'^\[SimpleSecCheck|^Orchestrating|^Executing|^completed|^Finished', clean_line, re.IGNORECASE):
-        return clean_line
-    
-    # Filter out everything else (too verbose)
-    return None
+    return formatted_line
 
 
 async def capture_process_output(process: subprocess.Popen, scan_id: str):
@@ -580,6 +581,9 @@ async def get_scan_status():
     global current_scan
     update_activity()
     
+    # Debug logging
+    print(f"[Status Endpoint] Called: status={current_scan['status']}, scan_id={current_scan.get('scan_id')}, process={current_scan.get('process')}, process_alive={current_scan.get('process') is not None and current_scan.get('process').poll() is None if current_scan.get('process') else False}")
+    
     # If status is "running", check if scan is really done by looking at log file
     if current_scan["status"] == "running" and current_scan["scan_id"]:
         results_dir = current_scan.get("results_dir")
@@ -602,7 +606,7 @@ async def get_scan_status():
                 except Exception:
                     pass
     
-    return ScanStatus(
+    status_response = ScanStatus(
         status=current_scan["status"],
         scan_id=current_scan["scan_id"],
         results_dir=current_scan["results_dir"],
@@ -610,6 +614,10 @@ async def get_scan_status():
         error_code=current_scan.get("error_code"),
         error_message=current_scan.get("error_message")
     )
+    
+    print(f"[Status Endpoint] Returning: status={status_response.status}, scan_id={status_response.scan_id}")
+    
+    return status_response
 
 
 @app.get("/api/scan/logs")
@@ -622,90 +630,148 @@ async def stream_logs():
     global current_scan
     update_activity()
     
-    # Allow logs even if status is "done" but scan might still be running
-    if current_scan["status"] == "idle" and current_scan["results_dir"] is None:
+    # Allow logs if:
+    # 1. Status is "running", "done", or "error" (active scan)
+    # 2. Status is "idle" but scan_id exists (scan might have just started)
+    if current_scan["status"] == "idle" and current_scan["scan_id"] is None and current_scan["results_dir"] is None:
         raise HTTPException(status_code=404, detail="No active scan")
     
     async def generate():
         """Stream logs: first process output, then log file when available"""
-        log_file = None
-        max_wait_time = 120  # Wait up to 120 seconds for log file to appear
-        wait_start = time.time()
-        check_count = 0
-        process_output_sent = 0  # Track how many process output lines we've sent
+        try:
+            print(f"[Log Stream] Starting log stream for scan_id={current_scan.get('scan_id')}, status={current_scan.get('status')}")
+            log_file = None
+            max_wait_time = 120  # Wait up to 120 seconds for log file to appear
+            wait_start = time.time()
+            check_count = 0
+            process_output_sent = 0  # Track how many process output lines we've sent
+            
+            # Send initial message immediately
+            initial_msg = json.dumps({'line': '🚀 Starting security scan...'})
+            print(f"[Log Stream] Sending initial message: {initial_msg}")
+            yield f"data: {initial_msg}\n\n"
+            print(f"[Log Stream] Initial message sent successfully")
+        except Exception as e:
+            print(f"[Log Stream] CRITICAL ERROR in generate() startup: {e}")
+            import traceback
+            traceback.print_exc()
+            error_msg = json.dumps({'line': f'[ERROR] Failed to start log stream: {str(e)}'})
+            yield f"data: {error_msg}\n\n"
+            return
         
         # First, stream process output (stdout/stderr from run-docker.sh)
-        while (time.time() - wait_start) < max_wait_time:
-            check_count += 1
-            
-            # Send any new process output lines (FILTERED for frontend only)
-            with current_scan.get("process_output_lock", threading.Lock()):
-                process_output = current_scan.get("process_output", [])
-                if len(process_output) > process_output_sent:
-                    # Send new lines (filtered for frontend)
-                    for line in process_output[process_output_sent:]:
-                        formatted_line = filter_and_format_log_line(line)
-                        if formatted_line:  # Only send if filter allows it
-                            line_msg = json.dumps({'line': formatted_line})
-                            yield f"data: {line_msg}\n\n"
-                    process_output_sent = len(process_output)
-            
-            # Try to find log file
-            if current_scan["results_dir"]:
-                potential_log = Path(current_scan["results_dir"]) / "logs" / "security-check.log"
-                if potential_log.exists():
-                    log_file = potential_log
-                    print(f"[Log Stream] Found log file via results_dir: {log_file}")
-                    break
-            
-            # Try to find log file by scan_id
-            if not log_file and current_scan["scan_id"] and RESULTS_DIR.exists():
-                for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
-                    if scan_dir.is_dir() and current_scan["scan_id"] in scan_dir.name:
-                        potential_log = scan_dir / "logs" / "security-check.log"
+        try:
+            while (time.time() - wait_start) < max_wait_time:
+                check_count += 1
+                
+                try:
+                    # Send any new process output lines (FILTERED for frontend only)
+                    with current_scan.get("process_output_lock", threading.Lock()):
+                        process_output = current_scan.get("process_output", [])
+                        if check_count == 1:  # Log first check
+                            print(f"[Log Stream] First check: process_output length={len(process_output)}, already_sent={process_output_sent}")
+                        if len(process_output) > process_output_sent:
+                            new_lines = process_output[process_output_sent:]
+                            print(f"[Log Stream] Processing {len(new_lines)} new process output lines (check #{check_count})")
+                            # Send new lines - extract ONLY steps for frontend
+                            sent_count = 0
+                            batch_size = 10  # Send in batches to prevent stream timeout
+                            for i, line in enumerate(new_lines):
+                                try:
+                                    formatted_line = extract_steps_for_frontend(line)
+                                    if formatted_line:  # Only send if it's a step
+                                        line_msg = json.dumps({'line': formatted_line})
+                                        yield f"data: {line_msg}\n\n"
+                                        sent_count += 1
+                                        
+                                        # After every batch, give the event loop a chance
+                                        if sent_count % batch_size == 0:
+                                            await asyncio.sleep(0.01)
+                                except Exception as e:
+                                    print(f"[Log Stream] Error processing line {i}: {e}")
+                                    continue
+                            print(f"[Log Stream] Sent {sent_count} step lines (out of {len(new_lines)} total lines)")
+                            process_output_sent = len(process_output)
+                    
+                    # Try to find log file
+                    if current_scan["results_dir"]:
+                        potential_log = Path(current_scan["results_dir"]) / "logs" / "security-check.log"
                         if potential_log.exists():
                             log_file = potential_log
-                            current_scan["results_dir"] = str(scan_dir)
-                            print(f"[Log Stream] Found log file by scan_id: {log_file}")
+                            print(f"[Log Stream] Found log file via results_dir: {log_file}")
                             break
-            
-            # Fallback: find most recent log file
-            if not log_file and RESULTS_DIR.exists():
-                for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
-                    if scan_dir.is_dir():
-                        potential_log = scan_dir / "logs" / "security-check.log"
-                        if potential_log.exists():
-                            try:
-                                file_time = potential_log.stat().st_mtime
-                                if time.time() - file_time < 300:  # 5 minutes
+                    
+                    # Try to find log file by scan_id
+                    if not log_file and current_scan["scan_id"] and RESULTS_DIR.exists():
+                        for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
+                            if scan_dir.is_dir() and current_scan["scan_id"] in scan_dir.name:
+                                potential_log = scan_dir / "logs" / "security-check.log"
+                                if potential_log.exists():
                                     log_file = potential_log
                                     current_scan["results_dir"] = str(scan_dir)
-                                    print(f"[Log Stream] Found recent log file: {log_file}")
+                                    print(f"[Log Stream] Found log file by scan_id: {log_file}")
                                     break
-                            except Exception:
-                                pass
-            
-            # If we found the log file, break
-            if log_file:
-                break
-            
-            # If no new output and no log file, wait a bit
-            await asyncio.sleep(0.5)
+                    
+                    # Fallback: find most recent log file
+                    if not log_file and RESULTS_DIR.exists():
+                        for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
+                            if scan_dir.is_dir():
+                                potential_log = scan_dir / "logs" / "security-check.log"
+                                if potential_log.exists():
+                                    try:
+                                        file_time = potential_log.stat().st_mtime
+                                        if time.time() - file_time < 300:  # 5 minutes
+                                            log_file = potential_log
+                                            current_scan["results_dir"] = str(scan_dir)
+                                            print(f"[Log Stream] Found recent log file: {log_file}")
+                                            break
+                                    except Exception:
+                                        pass
+                    
+                    # If we found the log file, break
+                    if log_file:
+                        break
+                    
+                    # If no new output and no log file, wait a bit
+                    await asyncio.sleep(0.5)
+                except Exception as e:
+                    print(f"[Log Stream] Error in loop iteration #{check_count}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    error_msg = json.dumps({'line': f'[ERROR] Error in log stream: {str(e)}'})
+                    yield f"data: {error_msg}\n\n"
+                    await asyncio.sleep(0.5)  # Continue despite error
+        except Exception as e:
+            print(f"[Log Stream] CRITICAL ERROR in main loop: {e}")
+            import traceback
+            traceback.print_exc()
+            error_msg = json.dumps({'line': f'[ERROR] Critical error in log stream: {str(e)}'})
+            yield f"data: {error_msg}\n\n"
         
-        # If log file found, stream it
-        if log_file:
+        # Try to find and stream steps.log file (written directly by security-check.sh)
+        steps_log = None
+        if current_scan.get("results_dir"):
+            steps_log = Path(current_scan["results_dir"]) / "logs" / "steps.log"
+        elif current_scan.get("scan_id") and RESULTS_DIR.exists():
+            for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
+                if scan_dir.is_dir() and current_scan["scan_id"] in scan_dir.name:
+                    steps_log = scan_dir / "logs" / "steps.log"
+                    current_scan["results_dir"] = str(scan_dir)
+                    break
+        
+        # Stream steps.log if it exists
+        if steps_log and steps_log.exists():
             try:
-                # Read existing content from log file
-                with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
-                    existing_content = f.read()
-                    if existing_content:
-                        # Send existing log content (filtered)
-                        for line in existing_content.split('\n'):
-                            if line.strip():
-                                formatted_line = filter_and_format_log_line(line)
-                                if formatted_line:
-                                    line_msg = json.dumps({'line': formatted_line})
-                                    yield f"data: {line_msg}\n\n"
+                print(f"[Log Stream] Found steps.log: {steps_log}")
+                steps_sent = 0
+                with open(steps_log, "r", encoding="utf-8", errors="ignore") as f:
+                    # Read existing steps
+                    existing_steps = f.readlines()
+                    for step_line in existing_steps:
+                        if step_line.strip():
+                            line_msg = json.dumps({'line': step_line.strip()})
+                            yield f"data: {line_msg}\n\n"
+                            steps_sent += 1
                     
                     # If scan is still running, tail the file
                     if current_scan["status"] == "running":
@@ -716,31 +782,35 @@ async def stream_logs():
                             current_position = f.tell()
                             if current_position > last_position:
                                 f.seek(last_position)
-                                for line in f:
-                                    if line.strip():
-                                        formatted_line = filter_and_format_log_line(line)
-                                        if formatted_line:
-                                            line_msg = json.dumps({'line': formatted_line})
-                                            yield f"data: {line_msg}\n\n"
+                                for step_line in f:
+                                    if step_line.strip():
+                                        line_msg = json.dumps({'line': step_line.strip()})
+                                        yield f"data: {line_msg}\n\n"
+                                        steps_sent += 1
                                 last_position = f.tell()
                             else:
                                 await asyncio.sleep(0.5)
             except Exception as e:
-                error_msg = json.dumps({'line': f'[ERROR] Failed to read log file: {str(e)}'})
+                print(f"[Log Stream] Error reading steps.log: {e}")
+                error_msg = json.dumps({'line': f'[ERROR] Failed to read steps.log: {str(e)}'})
                 yield f"data: {error_msg}\n\n"
+        elif log_file:
+            # Fallback: if steps.log doesn't exist yet, wait for it or use old method
+            print(f"[Log Stream] steps.log not found yet, waiting...")
+            await asyncio.sleep(1)
         else:
-            # No log file found, but continue streaming process output
-            error_msg = json.dumps({'line': '[WARNING] Log file not found, streaming process output only'})
-            yield f"data: {error_msg}\n\n"
-            
-            # Continue streaming process output
+            # No log file found, but continue streaming process output (ONLY STEPS)
+            # Continue streaming process output - ONLY STEPS
             while current_scan["status"] == "running":
                 with current_scan.get("process_output_lock", threading.Lock()):
                     process_output = current_scan.get("process_output", [])
                     if len(process_output) > process_output_sent:
                         for line in process_output[process_output_sent:]:
-                            line_msg = json.dumps({'line': line})
-                            yield f"data: {line_msg}\n\n"
+                            # Extract ONLY steps for frontend
+                            formatted_line = extract_steps_for_frontend(line)
+                            if formatted_line:  # Only send if it's a step
+                                line_msg = json.dumps({'line': formatted_line})
+                                yield f"data: {line_msg}\n\n"
                         process_output_sent = len(process_output)
                 await asyncio.sleep(0.5)
     

@@ -6,26 +6,57 @@ export default function LiveLogs() {
   const [autoScroll, setAutoScroll] = useState(true)
 
   useEffect(() => {
-    const eventSource = new EventSource('/api/scan/logs')
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        if (data.line) {
-          setLogs((prev) => [...prev, data.line])
+    let eventSource: EventSource | null = null
+    let reconnectTimeout: number | null = null
+    let reconnectAttempts = 0
+    const maxReconnectAttempts = 10
+    
+    const connect = () => {
+      console.log('[LiveLogs] Connecting to /api/scan/logs...')
+      eventSource = new EventSource('/api/scan/logs')
+      
+      eventSource.onopen = () => {
+        console.log('[LiveLogs] EventSource connected successfully')
+        reconnectAttempts = 0 // Reset bei Erfolg
+      }
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.line) {
+            setLogs((prev) => [...prev, data.line])
+          }
+        } catch (err) {
+          console.error('Failed to parse log line:', err, event.data)
         }
-      } catch (err) {
-        console.error('Failed to parse log line:', err)
+      }
+      
+      eventSource.onerror = (err) => {
+        console.error('[LiveLogs] SSE error:', err)
+        if (eventSource?.readyState === EventSource.CLOSED) {
+          console.error('[LiveLogs] EventSource closed')
+          eventSource.close()
+          eventSource = null
+          
+          // Auto-reconnect mit exponential backoff
+          if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000) // Max 30 Sekunden
+            console.log(`[LiveLogs] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})...`)
+            reconnectTimeout = setTimeout(connect, delay)
+          } else {
+            console.error('[LiveLogs] Max reconnection attempts reached')
+          }
+        }
       }
     }
-
-    eventSource.onerror = (err) => {
-      console.error('SSE error:', err)
-      eventSource.close()
-    }
-
+    
+    connect()
+    
     return () => {
-      eventSource.close()
+      console.log('[LiveLogs] Cleaning up EventSource connection')
+      if (reconnectTimeout) clearTimeout(reconnectTimeout)
+      if (eventSource) eventSource.close()
     }
   }, [])
 
