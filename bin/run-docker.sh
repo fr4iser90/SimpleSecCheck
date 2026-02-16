@@ -190,7 +190,7 @@ if [ ! -d "/project" ] || [ ! -f "/project/docker-compose.yml" ]; then
 fi
 
 echo ""
-echo -e "${BLUE}🚀 SimpleSecCheck Docker Security Scanner${NC}"
+echo -e "${BLUE} SimpleSecCheck Docker Security Scanner${NC}"
 echo "=========================================="
 echo -e "🎯 Scan Type: ${GREEN}$SCAN_TYPE${NC}"
 if [ "$SCAN_TYPE" = "code" ]; then

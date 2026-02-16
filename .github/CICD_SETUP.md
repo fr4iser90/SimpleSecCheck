@@ -1,4 +1,4 @@
-# 🚀 CI/CD Setup für SimpleSecCheck
+#  CI/CD Setup für SimpleSecCheck
 
 ## Übersicht
 
@@ -80,7 +80,7 @@ Nach jedem Push siehst du den Build-Status:
 - Überprüfe, ob der Docker Hub Username korrekt ist
 - Stelle sicher, dass das Repository existiert auf Docker Hub
 
-## 🚀 Version hochsetzen
+##  Version hochsetzen
 
 Um die Version zu ändern:
 1. Bearbeite die Datei `VERSION`

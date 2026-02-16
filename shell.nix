@@ -80,12 +80,12 @@ pkgs.mkShell {
       echo "Current Status:"
       
       if [ $# -eq 4 ]; then
-        echo "  🚀 Progress: $1"
+        echo "   Progress: $1"
         echo "  💪 Energy: $2"
         echo "  🎯 Focus: $3"
         echo "  🎨 Creativity: $4"
       else
-        echo "  🚀 Progress: Not set"
+        echo "   Progress: Not set"
         echo "  💪 Energy: Not set"
         echo "  🎯 Focus: Not set"
         echo "  🎨 Creativity: Not set"
@@ -206,7 +206,7 @@ pkgs.mkShell {
     
     # --- Quick Start Function ---
     quick-start() {
-      echo "🚀 Setting up VibeJam project..."
+      echo " Setting up VibeJam project..."
       
       # Create frontend
       if [ ! -d "frontend" ]; then
@@ -255,11 +255,11 @@ EOL
       echo "✨ Setup complete! Use 'dev-all' to start both servers"
       echo "📝 Edit backend/requirements.txt to add your project dependencies"
       
-      echo "🚀 Starting Coding Phase Timer!" | figlet | lolcat
+      echo " Starting Coding Phase Timer!" | figlet | lolcat
       vibe-timer 60 "Coding phase complete!" &
     }
     
-    echo "🚀 VibeJam Development Environment"
+    echo " VibeJam Development Environment"
     echo "Available commands:"
     echo "  quick-start   - Set up frontend and backend"
     echo "  dev-all      - Start both servers in tmux"

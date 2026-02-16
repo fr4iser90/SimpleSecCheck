@@ -82,7 +82,7 @@
 │  │  │ ☑ CI Mode                                   │  │    │
 │  │  │ Finding Policy: [________________]          │  │    │
 │  │  │                                             │  │    │
-│  │  │ [🚀 Start Scan]                            │  │    │
+│  │  │ [ Start Scan]                            │  │    │
 │  │  └──────────────────────────────────────────┘  │    │
 │  └─────────────────────────────────────────────────┘    │
 │                                                           │
@@ -327,7 +327,7 @@ Homepage → ScanForm ausfüllen
 
 ---
 
-## 🚀 Technische Umsetzung
+##  Technische Umsetzung
 
 ### Frontend Stack
 - **Framework**: React + TypeScript
@@ -374,7 +374,7 @@ GET  /api/results/*           # File Browser für results/ (optional)
 │  ☑ CI Mode                                          │
 │  Finding Policy: [________________]                 │
 │                                                     │
-│  [🚀 Start Scan]                                    │
+│  [ Start Scan]                                    │
 └────────────────────────────────────────────────────┘
 ```
 

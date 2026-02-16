@@ -6,47 +6,63 @@ export default function LiveLogs() {
   const [autoScroll, setAutoScroll] = useState(true)
 
   useEffect(() => {
-    let eventSource: EventSource | null = null
+    let ws: WebSocket | null = null
     let reconnectTimeout: number | null = null
     let reconnectAttempts = 0
     const maxReconnectAttempts = 10
     
     const connect = () => {
-      console.log('[LiveLogs] Connecting to /api/scan/logs...')
-      eventSource = new EventSource('/api/scan/logs')
+      // Convert HTTP to WebSocket URL
+      const wsUrl = window.location.origin.replace(/^http/, 'ws') + '/api/scan/logs/ws'
+      console.log('[LiveLogs] Connecting to WebSocket:', wsUrl)
       
-      eventSource.onopen = () => {
-        console.log('[LiveLogs] EventSource connected successfully')
-        reconnectAttempts = 0 // Reset bei Erfolg
-      }
-      
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          if (data.line) {
-            setLogs((prev) => [...prev, data.line])
-          }
-        } catch (err) {
-          console.error('Failed to parse log line:', err, event.data)
+      try {
+        ws = new WebSocket(wsUrl)
+        
+        ws.onopen = () => {
+          console.log('[LiveLogs] WebSocket connected successfully')
+          reconnectAttempts = 0 // Reset on success
         }
-      }
-      
-      eventSource.onerror = (err) => {
-        console.error('[LiveLogs] SSE error:', err)
-        if (eventSource?.readyState === EventSource.CLOSED) {
-          console.error('[LiveLogs] EventSource closed')
-          eventSource.close()
-          eventSource = null
+        
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            if (data.type === 'log' && data.data) {
+              setLogs((prev) => [...prev, data.data])
+            } else if (data.type === 'ping') {
+              // Ignore ping messages
+              return
+            }
+          } catch (err) {
+            console.error('Failed to parse WebSocket message:', err, event.data)
+          }
+        }
+        
+        ws.onerror = (err) => {
+          console.error('[LiveLogs] WebSocket error:', err)
+        }
+        
+        ws.onclose = (event) => {
+          console.log('[LiveLogs] WebSocket closed:', event.code, event.reason)
+          ws = null
           
-          // Auto-reconnect mit exponential backoff
+          // Auto-reconnect with exponential backoff
           if (reconnectAttempts < maxReconnectAttempts) {
             reconnectAttempts++
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000) // Max 30 Sekunden
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000) // Max 30 seconds
             console.log(`[LiveLogs] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})...`)
             reconnectTimeout = setTimeout(connect, delay)
           } else {
             console.error('[LiveLogs] Max reconnection attempts reached')
           }
+        }
+      } catch (err) {
+        console.error('[LiveLogs] Failed to create WebSocket:', err)
+        // Retry after delay
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000)
+          reconnectTimeout = setTimeout(connect, delay)
         }
       }
     }
@@ -54,9 +70,12 @@ export default function LiveLogs() {
     connect()
     
     return () => {
-      console.log('[LiveLogs] Cleaning up EventSource connection')
+      console.log('[LiveLogs] Cleaning up WebSocket connection')
       if (reconnectTimeout) clearTimeout(reconnectTimeout)
-      if (eventSource) eventSource.close()
+      if (ws) {
+        ws.close()
+        ws = null
+      }
     }
   }, [])
 

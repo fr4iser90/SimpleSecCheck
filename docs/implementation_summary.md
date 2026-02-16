@@ -66,7 +66,7 @@ The HTML reports now include:
 └────────────────────────────────────────┘
 ```
 
-## 🚀 Remaining Optional Improvements
+##  Remaining Optional Improvements
 
 The following enhancements are available but not yet implemented:
 

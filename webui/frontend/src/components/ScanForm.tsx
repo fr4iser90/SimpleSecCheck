@@ -1,7 +1,16 @@
 import { useState } from 'react'
 
+interface ScanStatusData {
+  status: 'idle' | 'running' | 'done' | 'error'
+  scan_id: string | null
+  results_dir: string | null
+  started_at: string | null
+  error_code?: number | null
+  error_message?: string | null
+}
+
 interface ScanFormProps {
-  onScanStart: () => void
+  onScanStart: (scanStatus: ScanStatusData) => void
 }
 
 export default function ScanForm({ onScanStart }: ScanFormProps) {
@@ -47,8 +56,11 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
         throw new Error(errorData.detail || 'Failed to start scan')
       }
 
-      // Navigate to scan view (response is OK, no need to parse JSON)
-      onScanStart()
+      // Parse the response to get the status
+      const scanStatus = await response.json()
+      
+      // Navigate to scan view with the status
+      onScanStart(scanStatus)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
       setLoading(false)
@@ -144,7 +156,7 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
       )}
 
       <button type="submit" className="primary" disabled={loading}>
-        {loading ? 'Starting...' : '🚀 Start Scan'}
+        {loading ? 'Starting...' : ' Start Scan'}
       </button>
     </form>
   )

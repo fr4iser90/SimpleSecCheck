@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import ScanStatus from '../components/ScanStatus'
 import LiveLogs from '../components/LiveLogs'
 import ReportViewer from '../components/ReportViewer'
@@ -15,56 +15,49 @@ interface ScanStatusData {
 
 export default function ScanView() {
   const navigate = useNavigate()
-  const [status, setStatus] = useState<ScanStatusData>({
-    status: 'idle',
-    scan_id: null,
-    results_dir: null,
-    started_at: null,
-  })
-
-  useEffect(() => {
-    let retryCount = 0
-    const maxRetries = 3
-    
-    const pollStatus = async () => {
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 Sekunden Timeout
-        
-        const response = await fetch('/api/scan/status', {
-          signal: controller.signal
-        })
-        
-        clearTimeout(timeoutId)
-        
-        if (response.ok) {
-          const data = await response.json()
-          setStatus(data)
-          retryCount = 0 // Reset bei Erfolg
-        }
-      } catch (err) {
-        // Ignoriere AbortErrors (Timeout) - Backend ist möglicherweise beschäftigt
-        if (err instanceof Error && err.name === 'AbortError') {
-          // Timeout - Backend ist beschäftigt, das ist normal während des Scans
-          return
-        }
-        
-        console.error('Failed to fetch scan status:', err)
-        retryCount++
-        
-        if (retryCount < maxRetries) {
-          // Retry mit exponential backoff
-          const delay = 1000 * Math.pow(2, retryCount)
-          setTimeout(pollStatus, delay)
-        }
-      }
+  const location = useLocation()
+  
+  // Get initial status from navigation state (passed from ScanForm)
+  const [status, setStatus] = useState<ScanStatusData>(
+    location.state || {
+      status: 'idle',
+      scan_id: null,
+      results_dir: null,
+      started_at: null,
     }
-    
-    const interval = setInterval(pollStatus, 2000) // Poll every 2 seconds
-    pollStatus() // Sofort ausführen
-    
-    return () => clearInterval(interval)
-  }, [])
+  )
+
+  // Poll status every 2 seconds if scan is running
+  useEffect(() => {
+    if (status.status === 'running' && status.scan_id) {
+      const interval = setInterval(async () => {
+        try {
+          const response = await fetch('/api/scan/status')
+          if (response.ok) {
+            const newStatus = await response.json()
+            setStatus(newStatus)
+            // If scan is done, stop polling
+            if (newStatus.status === 'done' || newStatus.status === 'error') {
+              clearInterval(interval)
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch scan status:', error)
+        }
+      }, 2000)
+      
+      return () => clearInterval(interval)
+    }
+  }, [status.status, status.scan_id])
+
+  // Helper function to get result link
+  const getResultLink = (): string | undefined => {
+    if (status.status === 'done' && status.scan_id) {
+      // Use the scan_id to construct the report link
+      return `/api/results/${status.scan_id}/report`
+    }
+    return undefined
+  }
 
   const handleNewScan = () => {
     navigate('/')
@@ -89,6 +82,29 @@ export default function ScanView() {
 
       {status.status === 'done' && status.results_dir && (
         <>
+          <div className="card">
+            <h2>✅ Scan Completed</h2>
+            <p>Scan ID: {status.scan_id}</p>
+            {getResultLink() && (
+              <a 
+                href={getResultLink()} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-block',
+                  marginTop: '1rem',
+                  padding: '0.75rem 1.5rem',
+                  background: '#007bff',
+                  color: 'white',
+                  textDecoration: 'none',
+                  borderRadius: '4px',
+                  fontWeight: 'bold'
+                }}
+              >
+                📊 View Results
+              </a>
+            )}
+          </div>
           <div className="card">
             <h2>Security Report</h2>
             <ReportViewer />

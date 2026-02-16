@@ -1,11 +1,20 @@
 import { useNavigate } from 'react-router-dom'
 import ScanForm from '../components/ScanForm'
 
+interface ScanStatusData {
+  status: 'idle' | 'running' | 'done' | 'error'
+  scan_id: string | null
+  results_dir: string | null
+  started_at: string | null
+  error_code?: number | null
+  error_message?: string | null
+}
+
 export default function HomePage() {
   const navigate = useNavigate()
 
-  const handleScanStart = () => {
-    navigate('/scan')
+  const handleScanStart = (scanStatus: ScanStatusData) => {
+    navigate('/scan', { state: scanStatus })
   }
 
   return (

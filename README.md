@@ -60,7 +60,7 @@ SimpleSecCheck is a powerful, single-shot Docker-based security scanner that per
 
 ---
 
-## 🚀 Features
+##  Features
 
 - **Single-Shot Analysis:** One command, complete security scan
 - **Dual Scan Modes:** Code analysis OR web application scanning
