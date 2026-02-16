@@ -6,75 +6,39 @@ export default function LiveLogs() {
   const [autoScroll, setAutoScroll] = useState(true)
 
   useEffect(() => {
-    let ws: WebSocket | null = null
-    let reconnectTimeout: number | null = null
-    let reconnectAttempts = 0
-    const maxReconnectAttempts = 10
+    let pollInterval: number | null = null
+    let lastCount = 0
     
-    const connect = () => {
-      // Convert HTTP to WebSocket URL
-      const wsUrl = window.location.origin.replace(/^http/, 'ws') + '/api/scan/logs/ws'
-      console.log('[LiveLogs] Connecting to WebSocket:', wsUrl)
-      
+    const fetchLogs = async () => {
       try {
-        ws = new WebSocket(wsUrl)
-        
-        ws.onopen = () => {
-          console.log('[LiveLogs] WebSocket connected successfully')
-          reconnectAttempts = 0 // Reset on success
+        const response = await fetch('/api/scan/logs')
+        if (!response.ok) {
+          console.error('[LiveLogs] Failed to fetch logs:', response.status)
+          return
         }
         
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data)
-            if (data.type === 'log' && data.data) {
-              setLogs((prev) => [...prev, data.data])
-            } else if (data.type === 'ping') {
-              // Ignore ping messages
-              return
-            }
-          } catch (err) {
-            console.error('Failed to parse WebSocket message:', err, event.data)
-          }
-        }
-        
-        ws.onerror = (err) => {
-          console.error('[LiveLogs] WebSocket error:', err)
-        }
-        
-        ws.onclose = (event) => {
-          console.log('[LiveLogs] WebSocket closed:', event.code, event.reason)
-          ws = null
-          
-          // Auto-reconnect with exponential backoff
-          if (reconnectAttempts < maxReconnectAttempts) {
-            reconnectAttempts++
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000) // Max 30 seconds
-            console.log(`[LiveLogs] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})...`)
-            reconnectTimeout = setTimeout(connect, delay)
-          } else {
-            console.error('[LiveLogs] Max reconnection attempts reached')
+        const data = await response.json()
+        if (data.lines && Array.isArray(data.lines)) {
+          // Only update if we have new lines
+          if (data.lines.length > lastCount) {
+            setLogs(data.lines)
+            lastCount = data.lines.length
           }
         }
       } catch (err) {
-        console.error('[LiveLogs] Failed to create WebSocket:', err)
-        // Retry after delay
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000)
-          reconnectTimeout = setTimeout(connect, delay)
-        }
+        console.error('[LiveLogs] Error fetching logs:', err)
       }
     }
     
-    connect()
+    // Fetch immediately
+    fetchLogs()
+    
+    // Poll every 500ms for real-time updates
+    pollInterval = window.setInterval(fetchLogs, 500)
     
     return () => {
-      console.log('[LiveLogs] Cleaning up WebSocket connection')
-      if (reconnectTimeout) clearTimeout(reconnectTimeout)
-      if (ws) {
-        ws.close()
-        ws = null
+      if (pollInterval) {
+        clearInterval(pollInterval)
       }
     }
   }, [])

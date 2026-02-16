@@ -40,7 +40,7 @@ async def start_scan(
     cli_script: Path,
     base_dir: Path,
     results_dir: Path,
-    log_worker_thread_func
+    log_worker_thread_func=None  # Not used anymore, kept for compatibility
 ):
     """
     Start a scan by calling bin/run-docker.sh
@@ -121,23 +121,6 @@ async def start_scan(
         # Start background task to monitor process
         asyncio.create_task(monitor_scan(process, scan_id, current_scan, results_dir))
         
-        # Get the current event loop to pass to the worker thread
-        event_loop = asyncio.get_event_loop()
-        
-        # Create and start log worker thread - pass results_dir instead of None
-        log_worker_thread = threading.Thread(
-            target=log_worker_thread_func,
-            args=(scan_id, results_dir, current_scan, event_loop),
-            daemon=True
-        )
-        log_worker_thread.start()
-        
-        # Update the module-level variable
-        import app.services.message_queue as mq
-        mq.log_worker_thread = log_worker_thread
-        
-        print(f"[Start Scan] Started log worker thread for scan_id={scan_id}")
-        
         return ScanStatus(
             status="running",
             scan_id=scan_id,
@@ -152,13 +135,18 @@ async def capture_process_output(process: subprocess.Popen, scan_id: str, curren
     """Capture stdout/stderr from run-docker.sh process and store for streaming"""
     try:
         print(f"[Process Output] Starting to capture output for scan {scan_id}, PID={process.pid}")
-        # Read process output line by line
+        loop = asyncio.get_event_loop()
+        
+        # Read process output line by line - run readline() in thread to avoid blocking event loop
         while True:
-            line = process.stdout.readline()
+            # Run readline() in thread pool to avoid blocking event loop
+            line = await loop.run_in_executor(None, process.stdout.readline)
+            
             if not line:
-                if process.poll() is not None:
+                # Check if process is done (non-blocking poll)
+                return_code = await loop.run_in_executor(None, process.poll)
+                if return_code is not None:
                     # Process finished
-                    return_code = process.poll()
                     print(f"[Process Output] Process finished with return code {return_code}")
                     break
                 await asyncio.sleep(0.1)
@@ -187,8 +175,9 @@ async def capture_process_output(process: subprocess.Popen, scan_id: str, curren
 
 async def monitor_scan(process: subprocess.Popen, scan_id: str, current_scan: dict, results_dir: Path):
     """Monitor scan process and update status when done"""
-    # Wait for process to complete
-    return_code = process.wait()
+    # Wait for process to complete - run in thread to avoid blocking event loop
+    loop = asyncio.get_event_loop()
+    return_code = await loop.run_in_executor(None, process.wait)
     
     # If process exited unexpectedly (non-zero exit code that's not a normal scan error),
     # try to stop any orphaned containers
