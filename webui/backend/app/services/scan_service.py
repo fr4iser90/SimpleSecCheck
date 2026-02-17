@@ -23,6 +23,7 @@ class ScanRequest(BaseModel):
     target: str
     ci_mode: bool = False
     finding_policy: Optional[str] = None
+    collect_metadata: bool = False  # OPTIONAL: Only collect metadata if user explicitly enables it
 
 
 class ScanStatus(BaseModel):
@@ -77,6 +78,9 @@ async def start_scan(
         cmd.append("--ci")
     if clean_finding_policy:
         cmd.extend(["--finding-policy", clean_finding_policy])
+    # ONLY collect metadata if user explicitly enabled it
+    if request.collect_metadata:
+        cmd.append("--collect-metadata")
     cmd.append(clean_target if request.type != "network" else "network")
     
     # Start process (as non-root user, no shell injection)

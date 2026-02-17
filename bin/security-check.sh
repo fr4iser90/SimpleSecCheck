@@ -1112,6 +1112,42 @@ else
     log_message "--- Skipping Burp Suite Scan (Code scan mode) ---"
 fi
 
+# --- Metadata Collection (ONLY if explicitly enabled) ---
+if [ "${COLLECT_METADATA:-false}" = "true" ]; then
+    log_message "Collecting scan metadata (user enabled metadata collection)..."
+    METADATA_SCRIPT="$BASE_PROJECT_DIR/src/core/scan_metadata.py"
+    if [ -f "$METADATA_SCRIPT" ]; then
+        # Collect metadata using Python script
+        if python3 -c "
+import sys
+sys.path.insert(0, '$BASE_PROJECT_DIR/src')
+from core.scan_metadata import collect_scan_metadata, save_metadata
+import os
+
+metadata = collect_scan_metadata(
+    target_path='$TARGET_PATH_IN_CONTAINER',
+    scan_type='$SCAN_TYPE',
+    results_dir='$RESULTS_DIR_IN_CONTAINER',
+    finding_policy='${FINDING_POLICY_FILE_IN_CONTAINER:-}',
+    ci_mode=${CI_MODE:-false}
+)
+
+if save_metadata(metadata, '$RESULTS_DIR_IN_CONTAINER'):
+    print('Metadata collected and saved successfully')
+else:
+    print('Warning: Failed to save metadata')
+" >> "$LOG_FILE" 2>&1; then
+            log_message "Metadata collection completed successfully."
+        else
+            log_message "[WARN] Metadata collection failed (non-critical, continuing scan)"
+        fi
+    else
+        log_message "[WARN] Metadata script not found: $METADATA_SCRIPT"
+    fi
+else
+    log_message "Metadata collection disabled (default: privacy-first)"
+fi
+
 # --- Reporting Phase ---
 HTML_REPORT_PY_SCRIPT="$BASE_PROJECT_DIR/src/reporting/generate-html-report.py"
 HTML_REPORT_OUTPUT_FILE="$RESULTS_DIR_IN_CONTAINER/security-summary.html"

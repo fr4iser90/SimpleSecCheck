@@ -18,6 +18,7 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
   const [target, setTarget] = useState('')
   const [ciMode, setCiMode] = useState(false)
   const [findingPolicy, setFindingPolicy] = useState('')
+  const [collectMetadata, setCollectMetadata] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,6 +42,7 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
           target: scanType === 'network' ? 'network' : cleanTarget,
           ci_mode: ciMode,
           finding_policy: cleanFindingPolicy,
+          collect_metadata: collectMetadata,
         }),
       })
 
@@ -140,6 +142,20 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
           onBlur={(e) => setFindingPolicy(e.target.value.trim())} // Auto-trim on blur
           placeholder="config/finding-policy.json"
         />
+      </div>
+
+      <div className="form-group">
+        <label>
+          <input
+            type="checkbox"
+            checked={collectMetadata}
+            onChange={(e) => setCollectMetadata(e.target.checked)}
+          />
+          Collect Metadata (optional - includes Git info, project path, etc.)
+        </label>
+        <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
+          By default, no metadata is collected for privacy. Enable this to include project information in the scan report.
+        </small>
       </div>
 
       {error && (

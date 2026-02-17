@@ -27,14 +27,16 @@ CI_MODE=false
 TARGET=""
 FINDING_POLICY_ARG=""
 FINDING_POLICY_FILE_IN_CONTAINER=""
+COLLECT_METADATA=false
 
 print_usage() {
-    echo "Usage: $0 [--ci] [--finding-policy <path>] <target>"
+    echo "Usage: $0 [--ci] [--finding-policy <path>] [--collect-metadata] <target>"
     echo ""
     echo "Examples:"
     echo "  $0 /home/user/my-project          # Scan local code"
     echo "  $0 --ci /home/user/my-project     # CI-friendly code scan"
     echo "  $0 --finding-policy config/finding-policy.json /home/user/my-project"
+    echo "  $0 --collect-metadata /home/user/my-project  # Collect scan metadata (optional)"
     echo "  $0 https://example.com            # Scan website"
     echo "  $0 network                        # Scan network/infrastructure"
 }
@@ -53,6 +55,10 @@ while [ $# -gt 0 ]; do
             fi
             FINDING_POLICY_ARG="$2"
             shift 2
+            ;;
+        --collect-metadata)
+            COLLECT_METADATA=true
+            shift
             ;;
         -h|--help)
             print_usage
@@ -210,6 +216,7 @@ export ZAP_TARGET="$ZAP_TARGET"
 export TARGET_PATH_IN_CONTAINER="/target"
 export PROJECT_RESULTS_DIR="$RESULTS_DIR"
 export SCAN_TYPE="$SCAN_TYPE"
+export COLLECT_METADATA="$COLLECT_METADATA"  # Only collect metadata if explicitly enabled
 
 # Load optional API tokens from .env file if it exists
 if [ -f "$SCRIPT_DIR/.env" ]; then

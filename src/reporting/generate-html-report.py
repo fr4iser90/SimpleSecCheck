@@ -16,7 +16,7 @@ import traceback
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.join(BASE_DIR, "processors"))
-sys.path.insert(0, os.path.join(BASE_DIR, "core"))
+sys.path.insert(0, os.path.join(BASE_DIR, "core"))  # Add core/ directly to path (like processors/)
 sys.path.insert(0, "/SimpleSecCheck/scripts")
 
 from html_utils import html_header, html_footer, generate_visual_summary_section, generate_overall_summary_and_links_section, generate_executive_summary, generate_tool_status_section
@@ -50,6 +50,12 @@ from bandit_processor import bandit_summary, generate_bandit_html_section
 from android_manifest_processor import android_manifest_summary, generate_android_manifest_html
 from ios_plist_processor import ios_plist_summary, generate_ios_plist_html
 from finding_policy import load_policy, apply_semgrep_policy, apply_gitleaks_policy
+try:
+    from scan_metadata import load_metadata
+except ImportError:
+    # Fallback if scan_metadata module not available (should not happen, but be safe)
+    def load_metadata(results_dir):
+        return None
 
 RESULTS_DIR = os.environ.get('RESULTS_DIR', '/SimpleSecCheck/results')
 OUTPUT_FILE = os.environ.get('OUTPUT_FILE', os.path.join(RESULTS_DIR, 'security-summary.html'))
@@ -67,6 +73,66 @@ def read_json(path):
     except Exception as e:
         debug(f"Error reading JSON file {path}: {e}")
         return None
+
+
+def generate_metadata_section(metadata):
+    """
+    Generate HTML section for scan metadata (only shown if metadata was collected).
+    """
+    if not metadata:
+        return ""
+    
+    html_parts = []
+    html_parts.append('<div class="glass" style="margin: 2rem 0; padding: 2rem;">')
+    html_parts.append('<h2>📋 Scan Metadata</h2>')
+    html_parts.append('<p style="color: #6c757d; margin-bottom: 1.5rem;">Metadata was collected because you enabled "Collect Metadata" option.</p>')
+    html_parts.append('<table style="width: 100%; border-collapse: collapse;">')
+    
+    # Project Information
+    if metadata.get("project_name"):
+        html_parts.append(f'<tr><td style="padding: 0.75rem; font-weight: bold; width: 30%;">Project Name:</td><td style="padding: 0.75rem;">{html.escape(str(metadata.get("project_name", "")))}</td></tr>')
+    
+    if metadata.get("target_path_absolute"):
+        html_parts.append(f'<tr><td style="padding: 0.75rem; font-weight: bold;">Project Path:</td><td style="padding: 0.75rem; word-break: break-all;">{html.escape(str(metadata.get("target_path_absolute", "")))}</td></tr>')
+    
+    if metadata.get("scan_type"):
+        html_parts.append(f'<tr><td style="padding: 0.75rem; font-weight: bold;">Scan Type:</td><td style="padding: 0.75rem;">{html.escape(str(metadata.get("scan_type", "")))}</td></tr>')
+    
+    # Git Information
+    git_info = metadata.get("git_info", {})
+    if git_info and any(git_info.values()):
+        html_parts.append('<tr><td colspan="2" style="padding: 1rem 0.75rem 0.5rem; font-weight: bold; border-top: 1px solid rgba(255,255,255,0.2);">Git Repository Information:</td></tr>')
+        
+        if git_info.get("repository_url"):
+            html_parts.append(f'<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">Repository URL:</td><td style="padding: 0.75rem; word-break: break-all;">{html.escape(str(git_info.get("repository_url", "")))}</td></tr>')
+        
+        if git_info.get("branch"):
+            html_parts.append(f'<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">Branch:</td><td style="padding: 0.75rem;">{html.escape(str(git_info.get("branch", "")))}</td></tr>')
+        
+        if git_info.get("commit_hash"):
+            html_parts.append(f'<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">Commit Hash:</td><td style="padding: 0.75rem; font-family: monospace;">{html.escape(str(git_info.get("commit_hash", "")))}</td></tr>')
+        
+        if git_info.get("commit_message"):
+            html_parts.append(f'<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">Commit Message:</td><td style="padding: 0.75rem;">{html.escape(str(git_info.get("commit_message", "")))}</td></tr>')
+        
+        if git_info.get("is_dirty"):
+            html_parts.append('<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">Working Directory:</td><td style="padding: 0.75rem; color: #ffc107;">⚠️ Uncommitted changes detected</td></tr>')
+    
+    # Scan Configuration
+    scan_config = metadata.get("scan_config", {})
+    if scan_config:
+        html_parts.append('<tr><td colspan="2" style="padding: 1rem 0.75rem 0.5rem; font-weight: bold; border-top: 1px solid rgba(255,255,255,0.2);">Scan Configuration:</td></tr>')
+        
+        if scan_config.get("finding_policy_used"):
+            html_parts.append('<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">Finding Policy:</td><td style="padding: 0.75rem;">✅ Enabled</td></tr>')
+        
+        if scan_config.get("ci_mode"):
+            html_parts.append('<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">CI Mode:</td><td style="padding: 0.75rem;">✅ Enabled</td></tr>')
+    
+    html_parts.append('</table>')
+    html_parts.append('</div>')
+    
+    return "".join(html_parts)
 
 
 def generate_accepted_findings_section(accepted_findings):
@@ -195,6 +261,9 @@ def main():
     gitleaks_findings, gitleaks_accepted = apply_gitleaks_policy(gitleaks_findings, finding_policy.get("gitleaks", {}))
     accepted_findings.extend(semgrep_accepted)
     accepted_findings.extend(gitleaks_accepted)
+    
+    # Load scan metadata (only if user enabled metadata collection)
+    scan_metadata = load_metadata(RESULTS_DIR)
 
     try:
         # Extract ZAP alerts list if available, otherwise use empty list
@@ -248,6 +317,10 @@ def main():
             f.write(html_header(f'{target} - {now}'))
             # WebUI Controls Block
             # WebUI Controls removed - using single-shot scans only
+
+            # Scan Metadata Section (only if metadata was collected)
+            if scan_metadata:
+                f.write(generate_metadata_section(scan_metadata))
 
             # Executive Summary Dashboard
             f.write(generate_executive_summary(all_findings))
