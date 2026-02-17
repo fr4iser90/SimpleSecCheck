@@ -41,7 +41,6 @@ async def start_scan(
     cli_script: Path,
     base_dir: Path,
     results_dir: Path,
-    log_worker_thread_func=None  # Not used anymore, kept for compatibility
 ):
     """
     Start a scan by calling bin/run-docker.sh

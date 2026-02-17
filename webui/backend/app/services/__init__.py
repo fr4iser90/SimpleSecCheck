@@ -15,8 +15,6 @@ from .shutdown_service import (
     IDLE_TIMEOUT
 )
 from .step_service import extract_steps_for_frontend, write_step_to_log
-from .log_worker import log_worker_thread_func
-from .message_queue import log_queue, active_websockets, log_worker_running, log_worker_thread
 from .scan_service import (
     ScanRequest,
     ScanStatus,
@@ -26,7 +24,6 @@ from .scan_service import (
     monitor_scan,
     capture_process_output
 )
-from .websocket_service import websocket_logs
 
 __all__ = [
     "stop_running_containers",
@@ -41,11 +38,6 @@ __all__ = [
     "IDLE_TIMEOUT",
     "extract_steps_for_frontend",
     "write_step_to_log",
-    "log_worker_thread_func",
-    "log_queue",
-    "active_websockets",
-    "log_worker_running",
-    "log_worker_thread",
     "ScanRequest",
     "ScanStatus",
     "start_scan",
@@ -53,5 +45,4 @@ __all__ = [
     "stop_scan",
     "monitor_scan",
     "capture_process_output",
-    "websocket_logs",
 ]

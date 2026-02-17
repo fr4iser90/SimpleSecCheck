@@ -112,7 +112,7 @@ async def start_scan(request: ScanRequest):
         CLI_SCRIPT,
         BASE_DIR,
         RESULTS_DIR,
-        None  # log_worker_thread_func not needed anymore
+        None
     )
     
     return result
