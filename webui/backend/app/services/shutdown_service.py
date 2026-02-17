@@ -58,7 +58,6 @@ def idle_timeout_checker(current_scan: dict):
             continue
         
         if idle_time > IDLE_TIMEOUT and not shutdown_scheduled:
-            print(f"[Auto-Shutdown] Idle timeout ({IDLE_TIMEOUT}s) reached, shutting down...")
             schedule_shutdown(delay=10)  # 10 second grace period
             break
 
@@ -67,12 +66,9 @@ def create_signal_handler(current_scan: dict, stop_containers_func):
     """Create signal handler for shutdown signals"""
     def signal_handler(signum, frame):
         """Handle shutdown signals and stop running scans"""
-        print(f"[Signal Handler] Received signal {signum}, stopping running scans...")
-        
         if current_scan["status"] == "running":
             process = current_scan.get("process")
             if process and process.poll() is None:
-                print("[Signal Handler] Terminating scan process...")
                 try:
                     process.terminate()
                     # Wait a bit for graceful shutdown
@@ -80,13 +76,11 @@ def create_signal_handler(current_scan: dict, stop_containers_func):
                         process.wait(timeout=5)
                     except Exception:
                         # Force kill if it doesn't terminate
-                        print("[Signal Handler] Force killing scan process...")
                         process.kill()
-                except Exception as e:
-                    print(f"[Signal Handler] Error stopping process: {e}")
+                except Exception:
+                    pass
             
             # Stop docker containers
-            print("[Signal Handler] Stopping Docker containers...")
             stop_containers_func(current_scan)
         
         # Exit gracefully

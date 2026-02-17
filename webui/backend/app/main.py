@@ -157,7 +157,6 @@ async def get_logs():
                 lines = [line.strip() for line in f.readlines() if line.strip()]
             return {"lines": lines, "count": len(lines)}
         except Exception as e:
-            print(f"[Get Logs] Error reading steps.log: {e}")
             return {"lines": [], "count": 0, "error": str(e)}
     else:
         return {"lines": [], "count": 0}

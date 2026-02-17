@@ -162,8 +162,17 @@ async def capture_process_output(process: subprocess.Popen, scan_id: str, curren
                     if len(current_scan["process_output"]) > 1000:
                         current_scan["process_output"] = current_scan["process_output"][-1000:]
                 
-                # Backend logs everything (no filtering)
-                print(f"[Process Output] {clean_line}")
+                # Backend logs only important lines (not every line to reduce noise)
+                # Log orchestrator messages, errors, and important steps
+                if any(keyword in clean_line for keyword in [
+                    "[SimpleSecCheck Orchestrator]",
+                    "[ERROR]",
+                    "[ORCHESTRATOR ERROR]",
+                    "Scan completed",
+                    "Scan failed",
+                    "failed with exit code"
+                ]):
+                    print(f"[Process Output] {clean_line}")
                 
                 # Extract steps for frontend (this also writes to steps.log)
                 extract_steps_for_frontend(clean_line, current_scan, results_dir)
@@ -357,8 +366,7 @@ async def recheck_scan_status(scan_id: str, results_dir: Optional[str], return_c
 
 async def get_scan_status(current_scan: dict, results_dir: Path) -> ScanStatus:
     """Get current scan status"""
-    # Debug logging
-    print(f"[Status Endpoint] Called: status={current_scan['status']}, scan_id={current_scan.get('scan_id')}, process={current_scan.get('process')}, process_alive={current_scan.get('process') is not None and current_scan.get('process').poll() is None if current_scan.get('process') else False}")
+    old_status = current_scan["status"]
     
     # If status is "running", check if scan is really done by looking at log file
     if current_scan["status"] == "running" and current_scan["scan_id"]:
@@ -391,7 +399,9 @@ async def get_scan_status(current_scan: dict, results_dir: Path) -> ScanStatus:
         error_message=current_scan.get("error_message")
     )
     
-    print(f"[Status Endpoint] Returning: status={status_response.status}, scan_id={status_response.scan_id}")
+    # Log only on status change (reduced logging)
+    if old_status != status_response.status:
+        print(f"[Status] Changed: {old_status} -> {status_response.status}, scan_id={status_response.scan_id}")
     
     return status_response
 

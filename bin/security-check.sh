@@ -70,24 +70,19 @@ log_message() {
 }
 
 log_step() {
-    # Writes step directly to steps.log file (for frontend) - EXTRA LOG, does NOT replace log_message
-    # Usage: log_step <step_message>
-    CURRENT_STEP=$((CURRENT_STEP + 1))
-    local step_msg="$1"
-    # Use STEPS_LOG if defined, otherwise fallback to LOGS_DIR_IN_CONTAINER
-    local steps_log="${STEPS_LOG:-${LOGS_DIR_IN_CONTAINER}/steps.log}"
-    mkdir -p "$(dirname "$steps_log")"
-    echo "⏳ Step ${CURRENT_STEP}: ${step_msg}" >> "$steps_log"
+    # DISABLED: Python backend now handles all step logging with proper formatting (Step X/Y)
+    # Python extracts steps from orchestrator log messages and writes to steps.log
+    # This ensures consistent numbering and total step count
+    # Usage: log_step <step_message> (no-op, kept for compatibility)
+    :
 }
 
 log_step_complete() {
-    # Writes completed step to steps.log file - EXTRA LOG, does NOT replace log_message
-    # Usage: log_step_complete <step_message>
-    local step_msg="$1"
-    # Use STEPS_LOG if defined, otherwise fallback to LOGS_DIR_IN_CONTAINER
-    local steps_log="${STEPS_LOG:-${LOGS_DIR_IN_CONTAINER}/steps.log}"
-    mkdir -p "$(dirname "$steps_log")"
-    echo "✓ Step ${CURRENT_STEP}: ${step_msg}" >> "$steps_log"
+    # DISABLED: Python backend now handles all step logging with proper formatting (Step X/Y)
+    # Python extracts steps from orchestrator log messages and writes to steps.log
+    # This ensures consistent numbering and total step count
+    # Usage: log_step_complete <step_message> (no-op, kept for compatibility)
+    :
 }
 
 cleanup_lock() {
@@ -165,10 +160,10 @@ export STEPS_LOG
 log_message "Orchestrator script started."
 log_message "Scan Type: $SCAN_TYPE"
 
-# Initialize step counter for steps.log (EXTRA LOG for frontend)
-CURRENT_STEP=0
+# Step logging is now handled by Python backend (extracts from orchestrator log messages)
+# CURRENT_STEP=0  # No longer used - Python backend handles step counting
 mkdir -p "${RESULTS_DIR_IN_CONTAINER}/logs"
-log_step "Initializing scan..."
+log_step "Initializing scan..."  # No-op, kept for compatibility
 
 log_message "Container Base Project Dir (BASE_PROJECT_DIR): $BASE_PROJECT_DIR"
 if [ "$SCAN_TYPE" = "code" ]; then

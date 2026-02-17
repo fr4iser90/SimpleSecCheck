@@ -35,9 +35,8 @@ def write_step_to_log(step_line: str, scan_id: str, current_scan: dict, results_
             steps_log.parent.mkdir(parents=True, exist_ok=True)
             with open(steps_log, "a", encoding="utf-8") as f:
                 f.write(f"{step_line}\n")
-            print(f"[Step Log] Wrote step to {steps_log}: {step_line}")
-        except Exception as e:
-            print(f"[Step Log] ERROR writing to {steps_log}: {e}")
+        except Exception:
+            pass
 
 
 def extract_steps_for_frontend(line: str, current_scan: dict, results_dir: Path) -> Optional[str]:
@@ -52,69 +51,93 @@ def extract_steps_for_frontend(line: str, current_scan: dict, results_dir: Path)
     if not clean_line:
         return None
     
-    # Calculate total steps (approximate - will be updated as we see more steps)
-    # Common tools: Semgrep, Trivy, CodeQL, OWASP, Safety, Snyk, SonarQube, Checkov, TruffleHog, GitLeaks, Detect-secrets, npm_audit, ESLint, Brakeman, Bandit
-    # Plus: Initialization, Report Generation, Completion
-    total_steps = max(15, current_scan.get("step_counter", 0) + 2)  # Dynamic based on what we've seen
-    
     formatted_line = None
     
-    # Extract scan steps from orchestrator messages
-    # Pattern: "--- Orchestrating X Scan ---"
-    orchestrating_match = re.search(r'---\s*Orchestrating\s+(.+?)\s+Scan\s+---', clean_line, re.IGNORECASE)
-    if orchestrating_match:
-        tool_name = orchestrating_match.group(1).strip()
-        with current_scan["process_output_lock"]:
-            if tool_name not in current_scan["step_names"]:
-                current_scan["step_counter"] += 1
-                current_scan["step_names"][tool_name] = current_scan["step_counter"]
-            step_num = current_scan["step_names"][tool_name]
-            # Update total steps based on what we've seen
-            total_steps = max(total_steps, current_scan["step_counter"] + 2)
-        formatted_line = f"⏳ Step {step_num}/{total_steps}: Running {tool_name} scan..."
-    
-    # Pattern: "--- X Scan Orchestration Finished ---"
-    if not formatted_line:
-        finished_match = re.search(r'---\s*(.+?)\s+Scan\s+Orchestration\s+Finished\s+---', clean_line, re.IGNORECASE)
-        if finished_match:
-            tool_name = finished_match.group(1).strip()
-            with current_scan["process_output_lock"]:
-                step_num = current_scan["step_names"].get(tool_name, current_scan["step_counter"])
-                total_steps = max(total_steps, current_scan["step_counter"] + 2)
-            formatted_line = f"✓ Step {step_num}/{total_steps}: {tool_name} scan completed"
-    
-    # Initialization messages
+    # Initialization messages (Step 1)
     if not formatted_line:
         if re.search(r'SimpleSecCheck.*Scan.*Started|Orchestrator script started', clean_line, re.IGNORECASE):
             with current_scan["process_output_lock"]:
                 if "Initialization" not in current_scan["step_names"]:
                     current_scan["step_counter"] = 1
                     current_scan["step_names"]["Initialization"] = 1
-            formatted_line = "✓ Step 1/15: Initializing scan..."
+                    formatted_line = f"✓ Step 1: Initializing scan..."
     
-    # Report generation
+    # Extract scan steps from orchestrator messages
+    # Pattern: "--- Orchestrating X Scan ---" (only log when starting, not when finishing)
+    if not formatted_line:
+        orchestrating_match = re.search(r'---\s*Orchestrating\s+(.+?)\s+Scan\s+---', clean_line, re.IGNORECASE)
+        if orchestrating_match:
+            tool_name = orchestrating_match.group(1).strip()
+            with current_scan["process_output_lock"]:
+                # Only create step if not already seen
+                if tool_name not in current_scan["step_names"]:
+                    current_scan["step_counter"] += 1
+                    current_scan["step_names"][tool_name] = current_scan["step_counter"]
+                step_num = current_scan["step_names"][tool_name]
+                formatted_line = f"⏳ Step {step_num}: Running {tool_name} scan..."
+    
+    # Pattern: "--- X Scan Orchestration Finished ---" (log completion)
+    if not formatted_line:
+        finished_match = re.search(r'---\s*(.+?)\s+Scan\s+Orchestration\s+Finished\s+---', clean_line, re.IGNORECASE)
+        if finished_match:
+            tool_name = finished_match.group(1).strip()
+            with current_scan["process_output_lock"]:
+                # Get step number (should already exist from "Orchestrating" message)
+                step_num = current_scan["step_names"].get(tool_name)
+                if step_num:  # Only log if we've seen the start
+                    formatted_line = f"✓ Step {step_num}: {tool_name} scan completed"
+    
+    # OWASP Dependency Check database download (special case - can take 5-15 minutes)
+    if not formatted_line:
+        if re.search(r'Downloading vulnerability database.*may take|OWASP.*database.*not found.*Downloading', clean_line, re.IGNORECASE):
+            with current_scan["process_output_lock"]:
+                if "OWASP Database Download" not in current_scan["step_names"]:
+                    # Find OWASP step number
+                    owasp_step = current_scan["step_names"].get("OWASP Dependency Check")
+                    if owasp_step:
+                        current_scan["step_names"]["OWASP Database Download"] = owasp_step
+                        step_num = owasp_step
+                        formatted_line = f"⏳ Step {step_num}: Downloading OWASP vulnerability database (this may take 5-15 minutes)..."
+    
+    # OWASP database ready/using existing
+    if not formatted_line:
+        if re.search(r'Using existing.*OWASP.*database|OWASP.*database.*ready', clean_line, re.IGNORECASE):
+            with current_scan["process_output_lock"]:
+                if "OWASP Database Ready" not in current_scan["step_names"]:
+                    owasp_step = current_scan["step_names"].get("OWASP Dependency Check")
+                    if owasp_step:
+                        current_scan["step_names"]["OWASP Database Ready"] = owasp_step
+                        formatted_line = f"✓ Step {owasp_step}: OWASP database ready"
+    
+    # Report generation (only show once)
     if not formatted_line:
         if re.search(r'Generating.*HTML report|HTML report generation', clean_line, re.IGNORECASE):
             with current_scan["process_output_lock"]:
                 if "Report Generation" not in current_scan["step_names"]:
                     current_scan["step_counter"] += 1
                     current_scan["step_names"]["Report Generation"] = current_scan["step_counter"]
-                step_num = current_scan["step_names"]["Report Generation"]
-                total_steps = max(total_steps, current_scan["step_counter"] + 1)
-            formatted_line = f"⏳ Step {step_num}/{total_steps}: Generating report..."
+                    step_num = current_scan["step_counter"]
+                    formatted_line = f"⏳ Step {step_num}: Generating report..."
     
-    # Scan completion
+    # Report completion
+    if not formatted_line:
+        if re.search(r'Report.*generated|HTML report.*created', clean_line, re.IGNORECASE):
+            with current_scan["process_output_lock"]:
+                step_num = current_scan["step_names"].get("Report Generation")
+                if step_num:
+                    formatted_line = f"✓ Step {step_num}: Report generation completed"
+    
+    # Scan completion (only show once, must be last step)
     if not formatted_line:
         if re.search(r'SimpleSecCheck.*Scan.*Completed|Scan.*completed successfully', clean_line, re.IGNORECASE):
             with current_scan["process_output_lock"]:
                 if "Completion" not in current_scan["step_names"]:
                     current_scan["step_counter"] += 1
                     current_scan["step_names"]["Completion"] = current_scan["step_counter"]
-                step_num = current_scan["step_names"]["Completion"]
-                total_steps = max(total_steps, current_scan["step_counter"])
-            formatted_line = f"✓ Step {step_num}/{total_steps}: Scan completed successfully"
+                    step_num = current_scan["step_counter"]
+                    formatted_line = f"✓ Step {step_num}: Scan completed successfully"
     
-    # Errors (show as steps)
+    # Errors (show as steps, but don't count as steps)
     if not formatted_line:
         if re.search(r'\[ERROR\]|\[ORCHESTRATOR ERROR\]', clean_line, re.IGNORECASE):
             formatted_line = f"❌ {clean_line}"
