@@ -110,26 +110,32 @@ def collect_scan_metadata(
     scan_type: str,
     results_dir: str,
     finding_policy: Optional[str] = None,
-    ci_mode: bool = False
+    ci_mode: bool = False,
+    target_path_host: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Collect metadata about the scan.
     ONLY call this when user explicitly enabled metadata collection!
     
     Args:
-        target_path: Path to scanned project
+        target_path: Path to scanned project (container path, e.g., /target)
         scan_type: Type of scan (code, website, network)
         results_dir: Results directory path
         finding_policy: Optional finding policy file path
         ci_mode: Whether CI mode was enabled
+        target_path_host: Optional host path (e.g., /home/user/project) for better project name extraction
     
     Returns:
         Dictionary with scan metadata
     """
+    # Use host path for project name extraction, container path for file access
+    actual_path_for_name = target_path_host if target_path_host else target_path
+    actual_path_for_files = target_path  # Always use container path (files are mounted there)
+    
     metadata = {
         "scan_type": scan_type,
-        "target_path": target_path,
-        "target_path_absolute": os.path.abspath(target_path) if target_path else None,
+        "target_path": target_path,  # Container path (/target)
+        "target_path_absolute": actual_path_for_name,  # Host path if available
         "project_name": None,
         "results_dir": results_dir,
         "finding_policy": finding_policy,
@@ -141,17 +147,17 @@ def collect_scan_metadata(
         }
     }
     
-    # Extract project name from path
-    if target_path:
+    # Extract project name from host path if available, otherwise from container path
+    if actual_path_for_name:
         try:
-            abs_path = os.path.abspath(target_path)
+            abs_path = os.path.abspath(actual_path_for_name)
             metadata["project_name"] = os.path.basename(abs_path.rstrip("/"))
         except Exception:
-            metadata["project_name"] = os.path.basename(target_path) if target_path else None
+            metadata["project_name"] = os.path.basename(actual_path_for_name) if actual_path_for_name else None
     
-    # Collect Git information (only for code scans with valid path)
-    if scan_type == "code" and target_path and os.path.exists(target_path):
-        metadata["git_info"] = get_git_info(target_path)
+    # Collect Git information using container path (files are accessible there)
+    if scan_type == "code" and actual_path_for_files and os.path.exists(actual_path_for_files):
+        metadata["git_info"] = get_git_info(actual_path_for_files)
     
     return metadata
 

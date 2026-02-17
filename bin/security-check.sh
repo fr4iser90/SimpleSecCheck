@@ -1114,32 +1114,59 @@ fi
 
 # --- Metadata Collection (ONLY if explicitly enabled) ---
 if [ "${COLLECT_METADATA:-false}" = "true" ]; then
+    log_message "--- Collecting Metadata ---"
     log_message "Collecting scan metadata (user enabled metadata collection)..."
     METADATA_SCRIPT="$BASE_PROJECT_DIR/src/core/scan_metadata.py"
     if [ -f "$METADATA_SCRIPT" ]; then
+        # Prepare finding_policy parameter (empty string becomes None)
+        FINDING_POLICY_PARAM="${FINDING_POLICY_FILE_IN_CONTAINER:-}"
+        if [ -z "$FINDING_POLICY_PARAM" ]; then
+            FINDING_POLICY_PARAM="None"
+        else
+            FINDING_POLICY_PARAM="'$FINDING_POLICY_PARAM'"
+        fi
+        
+        # Prepare ci_mode parameter (convert string to boolean)
+        CI_MODE_PARAM="False"
+        if [ "${CI_MODE:-false}" = "true" ]; then
+            CI_MODE_PARAM="True"
+        fi
+        
         # Collect metadata using Python script
         if python3 -c "
 import sys
+import traceback
 sys.path.insert(0, '$BASE_PROJECT_DIR/src')
-from core.scan_metadata import collect_scan_metadata, save_metadata
-import os
-
-metadata = collect_scan_metadata(
-    target_path='$TARGET_PATH_IN_CONTAINER',
-    scan_type='$SCAN_TYPE',
-    results_dir='$RESULTS_DIR_IN_CONTAINER',
-    finding_policy='${FINDING_POLICY_FILE_IN_CONTAINER:-}',
-    ci_mode=${CI_MODE:-false}
-)
-
-if save_metadata(metadata, '$RESULTS_DIR_IN_CONTAINER'):
-    print('Metadata collected and saved successfully')
-else:
-    print('Warning: Failed to save metadata')
+try:
+    from core.scan_metadata import collect_scan_metadata, save_metadata
+    
+    finding_policy = $FINDING_POLICY_PARAM
+    ci_mode = $CI_MODE_PARAM
+    target_path_host = '${TARGET_PATH_HOST:-}'
+    
+    metadata = collect_scan_metadata(
+        target_path='$TARGET_PATH_IN_CONTAINER',
+        target_path_host=target_path_host if target_path_host else None,
+        scan_type='$SCAN_TYPE',
+        results_dir='$RESULTS_DIR_IN_CONTAINER',
+        finding_policy=finding_policy,
+        ci_mode=ci_mode
+    )
+    
+    if save_metadata(metadata, '$RESULTS_DIR_IN_CONTAINER'):
+        print('Metadata collected and saved successfully')
+    else:
+        print('Warning: Failed to save metadata')
+except Exception as e:
+    print(f'Error collecting metadata: {e}')
+    traceback.print_exc()
+    sys.exit(1)
 " >> "$LOG_FILE" 2>&1; then
+            log_message "--- Metadata Collection Finished ---"
             log_message "Metadata collection completed successfully."
         else
             log_message "[WARN] Metadata collection failed (non-critical, continuing scan)"
+            log_message "[WARN] Check log file for details: $LOG_FILE"
         fi
     else
         log_message "[WARN] Metadata script not found: $METADATA_SCRIPT"
@@ -1157,7 +1184,6 @@ HTML_REPORT_OUTPUT_FILE="$RESULTS_DIR_IN_CONTAINER/security-summary.html"
 # ZAP_TARGET is already exported.
 # It also uses FP_WHITELIST_FILE if set.
 export FP_WHITELIST_FILE="${FP_WHITELIST_FILE:-$BASE_PROJECT_DIR/config/policy/fp_whitelist.json}" # Default if not set
-export FINDING_POLICY_FILE="${FINDING_POLICY_FILE:-$BASE_PROJECT_DIR/config/policy/finding_policy.json}"
 
 log_message "Checking for HTML report generator: $HTML_REPORT_PY_SCRIPT"
 if [ -f "$HTML_REPORT_PY_SCRIPT" ]; then

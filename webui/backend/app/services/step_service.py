@@ -109,6 +109,30 @@ def extract_steps_for_frontend(line: str, current_scan: dict, results_dir: Path)
                         current_scan["step_names"]["OWASP Database Ready"] = owasp_step
                         formatted_line = f"✓ Step {owasp_step}: OWASP database ready"
     
+    # Metadata collection (only if enabled)
+    if not formatted_line:
+        if re.search(r'---\s*Collecting\s+Metadata\s+---|Collecting scan metadata|Collecting.*metadata.*enabled', clean_line, re.IGNORECASE):
+            with current_scan["process_output_lock"]:
+                if "Metadata Collection" not in current_scan["step_names"]:
+                    current_scan["step_counter"] += 1
+                    current_scan["step_names"]["Metadata Collection"] = current_scan["step_counter"]
+                    step_num = current_scan["step_counter"]
+                    formatted_line = f"⏳ Step {step_num}: Collecting metadata..."
+    
+    # Metadata collection completion (only show once)
+    if not formatted_line:
+        if re.search(r'---\s*Metadata\s+Collection\s+Finished\s+---|Metadata collection.*completed successfully|Metadata.*saved successfully', clean_line, re.IGNORECASE):
+            with current_scan["process_output_lock"]:
+                step_num = current_scan["step_names"].get("Metadata Collection")
+                if step_num:
+                    # Check if already completed to avoid duplicates
+                    completed_key = "Metadata Collection_completed"
+                    if completed_key not in current_scan.get("completed_steps", set()):
+                        if "completed_steps" not in current_scan:
+                            current_scan["completed_steps"] = set()
+                        current_scan["completed_steps"].add(completed_key)
+                        formatted_line = f"✓ Step {step_num}: Metadata collection completed"
+    
     # Report generation (only show once)
     if not formatted_line:
         if re.search(r'Generating.*HTML report|HTML report generation', clean_line, re.IGNORECASE):

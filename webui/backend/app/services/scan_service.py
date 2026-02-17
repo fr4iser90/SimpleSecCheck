@@ -59,6 +59,9 @@ async def start_scan(
     clean_target = request.target.strip() if request.target else ""
     clean_finding_policy = request.finding_policy.strip() if request.finding_policy else None
     
+    # Log what Frontend sent to Backend
+    print(f"[Scan Service] Frontend sent: type={request.type}, target={clean_target}, finding_policy={clean_finding_policy}, ci_mode={request.ci_mode}, collect_metadata={request.collect_metadata}")
+    
     if request.type == "code":
         if not clean_target:
             raise HTTPException(status_code=400, detail="Target path is required")
@@ -78,10 +81,14 @@ async def start_scan(
         cmd.append("--ci")
     if clean_finding_policy:
         cmd.extend(["--finding-policy", clean_finding_policy])
+        print(f"[Scan Service] Adding --finding-policy to command: {clean_finding_policy}")
     # ONLY collect metadata if user explicitly enabled it
     if request.collect_metadata:
         cmd.append("--collect-metadata")
     cmd.append(clean_target if request.type != "network" else "network")
+    
+    # Log final command that will be executed
+    print(f"[Scan Service] Executing command: {' '.join(cmd)}")
     
     # Start process (as non-root user, no shell injection)
     try:

@@ -255,8 +255,15 @@ def main():
     ios_findings_summary = ios_plist_summary(ios_plist_json_path)
     accepted_findings = []
 
-    policy_path = os.environ.get("FINDING_POLICY_FILE", "/SimpleSecCheck/config/policy/finding_policy.json")
-    finding_policy = load_policy(policy_path)
+    # Load finding policy - only if explicitly provided (NO DEFAULT!)
+    policy_path = os.environ.get("FINDING_POLICY_FILE")
+    if not policy_path or policy_path.strip() == "":
+        # No policy specified - don't use any policy
+        finding_policy = {}
+    else:
+        # Policy was explicitly provided - try to load it
+        finding_policy = load_policy(policy_path)
+    
     semgrep_findings, semgrep_accepted = apply_semgrep_policy(semgrep_findings, finding_policy.get("semgrep", {}))
     gitleaks_findings, gitleaks_accepted = apply_gitleaks_policy(gitleaks_findings, finding_policy.get("gitleaks", {}))
     accepted_findings.extend(semgrep_accepted)

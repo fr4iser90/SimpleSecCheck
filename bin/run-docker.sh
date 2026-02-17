@@ -287,6 +287,7 @@ if [ "$SCAN_TYPE" = "network" ]; then
         -e ZAP_TARGET="$ZAP_TARGET" \
         -e TARGET_URL="$ZAP_TARGET" \
         -e PROJECT_RESULTS_DIR="$RESULTS_DIR" \
+        -e COLLECT_METADATA="$COLLECT_METADATA" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
         $OWASP_DATA_VOLUME \
@@ -309,37 +310,69 @@ elif [ "$SCAN_TYPE" = "code" ]; then
             git -C "$TARGET_PATH" archive --format=tar HEAD | tar -xf - -C "$TEMP_TRACKED_SNAPSHOT_DIR"
             TARGET_MOUNT_PATH="$TEMP_TRACKED_SNAPSHOT_DIR"
             log_message "Using tracked-only snapshot for scan input: $TARGET_MOUNT_PATH"
+            
+            # If a finding policy was explicitly specified (relative path), try to copy it into the snapshot
+            # (it might not be tracked in git, so it won't be in the snapshot)
+            # Since git -C "$TARGET_PATH" succeeded, we can use git to access the file even if we're in a container
+            if [ -n "$FINDING_POLICY_ARG" ] && [[ ! "$FINDING_POLICY_ARG" = /* ]] && [[ ! "$FINDING_POLICY_ARG" = /target/* ]]; then
+                # Check if file exists in original target and is not already in snapshot
+                if [ ! -f "$TEMP_TRACKED_SNAPSHOT_DIR/$FINDING_POLICY_ARG" ]; then
+                    # Try to copy from original target (works on host, may fail in container)
+                    if [ -f "$TARGET_PATH/$FINDING_POLICY_ARG" ]; then
+                        mkdir -p "$(dirname "$TEMP_TRACKED_SNAPSHOT_DIR/$FINDING_POLICY_ARG")"
+                        cp "$TARGET_PATH/$FINDING_POLICY_ARG" "$TEMP_TRACKED_SNAPSHOT_DIR/$FINDING_POLICY_ARG"
+                        log_message "Copied explicit finding policy into tracked snapshot: /target/$FINDING_POLICY_ARG"
+                    else
+                        # File doesn't exist at TARGET_PATH (might be in container where path doesn't exist)
+                        # Since git -C "$TARGET_PATH" works, try to get the git root and access file from there
+                        GIT_ROOT="$(git -C "$TARGET_PATH" rev-parse --show-toplevel 2>/dev/null || echo "")"
+                        if [ -n "$GIT_ROOT" ]; then
+                            if [ -f "$GIT_ROOT/$FINDING_POLICY_ARG" ]; then
+                                mkdir -p "$(dirname "$TEMP_TRACKED_SNAPSHOT_DIR/$FINDING_POLICY_ARG")"
+                                cp "$GIT_ROOT/$FINDING_POLICY_ARG" "$TEMP_TRACKED_SNAPSHOT_DIR/$FINDING_POLICY_ARG"
+                                log_message "Copied explicit finding policy into tracked snapshot from git root: /target/$FINDING_POLICY_ARG"
+                            else
+                                log_warning "Finding policy file not found at git root: $GIT_ROOT/$FINDING_POLICY_ARG"
+                            fi
+                        else
+                            log_warning "Could not determine git root for target path: $TARGET_PATH"
+                        fi
+                    fi
+                fi
+            fi
         else
             log_warning "SCAN_SCOPE=tracked requested, but target is not a git repository. Falling back to full scan scope."
         fi
     fi
 
     # Finding policy resolution priority:
-    # 1) Explicit --finding-policy
-    # 2) Autodetect in target repo
-    # 3) Scanner default in container (handled by security-check.sh)
+    # 1) Explicit --finding-policy (relative path: will be in /target, absolute path: must be in target)
+    # 2) Autodetect in target repo (done later in security-check.sh)
+    # NO DEFAULT POLICY - if not found, no policy is applied
     if [ -n "$FINDING_POLICY_ARG" ]; then
         if [[ "$FINDING_POLICY_ARG" = /target/* ]]; then
+            # Already a container path
             FINDING_POLICY_FILE_IN_CONTAINER="$FINDING_POLICY_ARG"
         elif [[ "$FINDING_POLICY_ARG" = /* ]]; then
-            # Absolute host path: only valid if it's inside the mounted target path.
-            if [[ "$FINDING_POLICY_ARG" == "$TARGET_MOUNT_PATH"* ]] && [ -f "$FINDING_POLICY_ARG" ]; then
+            # Absolute host path: convert to container path if inside target
+            # Check if we're in a container (can't validate host paths)
+            if [ -d "/app" ] || [ -f "/.dockerenv" ]; then
+                # Running in container: assume path is inside target, convert to /target/...
+                # Extract relative path from absolute path (assumes it's inside target)
+                FINDING_POLICY_FILE_IN_CONTAINER="/target/$(basename "$FINDING_POLICY_ARG")"
+                log_message "Running in container - converting absolute policy path to: $FINDING_POLICY_FILE_IN_CONTAINER"
+            elif [[ "$FINDING_POLICY_ARG" == "$TARGET_MOUNT_PATH"* ]] && [ -f "$FINDING_POLICY_ARG" ]; then
+                # Running on host: validate path exists and is inside target
                 FINDING_POLICY_FILE_IN_CONTAINER="/target${FINDING_POLICY_ARG#$TARGET_MOUNT_PATH}"
             else
-                log_warning "--finding-policy absolute path is outside mounted target or does not exist. Falling back to autodetect/default."
+                log_warning "--finding-policy absolute path is outside mounted target or does not exist. Will attempt auto-detection in target project."
             fi
         else
-            if [ -f "$TARGET_MOUNT_PATH/$FINDING_POLICY_ARG" ]; then
-                FINDING_POLICY_FILE_IN_CONTAINER="/target/$FINDING_POLICY_ARG"
-            elif [ "$TARGET_MOUNT_PATH" != "$TARGET_PATH" ] && [ -f "$TARGET_PATH/$FINDING_POLICY_ARG" ]; then
-                # SCAN_SCOPE=tracked uses a git snapshot; explicitly requested policy files may be untracked.
-                # Copy the policy into the snapshot so explicit user input still works.
-                mkdir -p "$(dirname "$TARGET_MOUNT_PATH/$FINDING_POLICY_ARG")"
-                cp "$TARGET_PATH/$FINDING_POLICY_ARG" "$TARGET_MOUNT_PATH/$FINDING_POLICY_ARG"
-                FINDING_POLICY_FILE_IN_CONTAINER="/target/$FINDING_POLICY_ARG"
-                log_message "Copied explicit finding policy into tracked snapshot: $FINDING_POLICY_FILE_IN_CONTAINER"
-            else
-                log_warning "--finding-policy file not found in target: $FINDING_POLICY_ARG. Falling back to autodetect/default."
+            # Relative path: will be automatically available at /target/$FINDING_POLICY_ARG
+            # (just like the target project itself - Docker mounts it!)
+            FINDING_POLICY_FILE_IN_CONTAINER="/target/$FINDING_POLICY_ARG"
+            if [ -d "/app" ] || [ -f "/.dockerenv" ]; then
+                log_message "Running in container - policy will be at: $FINDING_POLICY_FILE_IN_CONTAINER (mounted with target)"
             fi
         fi
     fi
@@ -379,13 +412,24 @@ elif [ "$SCAN_TYPE" = "code" ]; then
         DOCKER_COMPOSE_CONTEXT="$SCRIPT_DIR"
     fi
     
+    # Build environment variables array
+    DOCKER_ENV_ARGS=(
+        -e SCAN_TYPE="$SCAN_TYPE"
+        -e ZAP_TARGET="$ZAP_TARGET"
+        -e TARGET_URL="$ZAP_TARGET"
+        -e PROJECT_RESULTS_DIR="$RESULTS_DIR"
+        -e SIMPLESECCHECK_EXCLUDE_PATHS="$SIMPLESECCHECK_EXCLUDE_PATHS"
+        -e COLLECT_METADATA="$COLLECT_METADATA"
+        -e TARGET_PATH_HOST="$TARGET_MOUNT_PATH"
+    )
+    
+    # Only set FINDING_POLICY_FILE if a policy was found (NO DEFAULT!)
+    if [ -n "$FINDING_POLICY_FILE_IN_CONTAINER" ]; then
+        DOCKER_ENV_ARGS+=(-e FINDING_POLICY_FILE="$FINDING_POLICY_FILE_IN_CONTAINER")
+    fi
+    
     if docker-compose -f "$DOCKER_COMPOSE_FILE" --project-directory "$DOCKER_COMPOSE_CONTEXT" run --rm \
-        -e SCAN_TYPE="$SCAN_TYPE" \
-        -e ZAP_TARGET="$ZAP_TARGET" \
-        -e TARGET_URL="$ZAP_TARGET" \
-        -e PROJECT_RESULTS_DIR="$RESULTS_DIR" \
-        -e SIMPLESECCHECK_EXCLUDE_PATHS="$SIMPLESECCHECK_EXCLUDE_PATHS" \
-        -e FINDING_POLICY_FILE="$FINDING_POLICY_FILE_IN_CONTAINER" \
+        "${DOCKER_ENV_ARGS[@]}" \
         -v "$TARGET_MOUNT_PATH:/target:ro" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
@@ -408,6 +452,7 @@ else
         -e ZAP_TARGET="$ZAP_TARGET" \
         -e TARGET_URL="$ZAP_TARGET" \
         -e PROJECT_RESULTS_DIR="$RESULTS_DIR" \
+        -e COLLECT_METADATA="$COLLECT_METADATA" \
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
         $OWASP_DATA_VOLUME \
