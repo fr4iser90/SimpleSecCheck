@@ -105,6 +105,34 @@ chmod +x run-docker.sh
 
 That's it! Results will be available in the `results/` directory.
 
+### 🌐 WebUI (Optional)
+
+SimpleSecCheck includes an optional web interface for a more user-friendly experience:
+
+```bash
+# Start WebUI with docker-compose profile
+docker-compose --profile webui up
+
+# Access at http://localhost:8080
+```
+
+**WebUI Features:**
+- ✅ Start scans via web interface
+- ✅ Live progress and logs during scan execution
+- ✅ View HTML reports directly in browser
+- ✅ Browse local results with file browser
+- ✅ Auto-shutdown feature for security (configurable idle timeout)
+
+**Security Notes:**
+- WebUI binds to `127.0.0.1:8080` by default (localhost only)
+- For Docker deployments, set `HOST=0.0.0.0` environment variable if needed
+- WebUI follows single-shot principle: no database, no persistent state
+- Each scan is independent - no history tracking
+
+**WebUI is completely optional** - the CLI (`./run-docker.sh`) still works as before.
+
+See [webui/README.md](webui/README.md) for more details.
+
 ### Using Pre-built Docker Image Directly (Without Wrapper Script)
 
 **Pull and run the pre-built image from Docker Hub:**

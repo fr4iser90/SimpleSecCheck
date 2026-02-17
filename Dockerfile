@@ -1,9 +1,9 @@
 FROM ubuntu:22.04
 
 # Version information
-ARG VERSION=1.3.0
+ARG VERSION=1.4.0
 LABEL version=$VERSION
-LABEL maintainer="SimpleSecCheck Team"
+LABEL maintainer="fr4iser"
 
 # Install dependencies with Node.js v18+
 RUN apt-get update && \
