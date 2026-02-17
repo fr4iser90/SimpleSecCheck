@@ -116,6 +116,8 @@ docker-compose --profile webui up
 # Access at http://localhost:8080
 ```
 
+![WebUI Interface](assets/webui.png)
+
 **WebUI Features:**
 - ✅ Start scans via web interface
 - ✅ Live progress and logs during scan execution
