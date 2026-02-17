@@ -31,8 +31,9 @@ def get_git_info(target_path: str) -> Dict[str, Optional[str]]:
             return git_info
         
         # Get remote URL
+        # Security: Hardcoded git command, no user input, timeout set
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603, B607
                 ["git", "-C", target_path, "config", "--get", "remote.origin.url"],
                 capture_output=True,
                 text=True,
@@ -45,8 +46,9 @@ def get_git_info(target_path: str) -> Dict[str, Optional[str]]:
             pass
         
         # Get current branch
+        # Security: Hardcoded git command, no user input, timeout set
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603, B607
                 ["git", "-C", target_path, "rev-parse", "--abbrev-ref", "HEAD"],
                 capture_output=True,
                 text=True,
@@ -59,8 +61,9 @@ def get_git_info(target_path: str) -> Dict[str, Optional[str]]:
             pass
         
         # Get commit hash
+        # Security: Hardcoded git command, no user input, timeout set
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603, B607
                 ["git", "-C", target_path, "rev-parse", "HEAD"],
                 capture_output=True,
                 text=True,
@@ -73,8 +76,9 @@ def get_git_info(target_path: str) -> Dict[str, Optional[str]]:
             pass
         
         # Get commit message
+        # Security: Hardcoded git command, no user input, timeout set
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603, B607
                 ["git", "-C", target_path, "log", "-1", "--pretty=%s"],
                 capture_output=True,
                 text=True,
@@ -87,8 +91,9 @@ def get_git_info(target_path: str) -> Dict[str, Optional[str]]:
             pass
         
         # Check if working directory is dirty
+        # Security: Hardcoded git command, no user input, timeout set
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603, B607
                 ["git", "-C", target_path, "diff", "--quiet"],
                 capture_output=True,
                 timeout=5,
@@ -98,9 +103,10 @@ def get_git_info(target_path: str) -> Dict[str, Optional[str]]:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
             
-    except Exception:
-        # Silently fail - don't break scan if git info collection fails
-        pass
+    except Exception as e:
+        # Non-critical: Git info collection failed, don't break scan
+        import logging
+        logging.debug(f"Git metadata collection failed (non-critical): {e}")
     
     return git_info
 

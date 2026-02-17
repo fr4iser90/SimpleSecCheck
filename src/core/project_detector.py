@@ -53,8 +53,11 @@ def detect_native_projects(target_path):
                         results["project_type"] = "react-native-expo"
                     else:
                         results["project_type"] = "react-native"
-        except Exception:
-            pass
+        except Exception as e:
+            # Non-critical: Failed to detect React Native project type
+            # Log but don't break scan
+            import logging
+            logging.debug(f"Could not determine React Native project type: {e}")
     
     # Check for Android files
     android_manifest = target / "AndroidManifest.xml"

@@ -78,8 +78,10 @@ def zap_summary(zap_html_path, zap_xml_path):
                             if risk in summary:
                                 try:
                                     summary[risk] = int(count)
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    # Non-critical: Failed to parse risk count
+                                    import logging
+                                    logging.debug(f"Could not parse ZAP risk count '{count}': {e}")
                 return {"summary": summary, "alerts": []}
         except Exception as e:
             debug(f"Error parsing ZAP HTML: {e}")

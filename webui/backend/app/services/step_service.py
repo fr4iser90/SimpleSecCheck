@@ -35,8 +35,10 @@ def write_step_to_log(step_line: str, scan_id: str, current_scan: dict, results_
             steps_log.parent.mkdir(parents=True, exist_ok=True)
             with open(steps_log, "a", encoding="utf-8") as f:
                 f.write(f"{step_line}\n")
-        except Exception:
-            pass
+        except Exception as e:
+            # Non-critical: Failed to write step to log file
+            import logging
+            logging.debug(f"Could not write step to log file: {e}")
 
 
 def extract_steps_for_frontend(line: str, current_scan: dict, results_dir: Path) -> Optional[str]:

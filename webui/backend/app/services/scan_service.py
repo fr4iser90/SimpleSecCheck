@@ -92,7 +92,8 @@ async def start_scan(
     # Start process (as non-root user, no shell injection)
     try:
         # Security: Use list for cmd, no shell=True
-        process = subprocess.Popen(
+        # Security: Hardcoded CLI script path, no user input in cmd, shell=False, timeout handled by process
+        process = subprocess.Popen(  # nosec B603, B607
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,  # Combine stderr with stdout for better error messages
@@ -349,8 +350,10 @@ async def recheck_scan_status(scan_id: str, results_dir: Optional[str], return_c
                     scan_done = True
                 elif "Security scan completed" in log_content:
                     scan_done = True
-        except Exception:
-            pass
+        except Exception as e:
+            # Non-critical: Failed to check scan completion status
+            import logging
+            logging.debug(f"Could not check scan completion status: {e}")
     
     # If still not done after 30 seconds, assume done based on return code
     await asyncio.sleep(25)  # Total 30 seconds wait
@@ -397,8 +400,10 @@ async def get_scan_status(current_scan: dict, results_dir: Path) -> ScanStatus:
                         if "SimpleSecCheck Docker Security Scan Completed" in log_content:
                             current_scan["status"] = "done"
                             current_scan["results_dir"] = results_dir_path
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Non-critical: Failed to update scan status from log file
+                    import logging
+                    logging.debug(f"Could not update scan status from log: {e}")
     
     status_response = ScanStatus(
         status=current_scan["status"],

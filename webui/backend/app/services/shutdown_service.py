@@ -77,8 +77,10 @@ def create_signal_handler(current_scan: dict, stop_containers_func):
                     except Exception:
                         # Force kill if it doesn't terminate
                         process.kill()
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Non-critical: Failed to kill process during shutdown
+                    import logging
+                    logging.debug(f"Could not kill process during shutdown: {e}")
             
             # Stop docker containers
             stop_containers_func(current_scan)
