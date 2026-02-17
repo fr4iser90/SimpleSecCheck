@@ -2,7 +2,7 @@
 Container Service
 Handles Docker container management for scans
 """
-import subprocess
+import subprocess  # nosec B404 - Used safely with hardcoded docker commands, timeouts, and shell=False
 import os
 from typing import List
 

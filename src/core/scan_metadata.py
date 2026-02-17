@@ -6,7 +6,7 @@ Collects metadata about the scanned project (ONLY when explicitly enabled by use
 
 import os
 import json
-import subprocess
+import subprocess  # nosec B404 - Used safely with hardcoded commands, timeouts, and shell=False
 from pathlib import Path
 from typing import Optional, Dict, Any
 

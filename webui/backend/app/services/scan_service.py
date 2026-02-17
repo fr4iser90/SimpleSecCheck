@@ -3,7 +3,7 @@ Scan Service
 Handles scan management, monitoring, and status tracking
 """
 import os
-import subprocess
+import subprocess  # nosec B404 - Used safely with hardcoded CLI script, shell=False, and proper security controls
 import asyncio
 import re
 import threading
