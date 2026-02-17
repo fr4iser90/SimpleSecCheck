@@ -9,6 +9,7 @@ let
     aiosqlite
     python-dotenv
     pydantic
+    defusedxml  # Security: Required for safe XML parsing
     
     # Development tools
     black

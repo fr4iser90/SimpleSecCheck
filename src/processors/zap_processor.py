@@ -2,12 +2,10 @@
 import sys
 from pathlib import Path
 # Security: Use defusedxml instead of xml.etree to prevent XXE attacks
-try:
-    from defusedxml.ElementTree import parse as safe_parse
-except ImportError:
-    # Fallback to standard library if defusedxml not available (should not happen in production)
-    from xml.etree import ElementTree as ET
-    safe_parse = ET.parse
+# defusedxml is a REQUIRED dependency - no fallback, script will fail if missing
+from defusedxml.ElementTree import parse as safe_parse
+from defusedxml import defuse_stdlib
+defuse_stdlib()
 from bs4 import BeautifulSoup
 import os
 

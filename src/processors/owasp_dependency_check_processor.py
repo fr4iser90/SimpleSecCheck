@@ -2,12 +2,10 @@
 import sys
 import json
 # Security: Use defusedxml instead of xml.etree to prevent XXE attacks
-try:
-    from defusedxml.ElementTree import parse as safe_parse
-except ImportError:
-    # Fallback to standard library if defusedxml not available (should not happen in production)
-    import xml.etree.ElementTree as ET
-    safe_parse = ET.parse
+# defusedxml is a REQUIRED dependency - no fallback, script will fail if missing
+from defusedxml.ElementTree import parse as safe_parse
+from defusedxml import defuse_stdlib
+defuse_stdlib()
 
 def debug(msg):
     print(f"[owasp_dependency_check_processor] {msg}", file=sys.stderr)
