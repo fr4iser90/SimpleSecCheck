@@ -111,8 +111,7 @@ async def start_scan(request: ScanRequest):
         current_scan,
         CLI_SCRIPT,
         BASE_DIR,
-        RESULTS_DIR,
-        None
+        RESULTS_DIR
     )
     
     return result
