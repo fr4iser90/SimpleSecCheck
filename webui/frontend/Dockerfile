@@ -32,6 +32,11 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/conf.d/default.conf
 
+# Security: nginx runs as nginx user by default, but explicitly set it
+# Note: nginx:alpine already runs as non-root user 'nginx' by default
+# This is just for clarity and to ensure it stays that way
+USER nginx
+
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]

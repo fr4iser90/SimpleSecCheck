@@ -5,7 +5,13 @@ import datetime
 import sys
 import html
 from pathlib import Path
-from xml.etree import ElementTree as ET
+# Security: Use defusedxml instead of xml.etree to prevent XXE attacks
+try:
+    from defusedxml.ElementTree import parse as safe_parse
+except ImportError:
+    # Fallback to standard library if defusedxml not available (should not happen in production)
+    from xml.etree import ElementTree as ET
+    safe_parse = ET.parse
 import traceback
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))

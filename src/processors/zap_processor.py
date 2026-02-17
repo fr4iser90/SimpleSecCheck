@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 import sys
 from pathlib import Path
-from xml.etree import ElementTree as ET
+# Security: Use defusedxml instead of xml.etree to prevent XXE attacks
+try:
+    from defusedxml.ElementTree import parse as safe_parse
+except ImportError:
+    # Fallback to standard library if defusedxml not available (should not happen in production)
+    from xml.etree import ElementTree as ET
+    safe_parse = ET.parse
 from bs4 import BeautifulSoup
 import os
 
@@ -14,7 +20,7 @@ def zap_summary(zap_html_path, zap_xml_path):
     # Try XML first - return detailed alerts, not just counts
     if zap_xml_path and Path(zap_xml_path).exists():
         try:
-            tree = ET.parse(zap_xml_path)
+            tree = safe_parse(zap_xml_path)
             root = tree.getroot()
             alerts = root.findall('.//alertitem')
             detailed_alerts = []

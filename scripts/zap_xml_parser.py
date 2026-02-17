@@ -4,7 +4,14 @@ ZAP XML Report Parser
 Converts ZAP XML reports to readable HTML format
 """
 
-import xml.etree.ElementTree as ET
+# Security: Use defusedxml instead of xml.etree to prevent XXE attacks
+try:
+    from defusedxml.ElementTree import parse as safe_parse
+except ImportError:
+    # Fallback to standard library if defusedxml not available (should not happen in production)
+    import xml.etree.ElementTree as ET
+    safe_parse = ET.parse
+
 import sys
 import json
 from datetime import datetime
@@ -12,7 +19,7 @@ from datetime import datetime
 def parse_zap_xml(xml_file):
     """Parse ZAP XML report and return structured data"""
     try:
-        tree = ET.parse(xml_file)
+        tree = safe_parse(xml_file)
         root = tree.getroot()
         
         # Extract site information
@@ -58,11 +65,13 @@ def parse_zap_xml(xml_file):
             'scan_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
     
-    except ET.ParseError as e:
-        print(f"Error parsing XML: {e}", file=sys.stderr)
-        return None
     except Exception as e:
-        print(f"Error processing file: {e}", file=sys.stderr)
+        # Handle both defusedxml and standard library parse errors
+        error_type = type(e).__name__
+        if "ParseError" in error_type or "XMLSyntaxError" in error_type:
+            print(f"Error parsing XML: {e}", file=sys.stderr)
+        else:
+            print(f"Error processing file: {e}", file=sys.stderr)
         return None
 
 def generate_html_report(data):

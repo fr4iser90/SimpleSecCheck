@@ -31,6 +31,7 @@ RUN pip3 install beautifulsoup4
 RUN pip3 install pyyaml json5  # Added for configuration script
 RUN pip3 install flask
 RUN pip3 install requests  # Added for LLM connector
+RUN pip3 install defusedxml  # Security: Prevent XXE attacks in XML parsing
 
 # Install Trivy (always latest)
 RUN export TRIVY_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r '.assets[] | select(.name | test("Linux-64bit.deb")) | .browser_download_url') && \

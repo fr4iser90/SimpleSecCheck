@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 import sys
 import json
-import xml.etree.ElementTree as ET
+# Security: Use defusedxml instead of xml.etree to prevent XXE attacks
+try:
+    from defusedxml.ElementTree import parse as safe_parse
+except ImportError:
+    # Fallback to standard library if defusedxml not available (should not happen in production)
+    import xml.etree.ElementTree as ET
+    safe_parse = ET.parse
 
 def debug(msg):
     print(f"[owasp_dependency_check_processor] {msg}", file=sys.stderr)
@@ -109,7 +115,7 @@ def generate_owasp_dependency_check_html_section(owasp_dc_vulns):
 def parse_owasp_dependency_check_xml(xml_path):
     """Parse OWASP Dependency Check XML report for additional details"""
     try:
-        tree = ET.parse(xml_path)
+        tree = safe_parse(xml_path)
         root = tree.getroot()
         
         vulnerabilities = []
