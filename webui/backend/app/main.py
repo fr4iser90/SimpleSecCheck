@@ -237,4 +237,8 @@ for frontend_dir in frontend_paths:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    # Security: Default to localhost, allow override via environment variable for Docker
+    # In Docker containers, set HOST=0.0.0.0 to allow external access
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8080"))
+    uvicorn.run(app, host=host, port=port)
