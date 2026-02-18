@@ -24,6 +24,13 @@ from .scan_service import (
     monitor_scan,
     capture_process_output
 )
+from .owasp_update_service import (
+    UpdateStatus,
+    start_update,
+    get_update_status,
+    get_update_logs,
+    stop_update,
+)
 
 __all__ = [
     "stop_running_containers",
@@ -45,4 +52,9 @@ __all__ = [
     "stop_scan",
     "monitor_scan",
     "capture_process_output",
+    "UpdateStatus",
+    "start_update",
+    "get_update_status",
+    "get_update_logs",
+    "stop_update",
 ]

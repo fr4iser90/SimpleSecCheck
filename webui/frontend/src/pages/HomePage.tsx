@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import ScanForm from '../components/ScanForm'
+import OwaspUpdate from '../components/OwaspUpdate'
 
 interface ScanStatusData {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -25,6 +26,10 @@ export default function HomePage() {
           Single-shot security scanner. Each scan is independent. No history is stored.
         </p>
         <ScanForm onScanStart={handleScanStart} />
+      </div>
+
+      <div className="card" style={{ marginTop: '2rem' }}>
+        <OwaspUpdate />
       </div>
     </div>
   )

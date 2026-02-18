@@ -1,0 +1,167 @@
+name: OWASP Database Update Reminder
+
+# This workflow checks if the OWASP Dependency Check database is outdated
+# and creates a reminder issue if it hasn't been updated in a while.
+# It does NOT commit the database (too large for Git).
+
+on:
+  schedule:
+    # Run every Monday at 2 AM UTC
+    - cron: '0 2 * * 1'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  check-database-age:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Check database directory age
+        id: check-age
+        run: |
+          DB_DIR="./owasp-dependency-check-data"
+          MAX_AGE_DAYS=30  # Alert if database is older than 30 days
+          
+          if [ ! -d "$DB_DIR" ] || [ -z "$(ls -A "$DB_DIR" 2>/dev/null)" ]; then
+            echo "database_exists=false" >> $GITHUB_OUTPUT
+            echo "database_age_days=999" >> $GITHUB_OUTPUT
+            echo "⚠️ OWASP Dependency Check database not found"
+          else
+            echo "database_exists=true" >> $GITHUB_OUTPUT
+            
+            # Find the most recent file in the database directory
+            LATEST_FILE=$(find "$DB_DIR" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+            
+            if [ -n "$LATEST_FILE" ]; then
+              # Get file modification time
+              FILE_TIME=$(stat -c %Y "$LATEST_FILE" 2>/dev/null || stat -f %m "$LATEST_FILE" 2>/dev/null)
+              CURRENT_TIME=$(date +%s)
+              AGE_SECONDS=$((CURRENT_TIME - FILE_TIME))
+              AGE_DAYS=$((AGE_SECONDS / 86400))
+              
+              echo "database_age_days=$AGE_DAYS" >> $GITHUB_OUTPUT
+              echo "📅 Database last updated: $AGE_DAYS days ago"
+              
+              if [ $AGE_DAYS -gt $MAX_AGE_DAYS ]; then
+                echo "needs_update=true" >> $GITHUB_OUTPUT
+                echo "⚠️ Database is older than $MAX_AGE_DAYS days - update recommended"
+              else
+                echo "needs_update=false" >> $GITHUB_OUTPUT
+                echo "✅ Database is up to date (less than $MAX_AGE_DAYS days old)"
+              fi
+            else
+              echo "database_age_days=999" >> $GITHUB_OUTPUT
+              echo "needs_update=true" >> $GITHUB_OUTPUT
+              echo "⚠️ Could not determine database age"
+            fi
+          fi
+      
+      - name: Create or update reminder issue
+        if: steps.check-age.outputs.needs_update == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const title = '🔄 OWASP Dependency Check Database Update Reminder';
+            const body = `The OWASP Dependency Check vulnerability database should be updated.
+            
+            **Database Status:**
+            - Database exists: ${{ steps.check-age.outputs.database_exists }}
+            - Age: ${{ steps.check-age.outputs.database_age_days }} days
+            - Recommended: Update if older than 30 days
+            
+            **How to update:**
+            1. Run locally: \`./bin/update-owasp-db.sh\`
+            2. Or with NVD API key: \`NVD_API_KEY=your-key ./bin/update-owasp-db.sh\`
+            3. See README.md for more details
+            
+            **Note:** The database is cached locally and not committed to Git (too large).
+            Each user should maintain their own local copy.
+            
+            ---
+            *This issue was automatically created by the OWASP Database Update Reminder workflow.*
+            *It will be closed automatically when the database is updated.*`;
+            
+            // Search for existing open issue
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'owasp-db-reminder'
+            });
+            
+            const existingIssue = issues.find(issue => issue.title === title);
+            
+            if (existingIssue) {
+              // Update existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `🔄 **Reminder:** Database is still outdated (${{ steps.check-age.outputs.database_age_days }} days old). Please update when convenient.`
+              });
+              console.log(`Updated existing issue #${existingIssue.number}`);
+            } else {
+              // Create new issue
+              const { data: issue } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['owasp-db-reminder', 'maintenance']
+              });
+              console.log(`Created new issue #${issue.number}`);
+            }
+      
+      - name: Close outdated reminder issues
+        if: steps.check-age.outputs.needs_update == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Find and close existing reminder issues if database is now up to date
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'owasp-db-reminder'
+            });
+            
+            for (const issue of issues) {
+              if (issue.title.includes('OWASP Dependency Check Database Update Reminder')) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: '✅ Database is now up to date. Closing this reminder.'
+                });
+                
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed'
+                });
+                
+                console.log(`Closed issue #${issue.number}`);
+              }
+            }
+      
+      - name: Summary
+        run: |
+          echo "## OWASP Database Check Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Database exists: ${{ steps.check-age.outputs.database_exists }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Age: ${{ steps.check-age.outputs.database_age_days }} days" >> $GITHUB_STEP_SUMMARY
+          echo "- Needs update: ${{ steps.check-age.outputs.needs_update }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.check-age.outputs.needs_update }}" == "true" ]; then
+            echo "⚠️ **Action required:** Update the database using \`./bin/update-owasp-db.sh\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ Database is up to date" >> $GITHUB_STEP_SUMMARY
+          fi

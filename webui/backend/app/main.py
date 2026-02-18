@@ -36,6 +36,12 @@ from app.services import (
     start_scan as start_scan_service,
     get_scan_status as get_scan_status_service,
     stop_scan as stop_scan_service,
+    # OWASP Update service
+    UpdateStatus,
+    start_update as start_update_service,
+    get_update_status as get_update_status_service,
+    get_update_logs as get_update_logs_service,
+    stop_update as stop_update_service,
 )
 
 # Configuration
@@ -48,6 +54,7 @@ if not (BASE_DIR / "bin" / "run-docker.sh").exists():
 CLI_SCRIPT = BASE_DIR / "bin" / "run-docker.sh"
 RESULTS_DIR = BASE_DIR / "results"
 LOGS_DIR = BASE_DIR / "logs"
+OWASP_DATA_DIR = BASE_DIR / "owasp-dependency-check-data"
 
 # Validate CLI script exists
 if not CLI_SCRIPT.exists():
@@ -218,6 +225,40 @@ async def get_result_report(scan_id: str):
         media_type="text/html",
         headers={"Content-Disposition": "inline"}
     )
+
+
+@app.post("/api/owasp/update", response_model=UpdateStatus)
+async def start_owasp_update():
+    """Start OWASP Dependency Check database update"""
+    update_activity()
+    
+    result = await start_update_service(
+        BASE_DIR,
+        OWASP_DATA_DIR,
+    )
+    
+    return result
+
+
+@app.get("/api/owasp/status", response_model=UpdateStatus)
+async def get_owasp_update_status():
+    """Get current OWASP update status"""
+    update_activity()
+    return get_update_status_service()
+
+
+@app.get("/api/owasp/logs")
+async def get_owasp_update_logs():
+    """Get logs from current OWASP update (simple polling endpoint)"""
+    update_activity()
+    return get_update_logs_service()
+
+
+@app.post("/api/owasp/stop", response_model=UpdateStatus)
+async def stop_owasp_update():
+    """Stop the currently running OWASP update"""
+    update_activity()
+    return stop_update_service()
 
 
 # Serve frontend static files (after API routes)

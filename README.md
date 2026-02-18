@@ -285,6 +285,41 @@ nano .env  # Or use your favorite editor
 
 **Note:** All API tokens are optional. Tools will work in their basic modes without tokens. Tokens are stored locally in your `.env` file (which is git-ignored) and are never uploaded or shared.
 
+### Updating OWASP Dependency Check Database
+
+The OWASP Dependency Check vulnerability database is cached locally to avoid re-downloading 300K+ vulnerabilities on every scan. The database is automatically downloaded on the first scan, but you should update it periodically to get the latest vulnerability information.
+
+**When to update:**
+- **Weekly:** Recommended for critical projects or production environments
+- **Monthly:** Sufficient for most development workflows
+- **As needed:** Before important security audits or when new CVEs are announced
+
+**How to update:**
+
+```bash
+# Update database (uses public rate limits, slower)
+./bin/update-owasp-db.sh
+
+# Update with NVD API key (faster, recommended)
+NVD_API_KEY=your-key ./bin/update-owasp-db.sh
+
+# Or set NVD_API_KEY in .env file
+echo "NVD_API_KEY=your-key" >> .env
+./bin/update-owasp-db.sh
+```
+
+**Using Docker directly:**
+
+```bash
+docker run --rm \
+  -v $(pwd)/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
+  -e NVD_API_KEY=${NVD_API_KEY:-} \
+  fr4iser/simpleseccheck:latest \
+  dependency-check --updateonly --data /SimpleSecCheck/owasp-dependency-check-data ${NVD_API_KEY:+--nvdApiKey=$NVD_API_KEY}
+```
+
+**Note:** The update process typically takes 5-15 minutes depending on your connection speed. Using an `NVD_API_KEY` significantly speeds up the process by increasing rate limits.
+
 ---
 
 ## 🔍 Analysis Details
