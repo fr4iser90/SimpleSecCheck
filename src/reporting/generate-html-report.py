@@ -138,7 +138,7 @@ def generate_accepted_findings_section(accepted_findings):
         return ""
 
     html_parts = []
-    html_parts.append("<h2>Accepted Findings (With Rationale)</h2>")
+    html_parts.append('<h2 id="accepted-findings">Accepted Findings (With Rationale)</h2>')
     html_parts.append("<table><tr><th>Tool</th><th>ID</th><th>File</th><th>Line</th><th>Reason</th></tr>")
     for finding in accepted_findings:
         tool = html.escape(str(finding.get("tool", "")))
@@ -150,6 +150,127 @@ def generate_accepted_findings_section(accepted_findings):
             f"<tr><td>{tool}</td><td>{fid}</td><td>{path}</td><td>{line}</td><td>{reason}</td></tr>"
         )
     html_parts.append("</table>")
+    return "".join(html_parts)
+
+
+def generate_finding_policy_section(finding_policy, policy_path, accepted_findings):
+    """
+    Generate expandable Finding Policy section.
+    Shows:
+    - If NO policy: Example JSON structure + instructions
+    - If policy used: Status + link to accepted findings
+    """
+    html_parts = []
+    html_parts.append('<div class="glass" style="margin: 2rem 0; padding: 2rem;">')
+    
+    policy_used = bool(finding_policy and policy_path)
+    has_accepted = len(accepted_findings) > 0
+    
+    # Expandable section using <details>/<summary> (like tool-category)
+    html_parts.append('<details class="tool-category" data-category-has-issues="false" open>')
+    html_parts.append('<summary class="category-header" style="cursor: pointer; user-select: none;">')
+    
+    if policy_used:
+        html_parts.append('<h2 style="display: inline; margin: 0;">📋 Finding Policy</h2>')
+        html_parts.append('<span class="category-status-badge" data-summary="✅ Active"></span>')
+    else:
+        html_parts.append('<h2 style="display: inline; margin: 0;">📋 Finding Policy</h2>')
+        html_parts.append('<span class="category-status-badge" data-summary="ℹ️ Not configured"></span>')
+    
+    html_parts.append('</summary>')
+    
+    # Content
+    html_parts.append('<div style="margin-top: 1.5rem; padding: 1rem; background: rgba(0,0,0,0.1); border-radius: 8px;">')
+    
+    if policy_used:
+        # Policy is active
+        html_parts.append('<p style="color: #28a745; font-weight: 500; margin-bottom: 1rem;">')
+        html_parts.append('✅ A custom finding policy is active for this scan.')
+        html_parts.append('</p>')
+        
+        html_parts.append(f'<p style="margin-bottom: 0.5rem;"><strong>Policy file:</strong> <code style="background: rgba(0,0,0,0.2); padding: 0.2rem 0.5rem; border-radius: 4px;">{html.escape(str(policy_path))}</code></p>')
+        
+        if has_accepted:
+            html_parts.append('<p style="margin-top: 1rem; margin-bottom: 0.5rem;">')
+            html_parts.append(f'<strong>Accepted findings:</strong> {len(accepted_findings)} finding(s) were accepted by the policy.')
+            html_parts.append('</p>')
+            html_parts.append('<p style="margin-top: 0.5rem;">')
+            html_parts.append('<a href="#accepted-findings" style="color: #0dcaf0; text-decoration: underline;">View accepted findings →</a>')
+            html_parts.append('</p>')
+        else:
+            html_parts.append('<p style="margin-top: 1rem; color: #6c757d;">No findings were accepted by the policy in this scan.</p>')
+    else:
+        # No policy - show instructions
+        html_parts.append('<p style="color: #6c757d; margin-bottom: 1rem;">')
+        html_parts.append('This project does not currently use a custom finding policy.')
+        html_parts.append('</p>')
+        
+        html_parts.append('<p style="margin-bottom: 1.5rem;">')
+        html_parts.append('If you want to suppress false positives or override severities, create a JSON-based finding policy file.')
+        html_parts.append('</p>')
+        
+        # Example JSON (collapsible)
+        html_parts.append('<details style="margin-top: 1rem;">')
+        html_parts.append('<summary style="cursor: pointer; font-weight: 500; margin-bottom: 0.5rem; color: #0dcaf0;">📄 Example Policy Structure</summary>')
+        html_parts.append('<pre style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; overflow-x: auto; margin-top: 0.5rem;"><code>')
+        
+        example_json = '''{
+  "semgrep": {
+    "severity_overrides": [
+      {
+        "check_id": "python.django.security.debug-true.debug-true",
+        "path_regex": "settings_dev\\.py$",
+        "new_severity": "INFO",
+        "reason": "DEBUG=True is intentional for development settings"
+      }
+    ],
+    "accepted_findings": [
+      {
+        "check_id": "generic.secrets.security.hardcoded-secret.hardcoded-secret",
+        "path_regex": "src/examples/.*",
+        "message_regex": "just_an_example",
+        "reason": "This is an example key in a demonstration file, not a real secret"
+      }
+    ],
+    "dedupe": {
+      "enabled": true,
+      "line_window": 2
+    }
+  },
+  "gitleaks": {
+    "accepted_findings": [
+      {
+        "rule_id": "generic-api-key",
+        "file_regex": "tests/.*",
+        "description_regex": "test.*key",
+        "reason": "Test files contain example keys, not real secrets"
+      }
+    ]
+  },
+  "dedupe": {
+    "enabled": true,
+    "line_window": 2
+  }
+}'''
+        html_parts.append(html.escape(example_json))
+        html_parts.append('</code></pre>')
+        html_parts.append('</details>')
+        
+        # Usage instructions
+        html_parts.append('<div style="margin-top: 1.5rem; padding: 1rem; background: rgba(13, 202, 240, 0.1); border-left: 4px solid #0dcaf0; border-radius: 4px;">')
+        html_parts.append('<p style="margin: 0; font-weight: 500; margin-bottom: 0.5rem;">💡 How to use:</p>')
+        html_parts.append('<ol style="margin: 0.5rem 0 0 1.5rem; padding: 0;">')
+        html_parts.append('<li style="margin-bottom: 0.5rem;">Create a file named <code>finding-policy.json</code> in your project (e.g., <code>config/finding-policy.json</code>)</li>')
+        html_parts.append('<li style="margin-bottom: 0.5rem;">Use the example structure above as a template</li>')
+        html_parts.append('<li style="margin-bottom: 0.5rem;">Run the scan with: <code>./run-docker.sh --finding-policy config/finding-policy.json /path/to/project</code></li>')
+        html_parts.append('<li>Accepted findings will appear in the "Accepted Findings" section with your rationale</li>')
+        html_parts.append('</ol>')
+        html_parts.append('</div>')
+    
+    html_parts.append('</div>')
+    html_parts.append('</details>')
+    html_parts.append('</div>')
+    
     return "".join(html_parts)
 
 def main():
@@ -388,6 +509,9 @@ def main():
             # Accepted Findings Section (only if policy accepted any findings)
             if len(accepted_findings) > 0:
                 f.write(generate_accepted_findings_section(accepted_findings))
+
+            # Finding Policy Section (always shown - shows status or instructions)
+            f.write(generate_finding_policy_section(finding_policy, policy_path, accepted_findings))
 
             # Detect-secrets Section (only if findings exist)
             if len(detect_secrets_findings) > 0:
