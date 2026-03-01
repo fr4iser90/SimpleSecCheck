@@ -173,7 +173,7 @@ def collect_scan_metadata(
             metadata["git_info"] = get_git_info(target_path_host)
         elif actual_path_for_files and os.path.exists(actual_path_for_files):
             # Normal mode: Use container path
-            metadata["git_info"] = get_git_info(actual_path_for_files)
+        metadata["git_info"] = get_git_info(actual_path_for_files)
     
     return metadata
 
