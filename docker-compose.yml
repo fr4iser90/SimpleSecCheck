@@ -55,6 +55,7 @@ services:
       - ./docker-compose.yml:/app/docker-compose.yml:ro  # docker-compose.yml (read-only, needed by run-docker.sh)
       - ./Dockerfile:/app/Dockerfile:ro       # Dockerfile (read-only, needed for scanner build)
       - .:/project:ro                         # Project root (read-only, needed as build context for scanner)
+      - ./owasp-dependency-check-data:/app/owasp-dependency-check-data  # OWASP database (read-write: for updates and checks)
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket (read-only, for docker-compose)
     environment:
       - SIMPLESECCHECK_ROOT=/app

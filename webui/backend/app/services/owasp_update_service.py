@@ -268,7 +268,10 @@ def check_database_age(owasp_data_dir: Path) -> Tuple[Optional[int], bool]:
     Check the age of OWASP database files
     Returns: (age_in_days, database_exists)
     """
-    if not owasp_data_dir.exists() or not any(owasp_data_dir.iterdir()):
+    if not owasp_data_dir or not owasp_data_dir.exists():
+        return None, False
+    
+    if not any(owasp_data_dir.iterdir()):
         return None, False
     
     try:

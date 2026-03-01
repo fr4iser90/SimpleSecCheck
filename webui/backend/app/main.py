@@ -60,7 +60,8 @@ from core.path_setup import (
     get_webui_results_dir,
     get_webui_logs_dir,
     get_webui_owasp_data_dir,
-    get_webui_frontend_paths
+    get_webui_frontend_paths,
+    get_owasp_data_path_host
 )
 
 BASE_DIR = get_webui_base_dir()
@@ -68,6 +69,8 @@ CLI_SCRIPT = get_webui_cli_script()
 RESULTS_DIR = get_webui_results_dir()
 LOGS_DIR = get_webui_logs_dir()
 OWASP_DATA_DIR = get_webui_owasp_data_dir()
+# Get host path for OWASP data (for database existence checks)
+OWASP_DATA_DIR_HOST = get_owasp_data_path_host()
 
 # CLI script is only needed for direct CLI usage (not for WebUI)
 # WebUI calls docker-compose directly, so this validation is optional
@@ -444,7 +447,12 @@ async def start_owasp_update():
 async def get_owasp_update_status():
     """Get current OWASP update status"""
     update_activity()
-    return get_update_status_service(OWASP_DATA_DIR)
+    # IMPORTANT: In container, we can only access mounted volumes, not host paths!
+    # The container path is /app/owasp-dependency-check-data (mounted from host)
+    # We should use the container path for checks, not the host path
+    owasp_data_dir_for_check = OWASP_DATA_DIR
+    
+    return get_update_status_service(owasp_data_dir_for_check)
 
 
 @app.get("/api/owasp/logs")
