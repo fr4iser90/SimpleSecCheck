@@ -7,7 +7,7 @@
         "accepted_findings": [
             {
                 "rule_id": "javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop",
-                "file_regex": "webui/frontend/src/i18n/index\\.ts$",
+                "path_regex": ".*/webui/frontend/src/i18n/index\\.ts$",
                 "message_regex": "Possibility of prototype polluting function detected",
                 "reason": "Translation key access uses static JSON objects from locale files. Keys are derived from translation strings, not user input. The translations object structure is controlled and does not allow prototype pollution in practice. The code safely accesses nested translation keys for i18n functionality."
             }
@@ -17,7 +17,7 @@
         "accepted_findings": [
             {
                 "rule_id": "database-password",
-                "file_regex": "config/tools/clair/config\\.yaml$",
+                "file_regex": ".*/config/tools/clair/config\\.yaml$",
                 "description_regex": ".*",
                 "reason": "Config file contains example database connection strings for Clair tool configuration, not actual secrets"
             }
@@ -26,32 +26,32 @@
     "bandit": {
         "accepted_findings": [
             {
-                "check_id": "B404",
+                "rule_id": "B404",
                 "path_regex": ".*\\.py$",
                 "message_regex": "Consider possible security implications associated with the subprocess module",
                 "reason": "Subprocess usage is necessary for security tooling (docker, git commands). Commands are hardcoded, not user-controlled"
             },
             {
-                "check_id": "B607",
+                "rule_id": "B607",
                 "path_regex": ".*\\.py$",
                 "message_regex": "Starting a process with a partial executable path",
                 "reason": "Commands like 'docker' and 'git' are standard system commands, not partial paths. Safe for security tooling"
             },
             {
-                "check_id": "B603",
+                "rule_id": "B603",
                 "path_regex": ".*\\.py$",
                 "message_regex": "subprocess call - check for execution of untrusted input",
                 "reason": "Subprocess calls use hardcoded commands (docker, git) with controlled inputs, not user-controlled data"
             },
             {
-                "check_id": "B110",
+                "rule_id": "B110",
                 "path_regex": ".*\\.py$",
                 "message_regex": "Try, Except, Pass detected",
                 "reason": "Exception handling for non-critical operations (cleanup, status updates). Errors are logged elsewhere"
             },
             {
-                "check_id": "B108",
-                "path_regex": "webui/backend/app/services/owasp_update_service\\.py$",
+                "rule_id": "B108",
+                "path_regex": ".*/webui/backend/app/services/owasp_update_service\\.py$",
                 "message_regex": "Probable insecure usage of temp file/directory",
                 "reason": "Uses tempfile.mkstemp() which is secure. File descriptor is immediately closed after creation. The temp file is used for log backup only, with proper permissions and cleanup."
             }

@@ -25,7 +25,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Semgrep",
             "severity": f.get("severity", "UNKNOWN"),
-            "check_id": f.get("check_id", ""),
+            "rule_id": f.get("rule_id", ""),
             "path": f.get("path", ""),
             "line": str(f.get("start", "")),
             "message": f.get("message", ""),
@@ -37,7 +37,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Trivy",
             "severity": f.get("Severity", "UNKNOWN"),
-            "check_id": f.get("VulnerabilityID", ""),
+            "rule_id": f.get("VulnerabilityID", ""),
             "path": f.get("PkgName", ""),
             "line": "",
             "message": f.get("Title", f.get("Description", "")),
@@ -49,7 +49,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "CodeQL",
             "severity": f.get("severity", f.get("level", "note").upper()),
-            "check_id": f.get("rule_id", f.get("ruleId", "")),
+            "rule_id": f.get("rule_id", f.get("ruleId", "")),
             "path": f.get("path", ""),
             "line": str(f.get("start", "")),
             "message": f.get("message", ""),
@@ -61,7 +61,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "GitLeaks",
             "severity": "HIGH",
-            "check_id": f.get("rule_id", ""),
+            "rule_id": f.get("rule_id", ""),
             "path": f.get("file", ""),
             "line": str(f.get("line", "")),
             "message": f.get("description", ""),
@@ -73,7 +73,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "TruffleHog",
             "severity": "HIGH",
-            "check_id": f.get("detector", ""),
+            "rule_id": f.get("detector", ""),
             "path": f.get("redacted", ""),
             "line": "",
             "message": f.get("raw", "")[:100] if f.get("raw") else "",
@@ -85,7 +85,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Detect-secrets",
             "severity": "HIGH" if f.get("is_secret") else "MEDIUM",
-            "check_id": f.get("type", ""),
+            "rule_id": f.get("type", ""),
             "path": f.get("filename", ""),
             "line": str(f.get("line_number", "")),
             "message": f"Secret type: {f.get('type', '')}",
@@ -97,7 +97,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "OWASP Dependency Check",
             "severity": f.get("severity", "UNKNOWN"),
-            "check_id": f.get("name", ""),
+            "rule_id": f.get("name", ""),
             "path": f.get("fileName", ""),
             "line": "",
             "message": f.get("description", ""),
@@ -109,7 +109,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Safety",
             "severity": "HIGH",
-            "check_id": f.get("vulnerability", ""),
+            "rule_id": f.get("vulnerability", ""),
             "path": f.get("package", ""),
             "line": "",
             "message": f.get("advisory", ""),
@@ -121,7 +121,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Snyk",
             "severity": f.get("severity", "MEDIUM").upper(),
-            "check_id": f.get("vulnerability_id", f.get("id", "")),
+            "rule_id": f.get("vulnerability_id", f.get("id", "")),
             "path": f.get("package", ""),
             "line": "",
             "message": f.get("title", f.get("description", "")),
@@ -133,7 +133,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "ESLint",
             "severity": {1: "LOW", 2: "MEDIUM", 3: "HIGH"}.get(f.get("severity", 1), "LOW"),
-            "check_id": f.get("rule_id", ""),
+            "rule_id": f.get("rule_id", ""),
             "path": f.get("file_path", ""),
             "line": str(f.get("line", "")),
             "message": f.get("message", ""),
@@ -145,7 +145,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Bandit",
             "severity": f.get("issue_severity", "MEDIUM").upper(),
-            "check_id": f.get("test_id", ""),
+            "rule_id": f.get("test_id", ""),
             "path": f.get("filename", ""),
             "line": str(f.get("line_number", "")),
             "message": f.get("issue_text", ""),
@@ -159,7 +159,7 @@ TOOL_CONFIG = {
             "severity": {"High": "HIGH", "Medium": "MEDIUM", "Low": "LOW", "Weak": "LOW"}.get(
                 f.get("confidence", ""), "MEDIUM"
             ),
-            "check_id": f.get("warning_type", ""),
+            "rule_id": f.get("warning_type", ""),
             "path": f.get("file", ""),
             "line": str(f.get("line", "")),
             "message": f.get("message", ""),
@@ -171,7 +171,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "npm audit",
             "severity": f.get("severity", "MODERATE").upper(),
-            "check_id": f.get("package", ""),
+            "rule_id": f.get("package", ""),
             "path": f.get("package", ""),
             "line": "",
             "message": f"Vulnerability in {f.get('package', '')}",
@@ -183,7 +183,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "SonarQube",
             "severity": f.get("severity", "MEDIUM").upper(),
-            "check_id": f.get("rule", ""),
+            "rule_id": f.get("rule", ""),
             "path": f.get("component", ""),
             "line": str(f.get("line", "")),
             "message": f.get("message", ""),
@@ -195,7 +195,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Nuclei",
             "severity": f.get("severity", "MEDIUM").upper(),
-            "check_id": f.get("template_id", ""),
+            "rule_id": f.get("template_id", ""),
             "path": f.get("host", ""),
             "line": "",
             "message": f.get("name", f.get("description", "")),
@@ -207,7 +207,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Wapiti",
             "severity": "MEDIUM",
-            "check_id": f.get("category", ""),
+            "rule_id": f.get("category", ""),
             "path": f.get("target", ""),
             "line": "",
             "message": f.get("description", ""),
@@ -219,7 +219,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Nikto",
             "severity": "MEDIUM",
-            "check_id": f.get("id", ""),
+            "rule_id": f.get("id", ""),
             "path": f.get("url", ""),
             "line": "",
             "message": f.get("msg", ""),
@@ -231,7 +231,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Kube-hunter",
             "severity": f.get("severity", "MEDIUM").upper(),
-            "check_id": f.get("id", ""),
+            "rule_id": f.get("id", ""),
             "path": f.get("location", ""),
             "line": "",
             "message": f.get("description", ""),
@@ -243,7 +243,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Kube-bench",
             "severity": "MEDIUM",
-            "check_id": f.get("id", ""),
+            "rule_id": f.get("id", ""),
             "path": f.get("group", ""),
             "line": "",
             "message": f.get("description", ""),
@@ -255,7 +255,7 @@ TOOL_CONFIG = {
         "normalizer": lambda f: {
             "tool": "Docker Bench",
             "severity": "MEDIUM",
-            "check_id": f.get("test", ""),
+            "rule_id": f.get("test", ""),
             "path": f.get("group", ""),
             "line": "",
             "message": f.get("description", ""),
@@ -466,8 +466,8 @@ def _generate_english_prompt(findings: List[Dict], policy_path: str = "config/fi
             prompt_parts.append(f"- **File**: `{finding['path']}`\n")
             if finding.get('line'):
                 prompt_parts.append(f"- **Line**: {finding['line']}\n")
-            if finding.get('check_id'):
-                prompt_parts.append(f"- **Rule ID**: `{finding['check_id']}`\n")
+            if finding.get('rule_id'):
+                prompt_parts.append(f"- **Rule ID**: `{finding['rule_id']}`\n")
             prompt_parts.append(f"- **Message**: {finding['message']}\n\n")
     
     prompt_parts.append("\n## Expected Output\n")
@@ -519,8 +519,8 @@ def _generate_chinese_prompt(findings: List[Dict], policy_path: str = "config/fi
             prompt_parts.append(f"- **文件**: `{finding['path']}`\n")
             if finding.get('line'):
                 prompt_parts.append(f"- **行号**: {finding['line']}\n")
-            if finding.get('check_id'):
-                prompt_parts.append(f"- **规则ID**: `{finding['check_id']}`\n")
+            if finding.get('rule_id'):
+                prompt_parts.append(f"- **规则ID**: `{finding['rule_id']}`\n")
             prompt_parts.append(f"- **消息**: {finding['message']}\n\n")
     
     prompt_parts.append("\n## 期望输出\n")
@@ -573,8 +573,8 @@ def _generate_german_prompt(findings: List[Dict], policy_path: str = "config/fin
             prompt_parts.append(f"- **Datei**: `{finding['path']}`\n")
             if finding.get('line'):
                 prompt_parts.append(f"- **Zeile**: {finding['line']}\n")
-            if finding.get('check_id'):
-                prompt_parts.append(f"- **Regel-ID**: `{finding['check_id']}`\n")
+            if finding.get('rule_id'):
+                prompt_parts.append(f"- **Regel-ID**: `{finding['rule_id']}`\n")
             prompt_parts.append(f"- **Nachricht**: {finding['message']}\n\n")
     
     prompt_parts.append("\n## Erwartete Ausgabe\n")

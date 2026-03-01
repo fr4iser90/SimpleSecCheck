@@ -10,7 +10,7 @@ def semgrep_summary(semgrep_json):
     if semgrep_json and 'results' in semgrep_json:
         for r in semgrep_json['results']:
             finding = {
-                'check_id': r.get('check_id', ''),
+                'rule_id': r.get('check_id', ''),  # Semgrep JSON uses 'check_id', we normalize to 'rule_id'
                 'path': r.get('path', ''),
                 'start': r.get('start', {}).get('line', ''),
                 'message': r.get('extra', {}).get('message', ''),
@@ -35,7 +35,7 @@ def generate_semgrep_html_section(semgrep_findings):
             elif sev == 'LOW': icon = 'ℹ️'
             elif sev in ('INFO', 'INFORMATIONAL'): icon = 'ℹ️'
             
-            check_id_escaped = html.escape(str(finding.get("check_id", "")))
+            rule_id_escaped = html.escape(str(finding.get("rule_id", "")))
             path_escaped = html.escape(str(finding.get("path", "")))
             start_escaped = html.escape(str(finding.get("start", "")))
             message = str(finding.get("message", ""))
@@ -48,7 +48,7 @@ def generate_semgrep_html_section(semgrep_findings):
             message_escaped = html.escape(message)
             sev_escaped = html.escape(str(sev))
 
-            html_parts.append(f'<tr class="row-{sev_escaped}"><td>{check_id_escaped}</td><td>{path_escaped}</td><td>{start_escaped}</td><td>{message_escaped}</td><td class="severity-{sev_escaped}">{icon} {sev_escaped}</td></tr>')
+            html_parts.append(f'<tr class="row-{sev_escaped}"><td>{rule_id_escaped}</td><td>{path_escaped}</td><td>{start_escaped}</td><td>{message_escaped}</td><td class="severity-{sev_escaped}">{icon} {sev_escaped}</td></tr>')
         html_parts.append('</table>')
     else:
         html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No code vulnerabilities found.</div>')

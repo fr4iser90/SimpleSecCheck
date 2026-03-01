@@ -66,7 +66,7 @@ def generate_kube_bench_html_section(kube_bench_findings):
     if kube_bench_findings:
         html_parts.append('<table><tr><th>Check ID</th><th>State</th><th>Group</th><th>Description</th><th>Remediation</th></tr>')
         for finding in kube_bench_findings:
-            check_id_escaped = html.escape(str(finding.get('id', '')))
+            rule_id_escaped = html.escape(str(finding.get('id', '')))
             state_escaped = html.escape(str(finding.get('state', '')))
             group_escaped = html.escape(str(finding.get('group', '')))
             description_escaped = html.escape(str(finding.get('description', '')))
@@ -85,7 +85,7 @@ def generate_kube_bench_html_section(kube_bench_findings):
                 state_class = "sev-HIGH"
                 icon = '🚨'
             
-            html_parts.append(f'<tr class="row-{finding.get("state", "WARN").upper()}"><td>{check_id_escaped}</td><td class="{state_class}">{icon} {state_escaped}</td><td>{group_escaped}</td><td>{description_escaped}</td><td>{remediation_escaped}</td></tr>')
+            html_parts.append(f'<tr class="row-{finding.get("state", "WARN").upper()}"><td>{rule_id_escaped}</td><td class="{state_class}">{icon} {state_escaped}</td><td>{group_escaped}</td><td>{description_escaped}</td><td>{remediation_escaped}</td></tr>')
         html_parts.append('</table>')
     else:
         html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No Kubernetes compliance issues found.</div>')

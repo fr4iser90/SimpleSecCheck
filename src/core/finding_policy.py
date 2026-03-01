@@ -37,10 +37,10 @@ def _matches_pattern(value, pattern):
 
 
 def _matches_semgrep_rule(finding, rule):
-    check_ok = rule.get("check_id") is None or rule.get("check_id") == finding.get("check_id")
+    rule_ok = rule.get("rule_id") is None or rule.get("rule_id") == finding.get("rule_id")
     path_ok = _matches_pattern(finding.get("path", ""), rule.get("path_regex"))
     msg_ok = _matches_pattern(finding.get("message", ""), rule.get("message_regex"))
-    return check_ok and path_ok and msg_ok
+    return rule_ok and path_ok and msg_ok
 
 
 def _matches_gitleaks_rule(finding, rule):
@@ -48,6 +48,13 @@ def _matches_gitleaks_rule(finding, rule):
     path_ok = _matches_pattern(finding.get("file", ""), rule.get("file_regex"))
     desc_ok = _matches_pattern(finding.get("description", ""), rule.get("description_regex"))
     return rule_ok and path_ok and desc_ok
+
+
+def _matches_bandit_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or rule.get("rule_id") == finding.get("rule_id")
+    path_ok = _matches_pattern(finding.get("filename", ""), rule.get("path_regex"))
+    msg_ok = _matches_pattern(finding.get("message", ""), rule.get("message_regex"))
+    return rule_ok and path_ok and msg_ok
 
 
 def _accept_record(tool, finding, reason):
@@ -58,7 +65,7 @@ def _accept_record(tool, finding, reason):
     if tool == "Semgrep":
         record.update(
             {
-                "id": finding.get("check_id", ""),
+                "id": finding.get("rule_id", ""),
                 "path": finding.get("path", ""),
                 "line": finding.get("start", ""),
                 "message": finding.get("message", ""),
@@ -71,6 +78,15 @@ def _accept_record(tool, finding, reason):
                 "path": finding.get("file", ""),
                 "line": finding.get("line", ""),
                 "message": finding.get("description", ""),
+            }
+        )
+    elif tool == "Bandit":
+        record.update(
+            {
+                "id": finding.get("rule_id", ""),
+                "path": finding.get("filename", ""),
+                "line": finding.get("line_number", ""),
+                "message": finding.get("message", ""),
             }
         )
     return record
@@ -123,7 +139,7 @@ def dedupe_semgrep(findings, line_window=2):
     grouped = defaultdict(list)
     for finding in findings:
         key = (
-            str(finding.get("check_id", "")),
+            str(finding.get("rule_id", "")),
             str(finding.get("path", "")),
             str(finding.get("message", "")),
             str(finding.get("severity", "")),
@@ -185,6 +201,30 @@ def apply_gitleaks_policy(findings, gitleaks_policy):
         if accepted:
             accepted_records.append(
                 _accept_record("GitLeaks", finding, accepted.get("reason", "Accepted GitLeaks finding"))
+            )
+            continue
+        processed.append(finding)
+
+    return processed, accepted_records
+
+
+def apply_bandit_policy(findings, bandit_policy):
+    if not findings:
+        return [], []
+
+    accepted_rules = bandit_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+
+    for finding in findings:
+        accepted = None
+        for rule in accepted_rules:
+            if _matches_bandit_rule(finding, rule):
+                accepted = rule
+                break
+        if accepted:
+            accepted_records.append(
+                _accept_record("Bandit", finding, accepted.get("reason", "Accepted Bandit finding"))
             )
             continue
         processed.append(finding)

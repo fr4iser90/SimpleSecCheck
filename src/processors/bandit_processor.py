@@ -26,7 +26,7 @@ def bandit_summary(bandit_data):
     if bandit_data and 'results' in bandit_data:
         for result in bandit_data['results']:
             findings.append({
-                'test_id': result.get('test_id', ''),
+                'rule_id': result.get('test_id', ''),
                 'test_name': result.get('test_name', ''),
                 'severity': result.get('issue_severity', ''),
                 'confidence': result.get('issue_confidence', ''),
@@ -56,11 +56,11 @@ def generate_bandit_html_section(bandit_findings):
             
             filename_escaped = html.escape(str(finding['filename']))
             line_escaped = html.escape(str(finding['line_number']))
-            test_id_escaped = html.escape(str(finding['test_id']))
+            rule_id_escaped = html.escape(str(finding['rule_id']))
             message_escaped = html.escape(str(finding['message']))
             code_escaped = html.escape(str(finding['code']))
             
-            html_parts.append(f'<tr><td>{test_id_escaped}</td><td>{icon} {sev}</td><td>{finding["confidence"]}</td><td>{filename_escaped}</td><td>{line_escaped}</td><td>{message_escaped}</td><td>{code_escaped}</td></tr>')
+            html_parts.append(f'<tr><td>{rule_id_escaped}</td><td>{icon} {sev}</td><td>{finding["confidence"]}</td><td>{filename_escaped}</td><td>{line_escaped}</td><td>{message_escaped}</td><td>{code_escaped}</td></tr>')
         html_parts.append('</table>')
     else:
         html_parts.append('<p>No Python security vulnerabilities found.</p>')

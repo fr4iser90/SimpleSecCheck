@@ -54,7 +54,7 @@ from brakeman_processor import brakeman_summary, generate_brakeman_html_section
 from bandit_processor import bandit_summary, generate_bandit_html_section
 from android_manifest_processor import android_manifest_summary, generate_android_manifest_html
 from ios_plist_processor import ios_plist_summary, generate_ios_plist_html
-from finding_policy import load_policy, apply_semgrep_policy, apply_gitleaks_policy
+from finding_policy import load_policy, apply_semgrep_policy, apply_gitleaks_policy, apply_bandit_policy
 try:
     from scan_metadata import load_metadata
 except ImportError:
@@ -234,7 +234,7 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
   "semgrep": {
     "severity_overrides": [
       {
-        "check_id": "python.django.security.debug-true.debug-true",
+        "rule_id": "python.django.security.debug-true.debug-true",
         "path_regex": "settings_dev\\.py$",
         "new_severity": "INFO",
         "reason": "DEBUG=True is intentional for development settings"
@@ -242,7 +242,7 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
     ],
     "accepted_findings": [
       {
-        "check_id": "generic.secrets.security.hardcoded-secret.hardcoded-secret",
+        "rule_id": "generic.secrets.security.hardcoded-secret.hardcoded-secret",
         "path_regex": "src/examples/.*",
         "message_regex": "just_an_example",
         "reason": "This is an example key in a demonstration file, not a real secret"
@@ -292,7 +292,7 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
 def normalize_findings_for_ai_prompt(all_findings):
     """
     Normalize findings from all tools to unified format for AI prompt generation.
-    Returns list of normalized findings with tool, severity, path, line, message, check_id.
+    Returns list of normalized findings with tool, severity, path, line, message, rule_id.
     """
     normalized = []
     
@@ -310,7 +310,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                         normalized.append({
                             "tool": "ZAP",
                             "severity": risk_level.upper(),
-                            "check_id": str(alert.get("pluginid", "")),
+                            "rule_id": str(alert.get("pluginid", "")),
                             "path": alert.get("uri", ""),
                             "line": "",
                             "message": alert.get("name", alert.get("alert", "")),
@@ -323,7 +323,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "Semgrep",
                         "severity": str(finding.get("severity", "UNKNOWN")).upper(),
-                        "check_id": str(finding.get("check_id", "")),
+                        "rule_id": str(finding.get("rule_id", "")),
                         "path": str(finding.get("path", "")),
                         "line": str(finding.get("start", finding.get("line", ""))),
                         "message": str(finding.get("message", "")),
@@ -332,7 +332,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "Trivy",
                         "severity": str(finding.get("Severity", "UNKNOWN")).upper(),
-                        "check_id": str(finding.get("VulnerabilityID", "")),
+                        "rule_id": str(finding.get("VulnerabilityID", "")),
                         "path": str(finding.get("PkgName", "")),
                         "line": "",
                         "message": str(finding.get("Title", finding.get("Description", ""))),
@@ -341,7 +341,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "CodeQL",
                         "severity": str(finding.get("severity", finding.get("level", "note"))).upper(),
-                        "check_id": str(finding.get("rule_id", finding.get("ruleId", ""))),
+                        "rule_id": str(finding.get("rule_id", finding.get("ruleId", ""))),
                         "path": str(finding.get("path", "")),
                         "line": str(finding.get("start", "")),
                         "message": str(finding.get("message", "")),
@@ -350,7 +350,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "GitLeaks",
                         "severity": "HIGH",
-                        "check_id": str(finding.get("rule_id", "")),
+                        "rule_id": str(finding.get("rule_id", "")),
                         "path": str(finding.get("file", "")),
                         "line": str(finding.get("line", "")),
                         "message": str(finding.get("description", "")),
@@ -359,7 +359,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "TruffleHog",
                         "severity": "HIGH",
-                        "check_id": str(finding.get("detector", "")),
+                        "rule_id": str(finding.get("detector", "")),
                         "path": str(finding.get("redacted", "")),
                         "line": "",
                         "message": str(finding.get("raw", ""))[:100] if finding.get("raw") else "",
@@ -368,7 +368,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "Detect-secrets",
                         "severity": "HIGH" if finding.get("is_secret") else "MEDIUM",
-                        "check_id": str(finding.get("type", "")),
+                        "rule_id": str(finding.get("type", "")),
                         "path": str(finding.get("filename", "")),
                         "line": str(finding.get("line_number", "")),
                         "message": f"Secret type: {finding.get('type', '')}",
@@ -377,7 +377,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "OWASP Dependency Check",
                         "severity": str(finding.get("severity", "UNKNOWN")).upper(),
-                        "check_id": str(finding.get("name", "")),
+                        "rule_id": str(finding.get("name", "")),
                         "path": str(finding.get("fileName", "")),
                         "line": "",
                         "message": str(finding.get("description", "")),
@@ -386,7 +386,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "Safety",
                         "severity": "HIGH",
-                        "check_id": str(finding.get("vulnerability", "")),
+                        "rule_id": str(finding.get("vulnerability", "")),
                         "path": str(finding.get("package", "")),
                         "line": "",
                         "message": str(finding.get("advisory", "")),
@@ -395,7 +395,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "Snyk",
                         "severity": str(finding.get("severity", "MEDIUM")).upper(),
-                        "check_id": str(finding.get("vulnerability_id", finding.get("id", ""))),
+                        "rule_id": str(finding.get("vulnerability_id", finding.get("id", ""))),
                         "path": str(finding.get("package", "")),
                         "line": "",
                         "message": str(finding.get("title", finding.get("description", ""))),
@@ -405,7 +405,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "ESLint",
                         "severity": severity_map.get(finding.get("severity", 1), "LOW"),
-                        "check_id": str(finding.get("rule_id", "")),
+                        "rule_id": str(finding.get("rule_id", "")),
                         "path": str(finding.get("file_path", "")),
                         "line": str(finding.get("line", "")),
                         "message": str(finding.get("message", "")),
@@ -414,7 +414,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "Brakeman",
                         "severity": str(finding.get("severity", "MEDIUM")).upper(),
-                        "check_id": str(finding.get("warning_type", "")),
+                        "rule_id": str(finding.get("warning_type", "")),
                         "path": str(finding.get("file", "")),
                         "line": str(finding.get("line", "")),
                         "message": str(finding.get("message", "")),
@@ -423,7 +423,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": "Bandit",
                         "severity": str(finding.get("severity", "MEDIUM")).upper(),
-                        "check_id": str(finding.get("test_id", "")),
+                        "rule_id": str(finding.get("rule_id", "")),
                         "path": str(finding.get("filename", "")),
                         "line": str(finding.get("line_number", "")),
                         "message": str(finding.get("issue_text", "")),
@@ -433,7 +433,7 @@ def normalize_findings_for_ai_prompt(all_findings):
                     normalized.append({
                         "tool": tool_name,
                         "severity": str(finding.get("severity", finding.get("Severity", "UNKNOWN"))).upper(),
-                        "check_id": str(finding.get("check_id", finding.get("id", finding.get("rule_id", "")))),
+                        "rule_id": str(finding.get("rule_id", finding.get("id", finding.get("rule_id", "")))),
                         "path": str(finding.get("path", finding.get("file", finding.get("filename", "")))),
                         "line": str(finding.get("line", finding.get("line_number", finding.get("start", "")))),
                         "message": str(finding.get("message", finding.get("description", finding.get("title", "")))),
@@ -553,8 +553,10 @@ def main():
     
     semgrep_findings, semgrep_accepted = apply_semgrep_policy(semgrep_findings, finding_policy.get("semgrep", {}))
     gitleaks_findings, gitleaks_accepted = apply_gitleaks_policy(gitleaks_findings, finding_policy.get("gitleaks", {}))
+    bandit_findings, bandit_accepted = apply_bandit_policy(bandit_findings, finding_policy.get("bandit", {}))
     accepted_findings.extend(semgrep_accepted)
     accepted_findings.extend(gitleaks_accepted)
+    accepted_findings.extend(bandit_accepted)
     
     # Load scan metadata (only if user enabled metadata collection)
     scan_metadata = load_metadata(RESULTS_DIR)

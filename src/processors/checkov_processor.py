@@ -14,7 +14,7 @@ def checkov_summary(checkov_json):
         
         for check in failed_checks:
             finding = {
-                'check_id': check.get('check_id', ''),
+                'rule_id': check.get('rule_id', ''),
                 'check_name': check.get('check_name', ''),
                 'resource': check.get('resource', ''),
                 'file_path': check.get('file_path', ''),
@@ -23,7 +23,7 @@ def checkov_summary(checkov_json):
                 'description': check.get('guideline', ''),
                 'code_block': check.get('code_block', []),
                 'fix': check.get('code_block', []),
-                'framework': check.get('check_id', '').split('_')[0] if check.get('check_id', '') else 'UNKNOWN'
+                'framework': check.get('rule_id', '').split('_')[0] if check.get('rule_id', '') else 'UNKNOWN'
             }
             
             findings.append(finding)
@@ -45,7 +45,7 @@ def generate_checkov_html_section(checkov_findings):
             elif sev == 'LOW': icon = 'ℹ️'
             elif sev in ('INFO', 'INFORMATIONAL'): icon = 'ℹ️'
             
-            check_id_escaped = html.escape(str(finding.get("check_id", "")))
+            rule_id_escaped = html.escape(str(finding.get("rule_id", "")))
             check_name_escaped = html.escape(str(finding.get("check_name", "")))
             framework_escaped = html.escape(str(finding.get("framework", "UNKNOWN")))
             resource_escaped = html.escape(str(finding.get("resource", "")))
@@ -53,7 +53,7 @@ def generate_checkov_html_section(checkov_findings):
             sev_escaped = html.escape(str(sev))
             desc_escaped = html.escape(str(finding.get("description", "")))
 
-            html_parts.append(f'<tr class="row-{sev_escaped}"><td>{check_id_escaped}</td><td>{check_name_escaped}</td><td>{framework_escaped}</td><td>{resource_escaped}</td><td>{file_path_escaped}</td><td class="severity-{sev_escaped}">{icon} {sev_escaped}</td><td>{desc_escaped}</td></tr>')
+            html_parts.append(f'<tr class="row-{sev_escaped}"><td>{rule_id_escaped}</td><td>{check_name_escaped}</td><td>{framework_escaped}</td><td>{resource_escaped}</td><td>{file_path_escaped}</td><td class="severity-{sev_escaped}">{icon} {sev_escaped}</td><td>{desc_escaped}</td></tr>')
         html_parts.append('</table>')
         
         # Add summary statistics

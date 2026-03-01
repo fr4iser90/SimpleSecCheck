@@ -402,8 +402,8 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
         if (finding.line) {
           parts.push(`- **行号**: ${finding.line}\n`);
         }
-        if (finding.check_id) {
-          parts.push(`- **规则ID**: \`${finding.check_id}\`\n`);
+        if (finding.rule_id) {
+          parts.push(`- **规则ID**: \`${finding.rule_id}\`\n`);
         }
         parts.push(`- **消息**: ${finding.message || ''}\n\n`);
       }
@@ -442,8 +442,8 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
         if (finding.line) {
           parts.push(`- **Zeile**: ${finding.line}\n`);
         }
-        if (finding.check_id) {
-          parts.push(`- **Regel-ID**: \`${finding.check_id}\`\n`);
+        if (finding.rule_id) {
+          parts.push(`- **Regel-ID**: \`${finding.rule_id}\`\n`);
         }
         parts.push(`- **Nachricht**: ${finding.message || ''}\n\n`);
       }
@@ -483,8 +483,8 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
         if (finding.line) {
           parts.push(`- **Line**: ${finding.line}\n`);
         }
-        if (finding.check_id) {
-          parts.push(`- **Rule ID**: \`${finding.check_id}\`\n`);
+        if (finding.rule_id) {
+          parts.push(`- **Rule ID**: \`${finding.rule_id}\`\n`);
         }
         parts.push(`- **Message**: ${finding.message || ''}\n\n`);
       }
@@ -578,8 +578,8 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
           if (finding.line) {
             parts.push(`- **行号**: ${finding.line}\n`);
           }
-          if (finding.check_id) {
-            parts.push(`- **规则ID**: \`${finding.check_id}\`\n`);
+          if (finding.rule_id) {
+            parts.push(`- **规则ID**: \`${finding.rule_id}\`\n`);
           }
           parts.push(`- **消息**: ${finding.message || ''}\n\n`);
         }
@@ -619,8 +619,8 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
           if (finding.line) {
             parts.push(`- **Zeile**: ${finding.line}\n`);
           }
-          if (finding.check_id) {
-            parts.push(`- **Regel-ID**: \`${finding.check_id}\`\n`);
+          if (finding.rule_id) {
+            parts.push(`- **Regel-ID**: \`${finding.rule_id}\`\n`);
           }
           parts.push(`- **Nachricht**: ${finding.message || ''}\n\n`);
         }
@@ -661,8 +661,8 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
           if (finding.line) {
             parts.push(`- **Line**: ${finding.line}\n`);
           }
-          if (finding.check_id) {
-            parts.push(`- **Rule ID**: \`${finding.check_id}\`\n`);
+          if (finding.rule_id) {
+            parts.push(`- **Rule ID**: \`${finding.rule_id}\`\n`);
           }
           parts.push(`- **Message**: ${finding.message || ''}\n\n`);
         }
