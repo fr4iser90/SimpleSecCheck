@@ -250,7 +250,12 @@ function updateAIPromptPolicyPath(path: string): void {
 }
 
 // Generate prompt locally from findings (same logic as backend)
-function generatePromptLocally(findings: any[], language: Language, policyPath: string): string {
+function generatePromptLocally(findings: any[], language: Language, policyPath: string, maxFindingsPerPrompt: number = 50): string {
+  // Split findings if too many
+  if (findings.length > maxFindingsPerPrompt) {
+    return generateSplitPrompt(findings, language, policyPath, maxFindingsPerPrompt);
+  }
+  
   // Group by tool
   const byTool: { [key: string]: any[] } = {};
   for (const f of findings) {
@@ -384,6 +389,189 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
   }
 }
 
+// Generate split prompt for large projects
+function generateSplitPrompt(findings: any[], language: Language, policyPath: string, maxFindings: number): string {
+  // Group by tool first
+  const byTool: { [key: string]: any[] } = {};
+  for (const f of findings) {
+    const tool = f.tool || 'Unknown';
+    if (!byTool[tool]) {
+      byTool[tool] = [];
+    }
+    byTool[tool].push(f);
+  }
+  
+  // Split into chunks
+  const chunks: any[][] = [];
+  let currentChunk: any[] = [];
+  let currentCount = 0;
+  
+  for (const [tool, toolFindings] of Object.entries(byTool)) {
+    // If adding this tool would exceed limit, start new chunk
+    if (currentCount + toolFindings.length > maxFindings && currentChunk.length > 0) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentCount = 0;
+    }
+    
+    // Add all findings from this tool (keep tool findings together)
+    currentChunk.push(...toolFindings);
+    currentCount += toolFindings.length;
+  }
+  
+  // Add remaining chunk
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+  
+  // Generate prompts for each chunk
+  const prompts: string[] = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const chunkNum = i + 1;
+    const totalChunks = chunks.length;
+    
+    // Group chunk by tool
+    const chunkByTool: { [key: string]: any[] } = {};
+    for (const f of chunk) {
+      const tool = f.tool || 'Unknown';
+      if (!chunkByTool[tool]) {
+        chunkByTool[tool] = [];
+      }
+      chunkByTool[tool].push(f);
+    }
+    
+    if (language === 'chinese') {
+      const parts: string[] = [
+        "# 安全扫描结果分析请求\n\n",
+        `## 第 ${chunkNum} 部分，共 ${totalChunks} 部分\n\n`,
+        "我对代码库进行了安全扫描，发现以下问题。请分析每个发现并：\n",
+        "1. 识别误报（非实际安全问题的发现）\n",
+        "2. 对于误报，如可能，建议代码更改以避免触发规则\n",
+        "3. 如果无法/不适合更改代码，生成finding policy JSON条目\n",
+        "4. 提供包含所有误报的完整finding_policy.json结构\n\n",
+        "## 发现摘要\n",
+        `本部分总发现数: ${chunk.length}\n`,
+        `工具: ${Object.keys(chunkByTool).join(', ')}\n\n`
+      ];
+      
+      for (const [tool, toolFindings] of Object.entries(chunkByTool)) {
+        parts.push(`## ${tool} 发现 (${toolFindings.length} 个)\n\n`);
+        for (let j = 0; j < toolFindings.length; j++) {
+          const finding = toolFindings[j];
+          parts.push(`### 发现 ${j + 1}\n`);
+          parts.push(`- **严重性**: ${finding.severity || 'UNKNOWN'}\n`);
+          parts.push(`- **文件**: \`${finding.path || ''}\`\n`);
+          if (finding.line) {
+            parts.push(`- **行号**: ${finding.line}\n`);
+          }
+          if (finding.check_id) {
+            parts.push(`- **规则ID**: \`${finding.check_id}\`\n`);
+          }
+          parts.push(`- **消息**: ${finding.message || ''}\n\n`);
+        }
+      }
+      
+      parts.push("\n## 期望输出\n");
+      parts.push("1. 误报列表及说明\n");
+      parts.push("2. 代码更改建议（如适用）\n");
+      parts.push("3. 包含所有误报的完整`finding_policy.json`结构\n");
+      parts.push(`   - 放置在\`${policyPath}\`\n`);
+      parts.push("   - 使用适当的正则表达式进行路径/消息匹配\n");
+      parts.push("   - 为每个接受的发现包含清晰的原因\n");
+      
+      prompts.push(parts.join(''));
+    } else if (language === 'german') {
+      const parts: string[] = [
+        "# Sicherheitsscan-Ergebnisse Analyseanfrage\n\n",
+        `## Teil ${chunkNum} von ${totalChunks}\n\n`,
+        "Ich habe einen Sicherheitsscan meines Codebases durchgeführt und die folgenden Probleme gefunden. ",
+        "Bitte analysieren Sie jeden Fund und:\n",
+        "1. Identifizieren Sie False Positives (Funde, die keine tatsächlichen Sicherheitsprobleme sind)\n",
+        "2. Für False Positives schlagen Sie Code-Änderungen vor, falls möglich, um die Regel nicht auszulösen\n",
+        "3. Wenn Code-Änderungen nicht möglich/angemessen sind, generieren Sie einen finding policy JSON-Eintrag\n",
+        "4. Stellen Sie die vollständige finding_policy.json-Struktur mit allen False Positives bereit\n\n",
+        "## Funde-Zusammenfassung\n",
+        `Gesamtanzahl Funde in diesem Teil: ${chunk.length}\n`,
+        `Tools: ${Object.keys(chunkByTool).join(', ')}\n\n`
+      ];
+      
+      for (const [tool, toolFindings] of Object.entries(chunkByTool)) {
+        parts.push(`## ${tool} Funde (${toolFindings.length} insgesamt)\n\n`);
+        for (let j = 0; j < toolFindings.length; j++) {
+          const finding = toolFindings[j];
+          parts.push(`### Fund ${j + 1}\n`);
+          parts.push(`- **Schweregrad**: ${finding.severity || 'UNKNOWN'}\n`);
+          parts.push(`- **Datei**: \`${finding.path || ''}\`\n`);
+          if (finding.line) {
+            parts.push(`- **Zeile**: ${finding.line}\n`);
+          }
+          if (finding.check_id) {
+            parts.push(`- **Regel-ID**: \`${finding.check_id}\`\n`);
+          }
+          parts.push(`- **Nachricht**: ${finding.message || ''}\n\n`);
+        }
+      }
+      
+      parts.push("\n## Erwartete Ausgabe\n");
+      parts.push("1. Liste der False Positives mit Erklärung\n");
+      parts.push("2. Code-Änderungsvorschläge (falls zutreffend)\n");
+      parts.push("3. Vollständige `finding_policy.json`-Struktur mit allen False Positives\n");
+      parts.push(`   - Platzieren in \`${policyPath}\`\n`);
+      parts.push("   - Verwenden Sie geeignete Regex-Muster für Pfad/Nachricht-Matching\n");
+      parts.push("   - Enthalten Sie klare Gründe für jeden akzeptierten Fund\n");
+      
+      prompts.push(parts.join(''));
+    } else {
+      // English
+      const parts: string[] = [
+        "# Security Scan Findings Analysis Request\n\n",
+        `## Part ${chunkNum} of ${totalChunks}\n\n`,
+        "I have performed a security scan on my codebase and found the following issues. ",
+        "Please analyze each finding and:\n",
+        "1. Identify false positives (findings that are not actual security issues)\n",
+        "2. For false positives, suggest code changes if possible to avoid triggering the rule\n",
+        "3. If code changes are not possible/appropriate, generate a finding policy JSON entry\n",
+        "4. Provide the complete finding_policy.json structure with all false positives\n\n",
+        "## Findings Summary\n",
+        `Total findings in this part: ${chunk.length}\n`,
+        `Tools: ${Object.keys(chunkByTool).join(', ')}\n\n`
+      ];
+      
+      for (const [tool, toolFindings] of Object.entries(chunkByTool)) {
+        parts.push(`## ${tool} Findings (${toolFindings.length} total)\n\n`);
+        for (let j = 0; j < toolFindings.length; j++) {
+          const finding = toolFindings[j];
+          parts.push(`### Finding ${j + 1}\n`);
+          parts.push(`- **Severity**: ${finding.severity || 'UNKNOWN'}\n`);
+          parts.push(`- **File**: \`${finding.path || ''}\`\n`);
+          if (finding.line) {
+            parts.push(`- **Line**: ${finding.line}\n`);
+          }
+          if (finding.check_id) {
+            parts.push(`- **Rule ID**: \`${finding.check_id}\`\n`);
+          }
+          parts.push(`- **Message**: ${finding.message || ''}\n\n`);
+        }
+      }
+      
+      parts.push("\n## Expected Output\n");
+      parts.push("1. List of false positives with explanations\n");
+      parts.push("2. Code change suggestions (if applicable)\n");
+      parts.push("3. Complete `finding_policy.json` structure with all false positives\n");
+      parts.push(`   - Place in \`${policyPath}\`\n`);
+      parts.push("   - Use proper regex patterns for path/message matching\n");
+      parts.push("   - Include clear reasons for each accepted finding\n");
+      
+      prompts.push(parts.join(''));
+    }
+  }
+  
+  // Join with clear separator
+  const separator = "\n\n" + "=".repeat(80) + "\n\n";
+  return separator + prompts.join(separator);
+}
+
 async function loadAIPrompt(): Promise<void> {
   const loading = document.getElementById('ai-prompt-loading') as HTMLDivElement | null;
   const error = document.getElementById('ai-prompt-error') as HTMLDivElement | null;
@@ -431,10 +619,12 @@ async function loadAIPrompt(): Promise<void> {
         let jsonText = findingsScript.textContent || findingsScript.innerText || '';
         
         // Decode HTML entities if present (shouldn't be, but handle it just in case)
+        // Use DOMParser instead of innerHTML to avoid XSS risks
         if (jsonText.includes('&quot;') || jsonText.includes('&amp;')) {
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = jsonText;
-          jsonText = tempDiv.textContent || tempDiv.innerText || '';
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(`<div>${jsonText}</div>`, 'text/html');
+          const decodedElement = doc.body.firstElementChild as HTMLElement | null;
+          jsonText = decodedElement ? (decodedElement.textContent || decodedElement.innerText || '') : jsonText;
         }
         
         if (jsonText.trim()) {
@@ -484,7 +674,10 @@ async function copyAIPrompt(): Promise<void> {
 function generateAIPrompt(): void {
   // If in iframe (WebUI), send message to parent
   if (window.parent && window.parent !== window) {
-    window.parent.postMessage({ type: 'OPEN_AI_PROMPT_MODAL' }, '*');
+    // Use specific origin instead of '*' for security
+    // Try to get parent origin, fallback to current origin if same-origin
+    const targetOrigin = window.location.origin;
+    window.parent.postMessage({ type: 'OPEN_AI_PROMPT_MODAL' }, targetOrigin);
   } else {
     // If standalone (direct HTML file), open modal directly
     openAIPromptModal();

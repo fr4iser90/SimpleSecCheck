@@ -7,6 +7,7 @@ import subprocess  # nosec B404 - Used safely with hardcoded commands, shell=Fal
 import asyncio
 import re
 import threading
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -91,9 +92,11 @@ async def start_update(
     current_update["error_message"] = None
     current_update["process_output"] = []
     
-    # Create log file - use /tmp since logs volume is read-only
+    # Create log file - use tempfile.mkstemp() for secure temp file creation
     # Logs are stored in memory anyway (process_output), so file is just for backup
-    update_log_file = Path(f"/tmp/owasp-update-{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+    fd, temp_path = tempfile.mkstemp(prefix='owasp-update-', suffix='.log', dir='/tmp')
+    os.close(fd)  # Close file descriptor, we'll open it later if needed
+    update_log_file = Path(temp_path)
     current_update["update_log_file"] = update_log_file
     
     # Get NVD API key from environment

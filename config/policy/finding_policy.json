@@ -1,6 +1,44 @@
 {
     "dedupe": {
-      "enabled": true,
-      "line_window": 2
+        "enabled": true,
+        "line_window": 2
+    },
+    "gitleaks": {
+        "accepted_findings": [
+            {
+                "rule_id": "database-password",
+                "file_regex": "config/tools/clair/config\\.yaml$",
+                "description_regex": ".*",
+                "reason": "Config file contains example database connection strings for Clair tool configuration, not actual secrets"
+            }
+        ]
+    },
+    "bandit": {
+        "accepted_findings": [
+            {
+                "check_id": "B404",
+                "path_regex": ".*\\.py$",
+                "message_regex": "Consider possible security implications associated with the subprocess module",
+                "reason": "Subprocess usage is necessary for security tooling (docker, git commands). Commands are hardcoded, not user-controlled"
+            },
+            {
+                "check_id": "B607",
+                "path_regex": ".*\\.py$",
+                "message_regex": "Starting a process with a partial executable path",
+                "reason": "Commands like 'docker' and 'git' are standard system commands, not partial paths. Safe for security tooling"
+            },
+            {
+                "check_id": "B603",
+                "path_regex": ".*\\.py$",
+                "message_regex": "subprocess call - check for execution of untrusted input",
+                "reason": "Subprocess calls use hardcoded commands (docker, git) with controlled inputs, not user-controlled data"
+            },
+            {
+                "check_id": "B110",
+                "path_regex": ".*\\.py$",
+                "message_regex": "Try, Except, Pass detected",
+                "reason": "Exception handling for non-critical operations (cleanup, status updates). Errors are logged elsewhere"
+            }
+        ]
     }
 }

@@ -353,19 +353,26 @@ def collect_findings_from_results(results_dir: Path) -> List[Dict]:
     return all_findings
 
 
-def generate_ai_prompt(findings: List[Dict], language: str = "english", policy_path: str = "config/finding-policy.json") -> str:
+def generate_ai_prompt(findings: List[Dict], language: str = "english", policy_path: str = "config/finding-policy.json", max_findings_per_prompt: int = 50) -> str:
     """
     Generate structured AI prompt for false positive analysis
+    Automatically splits into multiple prompts if findings exceed max_findings_per_prompt
     
     Args:
         findings: List of finding dictionaries
         language: Language for prompt (english, chinese, german)
         policy_path: Path where finding policy should be placed (default: "config/finding-policy.json")
+        max_findings_per_prompt: Maximum findings per prompt before splitting (default: 50)
     
     Returns:
-        Formatted prompt string
+        Formatted prompt string (or multiple prompts separated by delimiters if split)
     """
     language = language.lower()
+    
+    # Split findings if too many
+    if len(findings) > max_findings_per_prompt:
+        return _generate_split_prompt(findings, language, policy_path, max_findings_per_prompt)
+    
     if language == "chinese":
         return _generate_chinese_prompt(findings, policy_path)
     elif language == "german":
@@ -374,7 +381,53 @@ def generate_ai_prompt(findings: List[Dict], language: str = "english", policy_p
         return _generate_english_prompt(findings, policy_path)
 
 
-def _generate_english_prompt(findings: List[Dict], policy_path: str = "config/finding-policy.json") -> str:
+def _generate_split_prompt(findings: List[Dict], language: str, policy_path: str, max_findings: int) -> str:
+    """Generate multiple prompts when findings exceed max_findings_per_prompt"""
+    # Group by tool first
+    by_tool = {}
+    for f in findings:
+        tool = f["tool"]
+        if tool not in by_tool:
+            by_tool[tool] = []
+        by_tool[tool].append(f)
+    
+    # Split into chunks
+    chunks = []
+    current_chunk = []
+    current_count = 0
+    
+    for tool, tool_findings in by_tool.items():
+        # If adding this tool would exceed limit, start new chunk
+        if current_count + len(tool_findings) > max_findings and current_chunk:
+            chunks.append(current_chunk)
+            current_chunk = []
+            current_count = 0
+        
+        # Add all findings from this tool (keep tool findings together)
+        current_chunk.extend(tool_findings)
+        current_count += len(tool_findings)
+    
+    # Add remaining chunk
+    if current_chunk:
+        chunks.append(current_chunk)
+    
+    # Generate prompts for each chunk
+    prompts = []
+    for i, chunk in enumerate(chunks, 1):
+        if language == "chinese":
+            prompt = _generate_chinese_prompt(chunk, policy_path, chunk_num=i, total_chunks=len(chunks))
+        elif language == "german":
+            prompt = _generate_german_prompt(chunk, policy_path, chunk_num=i, total_chunks=len(chunks))
+        else:
+            prompt = _generate_english_prompt(chunk, policy_path, chunk_num=i, total_chunks=len(chunks))
+        prompts.append(prompt)
+    
+    # Join with clear separator
+    separator = "\n\n" + "="*80 + "\n\n"
+    return separator.join(prompts)
+
+
+def _generate_english_prompt(findings: List[Dict], policy_path: str = "config/finding-policy.json", chunk_num: int = None, total_chunks: int = None) -> str:
     """Generate English prompt (standard mode)"""
     # Group by tool
     by_tool = {}
@@ -384,8 +437,14 @@ def _generate_english_prompt(findings: List[Dict], policy_path: str = "config/fi
             by_tool[tool] = []
         by_tool[tool].append(f)
     
+    # Add chunk info if split
+    chunk_header = ""
+    if chunk_num and total_chunks:
+        chunk_header = f"## Part {chunk_num} of {total_chunks}\n\n"
+    
     prompt_parts = [
         "# Security Scan Findings Analysis Request\n\n",
+        chunk_header,
         "I have performed a security scan on my codebase and found the following issues. ",
         "Please analyze each finding and:\n",
         "1. Identify false positives (findings that are not actual security issues)\n",
@@ -393,7 +452,7 @@ def _generate_english_prompt(findings: List[Dict], policy_path: str = "config/fi
         "3. If code changes are not possible/appropriate, generate a finding policy JSON entry\n",
         "4. Provide the complete finding_policy.json structure with all false positives\n\n",
         "## Findings Summary\n",
-        f"Total findings: {len(findings)}\n",
+        f"Total findings in this part: {len(findings)}\n",
         f"Tools: {', '.join(by_tool.keys())}\n\n"
     ]
     
@@ -422,7 +481,7 @@ def _generate_english_prompt(findings: List[Dict], policy_path: str = "config/fi
     return "".join(prompt_parts)
 
 
-def _generate_chinese_prompt(findings: List[Dict], policy_path: str = "config/finding-policy.json") -> str:
+def _generate_chinese_prompt(findings: List[Dict], policy_path: str = "config/finding-policy.json", chunk_num: int = None, total_chunks: int = None) -> str:
     """Generate Chinese prompt (token-saving mode)"""
     # Group by tool
     by_tool = {}
@@ -432,15 +491,21 @@ def _generate_chinese_prompt(findings: List[Dict], policy_path: str = "config/fi
             by_tool[tool] = []
         by_tool[tool].append(f)
     
+    # Add chunk info if split
+    chunk_header = ""
+    if chunk_num and total_chunks:
+        chunk_header = f"## 第 {chunk_num} 部分，共 {total_chunks} 部分\n\n"
+    
     prompt_parts = [
         "# 安全扫描结果分析请求\n\n",
+        chunk_header,
         "我对代码库进行了安全扫描，发现以下问题。请分析每个发现并：\n",
         "1. 识别误报（非实际安全问题的发现）\n",
         "2. 对于误报，如可能，建议代码更改以避免触发规则\n",
         "3. 如果无法/不适合更改代码，生成finding policy JSON条目\n",
         "4. 提供包含所有误报的完整finding_policy.json结构\n\n",
         "## 发现摘要\n",
-        f"总发现数: {len(findings)}\n",
+        f"本部分总发现数: {len(findings)}\n",
         f"工具: {', '.join(by_tool.keys())}\n\n"
     ]
     
@@ -469,7 +534,7 @@ def _generate_chinese_prompt(findings: List[Dict], policy_path: str = "config/fi
     return "".join(prompt_parts)
 
 
-def _generate_german_prompt(findings: List[Dict], policy_path: str = "config/finding-policy.json") -> str:
+def _generate_german_prompt(findings: List[Dict], policy_path: str = "config/finding-policy.json", chunk_num: int = None, total_chunks: int = None) -> str:
     """Generate German prompt"""
     # Group by tool
     by_tool = {}
@@ -479,8 +544,14 @@ def _generate_german_prompt(findings: List[Dict], policy_path: str = "config/fin
             by_tool[tool] = []
         by_tool[tool].append(f)
     
+    # Add chunk info if split
+    chunk_header = ""
+    if chunk_num and total_chunks:
+        chunk_header = f"## Teil {chunk_num} von {total_chunks}\n\n"
+    
     prompt_parts = [
         "# Sicherheitsscan-Ergebnisse Analyseanfrage\n\n",
+        chunk_header,
         "Ich habe einen Sicherheitsscan meines Codebases durchgeführt und die folgenden Probleme gefunden. ",
         "Bitte analysieren Sie jeden Fund und:\n",
         "1. Identifizieren Sie False Positives (Funde, die keine tatsächlichen Sicherheitsprobleme sind)\n",
@@ -488,7 +559,7 @@ def _generate_german_prompt(findings: List[Dict], policy_path: str = "config/fin
         "3. Wenn Code-Änderungen nicht möglich/angemessen sind, generieren Sie einen finding policy JSON-Eintrag\n",
         "4. Stellen Sie die vollständige finding_policy.json-Struktur mit allen False Positives bereit\n\n",
         "## Funde-Zusammenfassung\n",
-        f"Gesamtanzahl Funde: {len(findings)}\n",
+        f"Gesamtanzahl Funde in diesem Teil: {len(findings)}\n",
         f"Tools: {', '.join(by_tool.keys())}\n\n"
     ]
     
