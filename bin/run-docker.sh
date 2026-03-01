@@ -10,7 +10,8 @@
 #   ./run-docker.sh https://fr4iser.com
 #   ./run-docker.sh network                              # Scan network/infrastructure
 
-set -e
+# Don't exit on error immediately - we want to log errors first
+set +e
 
 # Colors for output
 RED='\033[0;31m'
@@ -20,7 +21,19 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
+# Define log_message early for debugging (write to stdout so it's captured)
+# RUN_DOCKER_LOG will be set later after LOGS_DIR is determined
+RUN_DOCKER_LOG="/dev/null"
+log_message() {
+    local msg="${BLUE}[SimpleSecCheck Docker]${NC} $1"
+    echo -e "$msg"
+    if [ "$RUN_DOCKER_LOG" != "/dev/null" ] && [ -n "$RUN_DOCKER_LOG" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$RUN_DOCKER_LOG" 2>/dev/null || true
+    fi
+}
+log_message "Starting run-docker.sh script..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+log_message "SCRIPT_DIR: $SCRIPT_DIR"
 SCAN_SCOPE="${SCAN_SCOPE:-full}" # full | tracked
 SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 CI_MODE=false
@@ -111,9 +124,10 @@ else
     SCAN_TYPE="code"
     TARGET_PATH="$TARGET"
     ZAP_TARGET=""
-    # Check if TARGET is a temporary Git clone path (contains "simpleseccheck_git" or "/tmp/")
+
+    # Check if TARGET is a temporary Git clone path (in results/tmp/)
     # If so, try to extract project name from GIT_URL environment variable or use basename
-    if [[ "$TARGET" =~ simpleseccheck_git ]] || [[ "$TARGET" =~ ^/.*/tmp/ ]]; then
+    if [[ "$TARGET" =~ results/tmp/ ]] || [[ "$TARGET" =~ ^/.*/tmp/ ]]; then
         # Temporary Git clone path - try to get repo name from GIT_URL or use basename of parent
         if [ -n "${GIT_URL:-}" ]; then
             # Extract repo name from Git URL (same logic as step_service.py)
@@ -140,50 +154,39 @@ else
 fi
 PROJECT_DIR="${PROJECT_NAME}_${TIMESTAMP}"
 
-# Determine host project root (needed when running from WebUI container)
-if [ -d "/project" ] && [ -f "/project/docker-compose.yml" ]; then
-    # Running in container: use HOST_PROJECT_ROOT if set, otherwise try to determine it
-    if [ -n "$HOST_PROJECT_ROOT" ]; then
-        HOST_SCRIPT_DIR="$HOST_PROJECT_ROOT"
-        echo "[Results Dir] Using HOST_PROJECT_ROOT: '$HOST_PROJECT_ROOT'"
-    else
-        # Fallback: try to get from docker inspect
-        CONTAINER_NAME="SimpleSecCheck_webui"
-        HOST_SCRIPT_DIR=$(docker inspect --format='{{range .Mounts}}{{if eq .Destination "/project"}}{{.Source}}{{end}}{{end}}' "$CONTAINER_NAME" 2>/dev/null || echo "")
-        if [ -z "$HOST_SCRIPT_DIR" ]; then
-            echo "[ERROR] Cannot determine host project root. Please set HOST_PROJECT_ROOT environment variable." >&2
-            exit 1
-        fi
-        echo "[Results Dir] Determined host project root from docker inspect: '$HOST_SCRIPT_DIR'"
-    fi
-    RESULTS_DIR="$HOST_SCRIPT_DIR/results/$PROJECT_DIR"
-    LOGS_DIR="$HOST_SCRIPT_DIR/results/$PROJECT_DIR/logs"
-    echo "[Results Dir] Using host path: RESULTS_DIR='$RESULTS_DIR'"
-else
-    # Running on host: use SCRIPT_DIR
-    RESULTS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR"
-    LOGS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR/logs"
-    echo "[Results Dir] Using script dir: RESULTS_DIR='$RESULTS_DIR'"
-fi
+# Script now only runs on host (CLI usage)
+# WebUI calls docker-compose directly, so no container/host distinction needed
+RESULTS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR"
+LOGS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR/logs"
+log_message "Using script dir: RESULTS_DIR='$RESULTS_DIR'"
 
 # Store original for later reference
 OVERALL_SUCCESS=false
 
-# Functions
-log_message() {
-    echo -e "${BLUE}[SimpleSecCheck Docker]${NC} $1"
-}
+# Functions (log_message already defined above for early logging)
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    local msg="${GREEN}[SUCCESS]${NC} $1"
+    echo -e "$msg"
+    if [ -n "$RUN_DOCKER_LOG" ] && [ "$RUN_DOCKER_LOG" != "/dev/null" ] && [ -f "$RUN_DOCKER_LOG" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SUCCESS] $1" >> "$RUN_DOCKER_LOG" 2>/dev/null || true
+    fi
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    local msg="${YELLOW}[WARNING]${NC} $1"
+    echo -e "$msg"
+    if [ -n "$RUN_DOCKER_LOG" ] && [ "$RUN_DOCKER_LOG" != "/dev/null" ] && [ -f "$RUN_DOCKER_LOG" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARNING] $1" >> "$RUN_DOCKER_LOG" 2>/dev/null || true
+    fi
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    local msg="${RED}[ERROR]${NC} $1"
+    echo -e "$msg" >&2
+    if [ -n "$RUN_DOCKER_LOG" ] && [ "$RUN_DOCKER_LOG" != "/dev/null" ] && [ -f "$RUN_DOCKER_LOG" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >> "$RUN_DOCKER_LOG" 2>/dev/null || true
+    fi
 }
 
 # Check if target is provided
@@ -217,6 +220,12 @@ if [ ! -d "/project" ] || [ ! -f "/project/docker-compose.yml" ]; then
     mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
 fi
 
+# Create log file for run-docker.sh execution (always, even in container)
+RUN_DOCKER_LOG="$LOGS_DIR/run-docker.log"
+mkdir -p "$LOGS_DIR"
+touch "$RUN_DOCKER_LOG"
+log_message "Logging to: $RUN_DOCKER_LOG"
+
 echo ""
 echo -e "${BLUE} SimpleSecCheck Docker Security Scanner${NC}"
 echo "=========================================="
@@ -248,57 +257,19 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
     set +a  # Stop automatically exporting
 fi
 
-# Determine docker-compose file and build context
-# If running in container (e.g., WebUI), use /project as build context
-# Otherwise use SCRIPT_DIR (host execution)
-if [ -d "/project" ] && [ -f "/project/docker-compose.yml" ]; then
-    # Running in container: use /project as build context
-    DOCKER_COMPOSE_FILE="/project/docker-compose.yml"
-    DOCKER_COMPOSE_CONTEXT="/project"
-else
-    # Running on host: use SCRIPT_DIR
-    DOCKER_COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
-    DOCKER_COMPOSE_CONTEXT="$SCRIPT_DIR"
-fi
+# Script now only runs on host (CLI usage)
+# WebUI calls docker-compose directly, so no container/host distinction needed
+DOCKER_COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+DOCKER_COMPOSE_CONTEXT="$SCRIPT_DIR"
 
-# Determine OWASP data volume mount (needed when using -v flags, as they override docker-compose.yml volumes)
-if [ -d "/project" ] && [ -f "/project/docker-compose.yml" ]; then
-    # Running in container: get host path
-    log_message "[OWASP Volume] Running in container, determining host path..."
-    
-    # Method 1: Use environment variable if set
-    if [ -n "$HOST_PROJECT_ROOT" ]; then
-        log_message "[OWASP Volume] Using HOST_PROJECT_ROOT from environment: '$HOST_PROJECT_ROOT'"
-    else
-        # Method 2: Use docker inspect with container name
-        CONTAINER_NAME="SimpleSecCheck_webui"
-        log_message "[OWASP Volume] Trying container name: '$CONTAINER_NAME'"
-        HOST_PROJECT_ROOT=$(docker inspect --format='{{range .Mounts}}{{if eq .Destination "/project"}}{{.Source}}{{end}}{{end}}' "$CONTAINER_NAME" 2>/dev/null || echo "")
-        log_message "[OWASP Volume] docker inspect result: HOST_PROJECT_ROOT='$HOST_PROJECT_ROOT'"
-    fi
-    if [ -n "$HOST_PROJECT_ROOT" ]; then
-        OWASP_DATA_VOLUME="-v $HOST_PROJECT_ROOT/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data"
-        log_message "[OWASP Volume] Using host path: $OWASP_DATA_VOLUME"
-        log_message "[OWASP Volume] Checking if host path exists: $HOST_PROJECT_ROOT/owasp-dependency-check-data"
-        if [ -d "$HOST_PROJECT_ROOT/owasp-dependency-check-data" ]; then
-            log_message "[OWASP Volume] ✓ Host path exists"
-        else
-            log_warning "[OWASP Volume] ✗ Host path does NOT exist: $HOST_PROJECT_ROOT/owasp-dependency-check-data"
-        fi
-    else
-        # Fallback: use relative path (might not work)
-        OWASP_DATA_VOLUME="-v ./owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data"
-        log_warning "[OWASP Volume] Could not determine host project root, using relative path: $OWASP_DATA_VOLUME"
-    fi
+# Script now only runs on host (CLI usage)
+# WebUI calls docker-compose directly, so no container/host distinction needed
+OWASP_DATA_VOLUME="-v $SCRIPT_DIR/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data"
+log_message "[OWASP Volume] Using absolute path: $OWASP_DATA_VOLUME"
+if [ -d "$SCRIPT_DIR/owasp-dependency-check-data" ]; then
+    log_message "[OWASP Volume] ✓ Host path exists"
 else
-    # Running on host: use absolute path
-    OWASP_DATA_VOLUME="-v $SCRIPT_DIR/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data"
-    log_message "[OWASP Volume] Running on host, using absolute path: $OWASP_DATA_VOLUME"
-    if [ -d "$SCRIPT_DIR/owasp-dependency-check-data" ]; then
-        log_message "[OWASP Volume] ✓ Host path exists"
-    else
-        log_warning "[OWASP Volume] ✗ Host path does NOT exist: $SCRIPT_DIR/owasp-dependency-check-data"
-    fi
+    log_warning "[OWASP Volume] ✗ Host path does NOT exist: $SCRIPT_DIR/owasp-dependency-check-data"
 fi
 
 # Run Docker Compose with the scanner service
@@ -328,10 +299,35 @@ elif [ "$SCAN_TYPE" = "code" ]; then
     # CI-friendly mode: scan only git-tracked files to avoid local artifact noise.
     if [ "$SCAN_SCOPE" = "tracked" ]; then
         if git -C "$TARGET_PATH" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            TEMP_TRACKED_SNAPSHOT_DIR="$(mktemp -d /tmp/simpleseccheck-tracked-XXXXXX)"
-            git -C "$TARGET_PATH" archive --format=tar HEAD | tar -xf - -C "$TEMP_TRACKED_SNAPSHOT_DIR"
-            TARGET_MOUNT_PATH="$TEMP_TRACKED_SNAPSHOT_DIR"
-            log_message "Using tracked-only snapshot for scan input: $TARGET_MOUNT_PATH"
+            # Check if TARGET_PATH is a temporary Git clone (from WebUI)
+            # If so, use host-mounted results/tmp directory instead of /tmp
+            if [[ "$TARGET_PATH" =~ results/tmp ]]; then
+                # Git clone from WebUI - create snapshot in host-mounted results/tmp directory
+                if [ -d "/project" ] && [ -f "/project/docker-compose.yml" ]; then
+                    # Running in WebUI container: use host-mounted results directory
+                    TEMP_TRACKED_SNAPSHOT_DIR="$(mktemp -d "$RESULTS_DIR/tmp/simpleseccheck-tracked-XXXXXX")"
+                else
+                    # Running on host: use results directory
+                    TEMP_TRACKED_SNAPSHOT_DIR="$(mktemp -d "$RESULTS_DIR/tmp/simpleseccheck-tracked-XXXXXX")"
+                fi
+                log_message "Creating tracked snapshot in host-mounted directory: $TEMP_TRACKED_SNAPSHOT_DIR"
+            else
+                # Regular local path - use /tmp (will be cleaned up after scan)
+                TEMP_TRACKED_SNAPSHOT_DIR="$(mktemp -d /tmp/simpleseccheck-tracked-XXXXXX)"
+                log_message "Creating tracked snapshot in temporary directory: $TEMP_TRACKED_SNAPSHOT_DIR"
+            fi
+            
+            log_message "Creating git archive from: $TARGET_PATH"
+            if git -C "$TARGET_PATH" archive --format=tar HEAD | tar -xf - -C "$TEMP_TRACKED_SNAPSHOT_DIR"; then
+                FILE_COUNT=$(find "$TEMP_TRACKED_SNAPSHOT_DIR" -type f 2>/dev/null | wc -l)
+                log_message "Git archive created successfully with $FILE_COUNT files"
+                TARGET_MOUNT_PATH="$TEMP_TRACKED_SNAPSHOT_DIR"
+                log_message "Using tracked-only snapshot for scan input: $TARGET_MOUNT_PATH"
+            else
+                log_error "Failed to create git archive snapshot"
+                log_warning "Falling back to full scan scope"
+                TARGET_MOUNT_PATH="$TARGET_PATH"
+            fi
             
             # If a finding policy was explicitly specified (relative path), try to copy it into the snapshot
             # (it might not be tracked in git, so it won't be in the snapshot)
@@ -422,16 +418,29 @@ elif [ "$SCAN_TYPE" = "code" ]; then
     fi
 
     # Code scan: mount code directory
-    # If running in container (e.g., WebUI), use /project as build context
-    # Otherwise use SCRIPT_DIR (host execution)
-    if [ -d "/project" ] && [ -f "/project/docker-compose.yml" ]; then
-        # Running in container: use /project as build context
-        DOCKER_COMPOSE_FILE="/project/docker-compose.yml"
-        DOCKER_COMPOSE_CONTEXT="/project"
-    else
-        # Running on host: use SCRIPT_DIR
-        DOCKER_COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
-        DOCKER_COMPOSE_CONTEXT="$SCRIPT_DIR"
+    # Script now only runs on host (CLI usage)
+    # WebUI calls docker-compose directly, so no container/host distinction needed
+    TARGET_MOUNT_PATH_HOST="$TARGET_MOUNT_PATH"
+    RESULTS_DIR_HOST="$RESULTS_DIR"
+    LOGS_DIR_HOST="$LOGS_DIR"
+    log_message "Running on host, using paths as-is"
+    
+    # Verify target path exists
+    if [ ! -d "$TARGET_MOUNT_PATH_HOST" ]; then
+        log_error "Target path does not exist: $TARGET_MOUNT_PATH_HOST"
+        log_error "Exiting with error code 1"
+        exit 1
+    fi
+    log_message "✓ Target path exists: $TARGET_MOUNT_PATH_HOST"
+    
+    # Count files in target directory for debugging
+    FILE_COUNT=$(find "$TARGET_MOUNT_PATH_HOST" -type f 2>/dev/null | wc -l)
+    log_message "Target directory contains $FILE_COUNT files"
+    
+    if [ "$FILE_COUNT" -eq 0 ]; then
+        log_warning "WARNING: Target directory is empty! Scanner will find nothing!"
+        log_warning "Directory contents:"
+        ls -la "$TARGET_MOUNT_PATH_HOST" 2>/dev/null || log_warning "  (cannot list directory)"
     fi
     
     # Build environment variables array
@@ -450,16 +459,44 @@ elif [ "$SCAN_TYPE" = "code" ]; then
         DOCKER_ENV_ARGS+=(-e FINDING_POLICY_FILE="$FINDING_POLICY_FILE_IN_CONTAINER")
     fi
     
-    if docker-compose -f "$DOCKER_COMPOSE_FILE" --project-directory "$DOCKER_COMPOSE_CONTEXT" run --rm \
+    log_message "Mounting volumes:"
+    log_message "  -v $TARGET_MOUNT_PATH_HOST:/target:ro"
+    log_message "  -v $RESULTS_DIR_HOST:/SimpleSecCheck/results"
+    log_message "  -v $LOGS_DIR_HOST:/SimpleSecCheck/logs"
+    log_message "Docker Compose file: $DOCKER_COMPOSE_FILE"
+    log_message "Docker Compose context: $DOCKER_COMPOSE_CONTEXT"
+    
+    # Execute docker-compose command and capture ALL output (stdout + stderr) to log file
+    log_message "Executing docker-compose command..."
+    log_message "Full command: docker-compose -f $DOCKER_COMPOSE_FILE --project-directory $DOCKER_COMPOSE_CONTEXT run --rm ..."
+    
+    # Capture both stdout and stderr, write to log file AND stdout
+    DOCKER_COMPOSE_OUTPUT=$(docker-compose -f "$DOCKER_COMPOSE_FILE" --project-directory "$DOCKER_COMPOSE_CONTEXT" run --rm \
         "${DOCKER_ENV_ARGS[@]}" \
-        -v "$TARGET_MOUNT_PATH:/target:ro" \
-        -v "$RESULTS_DIR:/SimpleSecCheck/results" \
-        -v "$LOGS_DIR:/SimpleSecCheck/logs" \
+        -v "$TARGET_MOUNT_PATH_HOST:/target:ro" \
+        -v "$RESULTS_DIR_HOST:/SimpleSecCheck/results" \
+        -v "$LOGS_DIR_HOST:/SimpleSecCheck/logs" \
         $OWASP_DATA_VOLUME \
-        scanner /SimpleSecCheck/bin/security-check.sh; then
+        scanner /SimpleSecCheck/bin/security-check.sh 2>&1)
+    DOCKER_EXIT_CODE=$?
+    
+    # Write output to log file
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Docker Compose output:" >> "$RUN_DOCKER_LOG" 2>/dev/null || true
+    echo "$DOCKER_COMPOSE_OUTPUT" >> "$RUN_DOCKER_LOG" 2>/dev/null || true
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Docker Compose exit code: $DOCKER_EXIT_CODE" >> "$RUN_DOCKER_LOG" 2>/dev/null || true
+    
+    # Also output to stdout (for scan_service.py to capture)
+    echo "$DOCKER_COMPOSE_OUTPUT"
+    
+    if [ $DOCKER_EXIT_CODE -eq 0 ]; then
         log_success "Code security scan completed successfully!"
         OVERALL_SUCCESS=true
     else
+        log_error "Docker Compose command failed with exit code: $DOCKER_EXIT_CODE"
+        log_error "Last 20 lines of Docker Compose output:"
+        echo "$DOCKER_COMPOSE_OUTPUT" | tail -20 | while read -r line; do
+            log_error "  $line"
+        done
         log_warning "Code security scan completed with warnings"
         OVERALL_SUCCESS=false
     fi

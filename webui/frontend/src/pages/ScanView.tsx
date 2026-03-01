@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import ReportViewer from '../components/ReportViewer'
 import LiveLogs from '../components/LiveLogs'
 import StepsSidebar from '../components/StepsSidebar'
+import AIPromptModal from '../components/AIPromptModal'
 
 interface ScanStatusData {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -29,6 +30,24 @@ export default function ScanView() {
 
   const [isStepsSidebarOpen, setIsStepsSidebarOpen] = useState(false)
   const [isLogsSidebarOpen, setIsLogsSidebarOpen] = useState(false)
+  const [isAIPromptModalOpen, setIsAIPromptModalOpen] = useState(false)
+
+  // Listen for messages from iframe (HTML Report)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Security: Only accept messages from same origin
+      if (event.origin !== window.location.origin && !event.origin.includes('localhost:8080')) {
+        return
+      }
+      
+      if (event.data && event.data.type === 'OPEN_AI_PROMPT_MODAL') {
+        setIsAIPromptModalOpen(true)
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
 
   // Poll status every 2 seconds if scan is running
   useEffect(() => {
@@ -313,6 +332,12 @@ export default function ScanView() {
             </div>
           </>
         )}
+
+        {/* AI Prompt Modal */}
+        <AIPromptModal
+          isOpen={isAIPromptModalOpen}
+          onClose={() => setIsAIPromptModalOpen(false)}
+        />
       </div>
     )
   }

@@ -54,17 +54,39 @@ async def clone_repository(git_url: str, base_dir: Path, scan_id: str, current_s
     Returns the path to the cloned repository.
     Raises HTTPException on failure.
     """
-    # Create temporary directory for clones
-    tmp_dir = base_dir / "tmp"
-    tmp_dir.mkdir(exist_ok=True)
+    # Extract repository name from Git URL for directory naming
+    repo_name = "repo"
+    if "github.com" in git_url or "gitlab.com" in git_url:
+        # Extract repo name from URL: https://github.com/user/repo -> repo
+        parts = git_url.rstrip("/").split("/")
+        if len(parts) >= 2:
+            repo_name = parts[-1].replace(".git", "")
+    elif git_url.startswith("git@"):
+        # SSH URL: git@github.com:user/repo.git -> repo
+        parts = git_url.split(":")[-1].replace(".git", "").split("/")
+        if len(parts) >= 1:
+            repo_name = parts[-1]
     
-    # Create unique temporary directory for this clone
-    temp_dir = tempfile.mkdtemp(prefix="simpleseccheck_git_", dir=str(tmp_dir))
-    temp_path = Path(temp_dir)
+    # Sanitize repo name (remove invalid characters for directory names)
+    import re
+    repo_name = re.sub(r'[^a-zA-Z0-9_-]', '_', repo_name)
+    if not repo_name:
+        repo_name = "repo"
+    
+    # Create temporary directory for clones in results directory (host-mounted)
+    # This ensures Docker Compose can mount the path when starting the scanner container
+    tmp_dir = base_dir / "results" / "tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create temporary directory with repository name: repo_name_scan_id
+    temp_dir_name = f"{repo_name}_{scan_id}"
+    temp_path = tmp_dir / temp_dir_name
+    temp_path.mkdir(parents=True, exist_ok=True)
     
     try:
         print(f"[Git Clone] Cloning repository: {git_url}")
         print(f"[Git Clone] Target directory: {temp_path}")
+        print(f"[Git Clone] Using host-mounted directory: {tmp_dir} (visible to Docker Compose)")
         
         # Log Git clone step to frontend (before cloning starts)
         if scan_id and current_scan and results_dir:
@@ -89,8 +111,10 @@ async def clone_repository(git_url: str, base_dir: Path, scan_id: str, current_s
                 clone_url = clone_url + ".git"
         
         # Clone repository with shallow clone (depth=1) for faster cloning
+        # Clone into a subdirectory to avoid conflicts
+        clone_target = temp_path / repo_name
         def run_git_clone():
-            clone_cmd = ["git", "clone", "--depth", "1", "--single-branch", clone_url, str(temp_path)]
+            clone_cmd = ["git", "clone", "--depth", "1", "--single-branch", clone_url, str(clone_target)]
             # Add branch if specified
             if branch and branch.strip():
                 clone_cmd.insert(-1, "--branch")
@@ -109,7 +133,8 @@ async def clone_repository(git_url: str, base_dir: Path, scan_id: str, current_s
             timeout=CLONE_TIMEOUT
         )
         
-        print(f"[Git Clone] Successfully cloned repository to {temp_path}")
+        print(f"[Git Clone] Successfully cloned repository to {clone_target}")
+        print(f"[Git Clone] Repository name: {repo_name}")
         
         # Log Git clone completion step
         if scan_id and current_scan and results_dir:
@@ -118,8 +143,8 @@ async def clone_repository(git_url: str, base_dir: Path, scan_id: str, current_s
                 log_step("Git Clone", f"✓ Step {step_num}: Git repository cloned successfully", current_scan, results_dir, scan_id)
                 print(f"[Git Clone] Step logged: ✓ Step {step_num}: Git repository cloned successfully")
         
-        # Check repository size (approximate)
-        repo_size = sum(f.stat().st_size for f in temp_path.rglob('*') if f.is_file())
+        # Check repository size (approximate) - check the cloned repository directory
+        repo_size = sum(f.stat().st_size for f in clone_target.rglob('*') if f.is_file())
         if repo_size > MAX_REPO_SIZE:
             shutil.rmtree(temp_path, ignore_errors=True)
             raise HTTPException(
@@ -128,7 +153,8 @@ async def clone_repository(git_url: str, base_dir: Path, scan_id: str, current_s
             )
         
         print(f"[Git Clone] Repository size: {repo_size / (1024*1024):.1f}MB")
-        return temp_path
+        # Return the clone_target (the actual repository directory with code)
+        return clone_target
         
     except asyncio.TimeoutError:
         shutil.rmtree(temp_path, ignore_errors=True)
@@ -174,14 +200,26 @@ def cleanup_temp_repository(temp_path: Optional[Path]) -> None:
     """
     Clean up temporary repository directory.
     Safe to call multiple times - ignores errors if directory doesn't exist.
+    Note: temp_path is the cloned repository directory (e.g., PIDEA_20260301_xxx/PIDEA),
+    we need to delete the parent directory (PIDEA_20260301_xxx) to clean up everything.
     """
     if not temp_path:
         return
     
     try:
         temp_path_obj = Path(temp_path) if isinstance(temp_path, str) else temp_path
-        if temp_path_obj.exists() and temp_path_obj.is_dir():
+        # Get parent directory (the scan_id directory) to delete everything
+        parent_dir = temp_path_obj.parent
+        if parent_dir.exists() and parent_dir.is_dir():
+            print(f"[Cleanup] Deleting temporary repository directory: {parent_dir}")
+            shutil.rmtree(parent_dir, ignore_errors=True)
+            print(f"[Cleanup] Successfully deleted temporary repository directory: {parent_dir}")
+        elif temp_path_obj.exists() and temp_path_obj.is_dir():
+            # Fallback: delete just the repository directory if parent doesn't exist
+            print(f"[Cleanup] Deleting temporary repository: {temp_path_obj}")
             shutil.rmtree(temp_path_obj, ignore_errors=True)
-            print(f"[Cleanup] Successfully deleted temporary repository")
+            print(f"[Cleanup] Successfully deleted temporary repository: {temp_path_obj}")
+        else:
+            print(f"[Cleanup] Temporary repository does not exist: {parent_dir}")
     except Exception as e:
         print(f"[Cleanup Error] Failed to delete {temp_path}: {e}")

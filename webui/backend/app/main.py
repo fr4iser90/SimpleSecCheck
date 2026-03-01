@@ -61,9 +61,14 @@ RESULTS_DIR = BASE_DIR / "results"
 LOGS_DIR = BASE_DIR / "logs"
 OWASP_DATA_DIR = BASE_DIR / "owasp-dependency-check-data"
 
-# Validate CLI script exists
-if not CLI_SCRIPT.exists():
-    raise RuntimeError(f"CLI script not found: {CLI_SCRIPT}")
+# CLI script is only needed for direct CLI usage (not for WebUI)
+# WebUI calls docker-compose directly, so this validation is optional
+if not CLI_SCRIPT.exists() and os.path.exists("/app"):
+    # Running in container (WebUI) - script not needed
+    pass
+elif not CLI_SCRIPT.exists():
+    # Running on host without script - warn but don't fail (WebUI doesn't need it)
+    print(f"[WARNING] CLI script not found: {CLI_SCRIPT} (WebUI will use docker-compose directly)")
 
 app = FastAPI(title="SimpleSecCheck WebUI", version="1.0.0")
 

@@ -169,6 +169,26 @@ log_message "Container Base Project Dir (BASE_PROJECT_DIR): $BASE_PROJECT_DIR"
 if [ "$SCAN_TYPE" = "code" ]; then
     log_message "Host Code Mount for Scanning (TARGET_PATH_IN_CONTAINER): $TARGET_PATH_IN_CONTAINER"
     log_message "Exclude Paths (SIMPLESECCHECK_EXCLUDE_PATHS): $SIMPLESECCHECK_EXCLUDE_PATHS"
+    
+    # Debug: Check what's actually in /target
+    if [ -d "$TARGET_PATH_IN_CONTAINER" ]; then
+        FILE_COUNT=$(find "$TARGET_PATH_IN_CONTAINER" -type f 2>/dev/null | wc -l)
+        DIR_COUNT=$(find "$TARGET_PATH_IN_CONTAINER" -type d 2>/dev/null | wc -l)
+        log_message "DEBUG: /target directory contains $FILE_COUNT files and $DIR_COUNT directories"
+        
+        if [ "$FILE_COUNT" -eq 0 ]; then
+            log_error "ERROR: /target directory is EMPTY! Scanner will find nothing!"
+            log_error "This means the Docker volume mount failed or the source directory was empty."
+        else
+            # Show first few files/dirs for debugging
+            log_message "DEBUG: First 10 items in /target:"
+            find "$TARGET_PATH_IN_CONTAINER" -maxdepth 2 -type f -o -type d 2>/dev/null | head -10 | while read -r item; do
+                log_message "  - $item"
+            done
+        fi
+    else
+        log_error "ERROR: /target directory does not exist!"
+    fi
 fi
 log_message "Results Directory (RESULTS_DIR_IN_CONTAINER): $RESULTS_DIR_IN_CONTAINER"
 log_message "Logs Directory (LOGS_DIR_IN_CONTAINER): $LOGS_DIR_IN_CONTAINER"
@@ -1215,6 +1235,16 @@ if [ -f "$WEBUI_JS_SOURCE" ]; then
     log_message "webui.js copied to $WEBUI_JS_DEST"
 else
     log_message "[WARN] webui.js not found at $WEBUI_JS_SOURCE, not copied."
+fi
+
+# Copy ai_prompt_modal.js (if it exists in the orchestrator's script directory)
+AI_PROMPT_MODAL_JS_SOURCE="$BASE_PROJECT_DIR/src/reporting/ai_prompt_modal.js"
+AI_PROMPT_MODAL_JS_DEST="$RESULTS_DIR_IN_CONTAINER/ai_prompt_modal.js"
+if [ -f "$AI_PROMPT_MODAL_JS_SOURCE" ]; then
+    cp "$AI_PROMPT_MODAL_JS_SOURCE" "$AI_PROMPT_MODAL_JS_DEST"
+    log_message "ai_prompt_modal.js copied to $AI_PROMPT_MODAL_JS_DEST"
+else
+    log_message "[WARN] ai_prompt_modal.js not found at $AI_PROMPT_MODAL_JS_SOURCE, not copied."
 fi
 
 log_step_complete "Scan completed successfully"

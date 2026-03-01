@@ -18,6 +18,11 @@ from .shutdown_service import schedule_shutdown, SHUTDOWN_AFTER_SCAN, AUTO_SHUTD
 from .step_service import extract_steps_for_frontend, initialize_step_tracking, reset_step_tracking, initialize_steps_log
 from .git_service import is_git_url, clone_repository, cleanup_temp_repository
 
+# Central path management - ALL paths come from path_setup.py
+import sys
+sys.path.insert(0, "/project/src")
+from core.path_setup import get_scan_results_dir_host, get_target_mount_path_host, get_owasp_data_path_host
+
 
 class ScanRequest(BaseModel):
     type: str  # code, website, network
@@ -45,7 +50,7 @@ async def start_scan(
     results_dir: Path,
 ):
     """
-    Start a scan by calling bin/run-docker.sh
+    Start a scan by calling docker-compose run scanner directly
     Single-shot: Only one scan at a time
     """
     # Check if scan is already running
@@ -76,12 +81,17 @@ async def start_scan(
     
     # STEP 4: Handle Git repository URLs (if Git URL, clone it)
     temp_clone_path = None
+    git_clone_used = False
     if request.type == "code" and is_git_url(clean_target):
         print(f"[Scan Service] Git repository URL detected: {clean_target}")
         git_branch = request.git_branch.strip() if request.git_branch else None
         temp_clone_path = await clone_repository(clean_target, base_dir, scan_id, current_scan, results_dir, git_branch)
         clean_target = str(temp_clone_path)  # Use cloned path for scan
+        git_clone_used = True
         print(f"[Scan Service] Using cloned repository path: {clean_target}")
+        # CI Mode is not needed for Git clones - the clone already contains only tracked files
+        if request.ci_mode:
+            print(f"[Scan Service] CI Mode disabled for Git clone (clone already contains only tracked files)")
     
     # STEP 5: Validate target
     if request.type == "code" and not clean_target:
@@ -92,25 +102,82 @@ async def start_scan(
         if not clean_target.startswith(("http://", "https://")):
             raise HTTPException(status_code=400, detail="Target must be a valid URL (http:// or https://)")
     
-    # STEP 6: Build command
-    cmd = [str(cli_script)]
-    if request.ci_mode:
-        cmd.append("--ci")
+    # STEP 6: Get all paths from central path_setup (NO PATH CALCULATIONS HERE!)
+    scan_results_dir_container = current_scan["results_dir"]  # /app/results/EventPromoter_20260301_140119
+    results_dir_host = get_scan_results_dir_host(scan_results_dir_container)
+    logs_dir_host = f"{results_dir_host}/logs"
+    target_mount_path_host = get_target_mount_path_host(clean_target)
+    owasp_data_path_host = get_owasp_data_path_host()
+    
+    # OWASP volume mount
+    owasp_volume = []
+    if owasp_data_path_host:
+        owasp_volume = ["-v", f"{owasp_data_path_host}:/SimpleSecCheck/owasp-dependency-check-data"]
+        if os.path.exists(owasp_data_path_host):
+            print(f"[Scan Service] Using OWASP data volume: {owasp_volume[1]} (exists)")
+        else:
+            print(f"[Scan Service] Using OWASP data volume: {owasp_volume[1]} (will be created)")
+    else:
+        print(f"[Scan Service] WARNING: Could not determine OWASP data path - relying on docker-compose.yml volumes")
+    
+    # Build docker-compose command
+    docker_compose_file = "/project/docker-compose.yml"
+    docker_compose_context = "/project"
+    
+    cmd = [
+        "docker-compose",
+        "-f", docker_compose_file,
+        "--project-directory", docker_compose_context,
+        "run", "--rm"
+    ]
+    
+    # Environment variables
+    env_vars = [
+        "-e", f"SCAN_TYPE={request.type}",
+        "-e", f"PROJECT_RESULTS_DIR={results_dir_host}",
+        "-e", f"COLLECT_METADATA={'true' if request.collect_metadata else 'false'}",
+    ]
+    
+    if request.type == "website":
+        env_vars.extend(["-e", f"ZAP_TARGET={clean_target}", "-e", f"TARGET_URL={clean_target}"])
+    
+    if request.ci_mode and not git_clone_used:
+        env_vars.extend(["-e", "SCAN_SCOPE=tracked"])
+        print(f"[Scan Service] CI Mode enabled (scanning only tracked files)")
+    
+    # Finding policy
+    finding_policy_file = None
     if clean_finding_policy:
-        cmd.extend(["--finding-policy", clean_finding_policy])
-        print(f"[Scan Service] Adding --finding-policy to command: {clean_finding_policy}")
-    if request.collect_metadata:
-        cmd.append("--collect-metadata")
-    cmd.append(clean_target if request.type != "network" else "network")
+        # Check if policy file exists in target
+        if os.path.exists(f"{target_mount_path_host}/{clean_finding_policy}"):
+            finding_policy_file = f"/target/{clean_finding_policy}"
+            env_vars.extend(["-e", f"FINDING_POLICY_FILE={finding_policy_file}"])
+            print(f"[Scan Service] Using finding policy: {finding_policy_file}")
+        else:
+            print(f"[Scan Service] WARNING: Finding policy file not found: {target_mount_path_host}/{clean_finding_policy}")
     
-    # Set SCAN_ID and GIT_URL environment variables so run-docker.sh uses the same directory
+    cmd.extend(env_vars)
+    
+    # Volume mounts
+    if request.type == "code":
+        cmd.extend(["-v", f"{target_mount_path_host}:/target:ro"])
+    cmd.extend(["-v", f"{results_dir_host}:/SimpleSecCheck/results"])
+    cmd.extend(["-v", f"{logs_dir_host}:/SimpleSecCheck/logs"])
+    
+    if owasp_volume:
+        cmd.extend(owasp_volume)
+    
+    # Network scan needs docker socket
+    if request.type == "network":
+        cmd.extend(["-v", "/var/run/docker.sock:/var/run/docker.sock:ro"])
+    
+    # Scanner command
+    cmd.extend(["scanner", "/SimpleSecCheck/bin/security-check.sh"])
+    
+    print(f"[Scan Service] Executing docker-compose command: {' '.join(cmd)}")
+    
+    # Environment for subprocess (no special env vars needed, docker-compose handles it)
     env = os.environ.copy()
-    env["SCAN_ID"] = scan_id
-    # If original target was a Git URL, pass it so run-docker.sh can extract correct PROJECT_NAME
-    if request.type == "code" and is_git_url(original_target):
-        env["GIT_URL"] = original_target
-    
-    print(f"[Scan Service] Executing command: {' '.join(cmd)}")
     
     # STEP 7: Start scan process
     try:
@@ -195,11 +262,21 @@ async def capture_process_output(process: subprocess.Popen, scan_id: str, curren
                 # Log orchestrator messages, errors, and important steps
                 if any(keyword in clean_line for keyword in [
                     "[SimpleSecCheck Orchestrator]",
+                    "[SimpleSecCheck Docker]",
                     "[ERROR]",
+                    "[WARNING]",
                     "[ORCHESTRATOR ERROR]",
                     "Scan completed",
                     "Scan failed",
-                    "failed with exit code"
+                    "failed with exit code",
+                    "Starting run-docker.sh",
+                    "Converting container paths",
+                    "Verifying host paths",
+                    "Mounting volumes",
+                    "Executing docker-compose",
+                    "Target path does not exist",
+                    "Target directory contains",
+                    "Target directory is empty"
                 ]):
                     print(f"[Process Output] {clean_line}")
                 
@@ -232,24 +309,40 @@ async def monitor_scan(process: subprocess.Popen, scan_id: str, current_scan: di
     results_dir_path = current_scan["results_dir"]
     log_file = Path(results_dir_path) / "logs" / "security-check.log"
     
-    # Check for completion markers
-    scan_really_done = False
-    if log_file.exists():
+    # Determine if scan is completed
+    # Priority order:
+    # 1. Report file exists (most reliable - if report exists, scan succeeded)
+    # 2. Process exit code == 0
+    # 3. Completion marker in log file
+    scan_completed = False
+    report_file = None
+    
+    # Check 1: Report file exists (highest priority - if report exists, scan is done)
+    if results_dir_path:
+        report_file = Path(results_dir_path) / "security-summary.html"
+        if report_file.exists():
+            scan_completed = True
+            print(f"[Monitor Scan] Report file exists: {report_file} - marking scan as completed")
+            # If report exists, treat as success regardless of exit code
+            return_code = 0
+    
+    # Check 2: Process exit code
+    if not scan_completed and return_code == 0:
+        scan_completed = True
+    
+    # Check 3: Completion marker in log file
+    if not scan_completed and log_file.exists():
         try:
             with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
                 log_content = f.read()
                 if "SimpleSecCheck Security Scan Sequence Completed" in log_content:
-                    scan_really_done = True
+                    scan_completed = True
                 elif "SimpleSecCheck Docker Security Scan Completed" in log_content:
-                    scan_really_done = True
+                    scan_completed = True
                 elif "Security scan completed" in log_content:
-                    scan_really_done = True
+                    scan_completed = True
         except Exception:
             pass  # Non-critical
-    
-    # If process exited successfully, scan is done (even if log file doesn't exist yet)
-    if return_code == 0:
-        scan_really_done = True
     
     # Capture any error output for debugging and user feedback
     error_message = None
@@ -300,16 +393,12 @@ async def monitor_scan(process: subprocess.Popen, scan_id: str, current_scan: di
             print(f"[Scan Error] Failed to read error output: {e}")
             error_message = f"Failed to capture error details: {str(e)}"
     
-    # Update state based on whether scan is really done
-    if scan_really_done:
-        if return_code == 0:
-            current_scan["status"] = "done"
-            current_scan["error_code"] = None
-            current_scan["error_message"] = None
-        else:
-            current_scan["status"] = "error"
-            current_scan["error_code"] = return_code
-            current_scan["error_message"] = error_message
+    # Update state based on whether scan is completed
+    if scan_completed:
+        # If scan is completed (report exists or exit code 0), mark as done
+        current_scan["status"] = "done"
+        current_scan["error_code"] = None
+        current_scan["error_message"] = None
         
         # Cleanup temporary repository after scan is done
         temp_clone_path_str = current_scan.get("temp_clone_path")
@@ -322,8 +411,8 @@ async def monitor_scan(process: subprocess.Popen, scan_id: str, current_scan: di
         current_scan["status"] = "running"
         asyncio.create_task(recheck_scan_status(scan_id, results_dir_path, return_code, error_message, current_scan, results_dir))
     
-    # Schedule shutdown after scan if enabled (only if really done)
-    if scan_really_done and SHUTDOWN_AFTER_SCAN and AUTO_SHUTDOWN_ENABLED:
+    # Schedule shutdown after scan if enabled (only if completed)
+    if scan_completed and SHUTDOWN_AFTER_SCAN and AUTO_SHUTDOWN_ENABLED:
         print(f"[Auto-Shutdown] Scan completed, will shutdown in {SHUTDOWN_DELAY}s...")
         schedule_shutdown(delay=SHUTDOWN_DELAY)
 

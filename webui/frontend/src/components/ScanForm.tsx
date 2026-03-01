@@ -167,6 +167,22 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
         </div>
       </div>
 
+      {scanType === 'code' && (
+        <div className="form-group">
+          <label>
+            <input
+              type="checkbox"
+              checked={ciMode}
+              onChange={(e) => setCiMode(e.target.checked)}
+            />
+            CI Mode (scan only tracked files) (GitHub/GitLab)
+          </label>
+          <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
+            Scans only files tracked by Git (ignores untracked files)
+          </small>
+        </div>
+      )}
+
       {scanType !== 'network' && (
         <div className="form-group">
           <label htmlFor="target">
@@ -267,17 +283,6 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
           )}
         </div>
       )}
-
-      <div className="form-group">
-        <label>
-          <input
-            type="checkbox"
-            checked={ciMode}
-            onChange={(e) => setCiMode(e.target.checked)}
-          />
-          CI Mode (scan only tracked files)
-        </label>
-      </div>
 
       <div className="form-group">
         <label htmlFor="finding-policy">Finding Policy (optional)</label>
