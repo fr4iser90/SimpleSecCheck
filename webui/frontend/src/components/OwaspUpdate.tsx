@@ -220,17 +220,17 @@ export default function OwaspUpdate() {
         </div>
       </div>
 
-      <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f8f9fa', borderRadius: '4px' }}>
+      <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(0, 0, 0, 0.2)', borderRadius: '4px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span style={{ color: getStatusColor(), fontWeight: 'bold' }}>{getStatusText()}</span>
             {status.started_at && (
-              <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>
+              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--text-dark, #f8f9fa)' }}>
                 Started: {new Date(status.started_at).toLocaleString()}
               </span>
             )}
             {status.finished_at && (
-              <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>
+              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--text-dark, #f8f9fa)' }}>
                 Finished: {new Date(status.finished_at).toLocaleString()}
               </span>
             )}
