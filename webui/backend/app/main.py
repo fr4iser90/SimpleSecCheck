@@ -43,6 +43,7 @@ from app.services import (
     get_update_logs as get_update_logs_service,
     stop_update as stop_update_service,
 )
+from app.services.ai_prompt_service import collect_findings_from_results, generate_ai_prompt
 
 # Configuration
 # Try multiple paths for flexibility (dev vs production)
@@ -296,6 +297,39 @@ async def get_report():
         media_type="text/html",
         headers={"Content-Disposition": "inline"}
     )
+
+
+@app.get("/api/scan/ai-prompt")
+async def get_ai_prompt(token_saving: bool = False, policy_path: str = "config/finding-policy.json"):
+    """
+    Generate AI prompt with all findings for false positive analysis
+    
+    Args:
+        token_saving: If True, generate Chinese prompt (token-efficient)
+        policy_path: Path where finding policy should be placed
+    """
+    update_activity()
+    
+    if current_scan["results_dir"] is None:
+        raise HTTPException(status_code=404, detail="No scan results available")
+    
+    results_dir = Path(current_scan["results_dir"])
+    
+    # Collect all findings
+    findings = collect_findings_from_results(results_dir)
+    
+    if not findings:
+        raise HTTPException(status_code=404, detail="No findings found in scan results")
+    
+    # Generate prompt
+    prompt = generate_ai_prompt(findings, token_saving=token_saving, policy_path=policy_path)
+    
+    return {
+        "prompt": prompt,
+        "findings_count": len(findings),
+        "token_saving": token_saving,
+        "policy_path": policy_path
+    }
 
 
 @app.get("/api/results")

@@ -2,8 +2,12 @@
 import os
 import sys
 
-# Ensure the scripts directory is in the path for llm client imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Setup paths using central path_setup module
+# NO PATH CALCULATIONS HERE - everything is handled by path_setup.py
+sys.path.insert(0, "/project/src")
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))  # For import
+from core.path_setup import setup_paths
+setup_paths()
 
 llm_provider = os.environ.get('LLM_PROVIDER', 'openai').lower()
 llm_config = {

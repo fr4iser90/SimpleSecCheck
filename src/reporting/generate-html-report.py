@@ -11,11 +11,12 @@ from defusedxml.ElementTree import parse as safe_parse
 from defusedxml import defuse_stdlib
 defuse_stdlib()
 import traceback
+# Setup paths using central path_setup module
+# NO PATH CALCULATIONS HERE - everything is handled by path_setup.py
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.join(BASE_DIR, "processors"))
-sys.path.insert(0, os.path.join(BASE_DIR, "core"))  # Add core/ directly to path (like processors/)
-sys.path.insert(0, "/SimpleSecCheck/scripts")
+sys.path.insert(0, BASE_DIR)  # Add src/ to path first so we can import core.path_setup
+from core.path_setup import setup_paths
+setup_paths()
 
 from html_utils import html_header, html_footer, generate_visual_summary_section, generate_overall_summary_and_links_section, generate_executive_summary, generate_tool_status_section
 from zap_processor import zap_summary, generate_zap_html_section

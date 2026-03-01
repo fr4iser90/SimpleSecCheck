@@ -4,7 +4,12 @@ import html
 import json
 
 # Add parent directory to path for imports
-sys.path.insert(0, '/SimpleSecCheck')
+# Setup paths using central path_setup module
+# NO PATH CALCULATIONS HERE - everything is handled by path_setup.py
+sys.path.insert(0, "/project/src")
+sys.path.insert(0, "/SimpleSecCheck")  # For import
+from core.path_setup import setup_paths
+setup_paths()
 
 pass
 

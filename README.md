@@ -69,7 +69,7 @@ SimpleSecCheck is a powerful, single-shot Docker-based security scanner that per
 - **Unified Reporting:** Consolidated HTML reports with all findings
 - **Zero Infrastructure:** No databases, no persistent services, no monitoring
 - **Docker-Based:** Isolated, secure scanning environment
-- **Easy Usage:** Simple `./run-docker.sh` command for everything
+- **Easy Usage:** Simple `./bin/run-docker.sh` command for everything
 
 ---
 
@@ -88,19 +88,22 @@ git clone https://github.com/fr4iser90/SimpleSecCheck.git
 cd SimpleSecCheck
 
 # Make the script executable (one-time setup)
-chmod +x run-docker.sh
+chmod +x bin/run-docker.sh
 
 # Scan a local code project
-./run-docker.sh /path/to/your/project
+./bin/run-docker.sh /path/to/your/project
+
+# Scan a Git repository (GitHub/GitLab URL) - automatically clones and scans
+./bin/run-docker.sh https://github.com/user/repo
 
 # CI-friendly code scan (tracked files only + noise-reduction defaults)
-./run-docker.sh --ci /path/to/your/project
+./bin/run-docker.sh --ci /path/to/your/project
 
 # Use a project-specific finding policy from target repo
-./run-docker.sh --finding-policy config/finding-policy.json /path/to/your/project
+./bin/run-docker.sh --finding-policy config/finding-policy.json /path/to/your/project
 
 # Scan a website
-./run-docker.sh https://example.com
+./bin/run-docker.sh https://example.com
 ```
 
 That's it! Results will be available in the `results/` directory.
@@ -120,10 +123,13 @@ docker-compose --profile webui up
 
 **WebUI Features:**
 - ✅ Start scans via web interface
+- ✅ **Git Repository Support:** Direct GitHub/GitLab URL input with automatic cloning
+- ✅ **Branch Selection:** Automatic branch detection with manual selection option
 - ✅ Live progress and logs during scan execution
 - ✅ View HTML reports directly in browser
 - ✅ Browse local results with file browser
 - ✅ Auto-shutdown feature for security (configurable idle timeout)
+- ✅ **Automatic Cleanup:** Temporary Git repositories are automatically deleted after scan
 
 **Security Notes:**
 - WebUI binds to `127.0.0.1:8080` by default (localhost only)
@@ -131,7 +137,7 @@ docker-compose --profile webui up
 - WebUI follows single-shot principle: no database, no persistent state
 - Each scan is independent - no history tracking
 
-**WebUI is completely optional** - the CLI (`./run-docker.sh`) still works as before.
+**WebUI is completely optional** - the CLI (`./bin/run-docker.sh`) still works as before.
 
 See [webui/README.md](webui/README.md) for more details.
 
@@ -158,6 +164,10 @@ docker run --rm \
   -e SCAN_TYPE=code \
   fr4iser/simpleseccheck:latest \
   /SimpleSecCheck/bin/security-check.sh
+
+# Scan a Git repository (GitHub/GitLab URL)
+# Note: Use the wrapper script for Git repository scanning (automatically clones and cleans up)
+./bin/run-docker.sh https://github.com/user/repo
 
 # Scan a website
 docker run --rm \
@@ -188,21 +198,28 @@ docker run --rm \
 #### 🌐 Website/Domain Scanning
 Scan any public website or application:
 ```bash
-./run-docker.sh https://example.com
+./bin/run-docker.sh https://example.com
 ```
 ![Website Scan Example](assets/1.png)
 
 #### 💻 Local Codebase Scanning
 Scan your local project for security issues:
 ```bash
-./run-docker.sh /path/to/your/project
+./bin/run-docker.sh /path/to/your/project
 ```
 ![Codebase Scan Example](assets/2.png)
+
+#### 🔗 Git Repository Scanning
+Scan a Git repository directly from GitHub or GitLab (automatically clones, scans, and cleans up):
+```bash
+./bin/run-docker.sh https://github.com/user/repo
+./bin/run-docker.sh https://gitlab.com/user/repo
+```
 
 #### 🏠 Local Network Scanning
 Scan applications in your local Docker network (e.g., `http://host.docker.internal:8000`):
 ```bash
-./run-docker.sh network
+./bin/run-docker.sh network
 ```
 ![Local Network Scan Example](assets/3.png)
 
@@ -380,6 +397,7 @@ docker run --rm \
 After scanning, results are available in the `results/[project]_[timestamp]/` directory:
 
 - **Code scans:** `results/[ProjectName]_[timestamp]/` (e.g., `SimplePDFEditor_20251028_175751/`)
+- **Git repository scans:** `results/[RepoName]_[timestamp]/` (e.g., `PIDEA_20260301_101656/`)
 - **Website scans:** `results/[domain]_[timestamp]/`
 - **Network scans:** `results/network-infrastructure_[timestamp]/`
 

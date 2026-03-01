@@ -1190,6 +1190,8 @@ if [ -f "$HTML_REPORT_PY_SCRIPT" ]; then
     log_message "Generating consolidated HTML report to $HTML_REPORT_OUTPUT_FILE..."
     # Export OUTPUT_FILE so the Python script knows where the output should be
     export OUTPUT_FILE="$HTML_REPORT_OUTPUT_FILE"
+    # Export RESULTS_DIR so the Python script can find JSON files
+    export RESULTS_DIR="$RESULTS_DIR_IN_CONTAINER"
     # The generate-html-report.py script's debug messages will go to stderr, which is not captured by default here.
     # To capture its stderr into the main log, you'd add 2>&1 after it.
     if PYTHONUNBUFFERED=1 python3 "$HTML_REPORT_PY_SCRIPT" >> "$LOG_FILE" 2>&1; then

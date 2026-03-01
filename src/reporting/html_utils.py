@@ -671,6 +671,57 @@ window.onload = function() {{
   // Always default to dark mode
   document.body.classList.add('dark');
 }};
+
+async function generateAIPrompt() {{
+  const btn = document.getElementById('ai-prompt-btn');
+  const status = document.getElementById('ai-prompt-status');
+  const tokenSaving = document.getElementById('token-saving').checked;
+  const policyPath = document.getElementById('policy-path').value;
+  
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating...';
+  status.style.display = 'none';
+  
+  try {{
+    const response = await fetch(`/api/scan/ai-prompt?token_saving=${{tokenSaving}}&policy_path=${{encodeURIComponent(policyPath)}}`);
+    if (response.ok) {{
+      const data = await response.json();
+      await navigator.clipboard.writeText(data.prompt);
+      btn.textContent = '✓ Copied!';
+      status.textContent = `Prompt copied to clipboard (${{data.findings_count}} findings, ${{tokenSaving ? '中文 (Chinese)' : 'English'}})`;
+      status.style.display = 'inline';
+      status.style.color = 'var(--color-pass)';
+      setTimeout(() => {{
+        btn.textContent = '🤖 AI Prompt';
+        btn.disabled = false;
+        status.style.display = 'none';
+      }}, 4000);
+    }} else {{
+      const error = await response.text();
+      btn.textContent = '❌ Error';
+      status.textContent = 'Failed to generate prompt. Check console.';
+      status.style.display = 'inline';
+      status.style.color = 'var(--color-critical)';
+      console.error('AI Prompt Error:', error);
+      setTimeout(() => {{
+        btn.textContent = '🤖 AI Prompt';
+        btn.disabled = false;
+        status.style.display = 'none';
+      }}, 3000);
+    }}
+  }} catch (error) {{
+    btn.textContent = '❌ Error';
+    status.textContent = 'Failed to generate prompt. Check console.';
+    status.style.display = 'inline';
+    status.style.color = 'var(--color-critical)';
+    console.error('AI Prompt Error:', error);
+    setTimeout(() => {{
+      btn.textContent = '🤖 AI Prompt';
+      btn.disabled = false;
+      status.style.display = 'none';
+    }}, 3000);
+  }}
+}}
 </script>\n
 <script src="webui.js"></script>\n
 </head>\n
@@ -683,7 +734,23 @@ window.onload = function() {{
         <span>📅 {title}</span>\n
       </div>\n
     </div>\n
-    <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n
+    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">\n
+      <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n
+      <div id="ai-prompt-container" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; padding: 0.5rem; background: var(--glass-bg); border-radius: 8px; border: 1px solid var(--glass-border);">\n
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer;">\n
+          <input type="checkbox" id="token-saving" style="cursor: pointer;">\n
+          <span>Token Saving (中文)</span>\n
+        </label>\n
+        <select id="policy-path" style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: inherit; font-size: 0.9rem; cursor: pointer;">\n
+          <option value="config/finding-policy.json">config/finding-policy.json</option>\n
+          <option value="config/policy/finding-policy.json">config/policy/finding-policy.json</option>\n
+          <option value="security/finding-policy.json">security/finding-policy.json</option>\n
+          <option value=".security/finding-policy.json">.security/finding-policy.json</option>\n
+        </select>\n
+        <button id="ai-prompt-btn" class="toggle-btn" onclick="generateAIPrompt()" style="background: linear-gradient(135deg, #6c757d, #495057);">🤖 AI Prompt</button>\n
+        <span id="ai-prompt-status" style="font-size: 0.85rem; opacity: 0.8; display: none;"></span>\n
+      </div>\n
+    </div>\n
   </div>\n
 </div>\n
 <div class="container">\n'''

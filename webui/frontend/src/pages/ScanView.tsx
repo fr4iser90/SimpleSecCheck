@@ -27,6 +27,13 @@ export default function ScanView() {
     }
   )
 
+  // AI Prompt state
+  const [aiPromptCopied, setAiPromptCopied] = useState(false)
+  const [tokenSaving, setTokenSaving] = useState(false)
+  const [policyPath, setPolicyPath] = useState("config/finding-policy.json")
+  const [customPolicyPath, setCustomPolicyPath] = useState("")
+  const [useCustomPath, setUseCustomPath] = useState(false)
+
   // Poll status every 2 seconds if scan is running
   useEffect(() => {
     if (status.status === 'running' && status.scan_id) {
@@ -63,6 +70,26 @@ export default function ScanView() {
     navigate('/')
   }
 
+  const handleCopyAIPrompt = async () => {
+    try {
+      const finalPolicyPath = useCustomPath ? customPolicyPath : policyPath
+      const response = await fetch(
+        `/api/scan/ai-prompt?token_saving=${tokenSaving}&policy_path=${encodeURIComponent(finalPolicyPath)}`
+      )
+      if (response.ok) {
+        const data = await response.json()
+        await navigator.clipboard.writeText(data.prompt)
+        setAiPromptCopied(true)
+        setTimeout(() => setAiPromptCopied(false), 3000)
+      } else {
+        alert('Failed to generate AI prompt')
+      }
+    } catch (error) {
+      console.error('Error copying AI prompt:', error)
+      alert('Failed to copy AI prompt')
+    }
+  }
+
   return (
     <div className="container">
       <div className="card">
@@ -83,27 +110,131 @@ export default function ScanView() {
       {status.status === 'done' && status.results_dir && (
         <>
           <div className="card">
-            <h2>✅ Scan Completed</h2>
-            <p>Scan ID: {status.scan_id}</p>
-            {getResultLink() && (
-              <a 
-                href={getResultLink()} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-block',
-                  marginTop: '1rem',
-                  padding: '0.75rem 1.5rem',
-                  background: '#007bff',
-                  color: 'white',
-                  textDecoration: 'none',
-                  borderRadius: '4px',
-                  fontWeight: 'bold'
-                }}
-              >
-                📊 View Results
-              </a>
-            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div>
+                <h2 style={{ margin: 0 }}>✅ Scan Completed</h2>
+                <p style={{ margin: '0.5rem 0 0 0' }}>Scan ID: {status.scan_id}</p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={tokenSaving}
+                    onChange={(e) => setTokenSaving(e.target.checked)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <span>Token Saving (中文)</span>
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <span>Policy:</span>
+                    {!useCustomPath ? (
+                      <>
+                        <select
+                          value={policyPath}
+                          onChange={(e) => {
+                            if (e.target.value === "custom") {
+                              setUseCustomPath(true)
+                              setCustomPolicyPath("")
+                            } else {
+                              setPolicyPath(e.target.value)
+                            }
+                          }}
+                          style={{
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: '4px',
+                            border: '1px solid #ccc',
+                            fontSize: '0.9rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="config/finding-policy.json">config/finding-policy.json</option>
+                          <option value="config/policy/finding-policy.json">config/policy/finding-policy.json</option>
+                          <option value="security/finding-policy.json">security/finding-policy.json</option>
+                          <option value=".security/finding-policy.json">.security/finding-policy.json</option>
+                          <option value="custom">Custom...</option>
+                        </select>
+                      </>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <input
+                          type="text"
+                          value={customPolicyPath}
+                          onChange={(e) => setCustomPolicyPath(e.target.value)}
+                          placeholder="e.g., config/my-policy.json"
+                          style={{
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: '4px',
+                            border: '1px solid #ccc',
+                            fontSize: '0.9rem',
+                            width: '200px'
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              setUseCustomPath(false)
+                              setCustomPolicyPath("")
+                              setPolicyPath("config/finding-policy.json")
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            setUseCustomPath(false)
+                            setCustomPolicyPath("")
+                            setPolicyPath("config/finding-policy.json")
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '1rem',
+                            color: '#dc3545',
+                            padding: '0',
+                            lineHeight: '1'
+                          }}
+                          title="Reset to default"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </label>
+                </div>
+                <button
+                  onClick={handleCopyAIPrompt}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    background: aiPromptCopied ? '#28a745' : '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    transition: 'background 0.2s'
+                  }}
+                >
+                  {aiPromptCopied ? '✓ Copied!' : '🤖 AI Prompt'}
+                </button>
+                {getResultLink() && (
+                  <a 
+                    href={getResultLink()} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-block',
+                      padding: '0.75rem 1.5rem',
+                      background: '#007bff',
+                      color: 'white',
+                      textDecoration: 'none',
+                      borderRadius: '4px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    📊 View Results
+                  </a>
+                )}
+              </div>
+            </div>
           </div>
           <div className="card">
             <h2>Security Report</h2>

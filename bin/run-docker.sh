@@ -111,11 +111,33 @@ else
     SCAN_TYPE="code"
     TARGET_PATH="$TARGET"
     ZAP_TARGET=""
-    PROJECT_NAME=$(basename "$TARGET")
+    # Check if TARGET is a temporary Git clone path (contains "simpleseccheck_git" or "/tmp/")
+    # If so, try to extract project name from GIT_URL environment variable or use basename
+    if [[ "$TARGET" =~ simpleseccheck_git ]] || [[ "$TARGET" =~ ^/.*/tmp/ ]]; then
+        # Temporary Git clone path - try to get repo name from GIT_URL or use basename of parent
+        if [ -n "${GIT_URL:-}" ]; then
+            # Extract repo name from Git URL (same logic as step_service.py)
+            if [[ "$GIT_URL" =~ github\.com ]] || [[ "$GIT_URL" =~ gitlab\.com ]]; then
+                PROJECT_NAME=$(echo "$GIT_URL" | sed 's|.*/||' | sed 's|\.git$||')
+            else
+                PROJECT_NAME=$(basename "$TARGET")
+            fi
+        else
+            # Fallback: use basename of target (will be temp dir name, but better than nothing)
+            PROJECT_NAME=$(basename "$TARGET")
+        fi
+    else
+        # Regular local path
+        PROJECT_NAME=$(basename "$TARGET")
+    fi
 fi
 
-# Add timestamp for uniqueness
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+# Use SCAN_ID if provided (from WebUI), otherwise generate timestamp
+if [ -n "${SCAN_ID:-}" ]; then
+    TIMESTAMP="$SCAN_ID"
+else
+    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+fi
 PROJECT_DIR="${PROJECT_NAME}_${TIMESTAMP}"
 
 # Determine host project root (needed when running from WebUI container)
