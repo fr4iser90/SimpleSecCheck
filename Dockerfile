@@ -105,6 +105,9 @@ RUN export GITLEAKS_URL=$(wget -qO- https://api.github.com/repos/gitleaks/gitlea
 # Install ESLint and security plugins
 RUN npm install -g eslint eslint-plugin-security @typescript-eslint/parser @typescript-eslint/eslint-plugin
 
+# Install TypeScript for compiling typescript files
+RUN npm install -g typescript
+
 # Install Nikto (Web server scanner)
 RUN apt-get update && apt-get install -y perl libwww-perl liblwp-protocol-https-perl unzip && \
     wget https://github.com/sullo/nikto/archive/master.zip -O nikto.zip && \
@@ -174,6 +177,11 @@ RUN useradd -m -u 1000 -s /bin/bash scanner && \
 # Make scripts executable
 RUN chmod +x /SimpleSecCheck/bin/security-check.sh
 RUN chmod +x /SimpleSecCheck/src/core/configure.py
+
+# Compile TypeScript files (uses tsconfig.json automatically)
+RUN cd /SimpleSecCheck/src/reporting && \
+    tsc && \
+    echo "TypeScript files compiled successfully"
 
 # Install sudo and configure passwordless sudo for scanner user
 RUN apt-get install -y sudo && \
