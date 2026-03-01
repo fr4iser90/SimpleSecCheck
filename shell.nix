@@ -173,16 +173,16 @@ pkgs.mkShell {
     alias d-clean="docker-compose down -v --remove-orphans"
     
     # --- SimpleSecCheck Aliases ---
-    alias ssc-cli="./bin/run-docker.sh"
+    alias ssc-cli="./scripts/run-docker.sh"
     alias ssc-webui-up="docker-compose --profile webui up -d"
     alias ssc-webui-down="docker-compose --profile webui down"
     alias ssc-webui-logs="docker-compose --profile webui logs -f webui"
     alias ssc-webui-restart="docker-compose --profile webui restart webui"
     alias ssc-webui-build="docker-compose --profile webui build webui"
     alias ssc-webui-stop="docker-compose --profile webui stop webui"
-    alias ssc-scan-code="./bin/run-docker.sh"
-    alias ssc-scan-website="./bin/run-docker.sh"
-    alias ssc-scan-network="./bin/run-docker.sh network"
+    alias ssc-scan-code="./scripts/run-docker.sh"
+    alias ssc-scan-website="./scripts/run-docker.sh"
+    alias ssc-scan-network="./scripts/run-docker.sh network"
     
     # --- Hot Reload Aliases ---
     alias hot-fe="cd frontend && npm run dev -- --host"
@@ -281,7 +281,7 @@ EOL
     echo "  d-clean     - Clean up containers and volumes"
     echo ""
     echo "SimpleSecCheck commands:"
-    echo "  ssc-cli           - Run CLI scan (./bin/run-docker.sh)"
+    echo "  ssc-cli           - Run CLI scan (./scripts/run-docker.sh)"
     echo "  ssc-webui-up      - Start WebUI (docker-compose --profile webui up -d)"
     echo "  ssc-webui-down    - Stop WebUI"
     echo "  ssc-webui-logs    - Show WebUI logs"

@@ -175,13 +175,11 @@ RUN useradd -m -u 1000 -s /bin/bash scanner && \
     chown -R scanner:scanner /SimpleSecCheck /zap
 
 # Make scripts executable
-RUN chmod +x /SimpleSecCheck/bin/security-check.sh
+RUN chmod +x /SimpleSecCheck/scripts/security-check.sh
 RUN chmod +x /SimpleSecCheck/src/core/configure.py
 
 # Compile TypeScript files (uses tsconfig.json automatically)
-RUN cd /SimpleSecCheck/src/reporting && \
-    tsc && \
-    echo "TypeScript files compiled successfully"
+RUN cd /SimpleSecCheck/src/reporting && tsc
 
 # Install sudo and configure passwordless sudo for scanner user
 RUN apt-get install -y sudo && \

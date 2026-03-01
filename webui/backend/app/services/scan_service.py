@@ -172,7 +172,7 @@ async def start_scan(
         cmd.extend(["-v", "/var/run/docker.sock:/var/run/docker.sock:ro"])
     
     # Scanner command
-    cmd.extend(["scanner", "/SimpleSecCheck/bin/security-check.sh"])
+    cmd.extend(["scanner", "/SimpleSecCheck/scripts/security-check.sh"])
     
     print(f"[Scan Service] Executing docker-compose command: {' '.join(cmd)}")
     

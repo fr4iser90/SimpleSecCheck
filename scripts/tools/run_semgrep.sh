@@ -9,7 +9,7 @@
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
 LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
-SEMGREP_RULES_PATH="${SEMGREP_RULES_PATH:-/SimpleSecCheck/rules}" # Default rules path
+SEMGREP_RULES_PATH="${SEMGREP_RULES_PATH:-/SimpleSecCheck/config/rules}" # Default rules path
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"
 

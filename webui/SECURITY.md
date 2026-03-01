@@ -10,11 +10,11 @@
 ### Read-Only Volumes
 - All host volumes mounted read-only (`:ro`)
 - Prevents accidental modification of:
-  - CLI scripts (`bin/`)
+  - CLI scripts (`scripts/`)
   - Results (`results/`)
   - Logs (`logs/`)
   - Config (`config/`)
-  - Rules (`rules/`)
+  - Rules (`config/rules/`)
 
 ### Docker Socket Access
 - Docker socket mounted read-only (`:ro`)
@@ -124,7 +124,7 @@ WEBUI_AUTO_SHUTDOWN=false
 ### Current: Docker Socket (Read-Only)
 
 **How it works:**
-- WebUI calls `bin/run-docker.sh`
+- WebUI calls `scripts/run-docker.sh`
 - Script uses `docker-compose` which needs Docker socket
 - Socket mounted read-only (`:ro`)
 
@@ -137,7 +137,7 @@ WEBUI_AUTO_SHUTDOWN=false
 
 **Better approach:**
 - Use Docker API directly instead of `docker-compose`
-- Requires refactoring `bin/run-docker.sh`
+- Requires refactoring `scripts/run-docker.sh`
 - Can use TLS certificates for authentication
 - More granular permission control
 

@@ -103,3 +103,127 @@ def get_owasp_data_path_host() -> str:
         return None
     
     return os.path.join(host_project_root, "owasp-dependency-check-data")
+
+
+def get_results_dir():
+    """
+    Get RESULTS_DIR from environment variable.
+    MUST be set - no default!
+    Returns: RESULTS_DIR path or None if not set
+    """
+    return os.environ.get('RESULTS_DIR')
+
+
+def get_output_file():
+    """
+    Get OUTPUT_FILE from environment variable or calculate from RESULTS_DIR.
+    Returns: OUTPUT_FILE path or None if RESULTS_DIR not set
+    """
+    output_file = os.environ.get('OUTPUT_FILE')
+    if output_file:
+        return output_file
+    
+    results_dir = get_results_dir()
+    if not results_dir:
+        return None
+    
+    return os.path.join(results_dir, 'security-summary.html')
+
+
+def get_webui_base_dir():
+    """
+    Get WebUI base directory (SimpleSecCheck root).
+    Returns: Path object or None
+    """
+    from pathlib import Path
+    
+    # Try from environment
+    base_dir_env = os.environ.get('WEBUI_BASE_DIR')
+    if base_dir_env:
+        return Path(base_dir_env)
+    
+    # Try /app (container)
+    app_path = Path("/app")
+    if app_path.exists():
+        return app_path
+    
+    # Try to find from current file location (dev/local)
+    # This file is in src/core/, so go up 2 levels to get project root
+    current_file = Path(__file__)
+    project_root = current_file.parent.parent.parent
+    if (project_root / "scripts" / "run-docker.sh").exists():
+        return project_root
+    
+    return None
+
+
+def get_webui_cli_script():
+    """
+    Get WebUI CLI script path (scripts/run-docker.sh).
+    Returns: Path object or None
+    """
+    base_dir = get_webui_base_dir()
+    if not base_dir:
+        return None
+    
+    script_path = base_dir / "scripts" / "run-docker.sh"
+    if script_path.exists():
+        return script_path
+    
+    return None
+
+
+def get_webui_results_dir():
+    """
+    Get WebUI results directory.
+    Returns: Path object or None
+    """
+    base_dir = get_webui_base_dir()
+    if not base_dir:
+        return None
+    
+    return base_dir / "results"
+
+
+def get_webui_logs_dir():
+    """
+    Get WebUI logs directory.
+    Returns: Path object or None
+    """
+    base_dir = get_webui_base_dir()
+    if not base_dir:
+        return None
+    
+    return base_dir / "logs"
+
+
+def get_webui_owasp_data_dir():
+    """
+    Get WebUI OWASP data directory.
+    Returns: Path object or None
+    """
+    base_dir = get_webui_base_dir()
+    if not base_dir:
+        return None
+    
+    return base_dir / "owasp-dependency-check-data"
+
+
+def get_webui_frontend_paths():
+    """
+    Get WebUI frontend static paths (multiple fallbacks).
+    Returns: List of Path objects
+    """
+    from pathlib import Path
+    
+    base_dir = get_webui_base_dir()
+    if not base_dir:
+        return []
+    
+    paths = [
+        base_dir / "webui" / "frontend" / "dist",
+        base_dir / "static",
+        Path("/app/static"),
+    ]
+    
+    return paths

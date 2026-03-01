@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 SimpleSecCheck WebUI Backend
-Minimal FastAPI backend that wraps the CLI (bin/run-docker.sh)
+Minimal FastAPI backend that wraps the CLI (scripts/run-docker.sh)
 Single-shot principle: No database, no state, just CLI wrapper
 """
 
@@ -49,24 +49,32 @@ from app.services import (
 )
 from app.services.ai_prompt_service import collect_findings_from_results, generate_ai_prompt
 
-# Configuration
-# Try multiple paths for flexibility (dev vs production)
-BASE_DIR = Path(__file__).parent.parent.parent.parent  # SimpleSecCheck root
-if not (BASE_DIR / "bin" / "run-docker.sh").exists():
-    # Try alternative path (when running in container)
-    BASE_DIR = Path("/app")
+# Configuration - ALL PATHS FROM CENTRAL path_setup.py
+# NO PATH CALCULATIONS HERE!
+import sys
+sys.path.insert(0, "/project/src")
+sys.path.insert(0, "/SimpleSecCheck/src")
+from core.path_setup import (
+    get_webui_base_dir,
+    get_webui_cli_script,
+    get_webui_results_dir,
+    get_webui_logs_dir,
+    get_webui_owasp_data_dir,
+    get_webui_frontend_paths
+)
 
-CLI_SCRIPT = BASE_DIR / "bin" / "run-docker.sh"
-RESULTS_DIR = BASE_DIR / "results"
-LOGS_DIR = BASE_DIR / "logs"
-OWASP_DATA_DIR = BASE_DIR / "owasp-dependency-check-data"
+BASE_DIR = get_webui_base_dir()
+CLI_SCRIPT = get_webui_cli_script()
+RESULTS_DIR = get_webui_results_dir()
+LOGS_DIR = get_webui_logs_dir()
+OWASP_DATA_DIR = get_webui_owasp_data_dir()
 
 # CLI script is only needed for direct CLI usage (not for WebUI)
 # WebUI calls docker-compose directly, so this validation is optional
-if not CLI_SCRIPT.exists() and os.path.exists("/app"):
+if CLI_SCRIPT and not CLI_SCRIPT.exists() and os.path.exists("/app"):
     # Running in container (WebUI) - script not needed
     pass
-elif not CLI_SCRIPT.exists():
+elif CLI_SCRIPT and not CLI_SCRIPT.exists():
     # Running on host without script - warn but don't fail (WebUI doesn't need it)
     print(f"[WARNING] CLI script not found: {CLI_SCRIPT} (WebUI will use docker-compose directly)")
 
@@ -216,7 +224,7 @@ async def get_git_branches(url: str):
 @app.post("/api/scan/start", response_model=ScanStatus)
 async def start_scan(request: ScanRequest):
     """
-    Start a scan by calling bin/run-docker.sh
+    Start a scan by calling scripts/run-docker.sh
     Single-shot: Only one scan at a time
     """
     update_activity()
@@ -454,15 +462,11 @@ async def stop_owasp_update():
 
 
 # Serve frontend static files (after API routes)
-# Try multiple paths (dev vs production)
-frontend_paths = [
-    BASE_DIR / "webui" / "frontend" / "dist",
-    BASE_DIR / "static",  # For docker-compose build
-    Path("/app/static"),   # For docker container
-]
+# ALL PATHS FROM CENTRAL path_setup.py
+frontend_paths = get_webui_frontend_paths()
 
 for frontend_dir in frontend_paths:
-    if frontend_dir.exists():
+    if frontend_dir and frontend_dir.exists():
         app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="static")
         break
 

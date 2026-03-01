@@ -12,7 +12,6 @@ services:
       - ./results:/SimpleSecCheck/results
       - ./logs:/SimpleSecCheck/logs
       - ./config:/SimpleSecCheck/config
-      - ./rules:/SimpleSecCheck/rules
       # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
       - ./owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
       - /var/run/docker.sock:/var/run/docker.sock # For Docker Bench
@@ -21,7 +20,7 @@ services:
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
       - RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results
       - LOGS_DIR_IN_CONTAINER=/SimpleSecCheck/logs
-      - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/rules
+      - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/config/rules
       - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/trivy/config.yaml
       - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/anchore/config.yaml
       - ANCHORE_IMAGE=${ANCHORE_IMAGE:-}
@@ -49,11 +48,10 @@ services:
     ports:
       - "127.0.0.1:8080:8080"  # SAFE: Only localhost, not 0.0.0.0
     volumes:
-      - ./bin:/app/bin:ro                    # CLI Scripts (read-only)
+      - ./scripts:/app/scripts:ro            # CLI Scripts (read-only)
       - ./results:/app/results                # Results (read-write: run-docker.sh needs to create subdirs)
       - ./logs:/app/logs:ro                  # Logs (read-only)
-      - ./config:/app/config:ro              # Config (read-only)
-      - ./rules:/app/rules:ro                # Rules (read-only)
+      - ./config:/app/config:ro              # Config (read-only, includes rules)
       - ./docker-compose.yml:/app/docker-compose.yml:ro  # docker-compose.yml (read-only, needed by run-docker.sh)
       - ./Dockerfile:/app/Dockerfile:ro       # Dockerfile (read-only, needed for scanner build)
       - .:/project:ro                         # Project root (read-only, needed as build context for scanner)

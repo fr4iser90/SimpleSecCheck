@@ -285,7 +285,7 @@ if [ "$SCAN_TYPE" = "network" ]; then
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
         $OWASP_DATA_VOLUME \
         -v /var/run/docker.sock:/var/run/docker.sock:ro \
-        scanner /SimpleSecCheck/bin/security-check.sh; then
+        scanner /SimpleSecCheck/scripts/security-check.sh; then
         log_success "Network security scan completed successfully!"
         OVERALL_SUCCESS=true
     else
@@ -477,7 +477,7 @@ elif [ "$SCAN_TYPE" = "code" ]; then
         -v "$RESULTS_DIR_HOST:/SimpleSecCheck/results" \
         -v "$LOGS_DIR_HOST:/SimpleSecCheck/logs" \
         $OWASP_DATA_VOLUME \
-        scanner /SimpleSecCheck/bin/security-check.sh 2>&1)
+        scanner /SimpleSecCheck/scripts/security-check.sh 2>&1)
     DOCKER_EXIT_CODE=$?
     
     # Write output to log file
@@ -515,7 +515,7 @@ else
         -v "$RESULTS_DIR:/SimpleSecCheck/results" \
         -v "$LOGS_DIR:/SimpleSecCheck/logs" \
         $OWASP_DATA_VOLUME \
-        scanner /SimpleSecCheck/bin/security-check.sh; then
+        scanner /SimpleSecCheck/scripts/security-check.sh; then
         log_success "Website security scan completed successfully!"
         OVERALL_SUCCESS=true
     else

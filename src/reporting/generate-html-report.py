@@ -13,9 +13,7 @@ defuse_stdlib()
 import traceback
 # Setup paths using central path_setup module
 # NO PATH CALCULATIONS HERE - everything is handled by path_setup.py
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, BASE_DIR)  # Add src/ to path first so we can import core.path_setup
-from core.path_setup import setup_paths
+from core.path_setup import setup_paths, get_results_dir, get_output_file
 setup_paths()
 
 from html_utils import html_header, html_footer, generate_visual_summary_section, generate_overall_summary_and_links_section, generate_executive_summary, generate_tool_status_section
@@ -56,8 +54,17 @@ except ImportError:
     def load_metadata(results_dir):
         return None
 
-RESULTS_DIR = os.environ.get('RESULTS_DIR', '/SimpleSecCheck/results')
-OUTPUT_FILE = os.environ.get('OUTPUT_FILE', os.path.join(RESULTS_DIR, 'security-summary.html'))
+# Get paths from central path_setup - NO PATH CALCULATIONS HERE!
+RESULTS_DIR = get_results_dir()
+if not RESULTS_DIR:
+    sys.stderr.write("[ERROR] RESULTS_DIR environment variable is not set!\n")
+    sys.stderr.write("[ERROR] This script must be called via security-check.sh or with RESULTS_DIR set.\n")
+    sys.exit(1)
+
+OUTPUT_FILE = get_output_file()
+if not OUTPUT_FILE:
+    sys.stderr.write("[ERROR] Could not determine OUTPUT_FILE!\n")
+    sys.exit(1)
 
 def debug(msg):
     print(f"[generate-html-report] {msg}", file=sys.stderr)
@@ -440,8 +447,20 @@ def main():
                 # ZAP returns a dict, not a list
                 executed_tools[tool] = {'status': 'complete'}
         
+        # Read and embed JavaScript files inline (required for Blob URLs)
+        embedded_scripts = ""
+        js_files = ['ai_prompt_modal.js', 'webui.js']
+        for js_file in js_files:
+            js_path = os.path.join(RESULTS_DIR, js_file)
+            if os.path.exists(js_path):
+                try:
+                    with open(js_path, 'r', encoding='utf-8') as js_f:
+                        embedded_scripts += f"<script>\n{js_f.read()}\n</script>\n"
+                except Exception as e:
+                    debug(f"Warning: Could not read {js_file}: {e}")
+        
         with open(OUTPUT_FILE, 'w') as f:
-            f.write(html_header(f'{target} - {now}'))
+            f.write(html_header(f'{target} - {now}', embedded_scripts))
             # WebUI Controls Block
             # WebUI Controls removed - using single-shot scans only
 

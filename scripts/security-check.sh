@@ -20,7 +20,7 @@ export LOGS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/logs"
 export LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log" # Central log file
 
 # --- Tool Specific Configurations (absolute paths INSIDE container) ---
-export SEMGREP_RULES_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/rules"
+export SEMGREP_RULES_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/rules"
 export TRIVY_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/trivy/config.yaml"
 export CODEQL_CONFIG_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/codeql/config.yaml"
 export CODEQL_QUERIES_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/tools/codeql/queries"
@@ -1227,24 +1227,28 @@ else
     OVERALL_SUCCESS=false
 fi
 
-# Copy webui.js (if it exists in the orchestrator's script directory)
+# Copy webui.js (compiled from webui.ts during Docker build)
 WEBUI_JS_SOURCE="$BASE_PROJECT_DIR/src/reporting/webui.js"
 WEBUI_JS_DEST="$RESULTS_DIR_IN_CONTAINER/webui.js"
 if [ -f "$WEBUI_JS_SOURCE" ]; then
     cp "$WEBUI_JS_SOURCE" "$WEBUI_JS_DEST"
     log_message "webui.js copied to $WEBUI_JS_DEST"
 else
-    log_message "[WARN] webui.js not found at $WEBUI_JS_SOURCE, not copied."
+    log_message "[ERROR] webui.js not found at $WEBUI_JS_SOURCE - TypeScript compilation may have failed!"
+    log_message "[ERROR] Listing files in $BASE_PROJECT_DIR/src/reporting/:"
+    ls -la "$BASE_PROJECT_DIR/src/reporting/" || true
 fi
 
-# Copy ai_prompt_modal.js (if it exists in the orchestrator's script directory)
+# Copy ai_prompt_modal.js (compiled from ai_prompt_modal.ts during Docker build)
 AI_PROMPT_MODAL_JS_SOURCE="$BASE_PROJECT_DIR/src/reporting/ai_prompt_modal.js"
 AI_PROMPT_MODAL_JS_DEST="$RESULTS_DIR_IN_CONTAINER/ai_prompt_modal.js"
 if [ -f "$AI_PROMPT_MODAL_JS_SOURCE" ]; then
     cp "$AI_PROMPT_MODAL_JS_SOURCE" "$AI_PROMPT_MODAL_JS_DEST"
     log_message "ai_prompt_modal.js copied to $AI_PROMPT_MODAL_JS_DEST"
 else
-    log_message "[WARN] ai_prompt_modal.js not found at $AI_PROMPT_MODAL_JS_SOURCE, not copied."
+    log_message "[ERROR] ai_prompt_modal.js not found at $AI_PROMPT_MODAL_JS_SOURCE - TypeScript compilation may have failed!"
+    log_message "[ERROR] Listing files in $BASE_PROJECT_DIR/src/reporting/:"
+    ls -la "$BASE_PROJECT_DIR/src/reporting/" || true
 fi
 
 log_step_complete "Scan completed successfully"

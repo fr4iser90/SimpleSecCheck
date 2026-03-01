@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-def html_header(title):
+def html_header(title, embedded_scripts=""):
     return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>{title}</title>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<link rel="icon" type="image/png" href="assets/transparent.png">\n<style>\n
 /* ============================================
    GLASSMORPHISM MODERN DESIGN
@@ -672,8 +672,7 @@ window.onload = function() {{
   document.body.classList.add('dark');
 }};
 </script>\n
-<script src="ai_prompt_modal.js"></script>\n
-<script src="webui.js"></script>\n
+{embedded_scripts}
 </head>\n
 <body>\n
 <div class="header">\n

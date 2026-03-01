@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="assets/background.png" alt="SimpleSecCheck Preview" width="100%">
+  <img src="docs/assets/background.png" alt="SimpleSecCheck Preview" width="100%">
 </p>
 
 # SimpleSecCheck - Single-Shot Security Scanner
 
 <div align="center">
-  <img src="assets/transparent.png" alt="SimpleSecCheck Logo" width="128">
+  <img src="docs/assets/transparent.png" alt="SimpleSecCheck Logo" width="128">
   <p><strong>One Command, Complete Security Analysis</strong></p>
 </div>
 
@@ -69,7 +69,7 @@ SimpleSecCheck is a powerful, single-shot Docker-based security scanner that per
 - **Unified Reporting:** Consolidated HTML reports with all findings
 - **Zero Infrastructure:** No databases, no persistent services, no monitoring
 - **Docker-Based:** Isolated, secure scanning environment
-- **Easy Usage:** Simple `./bin/run-docker.sh` command for everything
+- **Easy Usage:** Simple `./scripts/run-docker.sh` command for everything
 
 ---
 
@@ -88,22 +88,22 @@ git clone https://github.com/fr4iser90/SimpleSecCheck.git
 cd SimpleSecCheck
 
 # Make the script executable (one-time setup)
-chmod +x bin/run-docker.sh
+chmod +x scripts/run-docker.sh
 
 # Scan a local code project
-./bin/run-docker.sh /path/to/your/project
+./scripts/run-docker.sh /path/to/your/project
 
 # Scan a Git repository (GitHub/GitLab URL) - automatically clones and scans
-./bin/run-docker.sh https://github.com/user/repo
+./scripts/run-docker.sh https://github.com/user/repo
 
 # CI-friendly code scan (tracked files only + noise-reduction defaults)
-./bin/run-docker.sh --ci /path/to/your/project
+./scripts/run-docker.sh --ci /path/to/your/project
 
 # Use a project-specific finding policy from target repo
-./bin/run-docker.sh --finding-policy config/finding-policy.json /path/to/your/project
+./scripts/run-docker.sh --finding-policy config/finding-policy.json /path/to/your/project
 
 # Scan a website
-./bin/run-docker.sh https://example.com
+./scripts/run-docker.sh https://example.com
 ```
 
 That's it! Results will be available in the `results/` directory.
@@ -119,7 +119,7 @@ docker-compose --profile webui up
 # Access at http://localhost:8080
 ```
 
-![WebUI Interface](assets/webui.png)
+![WebUI Interface](docs/assets/webui.png)
 
 **WebUI Features:**
 - ✅ Start scans via web interface
@@ -137,7 +137,7 @@ docker-compose --profile webui up
 - WebUI follows single-shot principle: no database, no persistent state
 - Each scan is independent - no history tracking
 
-**WebUI is completely optional** - the CLI (`./bin/run-docker.sh`) still works as before.
+**WebUI is completely optional** - the CLI (`./scripts/run-docker.sh`) still works as before.
 
 See [webui/README.md](webui/README.md) for more details.
 
@@ -163,11 +163,11 @@ docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e SCAN_TYPE=code \
   fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/bin/security-check.sh
+  /SimpleSecCheck/scripts/security-check.sh
 
 # Scan a Git repository (GitHub/GitLab URL)
 # Note: Use the wrapper script for Git repository scanning (automatically clones and cleans up)
-./bin/run-docker.sh https://github.com/user/repo
+./scripts/run-docker.sh https://github.com/user/repo
 
 # Scan a website
 docker run --rm \
@@ -179,7 +179,7 @@ docker run --rm \
   -v $(pwd)/rules:/SimpleSecCheck/rules \
   -v $(pwd)/zap:/SimpleSecCheck/zap \
   fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/bin/security-check.sh
+  /SimpleSecCheck/scripts/security-check.sh
 
 # Scan local network/Docker infrastructure
 docker run --rm \
@@ -190,7 +190,7 @@ docker run --rm \
   -v $(pwd)/rules:/SimpleSecCheck/rules \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/bin/security-check.sh
+  /SimpleSecCheck/scripts/security-check.sh
 ```
 
 ### Scan Examples
@@ -198,30 +198,30 @@ docker run --rm \
 #### 🌐 Website/Domain Scanning
 Scan any public website or application:
 ```bash
-./bin/run-docker.sh https://example.com
+./scripts/run-docker.sh https://example.com
 ```
-![Website Scan Example](assets/1.png)
+![Website Scan Example](docs/assets/1.png)
 
 #### 💻 Local Codebase Scanning
 Scan your local project for security issues:
 ```bash
-./bin/run-docker.sh /path/to/your/project
+./scripts/run-docker.sh /path/to/your/project
 ```
-![Codebase Scan Example](assets/2.png)
+![Codebase Scan Example](docs/assets/2.png)
 
 #### 🔗 Git Repository Scanning
 Scan a Git repository directly from GitHub or GitLab (automatically clones, scans, and cleans up):
 ```bash
-./bin/run-docker.sh https://github.com/user/repo
-./bin/run-docker.sh https://gitlab.com/user/repo
+./scripts/run-docker.sh https://github.com/user/repo
+./scripts/run-docker.sh https://gitlab.com/user/repo
 ```
 
 #### 🏠 Local Network Scanning
 Scan applications in your local Docker network (e.g., `http://host.docker.internal:8000`):
 ```bash
-./bin/run-docker.sh network
+./scripts/run-docker.sh network
 ```
-![Local Network Scan Example](assets/3.png)
+![Local Network Scan Example](docs/assets/3.png)
 
 ### What Gets Scanned
 
@@ -315,14 +315,14 @@ The OWASP Dependency Check vulnerability database is cached locally to avoid re-
 
 ```bash
 # Update database (uses public rate limits, slower)
-./bin/update-owasp-db.sh
+./scripts/update-owasp-db.sh
 
 # Update with NVD API key (faster, recommended)
-NVD_API_KEY=your-key ./bin/update-owasp-db.sh
+NVD_API_KEY=your-key ./scripts/update-owasp-db.sh
 
 # Or set NVD_API_KEY in .env file
 echo "NVD_API_KEY=your-key" >> .env
-./bin/update-owasp-db.sh
+./scripts/update-owasp-db.sh
 ```
 
 **Using Docker directly:**
@@ -417,12 +417,12 @@ Open the HTML report in your browser for the best experience!
 
 SimpleSecCheck includes comprehensive security rules:
 
-- **Code Bugs** (`rules/code-bugs.yml`) - Common programming errors
-- **Secrets Detection** (`rules/secrets.yml`) - API keys, passwords, tokens
-- **API Security** (`rules/api-security.yml`) - API vulnerabilities
-- **LLM/AI Security** (`rules/llm-ai-security.yml`) - AI-specific vulnerabilities
-- **Prompt Injection** (`rules/prompt-injection.yml`) - LLM prompt attacks
-- **React Native Security** (`rules/react-native-security.yml`) - Mobile app security issues (AsyncStorage, WebView, deep linking, etc.)
+- **Code Bugs** (`config/rules/code-bugs.yml`) - Common programming errors
+- **Secrets Detection** (`config/rules/secrets.yml`) - API keys, passwords, tokens
+- **API Security** (`config/rules/api-security.yml`) - API vulnerabilities
+- **LLM/AI Security** (`config/rules/llm-ai-security.yml`) - AI-specific vulnerabilities
+- **Prompt Injection** (`config/rules/prompt-injection.yml`) - LLM prompt attacks
+- **React Native Security** (`config/rules/react-native-security.yml`) - Mobile app security issues (AsyncStorage, WebView, deep linking, etc.)
 
 ---
 
@@ -430,14 +430,14 @@ SimpleSecCheck includes comprehensive security rules:
 
 ### Custom Rule Sets
 
-Add your own Semgrep rules to the `rules/` directory:
+Add your own Semgrep rules to the `config/rules/` directory:
 
 ```bash
 # Add custom rules
-echo "rules:" >> rules/custom.yml
-echo "  - id: my-custom-rule" >> rules/custom.yml
-echo "    patterns:" >> rules/custom.yml
-echo "      - pattern: dangerous_function(...)" >> rules/custom.yml
+echo "rules:" >> config/rules/custom.yml
+echo "  - id: my-custom-rule" >> config/rules/custom.yml
+echo "    patterns:" >> config/rules/custom.yml
+echo "      - pattern: dangerous_function(...)" >> config/rules/custom.yml
 ```
 
 ### Direct Docker Compose Usage
@@ -466,7 +466,7 @@ TARGET_URL=https://your-site.com docker-compose run --rm scanner
 
 ## 🤝 Contributing
 
-- Add new security rules to `rules/`
+- Add new security rules to `config/rules/`
 - Extend scanning capabilities in `scripts/tools/`
 - Improve report generation in `scripts/`
 - Submit issues and feature requests

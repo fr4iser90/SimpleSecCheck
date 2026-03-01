@@ -2,8 +2,8 @@
 # SimpleSecCheck - OWASP Dependency Check Database Update Script
 # Updates the cached vulnerability database without running a scan
 # Usage:
-#   ./bin/update-owasp-db.sh
-#   NVD_API_KEY=your-key ./bin/update-owasp-db.sh  # With API key for faster updates
+#   ./scripts/update-owasp-db.sh
+#   NVD_API_KEY=your-key ./scripts/update-owasp-db.sh  # With API key for faster updates
 
 set -e
 
