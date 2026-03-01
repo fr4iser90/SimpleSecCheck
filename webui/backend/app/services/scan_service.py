@@ -171,87 +171,14 @@ async def start_scan(
     
     if request.type == "website":
         env_vars.extend(["-e", f"ZAP_TARGET={clean_target}", "-e", f"TARGET_URL={clean_target}"])
-    temp_tracked_snapshot_dir = None
+    # CI Mode: For local scans, let the scanner container create the tracked snapshot
+    # (The scanner container has access to /target mount, WebUI container does not)
+    # For Git clones, CI mode is not needed (clone already contains only tracked files)
     if request.ci_mode and not git_clone_used and request.type == "code":
-        # For local scans with CI mode, create a tracked snapshot
-        # This matches the logic in run-docker.sh lines 300-330
-        
-        # For local scans, target MUST be mounted as /project in container
-        # Check if /project exists and is a git repository
-        git_check_path = "/project"
-        if not os.path.exists(git_check_path):
-            raise HTTPException(
-                status_code=500,
-                detail="CI Mode: /project mount not found. Local scans with CI mode require target to be mounted as /project."
-            )
-        
-        # Check if target is a git repository
-        git_check = subprocess.run(  # nosec B603, B607
-            ["git", "-C", git_check_path, "rev-parse", "--is-inside-work-tree"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=True
-        )
-        
-        if git_check.returncode == 0 and git_check.stdout.strip() == "true":
-            # Create temporary directory for tracked snapshot
-            # Use results/tmp so it's on the host-mounted volume (use container path)
-            results_tmp_dir = os.path.join(scan_results_dir_container, "tmp")
-            os.makedirs(results_tmp_dir, exist_ok=True)
-            temp_tracked_snapshot_dir = tempfile.mkdtemp(
-                prefix="simpleseccheck-tracked-",
-                dir=results_tmp_dir
-            )
-            
-            print(f"[Scan Service] CI Mode: Creating tracked snapshot in {temp_tracked_snapshot_dir}")
-            
-            # Create git archive
-            git_archive = subprocess.run(  # nosec B603, B607
-                ["git", "-C", git_check_path, "archive", "--format=tar", "HEAD"],
-                capture_output=True,
-                timeout=30,
-                check=True
-            )
-            
-            # Extract archive to snapshot directory
-            tar_extract = subprocess.run(  # nosec B603, B607
-                ["tar", "-xf", "-", "-C", temp_tracked_snapshot_dir],
-                input=git_archive.stdout,
-                timeout=30,
-                check=True
-            )
-            
-            file_count = len(list(Path(temp_tracked_snapshot_dir).rglob("*")))
-            print(f"[Scan Service] CI Mode: Tracked snapshot created with {file_count} files")
-            # Convert container path to host path for volume mounting
-            # temp_tracked_snapshot_dir is under /app/results, which maps to ./results on host
-            target_mount_path_host = get_scan_results_dir_host(temp_tracked_snapshot_dir)
-            print(f"[Scan Service] CI Mode: Using tracked snapshot: {target_mount_path_host}")
-            
-            # Copy finding policy if specified and not in snapshot
-            if clean_finding_policy and not clean_finding_policy.startswith("/"):
-                policy_in_snapshot = os.path.join(temp_tracked_snapshot_dir, clean_finding_policy)
-                policy_in_original = os.path.join(get_target_mount_path_host(clean_target), clean_finding_policy)
-                
-                if not os.path.exists(policy_in_snapshot) and os.path.exists(policy_in_original):
-                    os.makedirs(os.path.dirname(policy_in_snapshot), exist_ok=True)
-                    shutil.copy2(policy_in_original, policy_in_snapshot)
-                    print(f"[Scan Service] CI Mode: Copied finding policy to snapshot: {clean_finding_policy}")
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail="CI Mode: Target is not a git repository. CI mode requires a git repository."
-            )
-    
-    # Only set SCAN_SCOPE=tracked if we actually created a tracked snapshot
-    if temp_tracked_snapshot_dir:
+        # Set SCAN_SCOPE=tracked - scanner container will create snapshot from /target
         env_vars.extend(["-e", "SCAN_SCOPE=tracked"])
         env_vars.extend(["-e", "CI_MODE=true"])
-        # For CI mode, also set ORIGINAL_TARGET_PATH for metadata collection (tracked snapshot has no .git)
-        if request.ci_mode and not git_clone_used and original_target_mount_path_host != target_mount_path_host:
-            env_vars.extend(["-e", "ORIGINAL_TARGET_PATH=/original-target"])
-        print(f"[Scan Service] CI Mode enabled (using tracked snapshot)")
+        print(f"[Scan Service] CI Mode enabled - scanner will create tracked snapshot from /target")
     
     # Finding policy - CLEARLY SEPARATED: Git clones vs local scans
     # IMPORTANT: Git clones exist in WebUI container, local scans don't!
@@ -291,9 +218,10 @@ async def start_scan(
     # Volume mounts
     if request.type == "code":
         cmd.extend(["-v", f"{target_mount_path_host}:/target:ro"])
-        # For CI mode, also mount original repository for metadata collection (tracked snapshot has no .git)
-        if request.ci_mode and not git_clone_used and original_target_mount_path_host != target_mount_path_host:
+        # For CI mode, also mount original repository for metadata collection (scanner creates snapshot, but metadata needs .git)
+        if request.ci_mode and not git_clone_used:
             cmd.extend(["-v", f"{original_target_mount_path_host}:/original-target:ro"])
+            env_vars.extend(["-e", "ORIGINAL_TARGET_PATH=/original-target"])
     cmd.extend(["-v", f"{results_dir_host}:/SimpleSecCheck/results"])
     cmd.extend(["-v", f"{logs_dir_host}:/SimpleSecCheck/logs"])
     
@@ -338,7 +266,6 @@ async def start_scan(
         current_scan["error_message"] = None
         current_scan["container_ids"] = []
         current_scan["temp_clone_path"] = str(temp_clone_path) if temp_clone_path else None
-        current_scan["temp_tracked_snapshot_dir"] = temp_tracked_snapshot_dir if temp_tracked_snapshot_dir else None
         
         # Reset step tracking (preserve Git Clone steps if they exist)
         reset_step_tracking(current_scan, preserve_git_clone=True)
@@ -360,15 +287,6 @@ async def start_scan(
         # Cleanup temp repository if scan failed to start
         if temp_clone_path:
             cleanup_temp_repository(temp_clone_path)
-        
-        # Cleanup temp tracked snapshot if scan failed to start
-        if temp_tracked_snapshot_dir and os.path.exists(temp_tracked_snapshot_dir):
-            import shutil
-            try:
-                shutil.rmtree(temp_tracked_snapshot_dir)
-                print(f"[Scan Service] Cleaned up tracked snapshot after failure: {temp_tracked_snapshot_dir}")
-            except Exception as e:
-                print(f"[Scan Service] WARNING: Failed to cleanup tracked snapshot: {e}")
         current_scan["status"] = "error"
         raise HTTPException(status_code=500, detail=f"Failed to start scan: {str(e)}")
 
@@ -553,15 +471,6 @@ async def monitor_scan(process: subprocess.Popen, scan_id: str, current_scan: di
             cleanup_temp_repository(temp_clone_path)
             current_scan["temp_clone_path"] = None
         
-        # Cleanup temporary tracked snapshot after scan is done
-        temp_snapshot_dir = current_scan.get("temp_tracked_snapshot_dir")
-        if temp_snapshot_dir and os.path.exists(temp_snapshot_dir):
-            try:
-                shutil.rmtree(temp_snapshot_dir)
-                print(f"[Scan Service] Cleaned up tracked snapshot: {temp_snapshot_dir}")
-            except Exception as e:
-                print(f"[Scan Service] WARNING: Failed to cleanup tracked snapshot: {e}")
-            current_scan["temp_tracked_snapshot_dir"] = None
     else:
         # Scan process exited but scan might still be running
         current_scan["status"] = "running"
@@ -619,16 +528,6 @@ async def recheck_scan_status(scan_id: str, results_dir: Optional[str], return_c
             temp_clone_path = Path(temp_clone_path_str)
             cleanup_temp_repository(temp_clone_path)
             current_scan["temp_clone_path"] = None
-        
-        # Cleanup temporary tracked snapshot after scan is done
-        temp_snapshot_dir = current_scan.get("temp_tracked_snapshot_dir")
-        if temp_snapshot_dir and os.path.exists(temp_snapshot_dir):
-            try:
-                shutil.rmtree(temp_snapshot_dir)
-                print(f"[Scan Service] Cleaned up tracked snapshot: {temp_snapshot_dir}")
-            except Exception as e:
-                print(f"[Scan Service] WARNING: Failed to cleanup tracked snapshot: {e}")
-            current_scan["temp_tracked_snapshot_dir"] = None
         
         # Schedule shutdown if enabled
         if SHUTDOWN_AFTER_SCAN and AUTO_SHUTDOWN_ENABLED:
@@ -717,17 +616,6 @@ async def stop_scan(current_scan: dict) -> ScanStatus:
         temp_clone_path = Path(temp_clone_path_str)
         cleanup_temp_repository(temp_clone_path)
         current_scan["temp_clone_path"] = None
-    
-    # Cleanup temporary tracked snapshot if scan was stopped
-    temp_snapshot_dir = current_scan.get("temp_tracked_snapshot_dir")
-    if temp_snapshot_dir and os.path.exists(temp_snapshot_dir):
-        import shutil
-        try:
-            shutil.rmtree(temp_snapshot_dir)
-            print(f"[Scan Service] Cleaned up tracked snapshot after stop: {temp_snapshot_dir}")
-        except Exception as e:
-            print(f"[Scan Service] WARNING: Failed to cleanup tracked snapshot: {e}")
-        current_scan["temp_tracked_snapshot_dir"] = None
     
     return ScanStatus(
         status="error",

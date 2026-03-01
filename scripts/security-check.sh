@@ -90,6 +90,11 @@ cleanup_lock() {
         log_message "Removing lock file: $LOCK_FILE"
         rm -f "$LOCK_FILE"
     fi
+    # Cleanup CI Mode snapshot if it exists
+    if [ -n "${TEMP_TRACKED_SNAPSHOT_DIR:-}" ] && [ -d "$TEMP_TRACKED_SNAPSHOT_DIR" ]; then
+        log_message "Cleaning up CI Mode snapshot: $TEMP_TRACKED_SNAPSHOT_DIR"
+        rm -rf "$TEMP_TRACKED_SNAPSHOT_DIR"
+    fi
 }
 trap cleanup_lock EXIT SIGINT SIGTERM
 
@@ -188,6 +193,84 @@ if [ "$SCAN_TYPE" = "code" ]; then
         fi
     else
         log_error "ERROR: /target directory does not exist!"
+    fi
+    
+    # CI Mode: Create tracked snapshot if SCAN_SCOPE=tracked is set
+    log_message "DEBUG: SCAN_SCOPE=${SCAN_SCOPE:-not set}"
+    if [ "${SCAN_SCOPE:-}" = "tracked" ]; then
+        log_message "CI Mode: SCAN_SCOPE=tracked detected, attempting to create tracked snapshot"
+        # Temporarily disable exit on error for CI Mode logic
+        set +e
+        if git -C "$TARGET_PATH_IN_CONTAINER" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            log_message "CI Mode: Target is a git repository, proceeding with snapshot creation"
+            log_message "CI Mode: RESULTS_DIR_IN_CONTAINER=$RESULTS_DIR_IN_CONTAINER"
+            # Create temporary directory for tracked snapshot
+            mkdir -p "$RESULTS_DIR_IN_CONTAINER/tmp" 2>/dev/null || true
+            TEMP_TRACKED_SNAPSHOT_DIR="$(mktemp -d "$RESULTS_DIR_IN_CONTAINER/tmp/simpleseccheck-tracked-XXXXXX" 2>&1)"
+            MKTEMP_EXIT=$?
+            if [ $MKTEMP_EXIT -ne 0 ] || [ -z "$TEMP_TRACKED_SNAPSHOT_DIR" ] || [ ! -d "$TEMP_TRACKED_SNAPSHOT_DIR" ]; then
+                log_error "CI Mode: Failed to create temporary directory for snapshot (exit code: $MKTEMP_EXIT)"
+                log_error "CI Mode: mktemp output: $TEMP_TRACKED_SNAPSHOT_DIR"
+                log_warning "Falling back to full scan scope"
+            else
+                export TEMP_TRACKED_SNAPSHOT_DIR
+                log_message "CI Mode: Temporary snapshot directory created: $TEMP_TRACKED_SNAPSHOT_DIR"
+                log_message "CI Mode: Creating tracked snapshot from $TARGET_PATH_IN_CONTAINER"
+                
+                # Use git ls-files to respect .gitignore (only files that are tracked AND not ignored)
+                # Save original TARGET_PATH for later reference
+                ORIGINAL_TARGET_PATH="$TARGET_PATH_IN_CONTAINER"
+                SNAPSHOT_CREATED=false
+                SNAPSHOT_ERROR=false
+                
+                # Create snapshot by copying tracked files
+                # Use process substitution with error handling
+                if git -C "$ORIGINAL_TARGET_PATH" ls-files >/dev/null 2>&1; then
+                    while IFS= read -r file || [ -n "$file" ]; do
+                        if [ -n "$file" ] && [ -f "$ORIGINAL_TARGET_PATH/$file" ]; then
+                            mkdir -p "$TEMP_TRACKED_SNAPSHOT_DIR/$(dirname "$file")" 2>/dev/null || true
+                            cp "$ORIGINAL_TARGET_PATH/$file" "$TEMP_TRACKED_SNAPSHOT_DIR/$file" 2>/dev/null || SNAPSHOT_ERROR=true
+                        fi
+                    done < <(git -C "$ORIGINAL_TARGET_PATH" ls-files 2>/dev/null || echo "")
+                    
+                    if [ "$SNAPSHOT_ERROR" = "false" ]; then
+                        FILE_COUNT=$(find "$TEMP_TRACKED_SNAPSHOT_DIR" -type f 2>/dev/null | wc -l)
+                        log_message "CI Mode: Tracked snapshot created with $FILE_COUNT files"
+                        
+                        # Update TARGET_PATH_IN_CONTAINER to point to snapshot
+                        export TARGET_PATH_IN_CONTAINER="$TEMP_TRACKED_SNAPSHOT_DIR"
+                        SNAPSHOT_CREATED=true
+                        log_message "CI Mode: Using tracked snapshot for scan: $TARGET_PATH_IN_CONTAINER"
+                    else
+                        log_error "CI Mode: Errors occurred while creating tracked snapshot"
+                        log_warning "Falling back to full scan scope"
+                    fi
+                else
+                    log_error "CI Mode: Failed to get list of tracked files"
+                    log_warning "Falling back to full scan scope"
+                fi
+                
+                # Copy finding policy if specified and not in snapshot
+                if [ -n "${FINDING_POLICY_FILE:-}" ] && [ "$SNAPSHOT_CREATED" = "true" ]; then
+                    POLICY_RELATIVE_PATH=$(echo "$FINDING_POLICY_FILE" | sed 's|^/target/||')
+                    POLICY_IN_SNAPSHOT="$TEMP_TRACKED_SNAPSHOT_DIR/$POLICY_RELATIVE_PATH"
+                    POLICY_IN_ORIGINAL="$ORIGINAL_TARGET_PATH/$POLICY_RELATIVE_PATH"
+                    
+                    if [ ! -f "$POLICY_IN_SNAPSHOT" ] && [ -f "$POLICY_IN_ORIGINAL" ]; then
+                        mkdir -p "$(dirname "$POLICY_IN_SNAPSHOT")" 2>/dev/null || true
+                        cp "$POLICY_IN_ORIGINAL" "$POLICY_IN_SNAPSHOT" 2>/dev/null || true
+                        log_message "CI Mode: Copied finding policy to snapshot: $POLICY_RELATIVE_PATH"
+                    fi
+                fi
+            fi
+        else
+            log_warning "CI Mode: Target is not a git repository (git rev-parse failed), falling back to full scan scope"
+            log_message "CI Mode: Attempted path: $TARGET_PATH_IN_CONTAINER"
+        fi
+        # Re-enable exit on error
+        set -e
+    else
+        log_message "CI Mode: SCAN_SCOPE is not 'tracked', skipping tracked snapshot creation"
     fi
 fi
 log_message "Results Directory (RESULTS_DIR_IN_CONTAINER): $RESULTS_DIR_IN_CONTAINER"
