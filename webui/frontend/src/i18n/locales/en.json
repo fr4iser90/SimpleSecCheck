@@ -1,0 +1,26 @@
+{
+  "common": {
+    "close": "Close",
+    "cancel": "Cancel",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "loading": "Loading...",
+    "error": "Error"
+  },
+  "aiPrompt": {
+    "title": "AI Prompt Generator",
+    "promptPreview": "Prompt Preview",
+    "settings": "Settings",
+    "language": "Language",
+    "policyPath": "Policy Path",
+    "stats": "{{count}} findings | ~{{tokens}} tokens",
+    "loadingPrompt": "Loading prompt...",
+    "failedToLoad": "Failed to load prompt",
+    "placeholder": "Prompt will appear here...",
+    "languages": {
+      "english": "English",
+      "chinese": "中文",
+      "german": "Deutsch"
+    }
+  }
+}

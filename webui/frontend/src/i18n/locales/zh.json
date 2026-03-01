@@ -1,0 +1,26 @@
+{
+  "common": {
+    "close": "关闭",
+    "cancel": "取消",
+    "copy": "复制",
+    "copied": "已复制！",
+    "loading": "加载中...",
+    "error": "错误"
+  },
+  "aiPrompt": {
+    "title": "AI 提示词生成器",
+    "promptPreview": "提示词预览",
+    "settings": "设置",
+    "language": "语言",
+    "policyPath": "策略路径",
+    "stats": "{{count}} 个发现 | 约 {{tokens}} 个令牌",
+    "loadingPrompt": "加载提示词中...",
+    "failedToLoad": "加载提示词失败",
+    "placeholder": "提示词将显示在这里...",
+    "languages": {
+      "english": "English",
+      "chinese": "中文",
+      "german": "Deutsch"
+    }
+  }
+}

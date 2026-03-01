@@ -21,25 +21,29 @@ export default function ReportViewer() {
   }, [])
 
   if (!reportUrl) {
-    return <div style={{ opacity: 0.7 }}>Loading report...</div>
+    return (
+      <div style={{ 
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: 0.7 
+      }}>
+        Loading report...
+      </div>
+    )
   }
 
   return (
-    <div style={{ 
-      border: '1px solid var(--glass-border-dark)', 
-      borderRadius: '8px', 
-      overflow: 'hidden',
-      height: '80vh'
-    }}>
-      <iframe
-        src={reportUrl}
-        style={{
-          width: '100%',
-          height: '100%',
-          border: 'none',
-        }}
-        title="Security Report"
-      />
-    </div>
+    <iframe
+      src={reportUrl}
+      style={{
+        width: '100%',
+        height: '100%',
+        border: 'none',
+        display: 'block',
+      }}
+      title="Security Report"
+    />
   )
 }

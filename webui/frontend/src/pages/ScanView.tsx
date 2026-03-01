@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import ScanStatus from '../components/ScanStatus'
-import LiveLogs from '../components/LiveLogs'
 import ReportViewer from '../components/ReportViewer'
+import LiveLogs from '../components/LiveLogs'
+import StepsSidebar from '../components/StepsSidebar'
 
 interface ScanStatusData {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -27,12 +27,8 @@ export default function ScanView() {
     }
   )
 
-  // AI Prompt state
-  const [aiPromptCopied, setAiPromptCopied] = useState(false)
-  const [tokenSaving, setTokenSaving] = useState(false)
-  const [policyPath, setPolicyPath] = useState("config/finding-policy.json")
-  const [customPolicyPath, setCustomPolicyPath] = useState("")
-  const [useCustomPath, setUseCustomPath] = useState(false)
+  const [isStepsSidebarOpen, setIsStepsSidebarOpen] = useState(false)
+  const [isLogsSidebarOpen, setIsLogsSidebarOpen] = useState(false)
 
   // Poll status every 2 seconds if scan is running
   useEffect(() => {
@@ -57,240 +53,295 @@ export default function ScanView() {
     }
   }, [status.status, status.scan_id])
 
-  // Helper function to get result link
-  const getResultLink = (): string | undefined => {
-    if (status.status === 'done' && status.scan_id) {
-      // Use the scan_id to construct the report link
-      return `/api/results/${status.scan_id}/report`
-    }
-    return undefined
-  }
-
-  const handleNewScan = () => {
-    navigate('/')
-  }
-
-  const handleCopyAIPrompt = async () => {
-    try {
-      const finalPolicyPath = useCustomPath ? customPolicyPath : policyPath
-      const response = await fetch(
-        `/api/scan/ai-prompt?token_saving=${tokenSaving}&policy_path=${encodeURIComponent(finalPolicyPath)}`
-      )
-      if (response.ok) {
-        const data = await response.json()
-        await navigator.clipboard.writeText(data.prompt)
-        setAiPromptCopied(true)
-        setTimeout(() => setAiPromptCopied(false), 3000)
-      } else {
-        alert('Failed to generate AI prompt')
-      }
-    } catch (error) {
-      console.error('Error copying AI prompt:', error)
-      alert('Failed to copy AI prompt')
-    }
-  }
-
-  return (
-    <div className="container">
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h2>Scan Status</h2>
-          <button onClick={handleNewScan}>Start New Scan</button>
+  // Show loading/running state
+  if (status.status === 'running' || (status.status === 'done' && !status.results_dir)) {
+    return (
+      <div style={{ 
+        height: 'calc(100vh - 80px)', // Full height minus header
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '2rem',
+        padding: '2rem',
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⏳</div>
+          <h2>Scan in Progress...</h2>
+          <p style={{ opacity: 0.7, marginTop: '0.5rem' }}>
+            Scan ID: {status.scan_id}
+          </p>
         </div>
-        <ScanStatus status={status} />
-      </div>
-
-      {(status.status === 'running' || (status.status === 'done' && !status.results_dir) || (status.scan_id && status.status === 'idle')) && (
-        <div className="card">
-          <h2>Live Logs</h2>
+        <div style={{ 
+          width: '100%', 
+          maxWidth: '800px',
+          background: 'var(--glass-bg-dark)',
+          border: '1px solid var(--glass-border-dark)',
+          borderRadius: '8px',
+          padding: '1.5rem',
+        }}>
           <LiveLogs />
         </div>
-      )}
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button
+            onClick={() => setIsStepsSidebarOpen(true)}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: 'var(--glass-bg-dark)',
+              border: '1px solid var(--glass-border-dark)',
+              borderRadius: '8px',
+              color: 'var(--text-dark)',
+              cursor: 'pointer',
+            }}
+          >
+            📋 View Steps
+          </button>
+        </div>
+      </div>
+    )
+  }
 
-      {status.status === 'done' && status.results_dir && (
-        <>
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <div>
-                <h2 style={{ margin: 0 }}>✅ Scan Completed</h2>
-                <p style={{ margin: '0.5rem 0 0 0' }}>Scan ID: {status.scan_id}</p>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={tokenSaving}
-                    onChange={(e) => setTokenSaving(e.target.checked)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <span>Token Saving (中文)</span>
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    <span>Policy:</span>
-                    {!useCustomPath ? (
-                      <>
-                        <select
-                          value={policyPath}
-                          onChange={(e) => {
-                            if (e.target.value === "custom") {
-                              setUseCustomPath(true)
-                              setCustomPolicyPath("")
-                            } else {
-                              setPolicyPath(e.target.value)
-                            }
-                          }}
-                          style={{
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: '4px',
-                            border: '1px solid #ccc',
-                            fontSize: '0.9rem',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <option value="config/finding-policy.json">config/finding-policy.json</option>
-                          <option value="config/policy/finding-policy.json">config/policy/finding-policy.json</option>
-                          <option value="security/finding-policy.json">security/finding-policy.json</option>
-                          <option value=".security/finding-policy.json">.security/finding-policy.json</option>
-                          <option value="custom">Custom...</option>
-                        </select>
-                      </>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <input
-                          type="text"
-                          value={customPolicyPath}
-                          onChange={(e) => setCustomPolicyPath(e.target.value)}
-                          placeholder="e.g., config/my-policy.json"
-                          style={{
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: '4px',
-                            border: '1px solid #ccc',
-                            fontSize: '0.9rem',
-                            width: '200px'
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Escape') {
-                              setUseCustomPath(false)
-                              setCustomPolicyPath("")
-                              setPolicyPath("config/finding-policy.json")
-                            }
-                          }}
-                        />
-                        <button
-                          onClick={() => {
-                            setUseCustomPath(false)
-                            setCustomPolicyPath("")
-                            setPolicyPath("config/finding-policy.json")
-                          }}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontSize: '1rem',
-                            color: '#dc3545',
-                            padding: '0',
-                            lineHeight: '1'
-                          }}
-                          title="Reset to default"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
-                  </label>
-                </div>
+  // Show error state
+  if (status.status === 'error') {
+    return (
+      <div style={{ 
+        height: 'calc(100vh - 80px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2rem',
+      }}>
+        <div style={{
+          maxWidth: '800px',
+          width: '100%',
+          background: 'rgba(220, 53, 69, 0.2)',
+          border: '1px solid #dc3545',
+          borderRadius: '8px',
+          padding: '2rem',
+          color: '#dc3545',
+        }}>
+          <strong style={{ fontSize: '1.5rem' }}>❌ Scan failed</strong>
+          {status.error_message && (
+            <div style={{ 
+              marginTop: '1rem', 
+              padding: '1rem', 
+              background: 'rgba(0, 0, 0, 0.2)', 
+              borderRadius: '4px',
+              fontFamily: 'monospace',
+              fontSize: '0.9rem',
+              wordBreak: 'break-word',
+              whiteSpace: 'pre-wrap',
+              maxHeight: '400px',
+              overflowY: 'auto'
+            }}>
+              {status.error_message}
+            </div>
+          )}
+          {status.error_code && (
+            <div style={{ marginTop: '1rem', fontSize: '0.9rem', opacity: 0.8 }}>
+              Exit code: {status.error_code}
+            </div>
+          )}
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              marginTop: '1.5rem',
+              padding: '0.75rem 1.5rem',
+              background: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+          >
+            Start New Scan
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Show full-page report when scan is done
+  if (status.status === 'done' && status.results_dir) {
+    return (
+      <div style={{ 
+        height: 'calc(100vh - 80px)', // Full height minus header
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        {/* Full-Page Report */}
+        <div style={{ 
+          flex: 1,
+          overflow: 'hidden',
+          position: 'relative',
+        }}>
+          <ReportViewer />
+        </div>
+
+        {/* Floating Action Buttons */}
+        <div style={{
+          position: 'fixed',
+          bottom: '2rem',
+          right: '2rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
+          zIndex: 100,
+        }}>
+          <button
+            onClick={() => setIsStepsSidebarOpen(true)}
+            style={{
+              padding: '1rem',
+              background: 'var(--glass-bg-dark)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid var(--glass-border-dark)',
+              borderRadius: '50%',
+              width: '56px',
+              height: '56px',
+              color: 'var(--text-dark)',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+              fontSize: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="View Steps"
+          >
+            📋
+          </button>
+          <button
+            onClick={() => setIsLogsSidebarOpen(true)}
+            style={{
+              padding: '1rem',
+              background: 'var(--glass-bg-dark)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid var(--glass-border-dark)',
+              borderRadius: '50%',
+              width: '56px',
+              height: '56px',
+              color: 'var(--text-dark)',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+              fontSize: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="View Logs"
+          >
+            📄
+          </button>
+        </div>
+
+        {/* Steps Sidebar */}
+        <StepsSidebar
+          isOpen={isStepsSidebarOpen}
+          onClose={() => setIsStepsSidebarOpen(false)}
+        />
+
+        {/* Logs Sidebar */}
+        {isLogsSidebarOpen && (
+          <>
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0, 0, 0, 0.5)',
+                zIndex: 999,
+              }}
+              onClick={() => setIsLogsSidebarOpen(false)}
+            />
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: '500px',
+                maxWidth: '90vw',
+                background: 'var(--glass-bg-dark)',
+                backdropFilter: 'blur(20px)',
+                borderLeft: '1px solid var(--glass-border-dark)',
+                boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.3)',
+                zIndex: 1000,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  padding: '1.5rem',
+                  borderBottom: '1px solid var(--glass-border-dark)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <h2 style={{ margin: 0, fontSize: '1.25rem' }}>📄 Scan Logs</h2>
                 <button
-                  onClick={handleCopyAIPrompt}
+                  onClick={() => setIsLogsSidebarOpen(false)}
                   style={{
-                    padding: '0.5rem 1rem',
-                    background: aiPromptCopied ? '#28a745' : '#6c757d',
-                    color: 'white',
+                    background: 'transparent',
                     border: 'none',
-                    borderRadius: '4px',
+                    fontSize: '1.5rem',
                     cursor: 'pointer',
-                    fontWeight: 'bold',
-                    transition: 'background 0.2s'
+                    color: 'var(--text-dark)',
+                    padding: '0.25rem 0.5rem',
+                    lineHeight: 1,
                   }}
+                  title="Close"
                 >
-                  {aiPromptCopied ? '✓ Copied!' : '🤖 AI Prompt'}
+                  ✕
                 </button>
-                {getResultLink() && (
-                  <a 
-                    href={getResultLink()} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-block',
-                      padding: '0.75rem 1.5rem',
-                      background: '#007bff',
-                      color: 'white',
-                      textDecoration: 'none',
-                      borderRadius: '4px',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    📊 View Results
-                  </a>
-                )}
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  overflow: 'auto',
+                  padding: '1.5rem',
+                }}
+              >
+                <LiveLogs />
               </div>
             </div>
-          </div>
-          <div className="card">
-            <h2>Security Report</h2>
-            <ReportViewer />
-          </div>
-          <div className="card">
-            <h2>Scan Logs</h2>
-            <LiveLogs />
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
+    )
+  }
 
-      {status.status === 'error' && (
-        <div className="card">
-          <div style={{ 
-            background: 'rgba(220, 53, 69, 0.2)', 
-            border: '1px solid #dc3545', 
-            borderRadius: '8px', 
-            padding: '1rem',
-            color: '#dc3545'
-          }}>
-            <strong>❌ Scan failed</strong>
-            {status.error_message && (
-              <div style={{ 
-                marginTop: '0.75rem', 
-                padding: '0.75rem', 
-                background: 'rgba(0, 0, 0, 0.1)', 
-                borderRadius: '4px',
-                fontFamily: 'monospace',
-                fontSize: '0.9rem',
-                wordBreak: 'break-word',
-                whiteSpace: 'pre-wrap',  // Preserve line breaks
-                maxHeight: '300px',
-                overflowY: 'auto'
-              }}>
-                {status.error_message}
-              </div>
-            )}
-            {status.error_code && (
-              <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', opacity: 0.8 }}>
-                Exit code: {status.error_code}
-              </div>
-            )}
-            {!status.error_message && (
-              <div style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                Check the logs below or the Docker container logs for details.
-                {status.results_dir && (
-                  <div style={{ marginTop: '0.5rem' }}>
-                    Logs may be available in: {status.results_dir}/logs/
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+  // Default: No scan
+  return (
+    <div style={{ 
+      height: 'calc(100vh - 80px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      <div style={{ textAlign: 'center' }}>
+        <h2>No active scan</h2>
+        <button
+          onClick={() => navigate('/')}
+          style={{
+            marginTop: '1rem',
+            padding: '0.75rem 1.5rem',
+            background: 'var(--glass-bg-dark)',
+            border: '1px solid var(--glass-border-dark)',
+            borderRadius: '8px',
+            color: 'var(--text-dark)',
+            cursor: 'pointer',
+          }}
+        >
+          Start New Scan
+        </button>
+      </div>
     </div>
   )
 }

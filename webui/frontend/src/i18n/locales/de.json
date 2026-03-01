@@ -1,0 +1,26 @@
+{
+  "common": {
+    "close": "Schließen",
+    "cancel": "Abbrechen",
+    "copy": "Kopieren",
+    "copied": "Kopiert!",
+    "loading": "Lädt...",
+    "error": "Fehler"
+  },
+  "aiPrompt": {
+    "title": "AI-Prompt-Generator",
+    "promptPreview": "Prompt-Vorschau",
+    "settings": "Einstellungen",
+    "language": "Sprache",
+    "policyPath": "Richtlinien-Pfad",
+    "stats": "{{count}} Funde | ~{{tokens}} Tokens",
+    "loadingPrompt": "Lade Prompt...",
+    "failedToLoad": "Fehler beim Laden des Prompts",
+    "placeholder": "Prompt wird hier angezeigt...",
+    "languages": {
+      "english": "English",
+      "chinese": "中文",
+      "german": "Deutsch"
+    }
+  }
+}

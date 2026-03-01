@@ -21,6 +21,10 @@ from app.services import (
     # Shutdown service
     update_activity,
     schedule_shutdown,
+    cancel_shutdown,
+    shutdown_now,
+    toggle_auto_shutdown,
+    get_shutdown_status,
     idle_timeout_checker,
     create_signal_handler,
     register_signal_handlers,
@@ -300,12 +304,17 @@ async def get_report():
 
 
 @app.get("/api/scan/ai-prompt")
-async def get_ai_prompt(token_saving: bool = False, policy_path: str = "config/finding-policy.json"):
+async def get_ai_prompt(
+    token_saving: bool = False,
+    language: str = "english",
+    policy_path: str = "config/finding-policy.json"
+):
     """
     Generate AI prompt with all findings for false positive analysis
     
     Args:
-        token_saving: If True, generate Chinese prompt (token-efficient)
+        token_saving: If True, generate Chinese prompt (token-efficient) - DEPRECATED, use language instead
+        language: Language for prompt (english, chinese, german)
         policy_path: Path where finding policy should be placed
     """
     update_activity()
@@ -321,15 +330,49 @@ async def get_ai_prompt(token_saving: bool = False, policy_path: str = "config/f
     if not findings:
         raise HTTPException(status_code=404, detail="No findings found in scan results")
     
+    # Normalize language (backward compatibility: token_saving=True means chinese)
+    if token_saving:
+        language = "chinese"
+    language = language.lower()
+    if language not in ["english", "chinese", "german"]:
+        language = "english"
+    
     # Generate prompt
-    prompt = generate_ai_prompt(findings, token_saving=token_saving, policy_path=policy_path)
+    prompt = generate_ai_prompt(findings, language=language, policy_path=policy_path)
     
     return {
         "prompt": prompt,
         "findings_count": len(findings),
-        "token_saving": token_saving,
+        "language": language,
         "policy_path": policy_path
     }
+
+
+@app.get("/api/shutdown/status")
+async def get_shutdown_status_endpoint():
+    """Get current shutdown status"""
+    update_activity()
+    return get_shutdown_status(current_scan)
+
+
+@app.post("/api/shutdown/toggle")
+async def toggle_shutdown(request: dict):
+    """Toggle auto-shutdown on/off"""
+    update_activity()
+    enabled = request.get("enabled", True)
+    toggle_auto_shutdown(enabled)
+    return {
+        "auto_shutdown_enabled": AUTO_SHUTDOWN_ENABLED,
+        "message": f"Auto-shutdown {'enabled' if AUTO_SHUTDOWN_ENABLED else 'disabled'}"
+    }
+
+
+@app.post("/api/shutdown/now")
+async def shutdown_now_endpoint():
+    """Shutdown immediately"""
+    update_activity()
+    shutdown_now()
+    return {"message": "Shutting down now..."}
 
 
 @app.get("/api/results")

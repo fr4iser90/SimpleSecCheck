@@ -353,20 +353,23 @@ def collect_findings_from_results(results_dir: Path) -> List[Dict]:
     return all_findings
 
 
-def generate_ai_prompt(findings: List[Dict], token_saving: bool = False, policy_path: str = "config/finding-policy.json") -> str:
+def generate_ai_prompt(findings: List[Dict], language: str = "english", policy_path: str = "config/finding-policy.json") -> str:
     """
     Generate structured AI prompt for false positive analysis
     
     Args:
         findings: List of finding dictionaries
-        token_saving: If True, use Chinese for token efficiency
+        language: Language for prompt (english, chinese, german)
         policy_path: Path where finding policy should be placed (default: "config/finding-policy.json")
     
     Returns:
         Formatted prompt string
     """
-    if token_saving:
+    language = language.lower()
+    if language == "chinese":
         return _generate_chinese_prompt(findings, policy_path)
+    elif language == "german":
+        return _generate_german_prompt(findings, policy_path)
     else:
         return _generate_english_prompt(findings, policy_path)
 
@@ -462,5 +465,53 @@ def _generate_chinese_prompt(findings: List[Dict], policy_path: str = "config/fi
     prompt_parts.append(f"   - 放置在`{policy_path}`\n")
     prompt_parts.append("   - 使用正确的正则表达式匹配路径/消息\n")
     prompt_parts.append("   - 为每个接受的发现包含清晰的理由\n")
+    
+    return "".join(prompt_parts)
+
+
+def _generate_german_prompt(findings: List[Dict], policy_path: str = "config/finding-policy.json") -> str:
+    """Generate German prompt"""
+    # Group by tool
+    by_tool = {}
+    for f in findings:
+        tool = f["tool"]
+        if tool not in by_tool:
+            by_tool[tool] = []
+        by_tool[tool].append(f)
+    
+    prompt_parts = [
+        "# Sicherheitsscan-Ergebnisse Analyseanfrage\n\n",
+        "Ich habe einen Sicherheitsscan meines Codebases durchgeführt und die folgenden Probleme gefunden. ",
+        "Bitte analysieren Sie jeden Fund und:\n",
+        "1. Identifizieren Sie False Positives (Funde, die keine tatsächlichen Sicherheitsprobleme sind)\n",
+        "2. Für False Positives schlagen Sie Code-Änderungen vor, falls möglich, um die Regel nicht auszulösen\n",
+        "3. Wenn Code-Änderungen nicht möglich/angemessen sind, generieren Sie einen finding policy JSON-Eintrag\n",
+        "4. Stellen Sie die vollständige finding_policy.json-Struktur mit allen False Positives bereit\n\n",
+        "## Funde-Zusammenfassung\n",
+        f"Gesamtanzahl Funde: {len(findings)}\n",
+        f"Tools: {', '.join(by_tool.keys())}\n\n"
+    ]
+    
+    # Add findings by tool
+    for tool, tool_findings in by_tool.items():
+        prompt_parts.append(f"## {tool} Funde ({len(tool_findings)} insgesamt)\n\n")
+        
+        for i, finding in enumerate(tool_findings, 1):
+            prompt_parts.append(f"### Fund {i}\n")
+            prompt_parts.append(f"- **Schweregrad**: {finding['severity']}\n")
+            prompt_parts.append(f"- **Datei**: `{finding['path']}`\n")
+            if finding.get('line'):
+                prompt_parts.append(f"- **Zeile**: {finding['line']}\n")
+            if finding.get('check_id'):
+                prompt_parts.append(f"- **Regel-ID**: `{finding['check_id']}`\n")
+            prompt_parts.append(f"- **Nachricht**: {finding['message']}\n\n")
+    
+    prompt_parts.append("\n## Erwartete Ausgabe\n")
+    prompt_parts.append("1. Liste der False Positives mit Erklärung\n")
+    prompt_parts.append("2. Code-Änderungsvorschläge (falls zutreffend)\n")
+    prompt_parts.append("3. Vollständige `finding_policy.json`-Struktur mit allen False Positives\n")
+    prompt_parts.append(f"   - Abzulegen in `{policy_path}`\n")
+    prompt_parts.append("   - Verwenden Sie korrekte reguläre Ausdrücke zum Abgleichen von Pfad/Nachricht\n")
+    prompt_parts.append("   - Enthalten Sie für jeden akzeptierten Fund eine klare Begründung\n")
     
     return "".join(prompt_parts)

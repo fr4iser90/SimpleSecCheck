@@ -47,7 +47,7 @@ services:
     # Entrypoint script will dynamically configure docker group access at runtime
     # No need to specify user here - entrypoint handles it
     ports:
-      - "127.0.0.1:9999:8080"  # SAFE: Only localhost, not 0.0.0.0
+      - "127.0.0.1:8080:8080"  # SAFE: Only localhost, not 0.0.0.0
     volumes:
       - ./bin:/app/bin:ro                    # CLI Scripts (read-only)
       - ./results:/app/results                # Results (read-write: run-docker.sh needs to create subdirs)

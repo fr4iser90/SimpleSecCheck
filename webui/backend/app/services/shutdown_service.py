@@ -17,6 +17,8 @@ IDLE_TIMEOUT = int(os.getenv("WEBUI_IDLE_TIMEOUT", "1800"))  # 30 minutes defaul
 # Track last activity for idle timeout
 last_activity = time.time()
 shutdown_scheduled = False
+shutdown_scheduled_time = None  # Timestamp when shutdown was scheduled
+shutdown_delay_seconds = 0  # Delay in seconds when shutdown was scheduled
 
 
 def update_activity():
@@ -27,12 +29,14 @@ def update_activity():
 
 def schedule_shutdown(delay: int = 0):
     """Schedule graceful shutdown"""
-    global shutdown_scheduled
+    global shutdown_scheduled, shutdown_scheduled_time, shutdown_delay_seconds
     
     if shutdown_scheduled or not AUTO_SHUTDOWN_ENABLED:
         return
     
     shutdown_scheduled = True
+    shutdown_scheduled_time = time.time()
+    shutdown_delay_seconds = delay
     
     def shutdown():
         time.sleep(delay)
@@ -40,6 +44,60 @@ def schedule_shutdown(delay: int = 0):
         os.kill(os.getpid(), signal.SIGTERM)
     
     threading.Thread(target=shutdown, daemon=True).start()
+
+
+def cancel_shutdown():
+    """Cancel scheduled shutdown"""
+    global shutdown_scheduled, shutdown_scheduled_time, shutdown_delay_seconds
+    shutdown_scheduled = False
+    shutdown_scheduled_time = None
+    shutdown_delay_seconds = 0
+
+
+def shutdown_now():
+    """Shutdown immediately"""
+    global shutdown_scheduled
+    shutdown_scheduled = True
+    print("[Manual Shutdown] Shutting down now...")
+    os.kill(os.getpid(), signal.SIGTERM)
+
+
+def toggle_auto_shutdown(enabled: bool):
+    """Toggle auto-shutdown on/off"""
+    global AUTO_SHUTDOWN_ENABLED
+    # Note: This only affects runtime, not environment variable
+    # Environment variable is read at startup, so this is a runtime toggle
+    AUTO_SHUTDOWN_ENABLED = enabled
+    if not enabled:
+        cancel_shutdown()
+    return AUTO_SHUTDOWN_ENABLED
+
+
+def get_shutdown_status(current_scan: dict):
+    """Get current shutdown status"""
+    global shutdown_scheduled, shutdown_scheduled_time, shutdown_delay_seconds, last_activity
+    
+    shutdown_in_seconds = None
+    if shutdown_scheduled and shutdown_scheduled_time:
+        elapsed = time.time() - shutdown_scheduled_time
+        remaining = max(0, shutdown_delay_seconds - elapsed)
+        shutdown_in_seconds = int(remaining) if remaining > 0 else 0
+    
+    idle_time = time.time() - last_activity
+    idle_timeout_remaining = None
+    if AUTO_SHUTDOWN_ENABLED and IDLE_TIMEOUT > 0 and current_scan.get("status") != "running":
+        idle_timeout_remaining = max(0, IDLE_TIMEOUT - idle_time)
+    
+    return {
+        "auto_shutdown_enabled": AUTO_SHUTDOWN_ENABLED,
+        "shutdown_after_scan": SHUTDOWN_AFTER_SCAN,
+        "shutdown_delay": SHUTDOWN_DELAY,
+        "idle_timeout": IDLE_TIMEOUT,
+        "shutdown_scheduled": shutdown_scheduled,
+        "shutdown_in_seconds": shutdown_in_seconds,
+        "idle_timeout_remaining": int(idle_timeout_remaining) if idle_timeout_remaining is not None else None,
+        "last_activity": last_activity,
+    }
 
 
 def idle_timeout_checker(current_scan: dict):
