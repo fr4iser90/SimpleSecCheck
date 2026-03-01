@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from .container_service import stop_running_containers
-from .shutdown_service import schedule_shutdown, SHUTDOWN_AFTER_SCAN, AUTO_SHUTDOWN_ENABLED, SHUTDOWN_DELAY
+from .shutdown_service import schedule_shutdown, cancel_shutdown, SHUTDOWN_AFTER_SCAN, AUTO_SHUTDOWN_ENABLED, SHUTDOWN_DELAY
 from .step_service import extract_steps_for_frontend, initialize_step_tracking, reset_step_tracking, initialize_steps_log
 from .git_service import is_git_url, clone_repository, cleanup_temp_repository
 
@@ -56,6 +56,10 @@ async def start_scan(
     # Check if scan is already running
     if current_scan["status"] == "running":
         raise HTTPException(status_code=409, detail="Scan already running")
+    
+    # Cancel any scheduled shutdown when starting a new scan
+    cancel_shutdown()
+    print(f"[Scan Service] Cancelled scheduled shutdown - new scan starting")
     
     # Validate scan type
     if request.type not in ["code", "website", "network"]:
@@ -160,25 +164,37 @@ async def start_scan(
     
     # Finding policy - with proper path resolution and auto-detection fallback
     # This happens AFTER Git clone (if used), so the cloned repository is available
-    # IMPORTANT: Check in CONTAINER path, not host path, because we're running in the container
+    # IMPORTANT: For Git clones, clean_target is a container path. For local scans, it's a host path.
+    # We need to check the file existence on the HOST (where we're running), not in the container.
     finding_policy_file = None
     if clean_finding_policy:
         # Debug: Log path resolution
         print(f"[Scan Service] Finding policy resolution:")
-        print(f"[Scan Service]   clean_target (container): {clean_target}")
+        print(f"[Scan Service]   clean_target: {clean_target}")
         print(f"[Scan Service]   target_mount_path_host (host): {target_mount_path_host}")
         print(f"[Scan Service]   clean_finding_policy: {clean_finding_policy}")
+        print(f"[Scan Service]   git_clone_used: {git_clone_used}")
         
-        # Check if target directory exists (use container path since we're in container)
-        # clean_target is the container path (e.g., /app/results/tmp/.../repo)
-        if not os.path.exists(clean_target):
-            print(f"[Scan Service] WARNING: Target directory does not exist (container): {clean_target}")
+        # Determine the path to check:
+        # - For Git clones: clean_target is already a container path (temp clone dir)
+        # - For local scans: clean_target is a host path, use target_mount_path_host
+        if git_clone_used:
+            # Git clone: clean_target is container path (e.g., /app/results/tmp/.../repo)
+            check_base_path = clean_target
+            print(f"[Scan Service] Using container path for Git clone: {check_base_path}")
         else:
-            print(f"[Scan Service] ✓ Target directory exists (container): {clean_target}")
+            # Local scan: use host path
+            check_base_path = target_mount_path_host
+            print(f"[Scan Service] Using host path for local scan: {check_base_path}")
         
-        # Check if policy file exists in target (use container path)
-        # clean_target is already the container path where the repo was cloned
-        policy_check_path = os.path.join(clean_target, clean_finding_policy)
+        # Check if target directory exists
+        if not os.path.exists(check_base_path):
+            print(f"[Scan Service] WARNING: Target directory does not exist: {check_base_path}")
+        else:
+            print(f"[Scan Service] ✓ Target directory exists: {check_base_path}")
+        
+        # Check if policy file exists in target
+        policy_check_path = os.path.join(check_base_path, clean_finding_policy)
         if os.path.exists(policy_check_path):
             finding_policy_file = f"/target/{clean_finding_policy}"
             env_vars.extend(["-e", f"FINDING_POLICY_FILE={finding_policy_file}"])
@@ -190,30 +206,36 @@ async def start_scan(
     
     # Auto-detection fallback: If no explicit policy was found, try common locations
     # This matches the logic in run-docker.sh lines 398-414
-    # Use container path (clean_target) since we're checking in the container
-    if not finding_policy_file and os.path.exists(clean_target):
-        policy_candidates = [
-            "config/finding-policy.json",
-            "config/finding_policy.json",
-            "config/policy/finding-policy.json",
-            "config/policy/finding_policy.json",
-            "security/finding-policy.json",
-            "security/finding_policy.json",
-            ".security/finding-policy.json",
-            ".security/finding_policy.json",
-        ]
+    if not finding_policy_file:
+        # Determine the path to check (same logic as above)
+        if git_clone_used:
+            check_base_path = clean_target
+        else:
+            check_base_path = target_mount_path_host
         
-        for policy_candidate in policy_candidates:
-            candidate_path = os.path.join(clean_target, policy_candidate)
-            if os.path.exists(candidate_path):
-                finding_policy_file = f"/target/{policy_candidate}"
-                env_vars.extend(["-e", f"FINDING_POLICY_FILE={finding_policy_file}"])
-                print(f"[Scan Service] ✓ Auto-detected finding policy: {finding_policy_file} (found at {candidate_path})")
-                break
-        
-        if not finding_policy_file:
-            print(f"[Scan Service] No finding policy found (neither explicit nor auto-detected)")
-            print(f"[Scan Service] Searched in: {clean_target}")
+        if os.path.exists(check_base_path):
+            policy_candidates = [
+                "config/finding-policy.json",
+                "config/finding_policy.json",
+                "config/policy/finding-policy.json",
+                "config/policy/finding_policy.json",
+                "security/finding-policy.json",
+                "security/finding_policy.json",
+                ".security/finding-policy.json",
+                ".security/finding_policy.json",
+            ]
+            
+            for policy_candidate in policy_candidates:
+                candidate_path = os.path.join(check_base_path, policy_candidate)
+                if os.path.exists(candidate_path):
+                    finding_policy_file = f"/target/{policy_candidate}"
+                    env_vars.extend(["-e", f"FINDING_POLICY_FILE={finding_policy_file}"])
+                    print(f"[Scan Service] ✓ Auto-detected finding policy: {finding_policy_file} (found at {candidate_path})")
+                    break
+            
+            if not finding_policy_file:
+                print(f"[Scan Service] No finding policy found (neither explicit nor auto-detected)")
+                print(f"[Scan Service] Searched in: {check_base_path}")
     
     cmd.extend(env_vars)
     
@@ -476,7 +498,7 @@ async def monitor_scan(process: subprocess.Popen, scan_id: str, current_scan: di
     # Schedule shutdown after scan if enabled (only if completed)
     if scan_completed and SHUTDOWN_AFTER_SCAN and AUTO_SHUTDOWN_ENABLED:
         print(f"[Auto-Shutdown] Scan completed, will shutdown in {SHUTDOWN_DELAY}s...")
-        schedule_shutdown(delay=SHUTDOWN_DELAY)
+        schedule_shutdown(delay=SHUTDOWN_DELAY, current_scan=current_scan)
 
 
 async def recheck_scan_status(scan_id: str, results_dir: Optional[str], return_code: int, error_message: Optional[str], current_scan: dict, results_dir_path: Path):
@@ -529,7 +551,7 @@ async def recheck_scan_status(scan_id: str, results_dir: Optional[str], return_c
         # Schedule shutdown if enabled
         if SHUTDOWN_AFTER_SCAN and AUTO_SHUTDOWN_ENABLED:
             print(f"[Auto-Shutdown] Scan completed, will shutdown in {SHUTDOWN_DELAY}s...")
-            schedule_shutdown(delay=SHUTDOWN_DELAY)
+            schedule_shutdown(delay=SHUTDOWN_DELAY, current_scan=current_scan)
 
 
 async def get_scan_status(current_scan: dict, results_dir: Path) -> ScanStatus:

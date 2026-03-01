@@ -77,20 +77,34 @@ def get_scan_results_dir_host(scan_results_dir_container: str) -> str:
 def get_target_mount_path_host(target_path: str) -> str:
     """
     Get host path for target mount.
-    Returns: absolute host path
+    
+    Handles two cases:
+    1. Git clones: target_path is a container path like /app/results/tmp/.../repo
+       → Converts to host path in results directory
+    2. Local scans: target_path is already a host path like /home/user/project
+       → Returns as-is (no conversion needed)
+    
+    Args:
+        target_path: Container path (Git clone) or host path (local scan)
+    
+    Returns:
+        Absolute host path
     """
-    if not target_path.startswith("/app/results/"):
-        return target_path
+    # If path starts with /app/results/, it's a container path from a Git clone
+    # Convert it to the corresponding host path
+    if target_path.startswith("/app/results/"):
+        host_project_root = get_host_project_root()
+        if not host_project_root:
+            return target_path
+        
+        relative_path = target_path[len("/app/results"):]
+        if relative_path.startswith("/"):
+            relative_path = relative_path[1:]
+        
+        return os.path.join(host_project_root, "results", relative_path)
     
-    host_project_root = get_host_project_root()
-    if not host_project_root:
-        return target_path
-    
-    relative_path = target_path[len("/app/results"):]
-    if relative_path.startswith("/"):
-        relative_path = relative_path[1:]
-    
-    return os.path.join(host_project_root, "results", relative_path)
+    # Otherwise, it's already a host path (local scan) - return as-is
+    return target_path
 
 
 def get_owasp_data_path_host() -> str:

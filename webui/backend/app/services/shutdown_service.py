@@ -27,8 +27,13 @@ def update_activity():
     last_activity = time.time()
 
 
-def schedule_shutdown(delay: int = 0):
-    """Schedule graceful shutdown"""
+def schedule_shutdown(delay: int = 0, current_scan: dict = None):
+    """Schedule graceful shutdown
+    
+    Args:
+        delay: Delay in seconds before shutdown
+        current_scan: Optional dict to check if scan is running (prevents shutdown during scan)
+    """
     global shutdown_scheduled, shutdown_scheduled_time, shutdown_delay_seconds
     
     if shutdown_scheduled or not AUTO_SHUTDOWN_ENABLED:
@@ -39,7 +44,34 @@ def schedule_shutdown(delay: int = 0):
     shutdown_delay_seconds = delay
     
     def shutdown():
-        time.sleep(delay)
+        # Sleep in small increments to allow checking if scan started
+        elapsed = 0
+        check_interval = 5  # Check every 5 seconds
+        while elapsed < delay:
+            # Check if scan is running - if so, cancel shutdown
+            if current_scan and current_scan.get("status") == "running":
+                print(f"[Auto-Shutdown] Cancelled shutdown - scan is running")
+                cancel_shutdown()
+                return
+            
+            # Check if shutdown was cancelled
+            if not shutdown_scheduled:
+                return
+            
+            sleep_time = min(check_interval, delay - elapsed)
+            time.sleep(sleep_time)
+            elapsed += sleep_time
+        
+        # Final check before shutting down
+        if current_scan and current_scan.get("status") == "running":
+            print(f"[Auto-Shutdown] Cancelled shutdown - scan is running")
+            cancel_shutdown()
+            return
+        
+        # Check if shutdown was cancelled
+        if not shutdown_scheduled:
+            return
+        
         print(f"[Auto-Shutdown] Shutting down after {delay}s delay...")
         os.kill(os.getpid(), signal.SIGTERM)
     
@@ -116,7 +148,7 @@ def idle_timeout_checker(current_scan: dict):
             continue
         
         if idle_time > IDLE_TIMEOUT and not shutdown_scheduled:
-            schedule_shutdown(delay=10)  # 10 second grace period
+            schedule_shutdown(delay=10, current_scan=current_scan)  # 10 second grace period
             break
 
 
