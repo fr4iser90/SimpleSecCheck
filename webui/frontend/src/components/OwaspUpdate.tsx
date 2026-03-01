@@ -6,6 +6,8 @@ interface UpdateStatus {
   finished_at: string | null
   error_code?: number | null
   error_message?: string | null
+  database_age_days?: number | null
+  database_exists?: boolean | null
 }
 
 export default function OwaspUpdate() {
@@ -13,6 +15,8 @@ export default function OwaspUpdate() {
     status: 'idle',
     started_at: null,
     finished_at: null,
+    database_age_days: null,
+    database_exists: null,
   })
   const [logs, setLogs] = useState<string[]>([])
   const [isUpdating, setIsUpdating] = useState(false)
@@ -217,24 +221,62 @@ export default function OwaspUpdate() {
       </div>
 
       <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f8f9fa', borderRadius: '4px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ color: getStatusColor(), fontWeight: 'bold' }}>{getStatusText()}</span>
-          {status.started_at && (
-            <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>
-              Started: {new Date(status.started_at).toLocaleString()}
-            </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span style={{ color: getStatusColor(), fontWeight: 'bold' }}>{getStatusText()}</span>
+            {status.started_at && (
+              <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>
+                Started: {new Date(status.started_at).toLocaleString()}
+              </span>
+            )}
+            {status.finished_at && (
+              <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>
+                Finished: {new Date(status.finished_at).toLocaleString()}
+              </span>
+            )}
+          </div>
+          
+          {/* Database age information */}
+          {status.database_exists !== null && (
+            <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+              {status.database_exists ? (
+                status.database_age_days !== null ? (
+                  status.database_age_days < 1 ? (
+                    <span style={{ color: '#28a745' }}>
+                      📊 Database: Up to date (less than 1 day old)
+                    </span>
+                  ) : status.database_age_days < 7 ? (
+                    <span style={{ color: '#28a745' }}>
+                      📊 Database: Recent ({status.database_age_days} days old)
+                    </span>
+                  ) : status.database_age_days < 30 ? (
+                    <span style={{ color: '#ffc107' }}>
+                      📊 Database: Moderate ({status.database_age_days} days old - update recommended)
+                    </span>
+                  ) : (
+                    <span style={{ color: '#dc3545' }}>
+                      📊 Database: Outdated ({status.database_age_days} days old - update strongly recommended!)
+                    </span>
+                  )
+                ) : (
+                  <span style={{ color: '#6c757d' }}>
+                    📊 Database: Found (age unknown)
+                  </span>
+                )
+              ) : (
+                <span style={{ color: '#6c757d' }}>
+                  📊 Database: Not found (will be created on first update)
+                </span>
+              )}
+            </div>
           )}
-          {status.finished_at && (
-            <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>
-              Finished: {new Date(status.finished_at).toLocaleString()}
-            </span>
+          
+          {status.error_message && (
+            <div style={{ marginTop: '0.5rem', color: '#dc3545' }}>
+              Error: {status.error_message}
+            </div>
           )}
         </div>
-        {status.error_message && (
-          <div style={{ marginTop: '0.5rem', color: '#dc3545' }}>
-            Error: {status.error_message}
-          </div>
-        )}
       </div>
 
       {(status.status === 'running' || logs.length > 0) && (

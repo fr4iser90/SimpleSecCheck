@@ -444,7 +444,7 @@ async def start_owasp_update():
 async def get_owasp_update_status():
     """Get current OWASP update status"""
     update_activity()
-    return get_update_status_service()
+    return get_update_status_service(OWASP_DATA_DIR)
 
 
 @app.get("/api/owasp/logs")

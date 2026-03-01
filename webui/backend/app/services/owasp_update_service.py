@@ -10,7 +10,7 @@ import threading
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 from fastapi import HTTPException
 from pydantic import BaseModel
 
@@ -21,6 +21,8 @@ class UpdateStatus(BaseModel):
     finished_at: Optional[str] = None
     error_code: Optional[int] = None
     error_message: Optional[str] = None
+    database_age_days: Optional[int] = None  # Age of database files in days
+    database_exists: Optional[bool] = None  # Whether database directory exists
 
 
 # Global state for OWASP update (similar to scan state)
@@ -261,14 +263,60 @@ async def monitor_update(process: subprocess.Popen):
         print(f"[OWASP Update] Update failed with exit code {return_code}")
 
 
-def get_update_status() -> UpdateStatus:
+def check_database_age(owasp_data_dir: Path) -> Tuple[Optional[int], bool]:
+    """
+    Check the age of OWASP database files
+    Returns: (age_in_days, database_exists)
+    """
+    if not owasp_data_dir.exists() or not any(owasp_data_dir.iterdir()):
+        return None, False
+    
+    try:
+        # Find the most recent file in the database directory
+        # Look for H2 database files first (most common)
+        latest_file = None
+        for pattern in ["*.mv.db", "*.h2.db", "*.lock"]:
+            files = list(owasp_data_dir.glob(pattern))
+            if files:
+                latest_file = max(files, key=lambda f: f.stat().st_mtime)
+                break
+        
+        # Fallback: find any file
+        if latest_file is None:
+            all_files = [f for f in owasp_data_dir.rglob("*") if f.is_file()]
+            if all_files:
+                latest_file = max(all_files, key=lambda f: f.stat().st_mtime)
+        
+        if latest_file and latest_file.exists():
+            # Get file modification time
+            file_time = latest_file.stat().st_mtime
+            current_time = datetime.now().timestamp()
+            age_seconds = int(current_time - file_time)
+            age_days = age_seconds // 86400
+            return age_days, True
+        
+        return None, True  # Directory exists but no files found
+    except Exception as e:
+        print(f"[OWASP Update] Error checking database age: {e}")
+        return None, True  # Assume exists but can't determine age
+
+
+def get_update_status(owasp_data_dir: Optional[Path] = None) -> UpdateStatus:
     """Get current update status"""
+    # Check database age if directory is provided
+    database_age_days = None
+    database_exists = None
+    if owasp_data_dir:
+        database_age_days, database_exists = check_database_age(owasp_data_dir)
+    
     return UpdateStatus(
         status=current_update["status"],
         started_at=current_update.get("started_at"),
         finished_at=current_update.get("finished_at"),
         error_code=current_update.get("error_code"),
         error_message=current_update.get("error_message"),
+        database_age_days=database_age_days,
+        database_exists=database_exists,
     )
 
 
