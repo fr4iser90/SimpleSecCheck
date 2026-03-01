@@ -450,7 +450,7 @@ def _generate_english_prompt(findings: List[Dict], policy_path: str = "config/fi
         "1. Identify false positives (findings that are not actual security issues)\n",
         "2. For false positives, suggest code changes if possible to avoid triggering the rule\n",
         "3. If code changes are not possible/appropriate, generate a finding policy JSON entry\n",
-        "4. Provide the complete finding_policy.json structure with all false positives\n\n",
+        f"4. Provide the complete {os.path.basename(policy_path)} structure with all false positives\n\n",
         "## Findings Summary\n",
         f"Total findings in this part: {len(findings)}\n",
         f"Tools: {', '.join(by_tool.keys())}\n\n"
@@ -473,7 +473,7 @@ def _generate_english_prompt(findings: List[Dict], policy_path: str = "config/fi
     prompt_parts.append("\n## Expected Output\n")
     prompt_parts.append("1. List of false positives with explanations\n")
     prompt_parts.append("2. Code change suggestions (if applicable)\n")
-    prompt_parts.append("3. Complete `finding_policy.json` structure with all false positives\n")
+    prompt_parts.append(f"3. Complete `{os.path.basename(policy_path)}` structure with all false positives\n")
     prompt_parts.append(f"   - Place in `{policy_path}`\n")
     prompt_parts.append("   - Use proper regex patterns for path/message matching\n")
     prompt_parts.append("   - Include clear reasons for each accepted finding\n")
@@ -503,7 +503,7 @@ def _generate_chinese_prompt(findings: List[Dict], policy_path: str = "config/fi
         "1. 识别误报（非实际安全问题的发现）\n",
         "2. 对于误报，如可能，建议代码更改以避免触发规则\n",
         "3. 如果无法/不适合更改代码，生成finding policy JSON条目\n",
-        "4. 提供包含所有误报的完整finding_policy.json结构\n\n",
+        f"4. 提供包含所有误报的完整{os.path.basename(policy_path)}结构\n\n",
         "## 发现摘要\n",
         f"本部分总发现数: {len(findings)}\n",
         f"工具: {', '.join(by_tool.keys())}\n\n"
@@ -526,7 +526,7 @@ def _generate_chinese_prompt(findings: List[Dict], policy_path: str = "config/fi
     prompt_parts.append("\n## 期望输出\n")
     prompt_parts.append("1. 误报列表及说明\n")
     prompt_parts.append("2. 代码更改建议（如适用）\n")
-    prompt_parts.append("3. 包含所有误报的完整`finding_policy.json`结构\n")
+    prompt_parts.append(f"3. 包含所有误报的完整`{os.path.basename(policy_path)}`结构\n")
     prompt_parts.append(f"   - 放置在`{policy_path}`\n")
     prompt_parts.append("   - 使用正确的正则表达式匹配路径/消息\n")
     prompt_parts.append("   - 为每个接受的发现包含清晰的理由\n")
@@ -557,7 +557,7 @@ def _generate_german_prompt(findings: List[Dict], policy_path: str = "config/fin
         "1. Identifizieren Sie False Positives (Funde, die keine tatsächlichen Sicherheitsprobleme sind)\n",
         "2. Für False Positives schlagen Sie Code-Änderungen vor, falls möglich, um die Regel nicht auszulösen\n",
         "3. Wenn Code-Änderungen nicht möglich/angemessen sind, generieren Sie einen finding policy JSON-Eintrag\n",
-        "4. Stellen Sie die vollständige finding_policy.json-Struktur mit allen False Positives bereit\n\n",
+        f"4. Stellen Sie die vollständige {os.path.basename(policy_path)}-Struktur mit allen False Positives bereit\n\n",
         "## Funde-Zusammenfassung\n",
         f"Gesamtanzahl Funde in diesem Teil: {len(findings)}\n",
         f"Tools: {', '.join(by_tool.keys())}\n\n"
@@ -580,7 +580,7 @@ def _generate_german_prompt(findings: List[Dict], policy_path: str = "config/fin
     prompt_parts.append("\n## Erwartete Ausgabe\n")
     prompt_parts.append("1. Liste der False Positives mit Erklärung\n")
     prompt_parts.append("2. Code-Änderungsvorschläge (falls zutreffend)\n")
-    prompt_parts.append("3. Vollständige `finding_policy.json`-Struktur mit allen False Positives\n")
+    prompt_parts.append(f"3. Vollständige `{os.path.basename(policy_path)}`-Struktur mit allen False Positives\n")
     prompt_parts.append(f"   - Abzulegen in `{policy_path}`\n")
     prompt_parts.append("   - Verwenden Sie korrekte reguläre Ausdrücke zum Abgleichen von Pfad/Nachricht\n")
     prompt_parts.append("   - Enthalten Sie für jeden akzeptierten Fund eine klare Begründung\n")

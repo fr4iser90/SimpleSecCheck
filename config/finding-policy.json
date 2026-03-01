@@ -3,6 +3,16 @@
         "enabled": true,
         "line_window": 2
     },
+    "semgrep": {
+        "accepted_findings": [
+            {
+                "rule_id": "javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop",
+                "file_regex": "webui/frontend/src/i18n/index\\.ts$",
+                "message_regex": "Possibility of prototype polluting function detected",
+                "reason": "Translation key access uses static JSON objects from locale files. Keys are derived from translation strings, not user input. The translations object structure is controlled and does not allow prototype pollution in practice. The code safely accesses nested translation keys for i18n functionality."
+            }
+        ]
+    },
     "gitleaks": {
         "accepted_findings": [
             {
@@ -38,6 +48,12 @@
                 "path_regex": ".*\\.py$",
                 "message_regex": "Try, Except, Pass detected",
                 "reason": "Exception handling for non-critical operations (cleanup, status updates). Errors are logged elsewhere"
+            },
+            {
+                "check_id": "B108",
+                "path_regex": "webui/backend/app/services/owasp_update_service\\.py$",
+                "message_regex": "Probable insecure usage of temp file/directory",
+                "reason": "Uses tempfile.mkstemp() which is secure. File descriptor is immediately closed after creation. The temp file is used for log backup only, with proper permissions and cleanup."
             }
         ]
     }

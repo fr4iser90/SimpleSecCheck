@@ -160,7 +160,7 @@ function openAIPromptModal(): void {
                 <input
                   type="text"
                   id="ai-prompt-policy-path"
-                  value="config/finding-policy.json"
+                  value="${currentPolicyPath}"
                   onchange="updateAIPromptPolicyPath(this.value)"
                   placeholder="config/finding-policy.json"
                   style="
@@ -217,6 +217,11 @@ function openAIPromptModal(): void {
   }
   if (aiPromptModal) {
     aiPromptModal.style.display = 'flex';
+    // Update input field with current value
+    const input = document.getElementById('ai-prompt-policy-path') as HTMLInputElement | null;
+    if (input) {
+      input.value = currentPolicyPath;
+    }
   }
   loadAIPrompt();
 }
@@ -250,6 +255,11 @@ function setAIPromptLanguage(lang: Language): void {
 
 function updateAIPromptPolicyPath(path: string): void {
   currentPolicyPath = path;
+  // Update input field to reflect the change
+  const input = document.getElementById('ai-prompt-policy-path') as HTMLInputElement | null;
+  if (input) {
+    input.value = path;
+  }
   loadAIPrompt();
 }
 
@@ -277,7 +287,7 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
       "1. 识别误报（非实际安全问题的发现）\n",
       "2. 对于误报，如可能，建议代码更改以避免触发规则\n",
       "3. 如果无法/不适合更改代码，生成finding policy JSON条目\n",
-      "4. 提供包含所有误报的完整finding_policy.json结构\n\n",
+      `4. 提供包含所有误报的完整${policyPath.split('/').pop() || 'finding-policy.json'}结构\n\n`,
       "## 发现摘要\n",
       `总发现数: ${findings.length}\n`,
       `工具: ${Object.keys(byTool).join(', ')}\n\n`
@@ -303,7 +313,7 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
     parts.push("\n## 期望输出\n");
     parts.push("1. 误报列表及说明\n");
     parts.push("2. 代码更改建议（如适用）\n");
-    parts.push("3. 包含所有误报的完整`finding_policy.json`结构\n");
+    parts.push(`3. 包含所有误报的完整\`${policyPath.split('/').pop() || 'finding-policy.json'}\`结构\n`);
     parts.push(`   - 放置在\`${policyPath}\`\n`);
     parts.push("   - 使用适当的正则表达式进行路径/消息匹配\n");
     parts.push("   - 为每个接受的发现包含清晰的原因\n");
@@ -317,7 +327,7 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
       "1. Identifizieren Sie False Positives (Funde, die keine tatsächlichen Sicherheitsprobleme sind)\n",
       "2. Für False Positives schlagen Sie Code-Änderungen vor, falls möglich, um die Regel nicht auszulösen\n",
       "3. Wenn Code-Änderungen nicht möglich/angemessen sind, generieren Sie einen finding policy JSON-Eintrag\n",
-      "4. Stellen Sie die vollständige finding_policy.json-Struktur mit allen False Positives bereit\n\n",
+      `4. Stellen Sie die vollständige ${policyPath.split('/').pop() || 'finding-policy.json'}-Struktur mit allen False Positives bereit\n\n`,
       "## Funde-Zusammenfassung\n",
       `Gesamtanzahl Funde: ${findings.length}\n`,
       `Tools: ${Object.keys(byTool).join(', ')}\n\n`
@@ -343,7 +353,7 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
     parts.push("\n## Erwartete Ausgabe\n");
     parts.push("1. Liste der False Positives mit Erklärung\n");
     parts.push("2. Code-Änderungsvorschläge (falls zutreffend)\n");
-    parts.push("3. Vollständige `finding_policy.json`-Struktur mit allen False Positives\n");
+    parts.push(`3. Vollständige \`${policyPath.split('/').pop() || 'finding-policy.json'}\`-Struktur mit allen False Positives\n`);
     parts.push(`   - Platzieren in \`${policyPath}\`\n`);
     parts.push("   - Verwenden Sie geeignete Regex-Muster für Pfad/Nachricht-Matching\n");
     parts.push("   - Enthalten Sie klare Gründe für jeden akzeptierten Fund\n");
@@ -358,7 +368,7 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
       "1. Identify false positives (findings that are not actual security issues)\n",
       "2. For false positives, suggest code changes if possible to avoid triggering the rule\n",
       "3. If code changes are not possible/appropriate, generate a finding policy JSON entry\n",
-      "4. Provide the complete finding_policy.json structure with all false positives\n\n",
+      `4. Provide the complete ${policyPath.split('/').pop() || 'finding-policy.json'} structure with all false positives\n\n`,
       "## Findings Summary\n",
       `Total findings: ${findings.length}\n`,
       `Tools: ${Object.keys(byTool).join(', ')}\n\n`
@@ -384,7 +394,7 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
     parts.push("\n## Expected Output\n");
     parts.push("1. List of false positives with explanations\n");
     parts.push("2. Code change suggestions (if applicable)\n");
-    parts.push("3. Complete `finding_policy.json` structure with all false positives\n");
+    parts.push(`3. Complete \`${policyPath.split('/').pop() || 'finding-policy.json'}\` structure with all false positives\n`);
     parts.push(`   - Place in \`${policyPath}\`\n`);
     parts.push("   - Use proper regex patterns for path/message matching\n");
     parts.push("   - Include clear reasons for each accepted finding\n");
@@ -453,7 +463,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
         "1. 识别误报（非实际安全问题的发现）\n",
         "2. 对于误报，如可能，建议代码更改以避免触发规则\n",
         "3. 如果无法/不适合更改代码，生成finding policy JSON条目\n",
-        "4. 提供包含所有误报的完整finding_policy.json结构\n\n",
+        `4. 提供包含所有误报的完整${policyPath.split('/').pop() || 'finding-policy.json'}结构\n\n`,
         "## 发现摘要\n",
         `本部分总发现数: ${chunk.length}\n`,
         `工具: ${Object.keys(chunkByTool).join(', ')}\n\n`
@@ -479,7 +489,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
       parts.push("\n## 期望输出\n");
       parts.push("1. 误报列表及说明\n");
       parts.push("2. 代码更改建议（如适用）\n");
-      parts.push("3. 包含所有误报的完整`finding_policy.json`结构\n");
+      parts.push(`3. 包含所有误报的完整\`${policyPath.split('/').pop() || 'finding-policy.json'}\`结构\n`);
       parts.push(`   - 放置在\`${policyPath}\`\n`);
       parts.push("   - 使用适当的正则表达式进行路径/消息匹配\n");
       parts.push("   - 为每个接受的发现包含清晰的原因\n");
@@ -494,7 +504,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
         "1. Identifizieren Sie False Positives (Funde, die keine tatsächlichen Sicherheitsprobleme sind)\n",
         "2. Für False Positives schlagen Sie Code-Änderungen vor, falls möglich, um die Regel nicht auszulösen\n",
         "3. Wenn Code-Änderungen nicht möglich/angemessen sind, generieren Sie einen finding policy JSON-Eintrag\n",
-        "4. Stellen Sie die vollständige finding_policy.json-Struktur mit allen False Positives bereit\n\n",
+        `4. Stellen Sie die vollständige ${policyPath.split('/').pop() || 'finding-policy.json'}-Struktur mit allen False Positives bereit\n\n`,
         "## Funde-Zusammenfassung\n",
         `Gesamtanzahl Funde in diesem Teil: ${chunk.length}\n`,
         `Tools: ${Object.keys(chunkByTool).join(', ')}\n\n`
@@ -520,7 +530,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
       parts.push("\n## Erwartete Ausgabe\n");
       parts.push("1. Liste der False Positives mit Erklärung\n");
       parts.push("2. Code-Änderungsvorschläge (falls zutreffend)\n");
-      parts.push("3. Vollständige `finding_policy.json`-Struktur mit allen False Positives\n");
+      parts.push(`3. Vollständige \`${policyPath.split('/').pop() || 'finding-policy.json'}\`-Struktur mit allen False Positives\n`);
       parts.push(`   - Platzieren in \`${policyPath}\`\n`);
       parts.push("   - Verwenden Sie geeignete Regex-Muster für Pfad/Nachricht-Matching\n");
       parts.push("   - Enthalten Sie klare Gründe für jeden akzeptierten Fund\n");
@@ -536,7 +546,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
         "1. Identify false positives (findings that are not actual security issues)\n",
         "2. For false positives, suggest code changes if possible to avoid triggering the rule\n",
         "3. If code changes are not possible/appropriate, generate a finding policy JSON entry\n",
-        "4. Provide the complete finding_policy.json structure with all false positives\n\n",
+        `4. Provide the complete ${policyPath.split('/').pop() || 'finding-policy.json'} structure with all false positives\n\n`,
         "## Findings Summary\n",
         `Total findings in this part: ${chunk.length}\n`,
         `Tools: ${Object.keys(chunkByTool).join(', ')}\n\n`
@@ -562,7 +572,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
       parts.push("\n## Expected Output\n");
       parts.push("1. List of false positives with explanations\n");
       parts.push("2. Code change suggestions (if applicable)\n");
-      parts.push("3. Complete `finding_policy.json` structure with all false positives\n");
+      parts.push(`3. Complete \`${policyPath.split('/').pop() || 'finding-policy.json'}\` structure with all false positives\n`);
       parts.push(`   - Place in \`${policyPath}\`\n`);
       parts.push("   - Use proper regex patterns for path/message matching\n");
       parts.push("   - Include clear reasons for each accepted finding\n");
