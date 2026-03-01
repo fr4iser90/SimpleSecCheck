@@ -29,7 +29,6 @@ ehthumbs.db
 Thumbs.db
 
 # Docker
-Dockerfile
 .dockerignore
 
 # Logs and databases
