@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface ScanStatusData {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -13,14 +13,75 @@ interface ScanFormProps {
   onScanStart: (scanStatus: ScanStatusData) => void
 }
 
+// Git URL patterns for detection
+const GIT_URL_PATTERNS = [
+  /^https?:\/\/(www\.)?github\.com\/[\w\-\.]+\/[\w\-\.]+/,
+  /^https?:\/\/(www\.)?gitlab\.com\/[\w\-\.]+\/[\w\-\.]+/,
+  /^git@(github|gitlab)\.com:[\w\-\.]+\/[\w\-\.]+\.git$/,
+]
+
+function isGitUrl(url: string): boolean {
+  if (!url || !url.trim()) return false
+  return GIT_URL_PATTERNS.some(pattern => pattern.test(url.trim()))
+}
+
 export default function ScanForm({ onScanStart }: ScanFormProps) {
   const [scanType, setScanType] = useState<'code' | 'website' | 'network'>('code')
   const [target, setTarget] = useState('')
+  const [gitBranch, setGitBranch] = useState('')
+  const [availableBranches, setAvailableBranches] = useState<string[]>([])
+  const [loadingBranches, setLoadingBranches] = useState(false)
+  const [branchError, setBranchError] = useState<string | null>(null)
   const [ciMode, setCiMode] = useState(false)
   const [findingPolicy, setFindingPolicy] = useState('')
   const [collectMetadata, setCollectMetadata] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Detect if target is a Git URL
+  const isGitRepo = scanType === 'code' && isGitUrl(target)
+  
+  // Fetch branches when Git URL is detected
+  useEffect(() => {
+    if (isGitRepo && target.trim()) {
+      setLoadingBranches(true)
+      setBranchError(null)
+      setAvailableBranches([])
+      setGitBranch('') // Reset branch selection
+      
+      fetch(`/api/git/branches?url=${encodeURIComponent(target.trim())}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({ detail: 'Failed to fetch branches' }))
+            throw new Error(errorData.detail || 'Failed to fetch branches')
+          }
+          return res.json()
+        })
+        .then((data) => {
+          const branches = data.branches || []
+          const defaultBranch = data.default
+          
+          setAvailableBranches(branches)
+          
+          // Auto-select default branch if available (user can change it if needed)
+          if (defaultBranch && !gitBranch) {
+            setGitBranch(defaultBranch)
+          }
+          setLoadingBranches(false)
+        })
+        .catch((err) => {
+          console.warn('Failed to fetch branches:', err)
+          setBranchError(err.message || 'Could not fetch branches. You can still enter a branch name manually.')
+          setLoadingBranches(false)
+          // Don't show error to user - they can still enter branch manually
+        })
+    } else {
+      // Reset when not a Git repo
+      setAvailableBranches([])
+      setBranchError(null)
+      setGitBranch('')
+    }
+  }, [isGitRepo, target])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,6 +91,7 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
     try {
       // Clean whitespace from target and finding policy
       const cleanTarget = target.trim()
+      const cleanGitBranch = gitBranch.trim() || null
       const cleanFindingPolicy = findingPolicy.trim() || null
 
       const response = await fetch('/api/scan/start', {
@@ -40,6 +102,7 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
         body: JSON.stringify({
           type: scanType,
           target: scanType === 'network' ? 'network' : cleanTarget,
+          git_branch: cleanGitBranch,
           ci_mode: ciMode,
           finding_policy: cleanFindingPolicy,
           collect_metadata: collectMetadata,
@@ -107,7 +170,7 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
       {scanType !== 'network' && (
         <div className="form-group">
           <label htmlFor="target">
-            Target {scanType === 'code' ? '(Path)' : '(URL)'}
+            Target {scanType === 'code' ? '(Path oder Git URL)' : '(URL)'}
           </label>
           <input
             id="target"
@@ -115,9 +178,93 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             onBlur={(e) => setTarget(e.target.value.trim())} // Auto-trim on blur
-            placeholder={scanType === 'code' ? '/path/to/project' : 'https://example.com'}
+            placeholder={scanType === 'code' ? '/path/to/project oder https://github.com/user/repo' : 'https://example.com'}
             required
+            style={{
+              borderColor: isGitRepo ? '#28a745' : undefined,
+            }}
           />
+          {isGitRepo && (
+            <>
+              <div style={{
+                marginTop: '0.75rem',
+                padding: '0.75rem',
+                background: 'rgba(40, 167, 69, 0.1)',
+                border: '1px solid #28a745',
+                borderRadius: '6px',
+                fontSize: '0.875rem',
+                color: '#155724'
+              }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>🔗</span>
+                  <span>Git Repository erkannt</span>
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.25rem', lineHeight: '1.6' }}>
+                  <li>Repository wird automatisch geklont</li>
+                  <li>Scan wird auf geklontem Projekt ausgeführt</li>
+                  <li>Temporäres Projekt wird nach Scan automatisch gelöscht</li>
+                </ul>
+              </div>
+              <div className="form-group" style={{ marginTop: '0.75rem' }}>
+                <label htmlFor="git-branch">
+                  Git Branch {availableBranches.length > 0 ? '(automatisch erkannt)' : '(optional)'}
+                </label>
+                {loadingBranches ? (
+                  <div style={{ 
+                    padding: '0.5rem', 
+                    color: '#6c757d', 
+                    fontSize: '0.875rem',
+                    fontStyle: 'italic'
+                  }}>
+                    🔄 Branches werden geladen...
+                  </div>
+                ) : availableBranches.length > 0 ? (
+                  <select
+                    id="git-branch"
+                    value={gitBranch}
+                    onChange={(e) => setGitBranch(e.target.value)}
+                    style={{
+                      fontSize: '0.875rem',
+                      width: '100%',
+                      padding: '0.5rem',
+                      borderRadius: '4px',
+                      border: '1px solid #ced4da'
+                    }}
+                  >
+                    {availableBranches.map((branch) => (
+                      <option key={branch} value={branch}>
+                        {branch}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <>
+                    <input
+                      id="git-branch"
+                      type="text"
+                      value={gitBranch}
+                      onChange={(e) => setGitBranch(e.target.value)}
+                      onBlur={(e) => setGitBranch(e.target.value.trim())}
+                      placeholder="main, master, develop, etc. (leer = Standard-Branch)"
+                      style={{
+                        fontSize: '0.875rem'
+                      }}
+                    />
+                    {branchError && (
+                      <small style={{ display: 'block', marginTop: '0.5rem', color: '#856404', fontSize: '0.875rem' }}>
+                        ⚠️ {branchError}
+                      </small>
+                    )}
+                  </>
+                )}
+                <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
+                  {availableBranches.length > 0 
+                    ? 'Standard-Branch ist automatisch ausgewählt. Du kannst einen anderen Branch wählen.'
+                    : 'Leer lassen für Standard-Branch (meistens "main" oder "master")'}
+                </small>
+              </div>
+            </>
+          )}
         </div>
       )}
 

@@ -15,12 +15,14 @@ from pydantic import BaseModel
 
 from .container_service import stop_running_containers
 from .shutdown_service import schedule_shutdown, SHUTDOWN_AFTER_SCAN, AUTO_SHUTDOWN_ENABLED, SHUTDOWN_DELAY
-from .step_service import extract_steps_for_frontend
+from .step_service import extract_steps_for_frontend, initialize_step_tracking, reset_step_tracking, initialize_steps_log
+from .git_service import is_git_url, clone_repository, cleanup_temp_repository
 
 
 class ScanRequest(BaseModel):
     type: str  # code, website, network
     target: str
+    git_branch: Optional[str] = None  # Optional Git branch to clone
     ci_mode: bool = False
     finding_policy: Optional[str] = None
     collect_metadata: bool = False  # OPTIONAL: Only collect metadata if user explicitly enables it
@@ -61,68 +63,74 @@ async def start_scan(
     # Log what Frontend sent to Backend
     print(f"[Scan Service] Frontend sent: type={request.type}, target={clean_target}, finding_policy={clean_finding_policy}, ci_mode={request.ci_mode}, collect_metadata={request.collect_metadata}")
     
-    if request.type == "code":
-        if not clean_target:
-            raise HTTPException(status_code=400, detail="Target path is required")
-        # Note: We don't validate path existence here because:
-        # 1. The path is on the host, not in the container
-        # 2. run-docker.sh will validate and provide better error messages
-        # 3. The path will be mounted when docker-compose runs
+    # STEP 1: Generate scan_id (ALWAYS FIRST)
+    scan_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    current_scan["scan_id"] = scan_id
+    
+    # STEP 2: Save original target for directory name (before Git clone changes it)
+    original_target = clean_target
+    
+    # STEP 3: Initialize step tracking and create scan directory (ALWAYS BEFORE ANYTHING ELSE)
+    initialize_step_tracking(current_scan)
+    initialize_steps_log(scan_id, results_dir, current_scan, original_target)
+    
+    # STEP 4: Handle Git repository URLs (if Git URL, clone it)
+    temp_clone_path = None
+    if request.type == "code" and is_git_url(clean_target):
+        print(f"[Scan Service] Git repository URL detected: {clean_target}")
+        git_branch = request.git_branch.strip() if request.git_branch else None
+        temp_clone_path = await clone_repository(clean_target, base_dir, scan_id, current_scan, results_dir, git_branch)
+        clean_target = str(temp_clone_path)  # Use cloned path for scan
+        print(f"[Scan Service] Using cloned repository path: {clean_target}")
+    
+    # STEP 5: Validate target
+    if request.type == "code" and not clean_target:
+        raise HTTPException(status_code=400, detail="Target path is required")
     elif request.type == "website":
         if not clean_target:
             raise HTTPException(status_code=400, detail="Target URL is required")
         if not clean_target.startswith(("http://", "https://")):
             raise HTTPException(status_code=400, detail="Target must be a valid URL (http:// or https://)")
     
-    # Build command (exactly like CLI)
+    # STEP 6: Build command
     cmd = [str(cli_script)]
     if request.ci_mode:
         cmd.append("--ci")
     if clean_finding_policy:
         cmd.extend(["--finding-policy", clean_finding_policy])
         print(f"[Scan Service] Adding --finding-policy to command: {clean_finding_policy}")
-    # ONLY collect metadata if user explicitly enabled it
     if request.collect_metadata:
         cmd.append("--collect-metadata")
     cmd.append(clean_target if request.type != "network" else "network")
     
-    # Log final command that will be executed
     print(f"[Scan Service] Executing command: {' '.join(cmd)}")
     
-    # Start process (as non-root user, no shell injection)
+    # STEP 7: Start scan process
     try:
-        # Security: Use list for cmd, no shell=True
-        # Security: Hardcoded CLI script path, no user input in cmd, shell=False, timeout handled by process
         process = subprocess.Popen(  # nosec B603, B607
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,  # Combine stderr with stdout for better error messages
+            stderr=subprocess.STDOUT,
             cwd=str(base_dir),
             env=os.environ.copy(),
-            # Security: Run as current user (non-root), no shell
             shell=False,
-            # Security: Don't allow process to gain privileges
             start_new_session=False,
-            text=True,  # Text mode for easier error handling
-            bufsize=1   # Line buffered
+            text=True,
+            bufsize=1
         )
         
-        # Generate scan ID (timestamp-based)
-        scan_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Update GLOBAL state (CRITICAL: update dict, don't reassign!)
+        # STEP 8: Update scan state
         current_scan["process"] = process
         current_scan["status"] = "running"
-        current_scan["scan_id"] = scan_id
-        current_scan["results_dir"] = None  # Will be set when scan completes
         current_scan["started_at"] = datetime.now().isoformat()
         current_scan["process_output"] = []
-        current_scan["process_output_lock"] = threading.Lock()
-        current_scan["step_counter"] = 0  # Reset step counter
-        current_scan["step_names"] = {}  # Reset step names
         current_scan["error_code"] = None
         current_scan["error_message"] = None
-        current_scan["container_ids"] = []  # Reset container IDs
+        current_scan["container_ids"] = []
+        current_scan["temp_clone_path"] = str(temp_clone_path) if temp_clone_path else None
+        
+        # Reset step tracking (preserve Git Clone steps if they exist)
+        reset_step_tracking(current_scan, preserve_git_clone=True)
         
         print(f"[Start Scan] Status set to 'running', scan_id={scan_id}, PID={process.pid}")
         
@@ -138,6 +146,9 @@ async def start_scan(
             started_at=current_scan["started_at"]
         )
     except Exception as e:
+        # Cleanup temp repository if scan failed to start
+        if temp_clone_path:
+            cleanup_temp_repository(temp_clone_path)
         current_scan["status"] = "error"
         raise HTTPException(status_code=500, detail=f"Failed to start scan: {str(e)}")
 
@@ -229,7 +240,9 @@ async def monitor_scan(process: subprocess.Popen, scan_id: str, current_scan: di
             with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
                 log_content = f.read()
                 # Check for completion markers
-                if "SimpleSecCheck Docker Security Scan Completed" in log_content:
+                if "SimpleSecCheck Security Scan Sequence Completed" in log_content:
+                    scan_really_done = True
+                elif "SimpleSecCheck Docker Security Scan Completed" in log_content:
                     scan_really_done = True
                 elif "Security scan completed" in log_content:
                     scan_really_done = True
@@ -311,6 +324,13 @@ async def monitor_scan(process: subprocess.Popen, scan_id: str, current_scan: di
             current_scan["results_dir"] = results_dir_path
             current_scan["error_code"] = return_code
             current_scan["error_message"] = error_message
+        
+        # Cleanup temporary repository after scan is done
+        temp_clone_path_str = current_scan.get("temp_clone_path")
+        if temp_clone_path_str:
+            temp_clone_path = Path(temp_clone_path_str)
+            cleanup_temp_repository(temp_clone_path)
+            current_scan["temp_clone_path"] = None
     else:
         # Scan process exited but scan might still be running (e.g., docker-compose in background)
         # Keep status as "running" and let status endpoint check log file
@@ -346,7 +366,9 @@ async def recheck_scan_status(scan_id: str, results_dir: Optional[str], return_c
         try:
             with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
                 log_content = f.read()
-                if "SimpleSecCheck Docker Security Scan Completed" in log_content:
+                if "SimpleSecCheck Security Scan Sequence Completed" in log_content:
+                    scan_done = True
+                elif "SimpleSecCheck Docker Security Scan Completed" in log_content:
                     scan_done = True
                 elif "Security scan completed" in log_content:
                     scan_done = True
@@ -371,6 +393,13 @@ async def recheck_scan_status(scan_id: str, results_dir: Optional[str], return_c
             current_scan["error_code"] = return_code
             current_scan["error_message"] = error_message
         
+        # Cleanup temporary repository after scan is done
+        temp_clone_path_str = current_scan.get("temp_clone_path")
+        if temp_clone_path_str:
+            temp_clone_path = Path(temp_clone_path_str)
+            cleanup_temp_repository(temp_clone_path)
+            current_scan["temp_clone_path"] = None
+        
         # Schedule shutdown if enabled
         if SHUTDOWN_AFTER_SCAN and AUTO_SHUTDOWN_ENABLED:
             print(f"[Auto-Shutdown] Scan completed, will shutdown in {SHUTDOWN_DELAY}s...")
@@ -382,22 +411,28 @@ async def get_scan_status(current_scan: dict, results_dir: Path) -> ScanStatus:
     old_status = current_scan["status"]
     
     # If status is "running", check if scan is really done by looking at log file
+    # CRITICAL: Only check log file that matches current scan_id to avoid false positives from old scans
     if current_scan["status"] == "running" and current_scan["scan_id"]:
         results_dir_path = current_scan.get("results_dir")
         if not results_dir_path and results_dir.exists():
-            # Try to find results directory
+            # Try to find results directory - MUST match current scan_id
             for scan_dir in sorted(results_dir.iterdir(), reverse=True):
                 if scan_dir.is_dir() and current_scan["scan_id"] in scan_dir.name:
                     results_dir_path = str(scan_dir)
                     break
         
-        if results_dir_path:
+        # Only check log file if we found a directory matching the current scan_id
+        if results_dir_path and current_scan["scan_id"] in results_dir_path:
             log_file = Path(results_dir_path) / "logs" / "security-check.log"
             if log_file.exists():
                 try:
                     with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
                         log_content = f.read()
-                        if "SimpleSecCheck Docker Security Scan Completed" in log_content:
+                        # Only set to done if completion marker found AND log file belongs to current scan
+                        if "SimpleSecCheck Security Scan Sequence Completed" in log_content:
+                            current_scan["status"] = "done"
+                            current_scan["results_dir"] = results_dir_path
+                        elif "SimpleSecCheck Docker Security Scan Completed" in log_content:
                             current_scan["status"] = "done"
                             current_scan["results_dir"] = results_dir_path
                 except Exception as e:
@@ -460,6 +495,13 @@ async def stop_scan(current_scan: dict) -> ScanStatus:
     current_scan["error_code"] = 130  # SIGINT exit code
     current_scan["error_message"] = "Scan was stopped by user"
     current_scan["container_ids"] = []  # Clear container IDs
+    
+    # Cleanup temporary repository if scan was stopped
+    temp_clone_path_str = current_scan.get("temp_clone_path")
+    if temp_clone_path_str:
+        temp_clone_path = Path(temp_clone_path_str)
+        cleanup_temp_repository(temp_clone_path)
+        current_scan["temp_clone_path"] = None
     
     return ScanStatus(
         status="error",

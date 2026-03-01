@@ -105,6 +105,104 @@ async def health():
     return {"status": "ok", "service": "SimpleSecCheck WebUI"}
 
 
+@app.get("/api/git/branches")
+async def get_git_branches(url: str):
+    """
+    Get available branches from a Git repository.
+    Uses git ls-remote to fetch branches without cloning.
+    """
+    update_activity()
+    
+    import subprocess
+    import re
+    from urllib.parse import urlparse
+    
+    # Validate URL
+    if not url or not url.strip():
+        raise HTTPException(status_code=400, detail="URL is required")
+    
+    git_url = url.strip()
+    
+    # Normalize Git URL (add .git if needed for HTTPS URLs)
+    if not git_url.startswith("git@") and not git_url.endswith(".git") and not git_url.endswith("/"):
+        git_url = git_url + ".git"
+    
+    try:
+        # Use git ls-remote to fetch branches without cloning
+        # This is fast and doesn't require authentication for public repos
+        result = subprocess.run(
+            ["git", "ls-remote", "--heads", git_url],
+            capture_output=True,
+            text=True,
+            timeout=10,  # 10 second timeout
+            check=False  # Don't raise on error, we'll handle it
+        )
+        
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            
+            # Provide user-friendly error messages
+            if "not found" in error_msg.lower() or "does not exist" in error_msg.lower():
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Repository not found: {url}. Please check the URL and ensure the repository exists and is accessible."
+                )
+            elif "permission denied" in error_msg.lower() or "authentication" in error_msg.lower():
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Permission denied: {url}. Private repositories require authentication. You can still manually enter a branch name."
+                )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to fetch branches: {error_msg}. You can still manually enter a branch name."
+                )
+        
+        # Parse branches from output
+        # Format: <commit-hash>	refs/heads/<branch-name>
+        branches = []
+        for line in result.stdout.strip().split('\n'):
+            if line.strip():
+                match = re.search(r'refs/heads/(.+)', line)
+                if match:
+                    branch_name = match.group(1)
+                    branches.append(branch_name)
+        
+        # Sort branches (put common ones first)
+        common_branches = ['main', 'master', 'develop', 'dev', 'staging', 'production', 'prod']
+        sorted_branches = []
+        seen = set()
+        
+        # Add common branches first if they exist
+        for common in common_branches:
+            if common in branches:
+                sorted_branches.append(common)
+                seen.add(common)
+        
+        # Add remaining branches
+        for branch in sorted(branches):
+            if branch not in seen:
+                sorted_branches.append(branch)
+        
+        return {
+            "branches": sorted_branches,
+            "default": sorted_branches[0] if sorted_branches else None
+        }
+        
+    except subprocess.TimeoutExpired:
+        raise HTTPException(
+            status_code=408,
+            detail="Timeout while fetching branches. You can still manually enter a branch name."
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error while fetching branches: {str(e)}. You can still manually enter a branch name."
+        )
+
+
 @app.post("/api/scan/start", response_model=ScanStatus)
 async def start_scan(request: ScanRequest):
     """
@@ -146,17 +244,29 @@ async def get_logs():
     """
     update_activity()
     
-    # Find steps.log file
+    # Find steps.log file - MUST match current scan_id to avoid reading old scans
     steps_log = None
+    scan_id = current_scan.get("scan_id")
+    
+    if not scan_id:
+        return {"lines": [], "count": 0}
+    
+    # First try: Use results_dir if set and matches scan_id
     if current_scan.get("results_dir"):
-        steps_log = Path(current_scan["results_dir"]) / "logs" / "steps.log"
-    elif current_scan.get("scan_id") and RESULTS_DIR.exists():
+        results_dir_path = current_scan["results_dir"]
+        if scan_id in results_dir_path:
+            steps_log = Path(results_dir_path) / "logs" / "steps.log"
+    
+    # Second try: Find by scan_id (MUST match exactly)
+    if not steps_log and RESULTS_DIR.exists():
         for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
-            if scan_dir.is_dir() and current_scan["scan_id"] in scan_dir.name:
+            if scan_dir.is_dir() and scan_id in scan_dir.name:
+                # CRITICAL: Verify this is really the current scan
+                # Check if scan_id is in directory name (could be scan_scan_id or PROJECT_NAME_scan_id)
                 steps_log = scan_dir / "logs" / "steps.log"
                 break
     
-    # Read and return all lines
+    # Read and return all lines - ONLY if file exists and belongs to current scan
     if steps_log and steps_log.exists():
         try:
             with open(steps_log, "r", encoding="utf-8", errors="ignore") as f:

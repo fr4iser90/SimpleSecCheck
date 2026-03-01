@@ -1,11 +1,12 @@
 # Combined Dockerfile for docker-compose (backend + frontend)
 FROM python:3.11-slim
 
-# Install Node.js, docker-compose, and gosu for frontend build and CLI execution (as root, before user creation)
+# Install Node.js, docker-compose, gosu, and git for frontend build and CLI execution (as root, before user creation)
 RUN apt-get update && apt-get install -y \
     nodejs npm \
     curl \
     gosu \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install docker-compose (standalone binary)
