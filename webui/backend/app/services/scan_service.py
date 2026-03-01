@@ -21,7 +21,7 @@ from .git_service import is_git_url, clone_repository, cleanup_temp_repository
 # Central path management - ALL paths come from path_setup.py
 import sys
 sys.path.insert(0, "/project/src")
-from core.path_setup import get_scan_results_dir_host, get_target_mount_path_host, get_owasp_data_path_host
+from core.path_setup import get_scan_results_dir_host, get_target_mount_path_host, get_owasp_data_path_host, get_config_path_host
 
 
 class ScanRequest(BaseModel):
@@ -108,6 +108,7 @@ async def start_scan(
     logs_dir_host = f"{results_dir_host}/logs"
     target_mount_path_host = get_target_mount_path_host(clean_target)
     owasp_data_path_host = get_owasp_data_path_host()
+    config_path_host = get_config_path_host()
     
     # OWASP volume mount
     owasp_volume = []
@@ -119,6 +120,17 @@ async def start_scan(
             print(f"[Scan Service] Using OWASP data volume: {owasp_volume[1]} (will be created)")
     else:
         print(f"[Scan Service] WARNING: Could not determine OWASP data path - relying on docker-compose.yml volumes")
+    
+    # Config volume mount
+    config_volume = []
+    if config_path_host:
+        config_volume = ["-v", f"{config_path_host}:/SimpleSecCheck/config:ro"]
+        if os.path.exists(config_path_host):
+            print(f"[Scan Service] Using config volume: {config_volume[1]} (exists)")
+        else:
+            print(f"[Scan Service] WARNING: Config path does not exist: {config_path_host}")
+    else:
+        print(f"[Scan Service] WARNING: Could not determine config path - relying on docker-compose.yml volumes")
     
     # Build docker-compose command
     docker_compose_file = "/project/docker-compose.yml"
@@ -163,6 +175,9 @@ async def start_scan(
         cmd.extend(["-v", f"{target_mount_path_host}:/target:ro"])
     cmd.extend(["-v", f"{results_dir_host}:/SimpleSecCheck/results"])
     cmd.extend(["-v", f"{logs_dir_host}:/SimpleSecCheck/logs"])
+    
+    if config_volume:
+        cmd.extend(config_volume)
     
     if owasp_volume:
         cmd.extend(owasp_volume)

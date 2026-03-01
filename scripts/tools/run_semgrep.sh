@@ -35,10 +35,29 @@ if command -v semgrep &>/dev/null; then
     fi
   done
   
+  # Build config arguments: if SEMGREP_RULES_PATH is a directory, add all YAML files
+  SEMGREP_CONFIG_ARGS=()
+  if [ -d "$SEMGREP_RULES_PATH" ]; then
+    # Directory: add all .yml and .yaml files as configs
+    echo "[run_semgrep.sh][Semgrep] Found rules directory, adding all YAML files..." | tee -a "$LOG_FILE"
+    while IFS= read -r -d '' rule_file; do
+      SEMGREP_CONFIG_ARGS+=(--config "$rule_file")
+      echo "[run_semgrep.sh][Semgrep] Adding rule file: $rule_file" | tee -a "$LOG_FILE"
+    done < <(find "$SEMGREP_RULES_PATH" -type f \( -name "*.yml" -o -name "*.yaml" \) -print0 2>/dev/null)
+  elif [ -f "$SEMGREP_RULES_PATH" ]; then
+    # Single file
+    SEMGREP_CONFIG_ARGS+=(--config "$SEMGREP_RULES_PATH")
+  else
+    echo "[run_semgrep.sh][Semgrep][WARNING] Rules path not found: $SEMGREP_RULES_PATH, using auto rules only" | tee -a "$LOG_FILE"
+  fi
+  
+  # Always add auto rules for comprehensive coverage
+  SEMGREP_CONFIG_ARGS+=(--config auto)
+  
   # Run with custom rules + auto rules for comprehensive coverage
   # Disable git to avoid git errors when target is not a git repo
   echo "[run_semgrep.sh][Semgrep] Generating JSON report..." | tee -a "$LOG_FILE"
-  if semgrep --disable-version-check --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" "${SEMGREP_EXCLUDE_ARGS[@]}" --json -o "$SEMOLINA_JSON" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
+  if semgrep --disable-version-check "${SEMGREP_CONFIG_ARGS[@]}" "$TARGET_PATH" "${SEMGREP_EXCLUDE_ARGS[@]}" --json -o "$SEMOLINA_JSON" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
     echo "[run_semgrep.sh][Semgrep] JSON report generated successfully." | tee -a "$LOG_FILE"
   else
     EXIT_CODE=$?
@@ -47,7 +66,7 @@ if command -v semgrep &>/dev/null; then
   
   # Generate detailed text report with verbose output
   echo "[run_semgrep.sh][Semgrep] Generating text report..." | tee -a "$LOG_FILE"
-  if semgrep --disable-version-check --config="$SEMGREP_RULES_PATH" --config auto "$TARGET_PATH" "${SEMGREP_EXCLUDE_ARGS[@]}" --text -o "$SEMOLINA_TEXT" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
+  if semgrep --disable-version-check "${SEMGREP_CONFIG_ARGS[@]}" "$TARGET_PATH" "${SEMGREP_EXCLUDE_ARGS[@]}" --text -o "$SEMOLINA_TEXT" --severity=ERROR --severity=WARNING --severity=INFO >>"$LOG_FILE" 2>&1; then
     echo "[run_semgrep.sh][Semgrep] Text report generated successfully." | tee -a "$LOG_FILE"
   else
     EXIT_CODE=$?

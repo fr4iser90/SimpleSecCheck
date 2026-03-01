@@ -11,8 +11,16 @@ from defusedxml.ElementTree import parse as safe_parse
 from defusedxml import defuse_stdlib
 defuse_stdlib()
 import traceback
-# Setup paths using central path_setup module
-# NO PATH CALCULATIONS HERE - everything is handled by path_setup.py
+
+# Setup paths FIRST before importing anything from core
+# Add src directory to path so we can import core modules
+import sys
+from pathlib import Path
+SCRIPT_DIR = Path(__file__).parent.absolute()
+SRC_DIR = SCRIPT_DIR.parent
+sys.path.insert(0, str(SRC_DIR))
+
+# Now we can import from core
 from core.path_setup import setup_paths, get_results_dir, get_output_file
 setup_paths()
 
@@ -448,16 +456,25 @@ def main():
                 executed_tools[tool] = {'status': 'complete'}
         
         # Read and embed JavaScript files inline (required for Blob URLs)
+        # Read from source directory (compiled during Docker build), not RESULTS_DIR
         embedded_scripts = ""
         js_files = ['ai_prompt_modal.js', 'webui.js']
+        SCRIPT_DIR = Path(__file__).parent.absolute()  # src/reporting/
         for js_file in js_files:
-            js_path = os.path.join(RESULTS_DIR, js_file)
-            if os.path.exists(js_path):
+            # Try source directory first (where TypeScript compiles to)
+            js_path = SCRIPT_DIR / js_file
+            if not js_path.exists():
+                # Fallback: try RESULTS_DIR (in case files were copied there first)
+                js_path = Path(RESULTS_DIR) / js_file
+            if js_path.exists():
                 try:
                     with open(js_path, 'r', encoding='utf-8') as js_f:
                         embedded_scripts += f"<script>\n{js_f.read()}\n</script>\n"
+                        debug(f"Embedded {js_file} from {js_path}")
                 except Exception as e:
                     debug(f"Warning: Could not read {js_file}: {e}")
+            else:
+                debug(f"Warning: {js_file} not found at {js_path} or {SCRIPT_DIR / js_file}")
         
         with open(OUTPUT_FILE, 'w') as f:
             f.write(html_header(f'{target} - {now}', embedded_scripts))

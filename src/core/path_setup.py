@@ -105,6 +105,18 @@ def get_owasp_data_path_host() -> str:
     return os.path.join(host_project_root, "owasp-dependency-check-data")
 
 
+def get_config_path_host() -> str:
+    """
+    Get host path for config directory.
+    Returns host path or None if not found.
+    """
+    host_project_root = get_host_project_root()
+    if not host_project_root:
+        return None
+    
+    return os.path.join(host_project_root, "config")
+
+
 def get_results_dir():
     """
     Get RESULTS_DIR from environment variable.
