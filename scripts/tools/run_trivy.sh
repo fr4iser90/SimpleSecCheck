@@ -37,13 +37,20 @@ if command -v trivy &>/dev/null; then
     fi
   done
 
+  TRIVY_CONFIG_ARGS=()
+  if [ -f "$TRIVY_CONFIG_PATH" ]; then
+    TRIVY_CONFIG_ARGS=(--config "$TRIVY_CONFIG_PATH")
+  else
+    echo "[run_trivy.sh][Trivy][WARN] Config file not found at $TRIVY_CONFIG_PATH. Running with Trivy defaults." | tee -a "$LOG_FILE"
+  fi
+
   echo "[run_trivy.sh][Trivy] Running comprehensive vulnerability scan..." | tee -a "$LOG_FILE"
-  trivy "$TRIVY_SCAN_TYPE" --config "$TRIVY_CONFIG_PATH" --format json -o "$TRIVY_JSON" --severity HIGH,CRITICAL,MEDIUM,LOW --scanners vuln,secret,config "${TRIVY_SKIP_ARGS[@]}" "$TARGET_PATH" 2>&1 | tee -a "$LOG_FILE" || {
+  trivy "$TRIVY_SCAN_TYPE" "${TRIVY_CONFIG_ARGS[@]}" --format json -o "$TRIVY_JSON" --severity HIGH,CRITICAL,MEDIUM,LOW --scanners vuln,secret,config "${TRIVY_SKIP_ARGS[@]}" "$TARGET_PATH" 2>&1 | tee -a "$LOG_FILE" || {
     echo "[run_trivy.sh][Trivy] JSON report generation failed." | tee -a "$LOG_FILE"
   }
   
   # Generate detailed text report with all severities
-  trivy "$TRIVY_SCAN_TYPE" --config "$TRIVY_CONFIG_PATH" --format table -o "$TRIVY_TEXT" --severity HIGH,CRITICAL,MEDIUM,LOW --scanners vuln,secret,config "${TRIVY_SKIP_ARGS[@]}" "$TARGET_PATH" 2>&1 | tee -a "$LOG_FILE" || {
+  trivy "$TRIVY_SCAN_TYPE" "${TRIVY_CONFIG_ARGS[@]}" --format table -o "$TRIVY_TEXT" --severity HIGH,CRITICAL,MEDIUM,LOW --scanners vuln,secret,config "${TRIVY_SKIP_ARGS[@]}" "$TARGET_PATH" 2>&1 | tee -a "$LOG_FILE" || {
     echo "[run_trivy.sh][Trivy] Text report generation failed." | tee -a "$LOG_FILE"
   }
   
