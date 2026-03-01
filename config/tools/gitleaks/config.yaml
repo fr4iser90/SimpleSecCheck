@@ -6,6 +6,32 @@
   verbose = false
   verboseResults = false
 
+# Allowlist: Exclude common false positive paths
+[allowlist]
+  description = "Exclude node_modules, build artifacts, and documentation"
+  paths = [
+    # Dependencies and build artifacts
+    '''node_modules/''',
+    '''\.vite/''',
+    '''dist/''',
+    '''build/''',
+    '''\.next/''',
+    '''\.nuxt/''',
+    '''coverage/''',
+    '''\.cache/''',
+    # TypeScript definitions and source maps (common false positives)
+    '''\.d\.ts$''',
+    '''\.map$''',
+    # Documentation files (often contain example code)
+    '''README\.md$''',
+    '''\.md$''',
+    '''docs/''',
+    # Lock files
+    '''package-lock\.json$''',
+    '''yarn\.lock$''',
+    '''pnpm-lock\.yaml$''',
+  ]
+
 # Rules for different secret types
 [[rules]]
   description = "Generic API Key"
@@ -35,7 +61,9 @@
 [[rules]]
   description = "Database Password"
   id = "database-password"
-  regex = '''(?i)(password|pwd|pass)[\s=:]+['"]?([a-zA-Z0-9!@#$%^&*]{8,})['"]?'''
+  # More specific: only match database-related password patterns
+  # Exclude common false positives like "password" in function names or documentation
+  regex = '''(?i)(?:database|db|mysql|postgres|mongodb|redis)[\s_-]*(?:password|pwd|pass)[\s=:]+['"]?([a-zA-Z0-9!@#$%^&*]{8,})['"]?'''
 
 [[rules]]
   description = "Slack Token"

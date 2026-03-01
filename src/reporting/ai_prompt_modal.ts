@@ -249,6 +249,141 @@ function updateAIPromptPolicyPath(path: string): void {
   loadAIPrompt();
 }
 
+// Generate prompt locally from findings (same logic as backend)
+function generatePromptLocally(findings: any[], language: Language, policyPath: string): string {
+  // Group by tool
+  const byTool: { [key: string]: any[] } = {};
+  for (const f of findings) {
+    const tool = f.tool || 'Unknown';
+    if (!byTool[tool]) {
+      byTool[tool] = [];
+    }
+    byTool[tool].push(f);
+  }
+  
+  if (language === 'chinese') {
+    const parts: string[] = [
+      "# 安全扫描结果分析请求\n\n",
+      "我对代码库进行了安全扫描，发现以下问题。请分析每个发现并：\n",
+      "1. 识别误报（非实际安全问题的发现）\n",
+      "2. 对于误报，如可能，建议代码更改以避免触发规则\n",
+      "3. 如果无法/不适合更改代码，生成finding policy JSON条目\n",
+      "4. 提供包含所有误报的完整finding_policy.json结构\n\n",
+      "## 发现摘要\n",
+      `总发现数: ${findings.length}\n`,
+      `工具: ${Object.keys(byTool).join(', ')}\n\n`
+    ];
+    
+    for (const [tool, toolFindings] of Object.entries(byTool)) {
+      parts.push(`## ${tool} 发现 (${toolFindings.length} 个)\n\n`);
+      for (let i = 0; i < toolFindings.length; i++) {
+        const finding = toolFindings[i];
+        parts.push(`### 发现 ${i + 1}\n`);
+        parts.push(`- **严重性**: ${finding.severity || 'UNKNOWN'}\n`);
+        parts.push(`- **文件**: \`${finding.path || ''}\`\n`);
+        if (finding.line) {
+          parts.push(`- **行号**: ${finding.line}\n`);
+        }
+        if (finding.check_id) {
+          parts.push(`- **规则ID**: \`${finding.check_id}\`\n`);
+        }
+        parts.push(`- **消息**: ${finding.message || ''}\n\n`);
+      }
+    }
+    
+    parts.push("\n## 期望输出\n");
+    parts.push("1. 误报列表及说明\n");
+    parts.push("2. 代码更改建议（如适用）\n");
+    parts.push("3. 包含所有误报的完整`finding_policy.json`结构\n");
+    parts.push(`   - 放置在\`${policyPath}\`\n`);
+    parts.push("   - 使用适当的正则表达式进行路径/消息匹配\n");
+    parts.push("   - 为每个接受的发现包含清晰的原因\n");
+    
+    return parts.join('');
+  } else if (language === 'german') {
+    const parts: string[] = [
+      "# Sicherheitsscan-Ergebnisse Analyseanfrage\n\n",
+      "Ich habe einen Sicherheitsscan meines Codebases durchgeführt und die folgenden Probleme gefunden. ",
+      "Bitte analysieren Sie jeden Fund und:\n",
+      "1. Identifizieren Sie False Positives (Funde, die keine tatsächlichen Sicherheitsprobleme sind)\n",
+      "2. Für False Positives schlagen Sie Code-Änderungen vor, falls möglich, um die Regel nicht auszulösen\n",
+      "3. Wenn Code-Änderungen nicht möglich/angemessen sind, generieren Sie einen finding policy JSON-Eintrag\n",
+      "4. Stellen Sie die vollständige finding_policy.json-Struktur mit allen False Positives bereit\n\n",
+      "## Funde-Zusammenfassung\n",
+      `Gesamtanzahl Funde: ${findings.length}\n`,
+      `Tools: ${Object.keys(byTool).join(', ')}\n\n`
+    ];
+    
+    for (const [tool, toolFindings] of Object.entries(byTool)) {
+      parts.push(`## ${tool} Funde (${toolFindings.length} insgesamt)\n\n`);
+      for (let i = 0; i < toolFindings.length; i++) {
+        const finding = toolFindings[i];
+        parts.push(`### Fund ${i + 1}\n`);
+        parts.push(`- **Schweregrad**: ${finding.severity || 'UNKNOWN'}\n`);
+        parts.push(`- **Datei**: \`${finding.path || ''}\`\n`);
+        if (finding.line) {
+          parts.push(`- **Zeile**: ${finding.line}\n`);
+        }
+        if (finding.check_id) {
+          parts.push(`- **Regel-ID**: \`${finding.check_id}\`\n`);
+        }
+        parts.push(`- **Nachricht**: ${finding.message || ''}\n\n`);
+      }
+    }
+    
+    parts.push("\n## Erwartete Ausgabe\n");
+    parts.push("1. Liste der False Positives mit Erklärung\n");
+    parts.push("2. Code-Änderungsvorschläge (falls zutreffend)\n");
+    parts.push("3. Vollständige `finding_policy.json`-Struktur mit allen False Positives\n");
+    parts.push(`   - Platzieren in \`${policyPath}\`\n`);
+    parts.push("   - Verwenden Sie geeignete Regex-Muster für Pfad/Nachricht-Matching\n");
+    parts.push("   - Enthalten Sie klare Gründe für jeden akzeptierten Fund\n");
+    
+    return parts.join('');
+  } else {
+    // English (default)
+    const parts: string[] = [
+      "# Security Scan Findings Analysis Request\n\n",
+      "I have performed a security scan on my codebase and found the following issues. ",
+      "Please analyze each finding and:\n",
+      "1. Identify false positives (findings that are not actual security issues)\n",
+      "2. For false positives, suggest code changes if possible to avoid triggering the rule\n",
+      "3. If code changes are not possible/appropriate, generate a finding policy JSON entry\n",
+      "4. Provide the complete finding_policy.json structure with all false positives\n\n",
+      "## Findings Summary\n",
+      `Total findings: ${findings.length}\n`,
+      `Tools: ${Object.keys(byTool).join(', ')}\n\n`
+    ];
+    
+    for (const [tool, toolFindings] of Object.entries(byTool)) {
+      parts.push(`## ${tool} Findings (${toolFindings.length} total)\n\n`);
+      for (let i = 0; i < toolFindings.length; i++) {
+        const finding = toolFindings[i];
+        parts.push(`### Finding ${i + 1}\n`);
+        parts.push(`- **Severity**: ${finding.severity || 'UNKNOWN'}\n`);
+        parts.push(`- **File**: \`${finding.path || ''}\`\n`);
+        if (finding.line) {
+          parts.push(`- **Line**: ${finding.line}\n`);
+        }
+        if (finding.check_id) {
+          parts.push(`- **Rule ID**: \`${finding.check_id}\`\n`);
+        }
+        parts.push(`- **Message**: ${finding.message || ''}\n\n`);
+      }
+    }
+    
+    parts.push("\n## Expected Output\n");
+    parts.push("1. List of false positives with explanations\n");
+    parts.push("2. Code change suggestions (if applicable)\n");
+    parts.push("3. Complete `finding_policy.json` structure with all false positives\n");
+    parts.push(`   - Place in \`${policyPath}\`\n`);
+    parts.push("   - Use proper regex patterns for path/message matching\n");
+    parts.push("   - Include clear reasons for each accepted finding\n");
+    
+    return parts.join('');
+  }
+}
+
 async function loadAIPrompt(): Promise<void> {
   const loading = document.getElementById('ai-prompt-loading') as HTMLDivElement | null;
   const error = document.getElementById('ai-prompt-error') as HTMLDivElement | null;
@@ -285,14 +420,45 @@ async function loadAIPrompt(): Promise<void> {
       stats.textContent = `📊 ${data.findings_count} findings | ~${tokens.toLocaleString()} tokens`;
       stats.style.display = 'block';
     } else {
-      const errorText = await response.text();
-      error.textContent = `Failed to load prompt: ${errorText}`;
-      error.style.display = 'block';
-      loading.style.display = 'none';
+      throw new Error('API request failed');
     }
   } catch (err) {
+    // Fallback: Extract findings from embedded JSON in HTML
+    try {
+      const findingsScript = document.getElementById('findings-data') as HTMLScriptElement | null;
+      if (findingsScript) {
+        // Get text content - try textContent first, then innerText
+        let jsonText = findingsScript.textContent || findingsScript.innerText || '';
+        
+        // Decode HTML entities if present (shouldn't be, but handle it just in case)
+        if (jsonText.includes('&quot;') || jsonText.includes('&amp;')) {
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = jsonText;
+          jsonText = tempDiv.textContent || tempDiv.innerText || '';
+        }
+        
+        if (jsonText.trim()) {
+          const findings = JSON.parse(jsonText);
+          const prompt = generatePromptLocally(findings, currentLanguage, currentPolicyPath);
+          currentPrompt = prompt;
+          textarea.value = prompt;
+          textarea.style.display = 'block';
+          loading.style.display = 'none';
+          
+          const tokens = Math.ceil(prompt.length / (currentLanguage === 'chinese' ? 2 : 4));
+          stats.textContent = `📊 ${findings.length} findings | ~${tokens.toLocaleString()} tokens`;
+          stats.style.display = 'block';
+          return;
+        }
+      }
+    } catch (parseErr) {
+      // If embedded JSON doesn't exist or is invalid, show error
+      console.error('Failed to parse embedded findings:', parseErr);
+      console.error('Findings script element:', document.getElementById('findings-data'));
+    }
+    
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-    error.textContent = `Error: ${errorMessage}. Make sure the WebUI is running on http://localhost:8080`;
+    error.textContent = `Error: ${errorMessage}. Make sure the WebUI is running on http://localhost:8080 or open the report via WebUI.`;
     error.style.display = 'block';
     loading.style.display = 'none';
   }

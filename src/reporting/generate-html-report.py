@@ -289,6 +289,158 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
     
     return "".join(html_parts)
 
+def normalize_findings_for_ai_prompt(all_findings):
+    """
+    Normalize findings from all tools to unified format for AI prompt generation.
+    Returns list of normalized findings with tool, severity, path, line, message, check_id.
+    """
+    normalized = []
+    
+    # Normalize each tool's findings
+    for tool_name, findings in all_findings.items():
+        if findings is None:
+            continue
+        
+        # Handle different tool structures
+        if tool_name == 'ZAP' and isinstance(findings, dict):
+            # ZAP returns a dict with risk levels
+            for risk_level, alerts in findings.items():
+                if isinstance(alerts, list):
+                    for alert in alerts:
+                        normalized.append({
+                            "tool": "ZAP",
+                            "severity": risk_level.upper(),
+                            "check_id": str(alert.get("pluginid", "")),
+                            "path": alert.get("uri", ""),
+                            "line": "",
+                            "message": alert.get("name", alert.get("alert", "")),
+                        })
+        elif isinstance(findings, list):
+            # Standard list of findings
+            for finding in findings:
+                # Normalize based on tool
+                if tool_name == "Semgrep":
+                    normalized.append({
+                        "tool": "Semgrep",
+                        "severity": str(finding.get("severity", "UNKNOWN")).upper(),
+                        "check_id": str(finding.get("check_id", "")),
+                        "path": str(finding.get("path", "")),
+                        "line": str(finding.get("start", finding.get("line", ""))),
+                        "message": str(finding.get("message", "")),
+                    })
+                elif tool_name == "Trivy":
+                    normalized.append({
+                        "tool": "Trivy",
+                        "severity": str(finding.get("Severity", "UNKNOWN")).upper(),
+                        "check_id": str(finding.get("VulnerabilityID", "")),
+                        "path": str(finding.get("PkgName", "")),
+                        "line": "",
+                        "message": str(finding.get("Title", finding.get("Description", ""))),
+                    })
+                elif tool_name == "CodeQL":
+                    normalized.append({
+                        "tool": "CodeQL",
+                        "severity": str(finding.get("severity", finding.get("level", "note"))).upper(),
+                        "check_id": str(finding.get("rule_id", finding.get("ruleId", ""))),
+                        "path": str(finding.get("path", "")),
+                        "line": str(finding.get("start", "")),
+                        "message": str(finding.get("message", "")),
+                    })
+                elif tool_name == "GitLeaks":
+                    normalized.append({
+                        "tool": "GitLeaks",
+                        "severity": "HIGH",
+                        "check_id": str(finding.get("rule_id", "")),
+                        "path": str(finding.get("file", "")),
+                        "line": str(finding.get("line", "")),
+                        "message": str(finding.get("description", "")),
+                    })
+                elif tool_name == "TruffleHog":
+                    normalized.append({
+                        "tool": "TruffleHog",
+                        "severity": "HIGH",
+                        "check_id": str(finding.get("detector", "")),
+                        "path": str(finding.get("redacted", "")),
+                        "line": "",
+                        "message": str(finding.get("raw", ""))[:100] if finding.get("raw") else "",
+                    })
+                elif tool_name == "Detect-secrets":
+                    normalized.append({
+                        "tool": "Detect-secrets",
+                        "severity": "HIGH" if finding.get("is_secret") else "MEDIUM",
+                        "check_id": str(finding.get("type", "")),
+                        "path": str(finding.get("filename", "")),
+                        "line": str(finding.get("line_number", "")),
+                        "message": f"Secret type: {finding.get('type', '')}",
+                    })
+                elif tool_name == "OWASP Dependency Check":
+                    normalized.append({
+                        "tool": "OWASP Dependency Check",
+                        "severity": str(finding.get("severity", "UNKNOWN")).upper(),
+                        "check_id": str(finding.get("name", "")),
+                        "path": str(finding.get("fileName", "")),
+                        "line": "",
+                        "message": str(finding.get("description", "")),
+                    })
+                elif tool_name == "Safety":
+                    normalized.append({
+                        "tool": "Safety",
+                        "severity": "HIGH",
+                        "check_id": str(finding.get("vulnerability", "")),
+                        "path": str(finding.get("package", "")),
+                        "line": "",
+                        "message": str(finding.get("advisory", "")),
+                    })
+                elif tool_name == "Snyk":
+                    normalized.append({
+                        "tool": "Snyk",
+                        "severity": str(finding.get("severity", "MEDIUM")).upper(),
+                        "check_id": str(finding.get("vulnerability_id", finding.get("id", ""))),
+                        "path": str(finding.get("package", "")),
+                        "line": "",
+                        "message": str(finding.get("title", finding.get("description", ""))),
+                    })
+                elif tool_name == "ESLint":
+                    severity_map = {1: "LOW", 2: "MEDIUM", 3: "HIGH"}
+                    normalized.append({
+                        "tool": "ESLint",
+                        "severity": severity_map.get(finding.get("severity", 1), "LOW"),
+                        "check_id": str(finding.get("rule_id", "")),
+                        "path": str(finding.get("file_path", "")),
+                        "line": str(finding.get("line", "")),
+                        "message": str(finding.get("message", "")),
+                    })
+                elif tool_name == "Brakeman":
+                    normalized.append({
+                        "tool": "Brakeman",
+                        "severity": str(finding.get("severity", "MEDIUM")).upper(),
+                        "check_id": str(finding.get("warning_type", "")),
+                        "path": str(finding.get("file", "")),
+                        "line": str(finding.get("line", "")),
+                        "message": str(finding.get("message", "")),
+                    })
+                elif tool_name == "Bandit":
+                    normalized.append({
+                        "tool": "Bandit",
+                        "severity": str(finding.get("severity", "MEDIUM")).upper(),
+                        "check_id": str(finding.get("test_id", "")),
+                        "path": str(finding.get("filename", "")),
+                        "line": str(finding.get("line_number", "")),
+                        "message": str(finding.get("issue_text", "")),
+                    })
+                else:
+                    # Generic normalization for other tools
+                    normalized.append({
+                        "tool": tool_name,
+                        "severity": str(finding.get("severity", finding.get("Severity", "UNKNOWN"))).upper(),
+                        "check_id": str(finding.get("check_id", finding.get("id", finding.get("rule_id", "")))),
+                        "path": str(finding.get("path", finding.get("file", finding.get("filename", "")))),
+                        "line": str(finding.get("line", finding.get("line_number", finding.get("start", "")))),
+                        "message": str(finding.get("message", finding.get("description", finding.get("title", "")))),
+                    })
+    
+    return normalized
+
 def main():
     debug(f"Starting HTML report generation. Output: {OUTPUT_FILE}")
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -455,26 +607,48 @@ def main():
                 # ZAP returns a dict, not a list
                 executed_tools[tool] = {'status': 'complete'}
         
-        # Read and embed JavaScript files inline (required for Blob URLs)
-        # Read from source directory (compiled during Docker build), not RESULTS_DIR
+        # Read and embed JavaScript files inline (required for both Blob URLs and file://)
         embedded_scripts = ""
         js_files = ['ai_prompt_modal.js', 'webui.js']
         SCRIPT_DIR = Path(__file__).parent.absolute()  # src/reporting/
+        
+        # Try multiple possible locations for JS files (in order of preference)
+        possible_dirs = [
+            Path("/SimpleSecCheck/src/reporting"),  # Container absolute path (PRIMARY)
+            SCRIPT_DIR,  # src/reporting/ (relative to script)
+            Path(RESULTS_DIR),  # results/ (fallback - files copied after report generation)
+        ]
+        
         for js_file in js_files:
-            # Try source directory first (where TypeScript compiles to)
-            js_path = SCRIPT_DIR / js_file
-            if not js_path.exists():
-                # Fallback: try RESULTS_DIR (in case files were copied there first)
-                js_path = Path(RESULTS_DIR) / js_file
-            if js_path.exists():
-                try:
-                    with open(js_path, 'r', encoding='utf-8') as js_f:
-                        embedded_scripts += f"<script>\n{js_f.read()}\n</script>\n"
-                        debug(f"Embedded {js_file} from {js_path}")
-                except Exception as e:
-                    debug(f"Warning: Could not read {js_file}: {e}")
+            js_content = None
+            found_path = None
+            
+            for base_dir in possible_dirs:
+                js_path = base_dir / js_file
+                if js_path.exists():
+                    try:
+                        with open(js_path, 'r', encoding='utf-8') as js_f:
+                            js_content = js_f.read()
+                            found_path = js_path
+                            break
+                    except Exception as e:
+                        debug(f"Warning: Could not read {js_path}: {e}")
+            
+            if js_content:
+                embedded_scripts += f"<script>\n{js_content}\n</script>\n"
+                debug(f"Embedded {js_file} from {found_path}")
             else:
-                debug(f"Warning: {js_file} not found at {js_path} or {SCRIPT_DIR / js_file}")
+                debug(f"ERROR: {js_file} not found in any of: {possible_dirs}")
+                # Don't exit - continue without JS, but log error
+                sys.stderr.write(f"[ERROR] Failed to embed {js_file} - AI Prompt feature will not work!\n")
+        
+        # Normalize findings for AI prompt (for client-side generation when WebUI is not available)
+        normalized_findings = normalize_findings_for_ai_prompt(all_findings)
+        findings_json = json.dumps(normalized_findings, indent=2)
+        # Embed as JSON in script tag - no HTML escape needed since it's in a script tag
+        # JSON is safe in script tags (no script execution)
+        embedded_scripts += f'<script type="application/json" id="findings-data">{findings_json}</script>\n'
+        debug(f"Embedded {len(normalized_findings)} normalized findings for AI prompt")
         
         with open(OUTPUT_FILE, 'w') as f:
             f.write(html_header(f'{target} - {now}', embedded_scripts))
