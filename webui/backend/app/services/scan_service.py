@@ -21,7 +21,14 @@ from .git_service import is_git_url, clone_repository, cleanup_temp_repository
 # Central path management - ALL paths come from path_setup.py
 import sys
 sys.path.insert(0, "/project/src")
-from core.path_setup import get_scan_results_dir_host, get_target_mount_path_host, get_owasp_data_path_host, get_config_path_host
+from core.path_setup import (
+    get_scan_results_dir_host, 
+    get_target_mount_path_host, 
+    get_owasp_data_path_host, 
+    get_config_path_host,
+    get_finding_policy_check_path_for_git_clone,
+    get_finding_policy_check_path_for_local_scan
+)
 
 
 class ScanRequest(BaseModel):
@@ -162,80 +169,65 @@ async def start_scan(
         env_vars.extend(["-e", "SCAN_SCOPE=tracked"])
         print(f"[Scan Service] CI Mode enabled (scanning only tracked files)")
     
-    # Finding policy - with proper path resolution and auto-detection fallback
-    # This happens AFTER Git clone (if used), so the cloned repository is available
-    # IMPORTANT: For Git clones, clean_target is a container path. For local scans, it's a host path.
-    # We need to check the file existence on the HOST (where we're running), not in the container.
+    # Finding policy - CLEARLY SEPARATED: Git clones vs local scans
+    # IMPORTANT: Git clones exist in WebUI container, local scans don't!
+    # - Git clones: Can check file existence in WebUI container
+    # - Local scans: Cannot check in WebUI container, scanner will check after mount
     finding_policy_file = None
     if clean_finding_policy:
-        # Debug: Log path resolution
         print(f"[Scan Service] Finding policy resolution:")
         print(f"[Scan Service]   clean_target: {clean_target}")
         print(f"[Scan Service]   target_mount_path_host (host): {target_mount_path_host}")
         print(f"[Scan Service]   clean_finding_policy: {clean_finding_policy}")
         print(f"[Scan Service]   git_clone_used: {git_clone_used}")
         
-        # Determine the path to check:
-        # - For Git clones: clean_target is already a container path (temp clone dir)
-        # - For local scans: clean_target is a host path, use target_mount_path_host
         if git_clone_used:
-            # Git clone: clean_target is container path (e.g., /app/results/tmp/.../repo)
-            check_base_path = clean_target
-            print(f"[Scan Service] Using container path for Git clone: {check_base_path}")
+            # Git clone: Use dedicated function for Git clones (can check in container)
+            policy_check_path = get_finding_policy_check_path_for_git_clone(clean_target, clean_finding_policy)
+            if policy_check_path and os.path.exists(policy_check_path):
+                finding_policy_file = f"/target/{clean_finding_policy}"
+                env_vars.extend(["-e", f"FINDING_POLICY_FILE={finding_policy_file}"])
+                print(f"[Scan Service] ✓ Using finding policy: {finding_policy_file} (found at {policy_check_path})")
+            else:
+                print(f"[Scan Service] WARNING: Finding policy file not found at: {policy_check_path or 'invalid path'}")
+                print(f"[Scan Service] Will attempt auto-detection...")
         else:
-            # Local scan: use host path
-            check_base_path = target_mount_path_host
-            print(f"[Scan Service] Using host path for local scan: {check_base_path}")
-        
-        # Check if target directory exists
-        if not os.path.exists(check_base_path):
-            print(f"[Scan Service] WARNING: Target directory does not exist: {check_base_path}")
-        else:
-            print(f"[Scan Service] ✓ Target directory exists: {check_base_path}")
-        
-        # Check if policy file exists in target
-        policy_check_path = os.path.join(check_base_path, clean_finding_policy)
-        if os.path.exists(policy_check_path):
+            # Local scan: Use dedicated function for local scans (cannot check in container)
+            policy_check_path = get_finding_policy_check_path_for_local_scan(target_mount_path_host, clean_finding_policy)
+            # For local scans, we can't check in WebUI container, but we pass the path
+            # Scanner container will verify it exists at /target/{clean_finding_policy}
             finding_policy_file = f"/target/{clean_finding_policy}"
             env_vars.extend(["-e", f"FINDING_POLICY_FILE={finding_policy_file}"])
-            print(f"[Scan Service] ✓ Using finding policy: {finding_policy_file} (found at {policy_check_path})")
-        else:
-            print(f"[Scan Service] WARNING: Finding policy file not found at explicit path: {policy_check_path}")
-            print(f"[Scan Service] Will attempt auto-detection...")
-            # Don't set FINDING_POLICY_FILE yet - try auto-detection first
+            print(f"[Scan Service] Passing finding policy path to scanner: {finding_policy_file}")
+            print(f"[Scan Service] Note: Scanner container will verify file exists at mount point")
     
-    # Auto-detection fallback: If no explicit policy was found, try common locations
-    # This matches the logic in run-docker.sh lines 398-414
-    if not finding_policy_file:
-        # Determine the path to check (same logic as above)
-        if git_clone_used:
-            check_base_path = clean_target
-        else:
-            check_base_path = target_mount_path_host
+    # Auto-detection fallback: Only for Git clones (we can check those in container)
+    if not finding_policy_file and git_clone_used:
+        policy_candidates = [
+            "config/finding-policy.json",
+            "config/finding_policy.json",
+            "config/policy/finding-policy.json",
+            "config/policy/finding_policy.json",
+            "security/finding-policy.json",
+            "security/finding_policy.json",
+            ".security/finding-policy.json",
+            ".security/finding_policy.json",
+        ]
         
-        if os.path.exists(check_base_path):
-            policy_candidates = [
-                "config/finding-policy.json",
-                "config/finding_policy.json",
-                "config/policy/finding-policy.json",
-                "config/policy/finding_policy.json",
-                "security/finding-policy.json",
-                "security/finding_policy.json",
-                ".security/finding-policy.json",
-                ".security/finding_policy.json",
-            ]
-            
-            for policy_candidate in policy_candidates:
-                candidate_path = os.path.join(check_base_path, policy_candidate)
-                if os.path.exists(candidate_path):
-                    finding_policy_file = f"/target/{policy_candidate}"
-                    env_vars.extend(["-e", f"FINDING_POLICY_FILE={finding_policy_file}"])
-                    print(f"[Scan Service] ✓ Auto-detected finding policy: {finding_policy_file} (found at {candidate_path})")
-                    break
-            
-            if not finding_policy_file:
-                print(f"[Scan Service] No finding policy found (neither explicit nor auto-detected)")
-                print(f"[Scan Service] Searched in: {check_base_path}")
+        for policy_candidate in policy_candidates:
+            candidate_path = get_finding_policy_check_path_for_git_clone(clean_target, policy_candidate)
+            if candidate_path and os.path.exists(candidate_path):
+                finding_policy_file = f"/target/{policy_candidate}"
+                env_vars.extend(["-e", f"FINDING_POLICY_FILE={finding_policy_file}"])
+                print(f"[Scan Service] ✓ Auto-detected finding policy: {finding_policy_file} (found at {candidate_path})")
+                break
+        
+        if not finding_policy_file:
+            print(f"[Scan Service] No finding policy found (neither explicit nor auto-detected)")
+            print(f"[Scan Service] Searched in: {clean_target}")
+    elif not finding_policy_file and not git_clone_used:
+        # For local scans, auto-detection will be handled by scanner container via run-docker.sh
+        print(f"[Scan Service] Auto-detection will be handled by scanner container")
     
     cmd.extend(env_vars)
     

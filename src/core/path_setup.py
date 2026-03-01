@@ -4,6 +4,7 @@ Sets up sys.path to include processors and core modules
 """
 import os
 import sys
+from typing import Optional
 
 
 def setup_paths():
@@ -105,6 +106,48 @@ def get_target_mount_path_host(target_path: str) -> str:
     
     # Otherwise, it's already a host path (local scan) - return as-is
     return target_path
+
+
+def get_finding_policy_check_path_for_git_clone(container_path: str, policy_relative_path: str) -> Optional[str]:
+    """
+    Get path to check for finding policy file for Git clones.
+    
+    Git clones are stored in the WebUI container at /app/results/tmp/.../repo,
+    so we CAN check if the file exists in the WebUI container.
+    
+    Args:
+        container_path: Container path where Git repo was cloned (e.g., /app/results/tmp/.../repo)
+        policy_relative_path: Relative path to policy file (e.g., config/finding-policy.json)
+    
+    Returns:
+        Full container path to check if file exists, or None if path is invalid
+    """
+    if not container_path or not container_path.startswith("/app/results/"):
+        return None
+    
+    policy_path = os.path.join(container_path, policy_relative_path)
+    return policy_path
+
+
+def get_finding_policy_check_path_for_local_scan(host_path: str, policy_relative_path: str) -> Optional[str]:
+    """
+    Get path to check for finding policy file for local scans.
+    
+    IMPORTANT: For local scans, the WebUI container CANNOT access host paths.
+    The target is only mounted in the scanner container at /target.
+    This function returns None to indicate the file cannot be checked in WebUI container.
+    The scanner container will check it after mounting the target volume.
+    
+    Args:
+        host_path: Host path to target project (e.g., /home/user/project)
+        policy_relative_path: Relative path to policy file (e.g., config/finding-policy.json)
+    
+    Returns:
+        None - file cannot be checked in WebUI container, scanner will check it
+    """
+    # Local scan: WebUI container cannot access host paths
+    # Return None - scanner container will check after mounting
+    return None
 
 
 def get_owasp_data_path_host() -> str:
