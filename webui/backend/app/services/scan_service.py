@@ -248,6 +248,9 @@ async def start_scan(
     if temp_tracked_snapshot_dir:
         env_vars.extend(["-e", "SCAN_SCOPE=tracked"])
         env_vars.extend(["-e", "CI_MODE=true"])
+        # For CI mode, also set ORIGINAL_TARGET_PATH for metadata collection (tracked snapshot has no .git)
+        if request.ci_mode and not git_clone_used and original_target_mount_path_host != target_mount_path_host:
+            env_vars.extend(["-e", "ORIGINAL_TARGET_PATH=/original-target"])
         print(f"[Scan Service] CI Mode enabled (using tracked snapshot)")
     
     # Finding policy - CLEARLY SEPARATED: Git clones vs local scans
@@ -291,7 +294,6 @@ async def start_scan(
         # For CI mode, also mount original repository for metadata collection (tracked snapshot has no .git)
         if request.ci_mode and not git_clone_used and original_target_mount_path_host != target_mount_path_host:
             cmd.extend(["-v", f"{original_target_mount_path_host}:/original-target:ro"])
-            env_vars.extend(["-e", "ORIGINAL_TARGET_PATH=/original-target"])
     cmd.extend(["-v", f"{results_dir_host}:/SimpleSecCheck/results"])
     cmd.extend(["-v", f"{logs_dir_host}:/SimpleSecCheck/logs"])
     
