@@ -94,15 +94,15 @@ def get_target_mount_path_host(target_path: str) -> str:
     # If path starts with /app/results/, it's a container path from a Git clone
     # Convert it to the corresponding host path
     if target_path.startswith("/app/results/"):
-    host_project_root = get_host_project_root()
-    if not host_project_root:
-        return target_path
-    
-    relative_path = target_path[len("/app/results"):]
-    if relative_path.startswith("/"):
-        relative_path = relative_path[1:]
-    
-    return os.path.join(host_project_root, "results", relative_path)
+        host_project_root = get_host_project_root()
+        if not host_project_root:
+            return target_path
+        
+        relative_path = target_path[len("/app/results"):]
+        if relative_path.startswith("/"):
+            relative_path = relative_path[1:]
+        
+        return os.path.join(host_project_root, "results", relative_path)
     
     # Otherwise, it's already a host path (local scan) - return as-is
     return target_path
