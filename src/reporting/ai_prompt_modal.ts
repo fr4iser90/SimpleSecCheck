@@ -13,6 +13,16 @@ let currentPrompt: string = '';
 let currentLanguage: Language = 'english';
 let currentPolicyPath: string = 'config/finding-policy.json';
 
+// Helper function to safely set text content (prevents XSS)
+function setTextContent(element: HTMLElement, text: string): void {
+  element.textContent = text;
+}
+
+// Helper function to safely set attribute values
+function setAttribute(element: HTMLElement, name: string, value: string): void {
+  element.setAttribute(name, value);
+}
+
 function openAIPromptModal(): void {
   if (!aiPromptModal) {
     // Create modal if it doesn't exist
@@ -33,179 +43,268 @@ function openAIPromptModal(): void {
       padding: 2rem;
       overflow-y: auto;
     `;
-    aiPromptModal.innerHTML = `
-      <div style="
-        max-width: 900px;
-        width: 100%;
-        max-height: 90vh;
-        background: var(--glass-bg-dark);
-        backdrop-filter: blur(20px);
-        border-radius: 16px;
-        border: 1px solid var(--glass-border-dark);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        position: relative;
-        z-index: 1000000;
-        margin: auto;
-      ">
-        <div style="
-          padding: 1.5rem;
-          border-bottom: 1px solid var(--glass-border-dark);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        ">
-          <h2 style="margin: 0;">🤖 AI Prompt Generator</h2>
-          <button onclick="closeAIPromptModal()" style="
-            background: transparent;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: var(--text-dark);
-            padding: 0.25rem 0.5rem;
-            line-height: 1;
-          ">✕</button>
-        </div>
-        <div style="
-          flex: 1;
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-          gap: 1.5rem;
-          padding: 1.5rem;
-        ">
-          <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
-            <label style="margin-bottom: 0.5rem; font-weight: 600;">📋 Prompt Preview:</label>
-            <div id="ai-prompt-loading" style="
-              flex: 1;
-              display: none;
-              align-items: center;
-              justify-content: center;
-              padding: 2rem;
-              background: var(--glass-bg-dark);
-              border-radius: 8px;
-              border: 1px solid var(--glass-border-dark);
-            ">
-              <div style="opacity: 0.7;">⏳ Loading prompt...</div>
-            </div>
-            <div id="ai-prompt-error" style="
-              display: none;
-              padding: 1rem;
-              background: rgba(220, 53, 69, 0.2);
-              border: 1px solid #dc3545;
-              border-radius: 8px;
-              color: #dc3545;
-            "></div>
-            <textarea
-              id="ai-prompt-textarea"
-              style="
-                flex: 1;
-                min-height: 400px;
-                background: #000;
-                border: 1px solid var(--glass-border-dark);
-                border-radius: 8px;
-                padding: 1rem;
-                color: #f8f9fa;
-                font-family: 'Courier New', monospace;
-                font-size: 0.9rem;
-                resize: vertical;
-                white-space: pre-wrap;
-                word-wrap: break-word;
-                display: none;
-              "
-              placeholder="Prompt will appear here..."
-            ></textarea>
-          </div>
-          <div style="
-            background: var(--glass-bg-dark);
-            border: 1px solid var(--glass-border-dark);
-            border-radius: 8px;
-            padding: 1rem;
-          ">
-            <div style="margin-bottom: 1rem; font-weight: 600;">⚙️ Settings:</div>
-            <div style="display: flex; flex-direction: column; gap: 1rem;">
-              <div>
-                <label style="margin-bottom: 0.5rem; display: block;">Language:</label>
-                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                  <button onclick="setAIPromptLanguage('english')" id="lang-english" style="
-                    padding: 0.5rem 1rem;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    border: 1px solid var(--glass-border-dark);
-                    background: var(--glass-bg-dark);
-                    color: var(--text-dark);
-                  ">🇬🇧 English</button>
-                  <button onclick="setAIPromptLanguage('chinese')" id="lang-chinese" style="
-                    padding: 0.5rem 1rem;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    border: 1px solid var(--glass-border-dark);
-                    background: var(--glass-bg-dark);
-                    color: var(--text-dark);
-                  ">🇨🇳 中文</button>
-                  <button onclick="setAIPromptLanguage('german')" id="lang-german" style="
-                    padding: 0.5rem 1rem;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    border: 1px solid var(--glass-border-dark);
-                    background: var(--glass-bg-dark);
-                    color: var(--text-dark);
-                  ">🇩🇪 Deutsch</button>
-                </div>
-              </div>
-              <div>
-                <label style="margin-bottom: 0.5rem; display: block;">Policy Path:</label>
-                <input
-                  type="text"
-                  id="ai-prompt-policy-path"
-                  value="${currentPolicyPath}"
-                  onchange="updateAIPromptPolicyPath(this.value)"
-                  placeholder="config/finding-policy.json"
-                  style="
-                    width: 100%;
-                    padding: 0.75rem;
-                    background: var(--glass-bg-dark);
-                    border: 1px solid var(--glass-border-dark);
-                    border-radius: 8px;
-                    color: var(--text-dark);
-                  "
-                />
-              </div>
-            </div>
-          </div>
-          <div id="ai-prompt-stats" style="
-            display: none;
-            padding: 0.75rem;
-            background: var(--glass-bg-dark);
-            border: 1px solid var(--glass-border-dark);
-            border-radius: 8px;
-            font-size: 0.9rem;
-            opacity: 0.8;
-          "></div>
-          <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-            <button onclick="closeAIPromptModal()" style="
-              background: var(--glass-bg-dark);
-              border: 1px solid var(--glass-border-dark);
-              padding: 0.75rem 1.5rem;
-              border-radius: 8px;
-              color: var(--text-dark);
-              cursor: pointer;
-            ">❌ Cancel</button>
-            <button onclick="copyAIPrompt()" id="ai-prompt-copy-btn" style="
-              padding: 0.75rem 1.5rem;
-              border-radius: 8px;
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              border: none;
-              color: white;
-              cursor: pointer;
-              font-weight: 600;
-            ">📋 Copy</button>
-          </div>
-        </div>
-      </div>
+    
+    // Create content container
+    const contentContainer = document.createElement('div');
+    contentContainer.style.cssText = `
+      max-width: 900px;
+      width: 100%;
+      max-height: 90vh;
+      background: var(--glass-bg-dark);
+      backdrop-filter: blur(20px);
+      border-radius: 16px;
+      border: 1px solid var(--glass-border-dark);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      z-index: 1000000;
+      margin: auto;
     `;
+    
+    // Create header
+    const header = document.createElement('div');
+    header.style.cssText = `
+      padding: 1.5rem;
+      border-bottom: 1px solid var(--glass-border-dark);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    `;
+    
+    const title = document.createElement('h2');
+    title.style.margin = '0';
+    setTextContent(title, '🤖 AI Prompt Generator');
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.style.cssText = `
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--text-dark);
+      padding: 0.25rem 0.5rem;
+      line-height: 1;
+    `;
+    setTextContent(closeBtn, '✕');
+    closeBtn.addEventListener('click', closeAIPromptModal);
+    
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    
+    // Create main content area
+    const mainContent = document.createElement('div');
+    mainContent.style.cssText = `
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      padding: 1.5rem;
+    `;
+    
+    // Create prompt preview section
+    const previewSection = document.createElement('div');
+    previewSection.style.cssText = 'flex: 1; display: flex; flex-direction: column; min-height: 0;';
+    
+    const previewLabel = document.createElement('label');
+    previewLabel.style.cssText = 'margin-bottom: 0.5rem; font-weight: 600;';
+    setTextContent(previewLabel, '📋 Prompt Preview:');
+    
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'ai-prompt-loading';
+    loadingDiv.style.cssText = `
+      flex: 1;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      background: var(--glass-bg-dark);
+      border-radius: 8px;
+      border: 1px solid var(--glass-border-dark);
+    `;
+    const loadingText = document.createElement('div');
+    loadingText.style.opacity = '0.7';
+    setTextContent(loadingText, '⏳ Loading prompt...');
+    loadingDiv.appendChild(loadingText);
+    
+    const errorDiv = document.createElement('div');
+    errorDiv.id = 'ai-prompt-error';
+    errorDiv.style.cssText = `
+      display: none;
+      padding: 1rem;
+      background: rgba(220, 53, 69, 0.2);
+      border: 1px solid #dc3545;
+      border-radius: 8px;
+      color: #dc3545;
+    `;
+    
+    const textarea = document.createElement('textarea');
+    textarea.id = 'ai-prompt-textarea';
+    textarea.style.cssText = `
+      flex: 1;
+      min-height: 400px;
+      background: #000;
+      border: 1px solid var(--glass-border-dark);
+      border-radius: 8px;
+      padding: 1rem;
+      color: #f8f9fa;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      resize: vertical;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      display: none;
+    `;
+    setAttribute(textarea, 'placeholder', 'Prompt will appear here...');
+    
+    previewSection.appendChild(previewLabel);
+    previewSection.appendChild(loadingDiv);
+    previewSection.appendChild(errorDiv);
+    previewSection.appendChild(textarea);
+    
+    // Create settings section
+    const settingsSection = document.createElement('div');
+    settingsSection.style.cssText = `
+      background: var(--glass-bg-dark);
+      border: 1px solid var(--glass-border-dark);
+      border-radius: 8px;
+      padding: 1rem;
+    `;
+    
+    const settingsTitle = document.createElement('div');
+    settingsTitle.style.cssText = 'margin-bottom: 1rem; font-weight: 600;';
+    setTextContent(settingsTitle, '⚙️ Settings:');
+    
+    const settingsContent = document.createElement('div');
+    settingsContent.style.cssText = 'display: flex; flex-direction: column; gap: 1rem;';
+    
+    // Language section
+    const languageSection = document.createElement('div');
+    const languageLabel = document.createElement('label');
+    languageLabel.style.cssText = 'margin-bottom: 0.5rem; display: block;';
+    setTextContent(languageLabel, 'Language:');
+    
+    const languageButtons = document.createElement('div');
+    languageButtons.style.cssText = 'display: flex; gap: 0.5rem; flex-wrap: wrap;';
+    
+    const languages: { id: string; label: string; lang: Language }[] = [
+      { id: 'lang-english', label: '🇬🇧 English', lang: 'english' },
+      { id: 'lang-chinese', label: '🇨🇳 中文', lang: 'chinese' },
+      { id: 'lang-german', label: '🇩🇪 Deutsch', lang: 'german' }
+    ];
+    
+    languages.forEach(({ id, label, lang }) => {
+      const btn = document.createElement('button');
+      btn.id = id;
+      btn.style.cssText = `
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        border: 1px solid var(--glass-border-dark);
+        background: var(--glass-bg-dark);
+        color: var(--text-dark);
+      `;
+      setTextContent(btn, label);
+      btn.addEventListener('click', () => setAIPromptLanguage(lang));
+      languageButtons.appendChild(btn);
+    });
+    
+    languageSection.appendChild(languageLabel);
+    languageSection.appendChild(languageButtons);
+    
+    // Policy path section
+    const policySection = document.createElement('div');
+    const policyLabel = document.createElement('label');
+    policyLabel.style.cssText = 'margin-bottom: 0.5rem; display: block;';
+    setTextContent(policyLabel, 'Policy Path:');
+    
+    const policyInput = document.createElement('input');
+    policyInput.id = 'ai-prompt-policy-path';
+    policyInput.type = 'text';
+    policyInput.style.cssText = `
+      width: 100%;
+      padding: 0.75rem;
+      background: var(--glass-bg-dark);
+      border: 1px solid var(--glass-border-dark);
+      border-radius: 8px;
+      color: var(--text-dark);
+    `;
+    setAttribute(policyInput, 'placeholder', 'config/finding-policy.json');
+    policyInput.value = currentPolicyPath;
+    policyInput.addEventListener('change', (e) => {
+      const target = e.target as HTMLInputElement;
+      updateAIPromptPolicyPath(target.value);
+    });
+    
+    policySection.appendChild(policyLabel);
+    policySection.appendChild(policyInput);
+    
+    settingsContent.appendChild(languageSection);
+    settingsContent.appendChild(policySection);
+    
+    settingsSection.appendChild(settingsTitle);
+    settingsSection.appendChild(settingsContent);
+    
+    // Stats div
+    const statsDiv = document.createElement('div');
+    statsDiv.id = 'ai-prompt-stats';
+    statsDiv.style.cssText = `
+      display: none;
+      padding: 0.75rem;
+      background: var(--glass-bg-dark);
+      border: 1px solid var(--glass-border-dark);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      opacity: 0.8;
+    `;
+    
+    // Footer buttons
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display: flex; gap: 1rem; justify-content: flex-end;';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.style.cssText = `
+      background: var(--glass-bg-dark);
+      border: 1px solid var(--glass-border-dark);
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      color: var(--text-dark);
+      cursor: pointer;
+    `;
+    setTextContent(cancelBtn, '❌ Cancel');
+    cancelBtn.addEventListener('click', closeAIPromptModal);
+    
+    const copyBtn = document.createElement('button');
+    copyBtn.id = 'ai-prompt-copy-btn';
+    copyBtn.style.cssText = `
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: none;
+      color: white;
+      cursor: pointer;
+      font-weight: 600;
+    `;
+    setTextContent(copyBtn, '📋 Copy');
+    copyBtn.addEventListener('click', copyAIPrompt);
+    
+    footer.appendChild(cancelBtn);
+    footer.appendChild(copyBtn);
+    
+    // Assemble main content
+    mainContent.appendChild(previewSection);
+    mainContent.appendChild(settingsSection);
+    mainContent.appendChild(statsDiv);
+    mainContent.appendChild(footer);
+    
+    // Assemble content container
+    contentContainer.appendChild(header);
+    contentContainer.appendChild(mainContent);
+    
+    // Add to modal
+    aiPromptModal.appendChild(contentContainer);
     document.body.appendChild(aiPromptModal);
     
     // Close modal on overlay click
