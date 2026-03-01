@@ -161,9 +161,19 @@ def collect_scan_metadata(
         except Exception:
             metadata["project_name"] = os.path.basename(actual_path_for_name) if actual_path_for_name else None
     
-    # Collect Git information using container path (files are accessible there)
-    if scan_type == "code" and actual_path_for_files and os.path.exists(actual_path_for_files):
-        metadata["git_info"] = get_git_info(actual_path_for_files)
+    # Collect Git information
+    # IMPORTANT: For CI mode, use target_path_host (original repo) instead of target_path (tracked snapshot)
+    # The tracked snapshot has no .git directory, so we need the original repository
+    if scan_type == "code":
+        # For CI mode, target_path_host is the container path to original repo (e.g., /original-target)
+        # For normal mode, use target_path (container path like /target)
+        if ci_mode and target_path_host and os.path.exists(target_path_host):
+            # CI Mode: Use original repository path (tracked snapshot has no .git)
+            # target_path_host is already a container path like /original-target
+            metadata["git_info"] = get_git_info(target_path_host)
+        elif actual_path_for_files and os.path.exists(actual_path_for_files):
+            # Normal mode: Use container path
+            metadata["git_info"] = get_git_info(actual_path_for_files)
     
     return metadata
 

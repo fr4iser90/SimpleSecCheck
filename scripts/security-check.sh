@@ -1163,10 +1163,14 @@ try:
     finding_policy = $FINDING_POLICY_PARAM
     ci_mode = $CI_MODE_PARAM
     target_path_host = '${TARGET_PATH_HOST:-}'
+    original_target_path = '${ORIGINAL_TARGET_PATH:-}'
+    # For CI mode, use original repository path (tracked snapshot has no .git)
+    # original_target_path is a container path like /original-target
+    metadata_target_path_host = original_target_path if original_target_path else target_path_host
     
     metadata = collect_scan_metadata(
         target_path='$TARGET_PATH_IN_CONTAINER',
-        target_path_host=target_path_host if target_path_host else None,
+        target_path_host=metadata_target_path_host if metadata_target_path_host else None,
         scan_type='$SCAN_TYPE',
         results_dir='$RESULTS_DIR_IN_CONTAINER',
         finding_policy=finding_policy,
