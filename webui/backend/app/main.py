@@ -48,6 +48,23 @@ from app.services import (
     stop_update as stop_update_service,
 )
 from app.services.ai_prompt_service import collect_findings_from_results, generate_ai_prompt
+from app.services.github_api_service import (
+    list_user_repositories,
+    list_org_repositories,
+    get_rate_limit_info,
+    validate_github_token,
+    GitHubRepository,
+    RateLimitInfo,
+)
+from app.services.batch_scan_service import (
+    BatchScanRequest,
+    BatchScanProgress,
+    start_batch_scan,
+    get_batch_scan_progress,
+    pause_batch_scan,
+    resume_batch_scan,
+    stop_batch_scan,
+)
 
 # Configuration - ALL PATHS FROM CENTRAL path_setup.py
 # NO PATH CALCULATIONS HERE!
@@ -467,6 +484,120 @@ async def stop_owasp_update():
     """Stop the currently running OWASP update"""
     update_activity()
     return stop_update_service()
+
+
+# ============================================================================
+# Bulk Scan & GitHub API Endpoints
+# ============================================================================
+
+@app.get("/api/github/rate-limit")
+async def get_github_rate_limit():
+    """Get current GitHub API rate limit information"""
+    update_activity()
+    rate_limit = get_rate_limit_info()
+    return rate_limit.to_dict()
+
+
+@app.get("/api/github/repos")
+async def get_github_repositories(
+    username: str,
+    include_private: bool = False,
+    max_repos: int = 100
+):
+    """
+    List repositories for a GitHub user or organization.
+    
+    Args:
+        username: GitHub username or organization name
+        include_private: Include private repositories (requires token)
+        max_repos: Maximum number of repositories to fetch (default 100, max 100)
+    """
+    update_activity()
+    
+    # Validate max_repos
+    max_repos = min(max(1, max_repos), 100)
+    
+    try:
+        # Try as organization first, then as user
+        try:
+            repos, rate_limit = await list_org_repositories(username, max_repos)
+        except HTTPException as e:
+            if e.status_code == 404:
+                # Not an org, try as user
+                repos, rate_limit = await list_user_repositories(username, include_private, max_repos)
+            else:
+                raise
+        
+        return {
+            "repositories": [repo.to_dict() for repo in repos],
+            "rate_limit": rate_limit.to_dict(),
+            "count": len(repos)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch repositories: {str(e)}")
+
+
+@app.post("/api/github/validate-token")
+async def validate_github_token_endpoint(token: str):
+    """Validate a GitHub token"""
+    update_activity()
+    is_valid, user_info = await validate_github_token(token)
+    return {
+        "valid": is_valid,
+        "user_info": user_info if is_valid else None
+    }
+
+
+@app.post("/api/bulk/start", response_model=BatchScanProgress)
+async def start_bulk_scan(request: BatchScanRequest):
+    """Start a batch scan for multiple repositories"""
+    update_activity()
+    return await start_batch_scan(request, BASE_DIR, RESULTS_DIR, CLI_SCRIPT)
+
+
+@app.get("/api/bulk/status", response_model=BatchScanProgress)
+async def get_bulk_scan_status(batch_id: str = None):
+    """Get status of current batch scan"""
+    update_activity()
+    progress = get_batch_scan_progress(batch_id)
+    if not progress:
+        raise HTTPException(status_code=404, detail="No batch scan found")
+    return progress
+
+
+@app.post("/api/bulk/pause")
+async def pause_bulk_scan():
+    """Pause the current batch scan"""
+    update_activity()
+    await pause_batch_scan()
+    progress = get_batch_scan_progress()
+    if not progress:
+        raise HTTPException(status_code=404, detail="No batch scan found")
+    return progress
+
+
+@app.post("/api/bulk/resume")
+async def resume_bulk_scan():
+    """Resume a paused batch scan"""
+    update_activity()
+    await resume_batch_scan()
+    progress = get_batch_scan_progress()
+    if not progress:
+        raise HTTPException(status_code=404, detail="No batch scan found")
+    return progress
+
+
+@app.post("/api/bulk/stop")
+async def stop_bulk_scan():
+    """Stop the current batch scan"""
+    update_activity()
+    await stop_batch_scan()
+    progress = get_batch_scan_progress()
+    if not progress:
+        raise HTTPException(status_code=404, detail="No batch scan found")
+    return progress
 
 
 # Serve frontend static files (after API routes)
