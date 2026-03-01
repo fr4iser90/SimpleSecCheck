@@ -29,8 +29,9 @@ function openAIPromptModal(): void {
       display: none;
       align-items: center;
       justify-content: center;
-      z-index: 10000;
+      z-index: 999999;
       padding: 2rem;
+      overflow-y: auto;
     `;
     aiPromptModal.innerHTML = `
       <div style="
@@ -45,6 +46,9 @@ function openAIPromptModal(): void {
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        position: relative;
+        z-index: 1000000;
+        margin: auto;
       ">
         <div style="
           padding: 1.5rem;

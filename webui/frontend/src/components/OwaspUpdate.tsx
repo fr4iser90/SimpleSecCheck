@@ -240,24 +240,27 @@ export default function OwaspUpdate() {
           {status.database_exists !== null && (
             <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>
               {status.database_exists ? (
-                status.database_age_days !== null ? (
-                  status.database_age_days < 1 ? (
-                    <span style={{ color: '#28a745' }}>
-                      📊 Database: Up to date (less than 1 day old)
-                    </span>
-                  ) : status.database_age_days < 7 ? (
-                    <span style={{ color: '#28a745' }}>
-                      📊 Database: Recent ({status.database_age_days} days old)
-                    </span>
-                  ) : status.database_age_days < 30 ? (
-                    <span style={{ color: '#ffc107' }}>
-                      📊 Database: Moderate ({status.database_age_days} days old - update recommended)
-                    </span>
-                  ) : (
-                    <span style={{ color: '#dc3545' }}>
-                      📊 Database: Outdated ({status.database_age_days} days old - update strongly recommended!)
-                    </span>
-                  )
+                status.database_age_days != null ? (
+                  (() => {
+                    const ageDays = status.database_age_days as number;
+                    return ageDays < 1 ? (
+                      <span style={{ color: '#28a745' }}>
+                        📊 Database: Up to date (less than 1 day old)
+                      </span>
+                    ) : ageDays < 7 ? (
+                      <span style={{ color: '#28a745' }}>
+                        📊 Database: Recent ({ageDays} days old)
+                      </span>
+                    ) : ageDays < 30 ? (
+                      <span style={{ color: '#ffc107' }}>
+                        📊 Database: Moderate ({ageDays} days old - update recommended)
+                      </span>
+                    ) : (
+                      <span style={{ color: '#dc3545' }}>
+                        📊 Database: Outdated ({ageDays} days old - update strongly recommended!)
+                      </span>
+                    );
+                  })()
                 ) : (
                   <span style={{ color: '#6c757d' }}>
                     📊 Database: Found (age unknown)

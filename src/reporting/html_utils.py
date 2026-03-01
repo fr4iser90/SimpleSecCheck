@@ -660,6 +660,33 @@ body.dark .all-clear {{
     text-align: center;
   }}
 }}
+
+/* Scale down when opened directly (not in iframe) - larger viewports */
+@media (min-width: 1400px) {{
+  html {{
+    font-size: 14px;
+  }}
+  
+  body {{
+    font-size: 14px;
+  }}
+  
+  h1 {{
+    font-size: 1.75rem;
+  }}
+  
+  .container {{
+    max-width: 1400px;
+  }}
+  
+  .header {{
+    padding: 1.5rem 2rem;
+  }}
+  
+  .summary-card .number {{
+    font-size: 2.5rem;
+  }}
+}}
 </style>\n
 <script>\n
 function toggleDarkMode() {{
