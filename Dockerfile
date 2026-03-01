@@ -1,3 +1,7 @@
+# Stage 1: Trivy (only to extract the binary)
+FROM aquasec/trivy:latest AS trivy
+
+# Stage 2: Main scanner image
 FROM ubuntu:22.04
 
 # Version information
@@ -33,11 +37,8 @@ RUN pip3 install flask
 RUN pip3 install requests  # Added for LLM connector
 RUN pip3 install defusedxml  # Security: Prevent XXE attacks in XML parsing
 
-# Install Trivy (always latest)
-RUN export TRIVY_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r '.assets[] | select(.name | test("Linux-64bit.deb")) | .browser_download_url') && \
-    wget -O trivy.deb $TRIVY_URL && \
-    dpkg -i trivy.deb && \
-    rm trivy.deb
+# Copy Trivy binary from official image (Multi-Stage Build)
+COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 
 # Install CodeQL CLI and Query Packs
 RUN export CODEQL_URL=$(wget -qO- https://api.github.com/repos/github/codeql-cli-binaries/releases/latest | jq -r '.assets[] | select(.name | test("codeql-linux64.zip")) | .browser_download_url') && \
