@@ -69,7 +69,7 @@ SimpleSecCheck is a powerful, single-shot Docker-based security scanner that per
 - **Unified Reporting:** Consolidated HTML reports with all findings
 - **Zero Infrastructure:** No databases, no persistent services, no monitoring
 - **Docker-Based:** Isolated, secure scanning environment
-- **Easy Usage:** Simple `./scripts/run-docker.sh` command for everything
+- **Easy Usage:** Docker-based scanning (standalone or via WebUI)
 
 ---
 
@@ -82,29 +82,40 @@ SimpleSecCheck is a powerful, single-shot Docker-based security scanner that per
 
 ### Easy Usage
 
+**Standalone Docker (CLI):**
+
 ```bash
 # Clone the repository
 git clone https://github.com/fr4iser90/SimpleSecCheck.git
 cd SimpleSecCheck
 
-# Make the script executable (one-time setup)
-chmod +x scripts/run-docker.sh
-
 # Scan a local code project
-./scripts/run-docker.sh /path/to/your/project
+docker-compose run --rm \
+  -v /path/to/project:/target:ro \
+  -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/logs:/SimpleSecCheck/logs \
+  -v $(pwd)/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
+  scanner /SimpleSecCheck/scripts/security-check.sh
 
-# Scan a Git repository (GitHub/GitLab URL) - automatically clones and scans
-./scripts/run-docker.sh https://github.com/user/repo
-
-# CI-friendly code scan (tracked files only + noise-reduction defaults)
-./scripts/run-docker.sh --ci /path/to/your/project
-
-# Use a project-specific finding policy from target repo
-./scripts/run-docker.sh --finding-policy config/finding-policy.json /path/to/your/project
+# Or use Docker Hub image (standalone)
+docker run --rm \
+  -v /path/to/project:/target:ro \
+  -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/logs:/SimpleSecCheck/logs \
+  -v $(pwd)/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
+  fr4iser/simpleseccheck:latest \
+  /SimpleSecCheck/scripts/security-check.sh
 
 # Scan a website
-./scripts/run-docker.sh https://example.com
+docker-compose run --rm \
+  -e SCAN_TYPE=website \
+  -e ZAP_TARGET=https://example.com \
+  -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/logs:/SimpleSecCheck/logs \
+  scanner /SimpleSecCheck/scripts/security-check.sh
 ```
+
+See [docs/CLI_DOCKER.md](docs/CLI_DOCKER.md) for more examples.
 
 That's it! Results will be available in the `results/` directory.
 
@@ -137,7 +148,7 @@ docker-compose --profile webui up
 - WebUI follows single-shot principle: no database, no persistent state
 - Each scan is independent - no history tracking
 
-**WebUI is completely optional** - the CLI (`./scripts/run-docker.sh`) still works as before.
+**WebUI is completely optional** - standalone Docker scanning works as shown above.
 
 See [webui/README.md](webui/README.md) for more details.
 
@@ -166,8 +177,8 @@ docker run --rm \
   /SimpleSecCheck/scripts/security-check.sh
 
 # Scan a Git repository (GitHub/GitLab URL)
-# Note: Use the wrapper script for Git repository scanning (automatically clones and cleans up)
-./scripts/run-docker.sh https://github.com/user/repo
+# Note: Use WebUI for Git repository scanning (automatically clones and cleans up)
+# Or clone manually and scan the local directory
 
 # Scan a website
 docker run --rm \
@@ -198,19 +209,29 @@ docker run --rm \
 #### 🌐 Website/Domain Scanning
 Scan any public website or application:
 ```bash
-./scripts/run-docker.sh https://example.com
+docker-compose run --rm \
+  -e SCAN_TYPE=website \
+  -e ZAP_TARGET=https://example.com \
+  -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/logs:/SimpleSecCheck/logs \
+  scanner /SimpleSecCheck/scripts/security-check.sh
 ```
 ![Website Scan Example](docs/assets/1.png)
 
 #### 💻 Local Codebase Scanning
 Scan your local project for security issues:
 ```bash
-./scripts/run-docker.sh /path/to/your/project
+docker-compose run --rm \
+  -v /path/to/your/project:/target:ro \
+  -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/logs:/SimpleSecCheck/logs \
+  -v $(pwd)/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
+  scanner /SimpleSecCheck/scripts/security-check.sh
 ```
 ![Codebase Scan Example](docs/assets/2.png)
 
 #### 🔗 Git Repository Scanning
-Scan a Git repository directly from GitHub or GitLab (automatically clones, scans, and cleans up):
+Scan a Git repository directly from GitHub or GitLab (use WebUI for automatic cloning):
 ```bash
 ./scripts/run-docker.sh https://github.com/user/repo
 ./scripts/run-docker.sh https://gitlab.com/user/repo

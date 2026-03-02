@@ -89,13 +89,20 @@ async def clone_repository(git_url: str, base_dir: Path, scan_id: str, current_s
         print(f"[Git Clone] Using host-mounted directory: {tmp_dir} (visible to Docker Compose)")
         
         # Log Git clone step to frontend (before cloning starts)
-        if scan_id and current_scan and results_dir:
+        if scan_id and current_scan:
             # Register and log Git Clone step
-            initialize_step_tracking(current_scan)
+            # Note: initialize_step_tracking() should already be called, but call it again to be safe
+            if "step_counter" not in current_scan:
+                initialize_step_tracking(current_scan)
             step_num = register_step("Git Clone", current_scan)
             if step_num:
-                log_step("Git Clone", f"⏳ Step {step_num}: Cloning Git repository...", current_scan, results_dir, scan_id)
-                print(f"[Git Clone] Step logged: ⏳ Step {step_num}: Cloning Git repository...")
+                # Use results_dir from current_scan (set by initialize_steps_log)
+                results_dir_for_log = current_scan.get("results_dir")
+                if results_dir_for_log:
+                    log_step("Git Clone", f"⏳ Step {step_num}: Cloning Git repository...", current_scan, Path(results_dir_for_log), scan_id)
+                    print(f"[Git Clone] Step logged: ⏳ Step {step_num}: Cloning Git repository...")
+                else:
+                    print(f"[Git Clone] WARNING: results_dir not set in current_scan, cannot log step")
         
         # Normalize Git URL (remove .git suffix if present, handle SSH URLs)
         clone_url = git_url.strip()
@@ -137,11 +144,16 @@ async def clone_repository(git_url: str, base_dir: Path, scan_id: str, current_s
         print(f"[Git Clone] Repository name: {repo_name}")
         
         # Log Git clone completion step
-        if scan_id and current_scan and results_dir:
+        if scan_id and current_scan:
             step_num = current_scan.get("step_names", {}).get("Git Clone")
             if step_num:
-                log_step("Git Clone", f"✓ Step {step_num}: Git repository cloned successfully", current_scan, results_dir, scan_id)
-                print(f"[Git Clone] Step logged: ✓ Step {step_num}: Git repository cloned successfully")
+                # Use results_dir from current_scan (set by initialize_steps_log)
+                results_dir_for_log = current_scan.get("results_dir")
+                if results_dir_for_log:
+                    log_step("Git Clone", f"✓ Step {step_num}: Git repository cloned successfully", current_scan, Path(results_dir_for_log), scan_id)
+                    print(f"[Git Clone] Step logged: ✓ Step {step_num}: Git repository cloned successfully")
+                else:
+                    print(f"[Git Clone] WARNING: results_dir not set in current_scan, cannot log step")
         
         # Check repository size (approximate) - check the cloned repository directory
         repo_size = sum(f.stat().st_size for f in clone_target.rglob('*') if f.is_file())

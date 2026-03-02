@@ -6,13 +6,14 @@ Pulls jobs from queue and executes scans
 import os
 import asyncio
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
 
 from app.database import get_database
 from app.services.queue_service import get_queue_service
-from app.services.step_service import initialize_step_tracking, extract_steps_for_frontend, initialize_steps_log
+from app.services.step_service import initialize_step_tracking, extract_steps_for_frontend, initialize_steps_log, derive_project_name
 
 
 class ScannerWorker:
@@ -64,13 +65,83 @@ class ScannerWorker:
             except asyncio.CancelledError:
                 pass
     
+    async def _check_and_reset_stuck_jobs(self):
+        """Check for stuck jobs (running but no active task) and reset them to pending"""
+        try:
+            # Get all running jobs from database
+            all_jobs = await self.db.get_queue(limit=1000)
+            running_jobs = [job for job in all_jobs if job.get("status") == "running"]
+            
+            if not running_jobs:
+                return
+            
+            # Check which running jobs are actually stuck (not in self.running_scans)
+            stuck_jobs = []
+            for job in running_jobs:
+                queue_id = job.get("queue_id")
+                if queue_id and queue_id not in self.running_scans:
+                    # Check if job is older than 5 minutes (stuck)
+                    started_at = job.get("started_at")
+                    if started_at:
+                        try:
+                            if isinstance(started_at, str):
+                                # PostgreSQL returns ISO format strings
+                                started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+                            # Remove timezone for comparison
+                            if started_at.tzinfo:
+                                started_at = started_at.replace(tzinfo=None)
+                            age_minutes = (datetime.utcnow() - started_at).total_seconds() / 60
+                            if age_minutes > 5:  # Stuck if older than 5 minutes
+                                stuck_jobs.append(job)
+                        except (ValueError, AttributeError) as e:
+                            print(f"[Scanner Worker] Error parsing started_at for job {queue_id}: {e}")
+                    else:
+                        # No started_at means it was set to running but never actually started
+                        # Check created_at instead
+                        created_at = job.get("created_at")
+                        if created_at:
+                            try:
+                                if isinstance(created_at, str):
+                                    # PostgreSQL returns ISO format strings
+                                    created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                                # Remove timezone for comparison
+                                if created_at.tzinfo:
+                                    created_at = created_at.replace(tzinfo=None)
+                                age_minutes = (datetime.utcnow() - created_at).total_seconds() / 60
+                                if age_minutes > 5:  # Stuck if older than 5 minutes
+                                    stuck_jobs.append(job)
+                            except (ValueError, AttributeError) as e:
+                                print(f"[Scanner Worker] Error parsing created_at for job {queue_id}: {e}")
+            
+            # Reset stuck jobs to pending
+            if stuck_jobs:
+                print(f"[Scanner Worker] Found {len(stuck_jobs)} stuck job(s), resetting to pending...")
+                for job in stuck_jobs:
+                    queue_id = job.get("queue_id")
+                    print(f"[Scanner Worker] Resetting stuck job: queue_id={queue_id}, repository={job.get('repository_url', 'unknown')}")
+                    await self.db.update_queue_status(
+                        queue_id=queue_id,
+                        status="pending",
+                    )
+        except Exception as e:
+            print(f"[Scanner Worker] Error checking stuck jobs: {e}")
+            import traceback
+            traceback.print_exc()
+    
     async def _worker_loop(self):
         """Main worker loop - continuously polls queue for jobs"""
         import time
         last_log_time = 0
+        last_stuck_check = 0
         print("[Scanner Worker] Worker loop started and running")
         while self.is_running:
             try:
+                # Check for stuck jobs every 30 seconds
+                current_time = time.time()
+                if current_time - last_stuck_check >= 30:
+                    await self._check_and_reset_stuck_jobs()
+                    last_stuck_check = current_time
+                
                 # Check if we can start more scans
                 if len(self.running_scans) < self.max_concurrent_scans:
                     # Get next job from queue
@@ -78,16 +149,37 @@ class ScannerWorker:
                     
                     if job:
                         print(f"[Scanner Worker] Found job: {job['queue_id']} for {job.get('repository_url', 'unknown')} (status: {job.get('status', 'unknown')})")
-                        # Start scan task
-                        task = asyncio.create_task(self._process_scan_job(job))
+                        # Start scan task with error handling
+                        async def process_with_error_handling(job):
+                            try:
+                                await self._process_scan_job(job)
+                            except Exception as e:
+                                print(f"[Scanner Worker] CRITICAL: Task failed for {job.get('queue_id', 'unknown')}: {e}")
+                                import traceback
+                                traceback.print_exc()
+                                # Update status to failed
+                                try:
+                                    await self.db.update_queue_status(
+                                        queue_id=job.get('queue_id'),
+                                        status="failed",
+                                        completed_at=datetime.utcnow(),
+                                    )
+                                except Exception as db_error:
+                                    print(f"[Scanner Worker] Failed to update queue status: {db_error}")
+                        
+                        task = asyncio.create_task(process_with_error_handling(job))
                         self.running_scans[job["queue_id"]] = task
                     else:
                         # No jobs available, wait a bit
                         # Log every 10 seconds to avoid spam
-                        current_time = time.time()
                         if current_time - last_log_time >= 10:
                             queue_length = await self.db.get_queue_length()
-                            print(f"[Scanner Worker] No pending jobs found (queue length: {queue_length}, running scans: {len(self.running_scans)})")
+                            pending_count = len([s for s in await self.db.get_queue(limit=1000) if s.get("status") == "pending"])
+                            running_count = len([s for s in await self.db.get_queue(limit=1000) if s.get("status") == "running"])
+                            print(f"[Scanner Worker] No pending jobs found (queue length: {queue_length}, pending: {pending_count}, running in DB: {running_count}, running tasks: {len(self.running_scans)})")
+                            if len(self.running_scans) > 0:
+                                for queue_id, task in self.running_scans.items():
+                                    print(f"[Scanner Worker] Active task: queue_id={queue_id}, done={task.done()}")
                             last_log_time = current_time
                         await asyncio.sleep(1)
                 else:
@@ -111,8 +203,23 @@ class ScannerWorker:
     
     async def _process_scan_job(self, job: Dict[str, Any]):
         """Process a single scan job"""
-        queue_id = job["queue_id"]
-        repository_url = job["repository_url"]
+        # Add immediate logging and validation
+        print(f"[Scanner Worker] _process_scan_job called with job: {job}")
+        
+        if not job:
+            print(f"[Scanner Worker] ERROR: job is None or empty")
+            raise ValueError("Job is None or empty")
+        
+        queue_id = job.get("queue_id")
+        if not queue_id:
+            print(f"[Scanner Worker] ERROR: No queue_id in job: {job}")
+            raise ValueError(f"No queue_id in job: {job}")
+        
+        repository_url = job.get("repository_url")
+        if not repository_url:
+            print(f"[Scanner Worker] ERROR: No repository_url in job: {job}")
+            raise ValueError(f"No repository_url in job: {job}")
+        
         branch = job.get("branch")
         commit_hash = job.get("commit_hash")
         
@@ -168,7 +275,7 @@ class ScannerWorker:
         scan_id: Optional[str] = None,
     ) -> str:
         """
-        Execute scan using run-docker.sh
+        Execute scan using docker_runner.py (replaces run-docker.sh)
         Returns scan_id
         """
         import sys
@@ -176,16 +283,13 @@ class ScannerWorker:
         from core.path_setup import (
             get_webui_base_dir, 
             get_webui_results_dir, 
-            get_webui_cli_script,
             get_results_dir_for_scan,
-            get_docker_compose_file
         )
         from app.services.git_service import clone_repository, is_git_url
         
         # Get paths - ALL FROM CENTRAL path_setup.py
         base_dir = get_webui_base_dir()
         results_dir = get_webui_results_dir()
-        cli_script = get_webui_cli_script()
         
         # Use provided scan_id or generate new one
         if not scan_id:
@@ -200,6 +304,14 @@ class ScannerWorker:
         
         # Initialize step tracking for frontend display (sets process_output_lock)
         initialize_step_tracking(current_scan)
+        
+        # Get results directory path BEFORE cloning (needed for log_step in git_service)
+        project_name = derive_project_name(repository_url)
+        results_dir_path = get_results_dir_for_scan(project_name, scan_id)
+        results_dir_path_obj = Path(results_dir_path)
+        
+        # Initialize steps.log BEFORE Git clone (so log_step can write to it)
+        initialize_steps_log(scan_id, results_dir_path, current_scan, repository_url)
         
         # Clone repository if it's a Git URL
         temp_clone_path = None
@@ -239,35 +351,6 @@ class ScannerWorker:
         else:
             target_path = repository_url
         
-        # Build command - use run-docker.sh with target path
-        cli_script_str = str(cli_script)
-        cli_script_path = Path(cli_script_str)
-        print(f"[Scanner Worker] CLI script path: {cli_script_str}")
-        print(f"[Scanner Worker] CLI script exists: {cli_script_path.exists()}")
-        if cli_script_path.exists():
-            print(f"[Scanner Worker] CLI script is file: {cli_script_path.is_file()}")
-            print(f"[Scanner Worker] CLI script is executable: {os.access(cli_script_str, os.X_OK)}")
-        print(f"[Scanner Worker] Base dir: {base_dir}")
-        print(f"[Scanner Worker] CWD will be: {str(base_dir)}")
-        
-        # Check if script exists, if not try alternative paths
-        if not cli_script_path.exists():
-            # Try alternative: /app/scripts/run-docker.sh (if mounted)
-            alt_path = Path("/app/scripts/run-docker.sh")
-            if alt_path.exists():
-                print(f"[Scanner Worker] Using alternative path: {alt_path}")
-                cli_script_str = str(alt_path)
-            else:
-                # Try: /project/scripts/run-docker.sh (absolute)
-                alt_path2 = Path("/project/scripts/run-docker.sh")
-                if alt_path2.exists():
-                    print(f"[Scanner Worker] Using alternative path 2: {alt_path2}")
-                    cli_script_str = str(alt_path2)
-                else:
-                    raise Exception(f"run-docker.sh not found at {cli_script_str}, /app/scripts/run-docker.sh, or /project/scripts/run-docker.sh")
-        
-        cmd = [cli_script_str, "--collect-metadata", target_path]
-        
         # Extract project name from repository URL (not from target path)
         # This ensures we get the clean repo name without timestamps
         if is_git_url(repository_url):
@@ -298,46 +381,34 @@ class ScannerWorker:
         else:
             project_name = "scan"
         
-        # Get results directory from central path_setup function
-        results_dir_path = get_results_dir_for_scan(project_name, scan_id)
-        results_dir_path_obj = Path(results_dir_path)
-        
-        # Initialize steps.log BEFORE scan starts (creates directory and steps.log)
-        initialize_steps_log(scan_id, results_dir_path, current_scan, repository_url)
+        # results_dir_path already set before Git clone, no need to set again
+        # Just ensure it's still valid
+        if not results_dir_path_obj.exists():
+            results_dir_path_obj.mkdir(parents=True, exist_ok=True)
         
         # Ensure logs directory exists
         logs_dir = results_dir_path_obj / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
         
-        # Set environment variables
-        env = os.environ.copy()
-        env["COLLECT_METADATA"] = "true"  # Always collect metadata in production
-        env["SCAN_ID"] = scan_id  # Pass scan_id to run-docker.sh
-        env["RESULTS_DIR"] = results_dir_path  # Use central function
-        env["ENVIRONMENT"] = os.getenv("ENVIRONMENT", "dev")  # Pass ENVIRONMENT to run-docker.sh
-        # Set GIT_URL so run-docker.sh can extract correct project name
+        # Set environment variables for docker_runner
+        os.environ["COLLECT_METADATA"] = "true"  # Always collect metadata
+        os.environ["RESULTS_DIR"] = results_dir_path  # Use central function
+        os.environ["ENVIRONMENT"] = os.getenv("ENVIRONMENT", "dev")
+        # Set GIT_URL so docker_runner can extract correct project name
         if is_git_url(repository_url):
-            env["GIT_URL"] = repository_url
+            os.environ["GIT_URL"] = repository_url
         
-        # Execute scan
-        print(f"[Scanner Worker] Starting scan: {scan_id} for {repository_url}")
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=str(base_dir),
-            env=env,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,  # Combine stderr with stdout
-        )
+        # Use docker_runner instead of run-docker.sh
+        from app.services.docker_runner import DockerRunner
+        
+        runner = DockerRunner(log_file=str(logs_dir / "orchestrator.log"))
         
         # Stream output and extract steps for frontend in real-time
-        # Write ALL logs to scan.log (live, for frontend) - parallel to security-check.sh writing
         scan_log = results_dir_path_obj / "logs" / "scan.log"
         output_lines = []
-        while True:
-            line = await process.stdout.readline()
-            if not line:
-                break
-            line_str = line.decode('utf-8', errors='ignore').strip()
+        
+        def output_callback(line_str: str):
+            """Callback for each output line from docker-compose"""
             output_lines.append(line_str)
             print(f"[Scanner Worker] {line_str}")
             
@@ -353,11 +424,22 @@ class ScannerWorker:
             if step_line:
                 print(f"[Scanner Worker] [Step] {step_line}")
         
-        await process.wait()
+        # Execute scan using docker_runner
+        print(f"[Scanner Worker] Starting scan: {scan_id} for {repository_url}")
+        success = await runner.run_scan_async(
+            target=target_path,
+            scan_id=scan_id,
+            project_name=project_name,
+            results_dir=results_dir_path,
+            ci_mode=False,  # WebUI always does full scans
+            finding_policy=None,  # Auto-detect
+            collect_metadata=True,
+            output_callback=output_callback,
+        )
         
-        if process.returncode != 0:
-            error_output = "\n".join(output_lines[-20:])  # Last 20 lines
-            raise Exception(f"Scan failed (exit code {process.returncode}): {error_output}")
+        if not success:
+            error_output = "\n".join(output_lines[-20:]) if output_lines else "No output captured"
+            raise Exception(f"Scan failed: {error_output}")
         
         # Try to find scan results directory
         # Results are typically in results/PROJECT_NAME_SCAN_ID/
