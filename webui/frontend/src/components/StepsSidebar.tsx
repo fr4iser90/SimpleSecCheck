@@ -19,63 +19,39 @@ export default function StepsSidebar({ isOpen, onClose }: StepsSidebarProps) {
   useEffect(() => {
     if (!isOpen) return
 
-    const fetchSteps = async () => {
+    // Use SSE instead of polling for real-time updates
+    const eventSource = new EventSource('/api/scan/stream')
+    
+    eventSource.onmessage = (e) => {
       try {
-        const response = await fetch('/api/scan/logs')
-        if (response.ok) {
-          const data = await response.json()
-          if (data.lines && Array.isArray(data.lines)) {
-            // Parse steps from log lines
-            const stepMap = new Map<number, Step>()
-            
-            data.lines.forEach((line: string) => {
-              // Match patterns like "Step 1: Cloning Git repository..." or "✓ Step 2: Initializing scan..."
-              const stepMatch = line.match(/([⏳✓❌]?)\s*Step\s+(\d+):\s*(.+)/i)
-              if (stepMatch) {
-                const [, statusIcon, stepNum, message] = stepMatch
-                const stepNumber = parseInt(stepNum, 10)
-                
-                let status: Step['status'] = 'pending'
-                if (statusIcon === '✓') status = 'completed'
-                else if (statusIcon === '⏳') status = 'running'
-                else if (statusIcon === '❌') status = 'failed'
-                
-                // Extract step name (before "..." or "completed" etc.)
-                const nameMatch = message.match(/^(.+?)(?:\s+\.\.\.|\s+completed|$)/i)
-                const stepName = nameMatch ? nameMatch[1].trim() : message.trim()
-                
-                if (!stepMap.has(stepNumber)) {
-                  stepMap.set(stepNumber, {
-                    number: stepNumber,
-                    name: stepName,
-                    status: status,
-                    message: message.trim(),
-                  })
-                } else {
-                  // Update existing step
-                  const existing = stepMap.get(stepNumber)!
-                  existing.status = status
-                  existing.message = message.trim()
-                }
-              }
-            })
-            
-            // Convert map to sorted array
-            const sortedSteps = Array.from(stepMap.values()).sort((a, b) => a.number - b.number)
-            setSteps(sortedSteps)
-          }
+        const data = JSON.parse(e.data)
+        
+        if (data.error) {
+          console.error('[StepsSidebar] SSE error:', data.error)
+          setLoading(false)
+          return
+        }
+        
+        // Update steps from SSE data (already parsed by backend)
+        if (data.steps && Array.isArray(data.steps)) {
+          setSteps(data.steps)
+          setLoading(false)
         }
       } catch (error) {
-        console.error('Failed to fetch steps:', error)
-      } finally {
+        console.error('[StepsSidebar] Failed to parse SSE data:', error)
         setLoading(false)
       }
     }
-
-    fetchSteps()
-    const interval = setInterval(fetchSteps, 2000) // Poll every 2 seconds
-
-    return () => clearInterval(interval)
+    
+    eventSource.onerror = (error) => {
+      console.error('[StepsSidebar] SSE connection error:', error)
+      setLoading(false)
+      eventSource.close()
+    }
+    
+    return () => {
+      eventSource.close()
+    }
   }, [isOpen])
 
   if (!isOpen) return null

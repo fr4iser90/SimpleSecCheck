@@ -81,7 +81,7 @@ services:
       # The scanner worker (running in this container) needs Docker access to run scan containers
       # Security: Only the scanner worker process uses Docker, not the WebUI API
       # Note: Docker socket needs write access to start/stop containers
-      - /var/run/docker.sock:/var/run/docker.sock  # Docker socket (required for scanner worker)
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket (read-only, for docker-compose)
     environment:
       - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1

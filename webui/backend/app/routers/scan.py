@@ -3,9 +3,12 @@ Scan Routes
 """
 import os
 import uuid
+import json
+import asyncio
+import re
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from app.services import (
     update_activity,
     ScanRequest,
@@ -155,27 +158,53 @@ async def stop_scan():
 
 
 @router.get("/api/scan/logs")
-async def get_logs():
+async def get_logs(http_request: Request = None):
     """
     Get logs from current scan (simple polling endpoint)
     Returns all lines from results/*/logs/steps.log
+    Supports both direct scans (current_scan) and queue scans
     """
     update_activity()
     
-    # Find steps.log file - MUST match current scan_id to avoid reading old scans
-    steps_log = None
-    scan_id = current_scan.get("scan_id")
+    scan_id = None
+    results_dir_path = None
+    
+    # Try to get scan_id from queue if session available (for queue scans)
+    session_id = None
+    if http_request:
+        session_id = getattr(http_request.state, "session_id", None)
+    
+    if session_id:
+        # Get user's latest scan from queue
+        queue_service = await get_queue_service()
+        user_scans = await queue_service.get_user_queue(session_id)
+        
+        if user_scans:
+            # Get the most recent scan
+            latest_scan = sorted(user_scans, key=lambda x: x.get("created_at", ""), reverse=True)[0]
+            # Use actual scan_id from queue (timestamp format) if available, otherwise use queue_id
+            scan_id = latest_scan.get("scan_id") or latest_scan.get("queue_id")
+            # Queue doesn't store results_dir, so we'll find it by scan_id
+    
+    # Fallback to current_scan (for Dev or direct scans)
+    if not scan_id:
+        scan_id = current_scan.get("scan_id")
+        if current_scan.get("results_dir"):
+            results_dir_path = current_scan["results_dir"]
     
     if not scan_id:
         return {"lines": [], "count": 0}
     
+    # Find steps.log file - MUST match scan_id to avoid reading old scans
+    steps_log = None
+    
     # First try: Use results_dir if set and matches scan_id
-    if current_scan.get("results_dir"):
-        results_dir_path = current_scan["results_dir"]
-        if scan_id in results_dir_path:
-            steps_log = Path(results_dir_path) / "logs" / "steps.log"
+    if results_dir_path and scan_id in results_dir_path:
+        steps_log = Path(results_dir_path) / "logs" / "steps.log"
     
     # Second try: Find by scan_id (MUST match exactly)
+    # For queue scans, scan_id is timestamp format (e.g., "20260302_181806")
+    # For direct scans, scan_id might be in results_dir name
     if not steps_log and RESULTS_DIR.exists():
         for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
             if scan_dir.is_dir() and scan_id in scan_dir.name:
@@ -211,6 +240,119 @@ async def get_report():
         report_file,
         media_type="text/html",
         headers={"Content-Disposition": "inline"}
+    )
+
+
+@router.get("/api/scan/stream")
+async def stream_scan_updates(http_request: Request, scan_id: str = None):
+    """
+    SSE endpoint for real-time scan updates (logs and steps)
+    Replaces polling with Server-Sent Events for better performance
+    """
+    update_activity()
+    
+    async def event_generator():
+        last_line_count = 0
+        last_step_count = 0
+        
+        # Determine scan_id from request or parameter
+        actual_scan_id = scan_id
+        if not actual_scan_id and http_request:
+            # Try to get from session (queue scans)
+            session_id = getattr(http_request.state, "session_id", None)
+            if session_id:
+                queue_service = await get_queue_service()
+                user_scans = await queue_service.get_user_queue(session_id)
+                if user_scans:
+                    latest_scan = sorted(user_scans, key=lambda x: x.get("created_at", ""), reverse=True)[0]
+                    actual_scan_id = latest_scan.get("scan_id") or latest_scan.get("queue_id")
+        
+        # Fallback to current_scan
+        if not actual_scan_id:
+            actual_scan_id = current_scan.get("scan_id") if current_scan else None
+        
+        if not actual_scan_id:
+            yield f"data: {json.dumps({'error': 'No active scan found'})}\n\n"
+            return
+        
+        while True:
+            # Check if client disconnected
+            if await http_request.is_disconnected() if http_request else False:
+                break
+            
+            try:
+                # Get current logs
+                logs_data = await get_logs(http_request)
+                log_lines = logs_data.get("lines", [])
+                
+                # Parse steps from log lines (same logic as frontend)
+                steps = []
+                step_map = {}
+                
+                for line in log_lines:
+                    step_match = re.match(r'([⏳✓❌]?)\s*Step\s+(\d+):\s*(.+)', line, re.IGNORECASE)
+                    if step_match:
+                        status_icon, step_num_str, message = step_match.groups()
+                        step_number = int(step_num_str)
+                        
+                        status = 'pending'
+                        if status_icon == '✓':
+                            status = 'completed'
+                        elif status_icon == '⏳':
+                            status = 'running'
+                        elif status_icon == '❌':
+                            status = 'failed'
+                        
+                        name_match = re.match(r'^(.+?)(?:\s+\.\.\.|\s+completed|$)', message, re.IGNORECASE)
+                        step_name = name_match.group(1).strip() if name_match else message.strip()
+                        
+                        if step_number not in step_map:
+                            step_map[step_number] = {
+                                "number": step_number,
+                                "name": step_name,
+                                "status": status,
+                                "message": message.strip()
+                            }
+                        else:
+                            # Update existing step
+                            step_map[step_number]["status"] = status
+                            step_map[step_number]["message"] = message.strip()
+                
+                steps = sorted(step_map.values(), key=lambda x: x["number"])
+                
+                # Only send if changed
+                current_line_count = len(log_lines)
+                current_step_count = len(steps)
+                
+                if (current_line_count > last_line_count or current_step_count > last_step_count):
+                    data = {
+                        "logs": log_lines,
+                        "steps": steps,
+                        "scan_id": actual_scan_id,
+                        "timestamp": asyncio.get_event_loop().time()
+                    }
+                    
+                    yield f"data: {json.dumps(data)}\n\n"
+                    
+                    last_line_count = current_line_count
+                    last_step_count = current_step_count
+                
+                # Check if scan is done (no new updates for 5 seconds)
+                # This is a simple heuristic - in production you might want to check queue status
+                await asyncio.sleep(0.5)  # Check every 500ms
+                
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                await asyncio.sleep(1)  # Wait before retrying
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
     )
 
 

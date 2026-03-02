@@ -12,6 +12,7 @@ from datetime import datetime
 
 from app.database import get_database
 from app.services.queue_service import get_queue_service
+from app.services.step_service import initialize_step_tracking, extract_steps_for_frontend
 
 
 class ScannerWorker:
@@ -164,12 +165,15 @@ class ScannerWorker:
         # Generate scan_id
         scan_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         
-        # Create a minimal current_scan dict for git_service
+        # Create a minimal current_scan dict for git_service and step tracking
         current_scan = {
             "scan_id": scan_id,
             "step_counter": 0,
             "step_names": {},
         }
+        
+        # Initialize step tracking for frontend display (sets process_output_lock)
+        initialize_step_tracking(current_scan)
         
         # Clone repository if it's a Git URL
         temp_clone_path = None
@@ -210,7 +214,33 @@ class ScannerWorker:
             target_path = repository_url
         
         # Build command - use run-docker.sh with target path
-        cmd = [str(cli_script), "--collect-metadata", target_path]
+        cli_script_str = str(cli_script)
+        cli_script_path = Path(cli_script_str)
+        print(f"[Scanner Worker] CLI script path: {cli_script_str}")
+        print(f"[Scanner Worker] CLI script exists: {cli_script_path.exists()}")
+        if cli_script_path.exists():
+            print(f"[Scanner Worker] CLI script is file: {cli_script_path.is_file()}")
+            print(f"[Scanner Worker] CLI script is executable: {os.access(cli_script_str, os.X_OK)}")
+        print(f"[Scanner Worker] Base dir: {base_dir}")
+        print(f"[Scanner Worker] CWD will be: {str(base_dir)}")
+        
+        # Check if script exists, if not try alternative paths
+        if not cli_script_path.exists():
+            # Try alternative: /app/scripts/run-docker.sh (if mounted)
+            alt_path = Path("/app/scripts/run-docker.sh")
+            if alt_path.exists():
+                print(f"[Scanner Worker] Using alternative path: {alt_path}")
+                cli_script_str = str(alt_path)
+            else:
+                # Try: /project/scripts/run-docker.sh (absolute)
+                alt_path2 = Path("/project/scripts/run-docker.sh")
+                if alt_path2.exists():
+                    print(f"[Scanner Worker] Using alternative path 2: {alt_path2}")
+                    cli_script_str = str(alt_path2)
+                else:
+                    raise Exception(f"run-docker.sh not found at {cli_script_str}, /app/scripts/run-docker.sh, or /project/scripts/run-docker.sh")
+        
+        cmd = [cli_script_str, "--collect-metadata", target_path]
         
         # Extract project name from repository URL (not from target path)
         # This ensures we get the clean repo name without timestamps
@@ -244,6 +274,11 @@ class ScannerWorker:
         
         # Get results directory from central path_setup function
         results_dir_path = get_results_dir_for_scan(project_name, scan_id)
+        results_dir_path_obj = Path(results_dir_path)
+        
+        # Ensure logs directory exists for step logging
+        logs_dir = results_dir_path_obj / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
         
         # Set environment variables
         env = os.environ.copy()
@@ -265,7 +300,8 @@ class ScannerWorker:
             stderr=asyncio.subprocess.STDOUT,  # Combine stderr with stdout
         )
         
-        # Stream output
+        # Stream output and extract steps for frontend in real-time
+        # run-docker.sh now streams output immediately (not buffered), so we see steps as they happen
         output_lines = []
         while True:
             line = await process.stdout.readline()
@@ -274,6 +310,11 @@ class ScannerWorker:
             line_str = line.decode('utf-8', errors='ignore').strip()
             output_lines.append(line_str)
             print(f"[Scanner Worker] {line_str}")
+            
+            # Extract steps for frontend display (also writes to steps.log)
+            step_line = extract_steps_for_frontend(line_str, current_scan, results_dir_path_obj)
+            if step_line:
+                print(f"[Scanner Worker] [Step] {step_line}")
         
         await process.wait()
         

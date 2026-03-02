@@ -231,22 +231,11 @@ def get_webui_cli_script():
     """
     Get WebUI CLI script path (scripts/run-docker.sh).
     Central function - all services should use this!
+    EINHEITLICH: Dev und Prod verwenden beide /project/scripts/run-docker.sh
     Returns: Path object
     """
-    environment = os.getenv("ENVIRONMENT", "dev").lower()
-    
-    if environment == "prod":
-        # In Production: scripts are in /project/scripts (mounted project root)
-        return Path("/project/scripts/run-docker.sh")
-    else:
-        # In Dev: scripts are in base_dir/scripts
-        base_dir = get_webui_base_dir()
-        if base_dir:
-            script_path = base_dir / "scripts" / "run-docker.sh"
-            if script_path.exists():
-                return script_path
-            return script_path  # Return even if doesn't exist (will fail with clear error)
-        return Path("./scripts/run-docker.sh")  # Fallback
+    # EINHEITLICH: Immer /project/scripts/run-docker.sh (weil .:/project:ro in beiden gemountet)
+    return Path("/project/scripts/run-docker.sh")
 
 
 def get_webui_results_dir():
@@ -265,26 +254,17 @@ def get_results_dir_for_scan(project_name: str, scan_id: str) -> str:
     """
     Get results directory path for a specific scan.
     Central function - all services should use this!
+    EINHEITLICH: Dev und Prod verwenden beide /app/results/...
     
     Args:
         project_name: Name of the project being scanned
         scan_id: Unique scan identifier (timestamp format)
     
     Returns:
-        str: Full path to results directory (e.g., "/app/results/PROJECT_SCAN_ID" in prod)
+        str: Full path to results directory (e.g., "/app/results/PROJECT_SCAN_ID")
     """
-    environment = os.getenv("ENVIRONMENT", "dev").lower()
-    
-    if environment == "prod":
-        # In Production: /app/results (writable, mounted from host)
-        return f"/app/results/{project_name}_{scan_id}"
-    else:
-        # In Dev: Use base_dir/results
-        base_dir = get_webui_base_dir()
-        if base_dir:
-            return str(base_dir / "results" / f"{project_name}_{scan_id}")
-        # Fallback
-        return f"./results/{project_name}_{scan_id}"
+    # EINHEITLICH: Immer /app/results/... (weil ./results:/app/results in beiden gemountet)
+    return f"/app/results/{project_name}_{scan_id}"
 
 
 def get_logs_dir_for_scan(results_dir: str) -> str:

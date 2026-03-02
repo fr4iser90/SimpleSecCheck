@@ -428,29 +428,34 @@ elif [ "$SCAN_TYPE" = "code" ]; then
     fi
 
     # Code scan: mount code directory
-    # Script now only runs on host (CLI usage)
-    # WebUI calls docker-compose directly, so no container/host distinction needed
+    # EINHEITLICH: Dev und Prod verwenden beide /project (gemountet von .:/project:ro)
     TARGET_MOUNT_PATH_HOST="$TARGET_MOUNT_PATH"
     RESULTS_DIR_HOST="$RESULTS_DIR"
     LOGS_DIR_HOST="$LOGS_DIR"
-    log_message "Running on host, using paths as-is"
     
-    # Verify target path exists
-    if [ ! -d "$TARGET_MOUNT_PATH_HOST" ]; then
-        log_error "Target path does not exist: $TARGET_MOUNT_PATH_HOST"
-        log_error "Exiting with error code 1"
-        exit 1
-    fi
-    log_message "✓ Target path exists: $TARGET_MOUNT_PATH_HOST"
-    
-    # Count files in target directory for debugging
-    FILE_COUNT=$(find "$TARGET_MOUNT_PATH_HOST" -type f 2>/dev/null | wc -l)
-    log_message "Target directory contains $FILE_COUNT files"
-    
-    if [ "$FILE_COUNT" -eq 0 ]; then
-        log_warning "WARNING: Target directory is empty! Scanner will find nothing!"
-        log_warning "Directory contents:"
-        ls -la "$TARGET_MOUNT_PATH_HOST" 2>/dev/null || log_warning "  (cannot list directory)"
+    # Check if we're running in a container (e.g., WebUI container at /app)
+    # If so, skip path validation - docker-compose will handle it when mounting
+    if [ -d "/app" ] || [ -f "/.dockerenv" ]; then
+        # Running in container: cannot validate host paths, let docker-compose handle it
+        log_message "Running in container - path validation will be done by docker-compose when mounting"
+    else
+        # Running on host: validate path exists
+        if [ ! -d "$TARGET_MOUNT_PATH_HOST" ]; then
+            log_error "Target path does not exist: $TARGET_MOUNT_PATH_HOST"
+            log_error "Exiting with error code 1"
+            exit 1
+        fi
+        log_message "✓ Target path exists: $TARGET_MOUNT_PATH_HOST"
+        
+        # Count files in target directory for debugging
+        FILE_COUNT=$(find "$TARGET_MOUNT_PATH_HOST" -type f 2>/dev/null | wc -l)
+        log_message "Target directory contains $FILE_COUNT files"
+        
+        if [ "$FILE_COUNT" -eq 0 ]; then
+            log_warning "WARNING: Target directory is empty! Scanner will find nothing!"
+            log_warning "Directory contents:"
+            ls -la "$TARGET_MOUNT_PATH_HOST" 2>/dev/null || log_warning "  (cannot list directory)"
+        fi
     fi
     
     # Build environment variables array

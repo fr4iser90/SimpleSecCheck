@@ -48,18 +48,15 @@ services:
     ports:
       - "127.0.0.1:8080:8080"  # SAFE: Only localhost, not 0.0.0.0
     volumes:
-      - ./scripts:/app/scripts:ro            # CLI Scripts (read-only) - DEVELOPMENT ONLY: Hot-Reload ohne Image-Rebuild
       - ./results:/app/results                # Results (read-write: run-docker.sh needs to create subdirs)
-      - ./logs:/app/logs:ro                  # Logs (read-only)
-      # Config ist bereits im Image (über COPY scanner/ im Dockerfile) - kein Volume-Mount nötig (Dev: für Hot-Reload könnte man es mounten, aber wir behandeln Dev=Prod)
-      - ./docker-compose.yml:/app/docker-compose.yml:ro  # docker-compose.yml (read-only, needed by run-docker.sh)
-      - ./Dockerfile:/app/Dockerfile:ro       # Dockerfile (read-only, needed for scanner build)
-      - .:/project:ro                         # Project root (read-only, needed as build context for scanner)
+      - .:/project:ro                         # Project root (read-only, needed as build context for scanner and scripts)
       - ./owasp-dependency-check-data:/app/owasp-dependency-check-data  # OWASP database (read-write: for updates and checks)
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket (read-only, for docker-compose)
     environment:
       - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1
+      # Environment mode (dev/prod)
+      - ENVIRONMENT=dev
       # Host project root for OWASP volume mounting (used by run-docker.sh)
       - HOST_PROJECT_ROOT=${PWD}
       # Auto-shutdown configuration (security feature)

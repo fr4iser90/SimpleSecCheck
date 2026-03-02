@@ -24,10 +24,7 @@ async def add_to_queue(
     branch: str = None,
     http_request: Request = None,
 ):
-    """Add scan to queue (Production only)"""
-    if not IS_PRODUCTION:
-        raise HTTPException(status_code=400, detail="Queue system only available in production mode")
-    
+    """Add scan to queue (always enabled in Dev and Prod)"""
     # Get session ID
     if not http_request:
         raise HTTPException(status_code=500, detail="Request object not available")
@@ -119,10 +116,7 @@ async def get_my_scans(http_request: Request):
 
 @router.get("/api/statistics")
 async def get_statistics():
-    """Get aggregated statistics"""
-    if not IS_PRODUCTION:
-        return {"message": "Statistics only available in production mode"}
-    
+    """Get aggregated statistics (always enabled in Dev and Prod)"""
     from app.database import get_database
     db = get_database()
     # Database is already initialized by startup event, but ensure it's ready

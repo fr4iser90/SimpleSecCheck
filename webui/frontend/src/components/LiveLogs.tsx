@@ -6,40 +6,34 @@ export default function LiveLogs() {
   const [autoScroll, setAutoScroll] = useState(true)
 
   useEffect(() => {
-    let pollInterval: number | null = null
-    let lastCount = 0
+    // Use SSE instead of polling for real-time updates
+    const eventSource = new EventSource('/api/scan/stream')
     
-    const fetchLogs = async () => {
+    eventSource.onmessage = (e) => {
       try {
-        const response = await fetch('/api/scan/logs')
-        if (!response.ok) {
-          console.error('[LiveLogs] Failed to fetch logs:', response.status)
+        const data = JSON.parse(e.data)
+        
+        if (data.error) {
+          console.error('[LiveLogs] SSE error:', data.error)
           return
         }
         
-        const data = await response.json()
-        if (data.lines && Array.isArray(data.lines)) {
-          // Only update if we have new lines
-          if (data.lines.length > lastCount) {
-            setLogs(data.lines)
-            lastCount = data.lines.length
-          }
+        // Update logs from SSE data (all log lines)
+        if (data.logs && Array.isArray(data.logs)) {
+          setLogs(data.logs)
         }
       } catch (err) {
-        console.error('[LiveLogs] Error fetching logs:', err)
+        console.error('[LiveLogs] Failed to parse SSE data:', err)
       }
     }
     
-    // Fetch immediately
-    fetchLogs()
-    
-    // Poll every 500ms for real-time updates
-    pollInterval = window.setInterval(fetchLogs, 500)
+    eventSource.onerror = (error) => {
+      console.error('[LiveLogs] SSE connection error:', error)
+      eventSource.close()
+    }
     
     return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval)
-      }
+      eventSource.close()
     }
   }, [])
 

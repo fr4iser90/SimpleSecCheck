@@ -124,59 +124,44 @@ export default function ScanView() {
     }
   }, [status.status, status.scan_id])
 
-  // Fetch steps from logs
+  // SSE: Real-time scan updates (steps and logs)
   useEffect(() => {
     if (status.status === 'running' && status.scan_id) {
-      const fetchSteps = async () => {
+      // Use SSE instead of polling for real-time updates
+      const eventSource = new EventSource(`/api/scan/stream?scan_id=${status.scan_id}`)
+      
+      eventSource.onmessage = (e) => {
         try {
-          const response = await fetch('/api/scan/logs')
-          if (response.ok) {
-            const data = await response.json()
-            if (data.lines && Array.isArray(data.lines)) {
-              // Parse steps from log lines (same logic as StepsSidebar)
-              const stepMap = new Map<number, Step>()
-              
-              data.lines.forEach((line: string) => {
-                const stepMatch = line.match(/([⏳✓❌]?)\s*Step\s+(\d+):\s*(.+)/i)
-                if (stepMatch) {
-                  const [, statusIcon, stepNum, message] = stepMatch
-                  const stepNumber = parseInt(stepNum, 10)
-                  
-                  let stepStatus: Step['status'] = 'pending'
-                  if (statusIcon === '✓') stepStatus = 'completed'
-                  else if (statusIcon === '⏳') stepStatus = 'running'
-                  else if (statusIcon === '❌') stepStatus = 'failed'
-                  
-                  const nameMatch = message.match(/^(.+?)(?:\s+\.\.\.|\s+completed|$)/i)
-                  const stepName = nameMatch ? nameMatch[1].trim() : message.trim()
-                  
-                  if (!stepMap.has(stepNumber)) {
-                    stepMap.set(stepNumber, {
-                      number: stepNumber,
-                      name: stepName,
-                      status: stepStatus,
-                      message: message.trim(),
-                    })
-                  } else {
-                    const existing = stepMap.get(stepNumber)!
-                    existing.status = stepStatus
-                    existing.message = message.trim()
-                  }
-                }
-              })
-              
-              const sortedSteps = Array.from(stepMap.values()).sort((a, b) => a.number - b.number)
-              setSteps(sortedSteps)
-            }
+          const data = JSON.parse(e.data)
+          
+          if (data.error) {
+            console.error('[ScanView] SSE error:', data.error)
+            return
+          }
+          
+          // Update steps from SSE data
+          if (data.steps && Array.isArray(data.steps)) {
+            setSteps(data.steps)
+          }
+          
+          // Update logs if needed (for future use)
+          if (data.logs && Array.isArray(data.logs)) {
+            // Logs are available but not currently displayed in ScanView
+            // Could be used for LiveLogs component
           }
         } catch (error) {
-          console.error('Failed to fetch steps:', error)
+          console.error('[ScanView] Failed to parse SSE data:', error)
         }
       }
-
-      fetchSteps()
-      const interval = setInterval(fetchSteps, 2000) // Poll every 2 seconds
-      return () => clearInterval(interval)
+      
+      eventSource.onerror = (error) => {
+        console.error('[ScanView] SSE connection error:', error)
+        eventSource.close()
+      }
+      
+      return () => {
+        eventSource.close()
+      }
     }
   }, [status.status, status.scan_id])
 
