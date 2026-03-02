@@ -204,7 +204,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
         )}
       </div>
 
-      {scanType === 'code' && (
+      {scanType === 'code' && !isGitRepo && isLocalPath && (
         <div className="form-group">
           <label>
             <input
@@ -212,10 +212,10 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
               checked={ciMode}
               onChange={(e) => setCiMode(e.target.checked)}
             />
-            CI Mode (scan only tracked files) (GitHub/GitLab)
+            CI Mode (scan only tracked files)
           </label>
           <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
-            Scans only files tracked by Git (ignores untracked files)
+            Scans only files tracked by Git (ignores untracked files). Only available for local Git repositories.
           </small>
         </div>
       )}

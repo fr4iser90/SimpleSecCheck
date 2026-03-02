@@ -93,6 +93,7 @@ export default function HomePage() {
         )}
       </div>
 
+      {/* OWASP Update - Only shown in Dev or if DB is old in Production */}
       <div className="card" style={{ marginTop: '2rem' }}>
         <OwaspUpdate />
       </div>

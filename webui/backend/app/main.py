@@ -6,6 +6,7 @@ Single-shot principle: No database, no state, just CLI wrapper
 """
 
 import os
+import asyncio
 import threading
 from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException
@@ -34,6 +35,11 @@ from app.services.queue_service import (
 from app.services.scanner_worker import (
     start_scanner_worker,
     stop_scanner_worker,
+)
+from app.services.owasp_update_service import (
+    start_update as start_owasp_update_service,
+    get_update_status as get_owasp_update_status_service,
+    check_database_age,
 )
 
 # Import routers
@@ -136,6 +142,56 @@ register_signal_handlers(signal_handler)
 # Session Management is optional (enabled in Prod by default, can be enabled in Dev)
 SESSION_MANAGEMENT = os.getenv("SESSION_MANAGEMENT", "true" if IS_PRODUCTION else "false").lower() == "true"
 
+async def owasp_auto_update_task():
+    """Background task for automatic OWASP database updates in production"""
+    # Only run in production if enabled
+    auto_update_enabled = os.getenv("OWASP_AUTO_UPDATE_ENABLED", "true" if IS_PRODUCTION else "false").lower() == "true"
+    if not IS_PRODUCTION or not auto_update_enabled:
+        return
+    
+    update_interval_days = int(os.getenv("OWASP_AUTO_UPDATE_INTERVAL_DAYS", "7"))
+    check_interval_hours = int(os.getenv("OWASP_AUTO_UPDATE_CHECK_INTERVAL_HOURS", "24"))
+    
+    print(f"[OWASP Auto-Update] Background task started (check every {check_interval_hours}h, update if DB >{update_interval_days} days old)")
+    
+    while True:
+        try:
+            await asyncio.sleep(check_interval_hours * 3600)  # Convert hours to seconds
+            
+            # Check if update is already running
+            status = get_owasp_update_status_service(OWASP_DATA_DIR)
+            if status.status == "running":
+                print("[OWASP Auto-Update] Update already in progress, skipping check")
+                continue
+            
+            # Check database age
+            database_age_days, database_exists = check_database_age(OWASP_DATA_DIR)
+            
+            if not database_exists:
+                print("[OWASP Auto-Update] Database does not exist, starting initial update...")
+                try:
+                    await start_owasp_update_service(BASE_DIR, OWASP_DATA_DIR)
+                    print("[OWASP Auto-Update] Initial update started")
+                except Exception as e:
+                    print(f"[OWASP Auto-Update] Failed to start initial update: {e}")
+            elif database_age_days is not None and database_age_days > update_interval_days:
+                print(f"[OWASP Auto-Update] Database is {database_age_days} days old (threshold: {update_interval_days} days), starting update...")
+                try:
+                    await start_owasp_update_service(BASE_DIR, OWASP_DATA_DIR)
+                    print("[OWASP Auto-Update] Update started")
+                except Exception as e:
+                    print(f"[OWASP Auto-Update] Failed to start update: {e}")
+            else:
+                print(f"[OWASP Auto-Update] Database is {database_age_days} days old, no update needed")
+                
+        except Exception as e:
+            print(f"[OWASP Auto-Update] Error in background task: {e}")
+            import traceback
+            traceback.print_exc()
+            # Wait before retrying
+            await asyncio.sleep(3600)  # Wait 1 hour before retrying on error
+
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on application startup"""
@@ -152,6 +208,11 @@ async def startup_event():
         # Start scanner worker (queue is always enabled)
         await start_scanner_worker()
         print("[Main] Scanner worker started")
+        
+        # Start OWASP auto-update background task (only in production if enabled)
+        if IS_PRODUCTION:
+            asyncio.create_task(owasp_auto_update_task())
+            print("[Main] OWASP auto-update background task started")
     except Exception as e:
         print(f"[Main] Failed to initialize services: {e}")
         import traceback

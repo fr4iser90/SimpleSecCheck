@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useConfig } from '../hooks/useConfig'
 
 interface UpdateStatus {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -11,6 +12,7 @@ interface UpdateStatus {
 }
 
 export default function OwaspUpdate() {
+  const { config } = useConfig()
   const [status, setStatus] = useState<UpdateStatus>({
     status: 'idle',
     started_at: null,
@@ -22,6 +24,10 @@ export default function OwaspUpdate() {
   const [isUpdating, setIsUpdating] = useState(false)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
+  
+  // In production, hide completely (auto-update runs in background)
+  // In dev, always show (manual control)
+  const shouldShow = !config?.is_production
 
   // Poll for status and logs
   useEffect(() => {
@@ -153,6 +159,11 @@ export default function OwaspUpdate() {
       default:
         return '⏸️ Idle'
     }
+  }
+
+  // Don't render in production (auto-update runs in background)
+  if (!shouldShow) {
+    return null
   }
 
   return (
