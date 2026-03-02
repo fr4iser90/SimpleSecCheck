@@ -17,6 +17,9 @@ sys.path.insert(0, "/project/src")
 from core.path_setup import setup_paths
 setup_paths()
 
+# Import finding policy functions
+from core.finding_policy import load_policy, apply_semgrep_policy, apply_gitleaks_policy, apply_bandit_policy
+
 # Tool configuration: maps tool name to (json_file, summary_function, normalizer_function)
 TOOL_CONFIG = {
     "Semgrep": {
@@ -310,12 +313,16 @@ def _get_summary_function(tool_name: str, summary_func_name: str) -> Optional[Ca
     return getattr(module, summary_func_name, None)
 
 
-def collect_findings_from_results(results_dir: Path) -> List[Dict]:
+def collect_findings_from_results(results_dir: Path, base_dir: Optional[Path] = None) -> List[Dict]:
     """
     Collect all findings from JSON files in results directory using existing processors
-    Returns unified list of findings with tool, severity, path, line, message
+    Applies finding policy to filter out accepted findings
+    Returns unified list of findings with tool, severity, path, line, message (filtered by policy)
     """
     all_findings = []
+    
+    # Group findings by tool for policy application
+    findings_by_tool = {}
     
     for tool_name, config in TOOL_CONFIG.items():
         json_file = results_dir / config["json_file"]
@@ -333,22 +340,80 @@ def collect_findings_from_results(results_dir: Path) -> List[Dict]:
                 print(f"[AI Prompt] Warning: Could not find summary function for {tool_name}")
                 continue
             
-            # Parse findings using processor
+            # Parse findings using processor (returns raw findings in tool-specific format)
             raw_findings = summary_func(json_data)
             
             # Skip if None (tool was skipped) or empty
             if raw_findings is None or not raw_findings:
                 continue
             
-            # Normalize findings to unified format
-            normalizer = config["normalizer"]
-            for raw_finding in raw_findings:
-                normalized = normalizer(raw_finding)
-                all_findings.append(normalized)
+            # Store raw findings by tool for policy filtering
+            findings_by_tool[tool_name] = raw_findings
         
         except Exception as e:
             print(f"[AI Prompt] Error processing {tool_name} ({config['json_file']}): {e}")
             continue
+    
+    # Load and apply finding policy
+    # Priority: 1) results_dir/finding-policy.json (copied by scanner), 2) metadata, 3) environment
+    policy_path = None
+    
+    # 1. Check if policy was copied to results_dir by scanner
+    policy_in_results = results_dir / "finding-policy.json"
+    if policy_in_results.exists():
+        policy_path = str(policy_in_results)
+        print(f"[AI Prompt] Using finding policy from results directory: {policy_path}")
+    else:
+        # 2. Try to load policy path from scan metadata
+        from core.scan_metadata import load_metadata
+        metadata = load_metadata(str(results_dir))
+        if metadata and metadata.get("finding_policy"):
+            finding_policy_path = metadata.get("finding_policy")
+            # This is the container path like /target/config/finding-policy.json
+            # Try to construct relative path and check in project root
+            if finding_policy_path.startswith("/target/"):
+                policy_relative = finding_policy_path.replace("/target/", "")
+                if base_dir:
+                    policy_candidate = base_dir / policy_relative
+                    if policy_candidate.exists():
+                        policy_path = str(policy_candidate)
+                        print(f"[AI Prompt] Using finding policy from metadata path: {policy_path}")
+        
+        # 3. Fallback: Try environment variable (for backward compatibility)
+        if not policy_path:
+            env_policy = os.environ.get("FINDING_POLICY_FILE")
+            if env_policy and env_policy.strip():
+                if Path(env_policy).exists():
+                    policy_path = env_policy
+                    print(f"[AI Prompt] Using finding policy from environment: {policy_path}")
+    
+    finding_policy = {}
+    if policy_path:
+        finding_policy = load_policy(policy_path)
+        if finding_policy:
+            print(f"[AI Prompt] Loaded finding policy successfully")
+        else:
+            print(f"[AI Prompt] Warning: Failed to load finding policy from: {policy_path}")
+    else:
+        print(f"[AI Prompt] No finding policy found - all findings will be included")
+    
+    # Apply policy to each tool's findings
+    for tool_name, raw_findings in findings_by_tool.items():
+        filtered_findings = raw_findings
+        
+        # Apply tool-specific policy
+        if tool_name == "Semgrep" and finding_policy.get("semgrep"):
+            filtered_findings, _ = apply_semgrep_policy(raw_findings, finding_policy.get("semgrep", {}))
+        elif tool_name == "GitLeaks" and finding_policy.get("gitleaks"):
+            filtered_findings, _ = apply_gitleaks_policy(raw_findings, finding_policy.get("gitleaks", {}))
+        elif tool_name == "Bandit" and finding_policy.get("bandit"):
+            filtered_findings, _ = apply_bandit_policy(raw_findings, finding_policy.get("bandit", {}))
+        
+        # Normalize filtered findings to unified format
+        normalizer = TOOL_CONFIG[tool_name]["normalizer"]
+        for raw_finding in filtered_findings:
+            normalized = normalizer(raw_finding)
+            all_findings.append(normalized)
     
     return all_findings
 

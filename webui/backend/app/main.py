@@ -357,8 +357,8 @@ async def get_ai_prompt(
     
     results_dir = Path(current_scan["results_dir"])
     
-    # Collect all findings
-    findings = collect_findings_from_results(results_dir)
+    # Collect all findings (with policy filtering)
+    findings = collect_findings_from_results(results_dir, base_dir=BASE_DIR)
     
     if not findings:
         raise HTTPException(status_code=404, detail="No findings found in scan results")

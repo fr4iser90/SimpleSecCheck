@@ -275,6 +275,23 @@ if [ "$SCAN_TYPE" = "code" ]; then
 fi
 log_message "Results Directory (RESULTS_DIR_IN_CONTAINER): $RESULTS_DIR_IN_CONTAINER"
 log_message "Logs Directory (LOGS_DIR_IN_CONTAINER): $LOGS_DIR_IN_CONTAINER"
+
+# Copy finding policy to results directory if specified
+if [ -n "${FINDING_POLICY_FILE:-}" ]; then
+    POLICY_SOURCE="$FINDING_POLICY_FILE"
+    POLICY_DEST="$RESULTS_DIR_IN_CONTAINER/finding-policy.json"
+    
+    if [ -f "$POLICY_SOURCE" ]; then
+        cp "$POLICY_SOURCE" "$POLICY_DEST" 2>/dev/null || true
+        if [ -f "$POLICY_DEST" ]; then
+            log_message "Copied finding policy to results directory: finding-policy.json"
+        else
+            log_warning "Failed to copy finding policy to results directory"
+        fi
+    else
+        log_warning "Finding policy file not found at: $POLICY_SOURCE"
+    fi
+fi
 if [ "$SCAN_TYPE" = "code" ]; then
     log_message "Semgrep Rules Path (SEMGREP_RULES_PATH_IN_CONTAINER): $SEMGREP_RULES_PATH_IN_CONTAINER"
     log_message "Trivy Config Path (TRIVY_CONFIG_PATH_IN_CONTAINER): $TRIVY_CONFIG_PATH_IN_CONTAINER"
