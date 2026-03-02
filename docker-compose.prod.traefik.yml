@@ -1,0 +1,221 @@
+# =============================================================================
+# SimpleSecCheck Production with Traefik Reverse Proxy
+# =============================================================================
+# This is a template configuration for using SimpleSecCheck behind Traefik.
+# 
+# Prerequisites:
+# - Traefik must be running with a network named "proxy"
+# - Set DOMAIN environment variable (e.g., DOMAIN=example.com)
+# - Adjust Traefik labels according to your setup
+#
+# Usage:
+#   export DOMAIN=example.com
+#   docker-compose -f docker-compose.prod.traefik.yml --profile webui up -d
+# =============================================================================
+
+services:
+  # PostgreSQL Database (Production)
+  postgres:
+    image: postgres:16-alpine
+    container_name: SimpleSecCheck_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-simpleseccheck}
+      POSTGRES_USER: ${POSTGRES_USER:-ssc_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - SimpleSecCheck_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ssc_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  scanner:
+    # Production Scanner Service - Picks jobs from queue and executes scans
+    # This service runs continuously and processes scan jobs from PostgreSQL queue
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: 1.4.0
+    image: fr4iser/simpleseccheck:latest
+    container_name: SimpleSecCheck_scanner_prod
+    volumes:
+      - ./results:/SimpleSecCheck/results
+      - ./logs:/SimpleSecCheck/logs
+      - ./config:/SimpleSecCheck/config
+      # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
+      - ./owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
+      # ⚠️ PRODUCTION: NO Docker socket - only Git scans allowed, no network scans
+      # Git scans don't require Docker socket (only network scans need it for Docker Bench)
+    environment:
+      - TARGET_URL=${TARGET_URL:-http://host.docker.internal:8000}
+      - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
+      - RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results
+      - LOGS_DIR_IN_CONTAINER=/SimpleSecCheck/logs
+      - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/config/rules
+      - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/trivy/config.yaml
+      - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/anchore/config.yaml
+      - ANCHORE_IMAGE=${ANCHORE_IMAGE:-}
+      - ZAP_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/zap/baseline.conf
+      - TRIVY_SCAN_TYPE=fs
+      - FP_WHITELIST_FILE=/SimpleSecCheck/config/policy/fp_whitelist.json
+      # Optional API Tokens (loaded from .env file if present)
+      - NVD_API_KEY=${NVD_API_KEY:-}
+      - SNYK_TOKEN=${SNYK_TOKEN:-}
+      # Production Mode - Scanner picks jobs from queue
+      - ENVIRONMENT=prod
+      - DATABASE_TYPE=postgresql
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}
+      - QUEUE_MODE=worker  # Scanner runs as queue worker
+      - MAX_CONCURRENT_SCANS=${MAX_CONCURRENT_SCANS:-1}
+    networks:
+      - SimpleSecCheck_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped  # Production: Keep scanner running
+    # Note: Scanner runs continuously, polling queue for jobs
+
+  webui:
+    # Production WebUI with Traefik - Start with: docker-compose -f docker-compose.prod.traefik.yml --profile webui up
+    # Production Mode: Auto-shutdown deaktiviert, PostgreSQL aktiv, nur Git Scans
+    # Traefik Reverse Proxy Configuration
+    build:
+      context: .
+      dockerfile: ./webui/Dockerfile.compose
+    container_name: SimpleSecCheck_webui
+    # Entrypoint script will dynamically configure docker group access at runtime
+    # No need to specify user here - entrypoint handles it
+    # Ports removed - Traefik handles routing
+    # ports:
+    #   - "0.0.0.0:8080:8080"  # Not needed with Traefik
+    volumes:
+      - ./scripts:/app/scripts:ro            # CLI Scripts (read-only)
+      - ./results:/app/results                # Results (read-write: run-docker.sh needs to create subdirs)
+      - ./logs:/app/logs:ro                  # Logs (read-only)
+      - ./config:/app/config:ro              # Config (read-only, includes rules)
+      - ./docker-compose.prod.traefik.yml:/app/docker-compose.yml:ro  # docker-compose.prod.traefik.yml (read-only, needed by run-docker.sh)
+      - ./Dockerfile:/app/Dockerfile:ro       # Dockerfile (read-only, needed for scanner build)
+      - .:/project:ro                         # Project root (read-only, needed as build context for scanner)
+      - ./owasp-dependency-check-data:/app/owasp-dependency-check-data  # OWASP database (read-write: for updates and checks)
+      # ⚠️ PRODUCTION: NO Docker socket mounted for security!
+      # Scanner runs as separate service that picks jobs from queue
+      # WebUI only manages queue, does NOT execute scans directly
+    environment:
+      - SIMPLESECCHECK_ROOT=/app
+      - PYTHONUNBUFFERED=1
+      # Host project root for OWASP volume mounting (used by run-docker.sh)
+      - HOST_PROJECT_ROOT=${PWD}
+      
+      # Production Mode Configuration
+      - ENVIRONMENT=prod
+      - DATABASE_TYPE=postgresql
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}
+      
+      # Auto-shutdown: DEAKTIVIERT in Production (Service muss dauerhaft laufen!)
+      - WEBUI_AUTO_SHUTDOWN=false
+      - WEBUI_SHUTDOWN_AFTER_SCAN=false
+      - WEBUI_SHUTDOWN_DELAY=0
+      - WEBUI_IDLE_TIMEOUT=0
+      
+      # Production Features
+      - SESSION_MANAGEMENT=true
+      - QUEUE_ENABLED=true
+      - METADATA_COLLECTION=always
+      - ONLY_GIT_SCANS=true
+      
+      # Session Configuration
+      - SESSION_DURATION=${SESSION_DURATION:-86400}
+      - SESSION_STORAGE=postgresql
+      - SESSION_COOKIE_NAME=${SESSION_COOKIE_NAME:-session_id}
+      - SESSION_HEADER_NAME=${SESSION_HEADER_NAME:-X-Session-ID}
+      - SESSION_COOKIE_HTTPONLY=true
+      - SESSION_COOKIE_SECURE=true
+      - SESSION_COOKIE_SAMESITE=lax
+      
+      # Queue Configuration
+      - MAX_QUEUE_LENGTH=${MAX_QUEUE_LENGTH:-1000}
+      - MAX_CONCURRENT_SCANS=${MAX_CONCURRENT_SCANS:-1}
+      - QUEUE_DEDUPLICATION=true
+      - QUEUE_FAIRNESS_MODE=fifo
+      
+      # Rate Limiting
+      - RATE_LIMIT_PER_SESSION_SCANS=${RATE_LIMIT_PER_SESSION_SCANS:-10}
+      - RATE_LIMIT_PER_SESSION_REQUESTS=${RATE_LIMIT_PER_SESSION_REQUESTS:-100}
+      - RATE_LIMIT_PER_IP_SCANS=${RATE_LIMIT_PER_IP_SCANS:-50}
+      - RATE_LIMIT_PER_IP_REQUESTS=${RATE_LIMIT_PER_IP_REQUESTS:-1000}
+      
+      # Size Limits
+      - MAX_ZIP_UPLOAD_SIZE=${MAX_ZIP_UPLOAD_SIZE:-100M}
+      - MAX_GIT_REPO_SIZE=${MAX_GIT_REPO_SIZE:-500M}
+      - MAX_SCAN_DISK_USAGE=${MAX_SCAN_DISK_USAGE:-2G}
+      
+      # Scan Deduplication
+      - SCAN_DEDUPLICATION_ENABLED=true
+      - SCAN_DEDUPLICATION_AGE_DAYS=${SCAN_DEDUPLICATION_AGE_DAYS:-7}
+      
+      # Optional Features
+      - STATISTICS_ENABLED=${STATISTICS_ENABLED:-true}
+      - ZIP_UPLOAD_ENABLED=${ZIP_UPLOAD_ENABLED:-true}
+      
+      # CORS Configuration
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
+    networks:
+      - SimpleSecCheck_network
+      - proxy  # Traefik network
+    profiles:
+      - webui  # Only start with: docker-compose -f docker-compose.prod.traefik.yml --profile webui up
+    depends_on:
+      postgres:
+        condition: service_healthy
+      scanner:
+        condition: service_started
+    # Security: no privileged mode, no capabilities
+    security_opt:
+      - no-new-privileges:true
+    read_only: false  # Allow writes to /tmp only (for uvicorn)
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    restart: unless-stopped  # Production: Auto-restart
+    labels:
+      # Traefik Enable
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      
+      # Frontend Router (nur für nicht-/api Requests)
+      - "traefik.http.routers.simpleseccheck-frontend.rule=Host(`simpleseccheck.${DOMAIN}`) && !PathPrefix(`/api`)"
+      - "traefik.http.routers.simpleseccheck-frontend.entrypoints=websecure"
+      - "traefik.http.routers.simpleseccheck-frontend.tls=true"
+      - "traefik.http.routers.simpleseccheck-frontend.tls.certresolver=http_resolver"
+      # Add your custom middlewares here (e.g., authentication, rate limiting)
+      # Example: - "traefik.http.routers.simpleseccheck-frontend.middlewares=default@file,auth@file"
+      - "traefik.http.routers.simpleseccheck-frontend.priority=10"
+      
+      # Frontend Service
+      - "traefik.http.services.simpleseccheck-frontend.loadbalancer.server.port=8080"
+      
+      # API Router (für /api Requests)
+      - "traefik.http.routers.simpleseccheck-api.rule=Host(`simpleseccheck.${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.simpleseccheck-api.entrypoints=websecure"
+      - "traefik.http.routers.simpleseccheck-api.tls=true"
+      - "traefik.http.routers.simpleseccheck-api.tls.certresolver=http_resolver"
+      - "traefik.http.routers.simpleseccheck-api.priority=20"
+      
+      # API Service
+      - "traefik.http.services.simpleseccheck-api.loadbalancer.server.port=8080"
+
+networks:
+  SimpleSecCheck_network:
+    driver: bridge
+  proxy:
+    external: true  # Traefik network (must exist)
+
+volumes:
+  results_data:
+  logs_data:
+  postgres_data:  # PostgreSQL data persistence

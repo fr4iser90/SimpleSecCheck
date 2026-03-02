@@ -35,6 +35,21 @@ from .owasp_update_service import (
     get_update_logs,
     stop_update,
 )
+from .session_service import (
+    SessionService,
+    get_session_service,
+    session_middleware,
+)
+from .queue_service import (
+    QueueService,
+    get_queue_service,
+)
+from .scanner_worker import (
+    ScannerWorker,
+    get_scanner_worker,
+    start_scanner_worker,
+    stop_scanner_worker,
+)
 
 __all__ = [
     "stop_running_containers",
@@ -65,4 +80,13 @@ __all__ = [
     "get_update_status",
     "get_update_logs",
     "stop_update",
+    "SessionService",
+    "get_session_service",
+    "session_middleware",
+    "QueueService",
+    "get_queue_service",
+    "ScannerWorker",
+    "get_scanner_worker",
+    "start_scanner_worker",
+    "stop_scanner_worker",
 ]

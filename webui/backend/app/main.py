@@ -11,7 +11,7 @@ import threading
 import json
 import time
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -65,6 +65,17 @@ from app.services.batch_scan_service import (
     resume_batch_scan,
     stop_batch_scan,
 )
+from app.services.session_service import (
+    session_middleware,
+    get_session_service,
+)
+from app.services.queue_service import (
+    get_queue_service,
+)
+from app.services.scanner_worker import (
+    start_scanner_worker,
+    stop_scanner_worker,
+)
 
 # Configuration - ALL PATHS FROM CENTRAL path_setup.py
 # NO PATH CALCULATIONS HERE!
@@ -100,16 +111,30 @@ elif CLI_SCRIPT and not CLI_SCRIPT.exists():
 
 app = FastAPI(title="SimpleSecCheck WebUI", version="1.0.0")
 
-# CORS for development
-# IMPORTANT: Cannot use allow_origins=["*"] with allow_credentials=True
-# According to FastAPI docs: https://fastapi.tiangolo.com/tutorial/cors/
+# Environment detection
+ENVIRONMENT = os.getenv("ENVIRONMENT", "dev").lower()
+IS_PRODUCTION = ENVIRONMENT == "prod"
+
+# CORS configuration
+cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if os.getenv("CORS_ALLOWED_ORIGINS") else []
+if not cors_origins or cors_origins == [""]:
+    # Default to localhost for development
+    cors_origins = ["http://localhost:8080", "http://127.0.0.1:8080"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],  # Explicit origins required when allow_credentials=True
+    allow_origins=cors_origins if cors_origins else ["*"],  # In production, should be specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Session middleware (only in production)
+if IS_PRODUCTION:
+    app.middleware("http")(session_middleware)
+    print("[Main] Production mode: Session management enabled")
+else:
+    print("[Main] Development mode: Session management disabled")
 
 # Global state for current scan (minimal, no DB)
 current_scan = {
@@ -134,6 +159,26 @@ if AUTO_SHUTDOWN_ENABLED and IDLE_TIMEOUT > 0:
 # Register signal handlers
 signal_handler = create_signal_handler(current_scan, stop_running_containers)
 register_signal_handlers(signal_handler)
+
+# Production: Start scanner worker
+if IS_PRODUCTION:
+    @app.on_event("startup")
+    async def startup_event():
+        """Start scanner worker on application startup"""
+        try:
+            await start_scanner_worker()
+            print("[Main] Scanner worker started")
+        except Exception as e:
+            print(f"[Main] Failed to start scanner worker: {e}")
+    
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """Stop scanner worker on application shutdown"""
+        try:
+            await stop_scanner_worker()
+            print("[Main] Scanner worker stopped")
+        except Exception as e:
+            print(f"[Main] Error stopping scanner worker: {e}")
 
 
 @app.get("/api/health")
@@ -242,22 +287,80 @@ async def get_git_branches(url: str):
 
 
 @app.post("/api/scan/start", response_model=ScanStatus)
-async def start_scan(request: ScanRequest):
+async def start_scan(request: ScanRequest, http_request: Request):
     """
     Start a scan by calling scripts/run-docker.sh
-    Single-shot: Only one scan at a time
+    In Production: Adds scan to queue instead of starting directly
+    In Development: Starts scan immediately (single-shot)
     """
     update_activity()
     
-    result = await start_scan_service(
-        request,
-        current_scan,
-        CLI_SCRIPT,
-        BASE_DIR,
-        RESULTS_DIR
-    )
+    # Production: Use queue system
+    if IS_PRODUCTION:
+        # Check if only Git scans are allowed
+        only_git_scans = os.getenv("ONLY_GIT_SCANS", "true").lower() == "true"
+        if only_git_scans and request.type != "code":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Only Git scans (code type) are allowed in production mode. Requested type: {request.type}"
+            )
+        
+        # Validate Git URL
+        from app.services.git_service import is_git_url
+        if request.type == "code" and not is_git_url(request.target):
+            raise HTTPException(
+                status_code=400,
+                detail="Only Git repository URLs are allowed in production mode"
+            )
+        
+        # Get session ID from request state (set by middleware)
+        session_id = getattr(http_request.state, "session_id", None)
+        if not session_id:
+            raise HTTPException(status_code=401, detail="Session required")
+        
+        # Check rate limits
+        session_service = await get_session_service()
+        allowed, error_msg = await session_service.check_rate_limit(session_id)
+        if not allowed:
+            raise HTTPException(status_code=429, detail=error_msg)
+        
+        # Add to queue
+        queue_service = await get_queue_service()
+        
+        # Extract branch and commit hash from request if available
+        branch = request.git_branch
+        commit_hash = None  # TODO: Extract from Git if needed
+        
+        result = await queue_service.add_scan_to_queue(
+            session_id=session_id,
+            repository_url=request.target,
+            branch=branch,
+            commit_hash=commit_hash,
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result.get("message", "Failed to add to queue"))
+        
+        # Increment scan count
+        await session_service.increment_scan_count(session_id)
+        
+        return ScanStatus(
+            status="queued",
+            scan_id=None,  # Will be set when scan starts
+            message=result.get("message", "Scan added to queue"),
+        )
     
-    return result
+    # Development: Start scan immediately
+    else:
+        result = await start_scan_service(
+            request,
+            current_scan,
+            CLI_SCRIPT,
+            BASE_DIR,
+            RESULTS_DIR
+        )
+        
+        return result
 
 
 @app.get("/api/scan/status", response_model=ScanStatus)
@@ -598,6 +701,160 @@ async def stop_bulk_scan():
     if not progress:
         raise HTTPException(status_code=404, detail="No batch scan found")
     return progress
+
+
+# ============================================================================
+# Production: Queue & Session Endpoints
+# ============================================================================
+
+@app.get("/api/session")
+async def get_session_info(http_request: Request):
+    """Get current session information"""
+    if not IS_PRODUCTION:
+        return {"session_id": None, "mode": "development"}
+    
+    session_id = getattr(http_request.state, "session_id", None)
+    if not session_id:
+        return {"session_id": None, "mode": "production"}
+    
+    session_service = await get_session_service()
+    session = await session_service.validate_session(session_id)
+    
+    if not session:
+        return {"session_id": None, "mode": "production", "valid": False}
+    
+    return {
+        "session_id": session_id,
+        "mode": "production",
+        "valid": True,
+        "scans_requested": session.get("scans_requested", 0),
+        "rate_limit_scans": session.get("rate_limit_scans", 10),
+    }
+
+
+@app.post("/api/queue/add")
+async def add_to_queue(
+    repository_url: str,
+    branch: str = None,
+    http_request: Request = None,
+):
+    """Add scan to queue (Production only)"""
+    if not IS_PRODUCTION:
+        raise HTTPException(status_code=400, detail="Queue system only available in production mode")
+    
+    # Get session ID
+    if not http_request:
+        raise HTTPException(status_code=500, detail="Request object not available")
+    
+    session_id = getattr(http_request.state, "session_id", None)
+    if not session_id:
+        raise HTTPException(status_code=401, detail="Session required")
+    
+    # Check rate limits
+    session_service = await get_session_service()
+    allowed, error_msg = await session_service.check_rate_limit(session_id)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=error_msg)
+    
+    # Validate Git URL
+    from app.services.git_service import is_git_url
+    if not is_git_url(repository_url):
+        raise HTTPException(status_code=400, detail="Only Git repository URLs are allowed")
+    
+    # Add to queue
+    queue_service = await get_queue_service()
+    result = await queue_service.add_scan_to_queue(
+        session_id=session_id,
+        repository_url=repository_url,
+        branch=branch,
+        commit_hash=None,  # TODO: Extract from Git if needed
+    )
+    
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result.get("message", "Failed to add to queue"))
+    
+    # Increment scan count
+    await session_service.increment_scan_count(session_id)
+    
+    return result
+
+
+@app.get("/api/queue")
+async def get_queue(limit: int = 100):
+    """Get public queue (anonymized)"""
+    if not IS_PRODUCTION:
+        return {"queue": [], "message": "Queue system only available in production mode"}
+    
+    queue_service = await get_queue_service()
+    queue = await queue_service.get_public_queue(limit=limit)
+    queue_length = await queue_service.get_queue_length()
+    
+    return {
+        "queue": queue,
+        "queue_length": queue_length,
+        "max_queue_length": int(os.getenv("MAX_QUEUE_LENGTH", "1000")),
+    }
+
+
+@app.get("/api/queue/{queue_id}/status")
+async def get_queue_status(queue_id: str, http_request: Request = None):
+    """Get status of a queue item"""
+    if not IS_PRODUCTION:
+        raise HTTPException(status_code=400, detail="Queue system only available in production mode")
+    
+    queue_service = await get_queue_service()
+    queue_item = await queue_service.get_queue_status(queue_id)
+    
+    if not queue_item:
+        raise HTTPException(status_code=404, detail="Queue item not found")
+    
+    # Check if user owns this queue item (if session available)
+    session_id = getattr(http_request.state, "session_id", None) if http_request else None
+    if session_id and queue_item.get("session_id") == session_id:
+        # Return full details for owner
+        return queue_item
+    else:
+        # Return anonymized version for others
+        return {
+            "queue_id": queue_item["queue_id"],
+            "repository_name": queue_item["repository_name"],
+            "status": queue_item["status"],
+            "position": queue_item.get("position"),
+            "created_at": queue_item.get("created_at"),
+        }
+
+
+@app.get("/api/queue/my-scans")
+async def get_my_scans(http_request: Request):
+    """Get queue items for current session"""
+    if not IS_PRODUCTION:
+        return {"scans": []}
+    
+    session_id = getattr(http_request.state, "session_id", None)
+    if not session_id:
+        raise HTTPException(status_code=401, detail="Session required")
+    
+    queue_service = await get_queue_service()
+    scans = await queue_service.get_user_queue(session_id)
+    
+    return {"scans": scans}
+
+
+@app.get("/api/statistics")
+async def get_statistics():
+    """Get aggregated statistics"""
+    if not IS_PRODUCTION:
+        return {"message": "Statistics only available in production mode"}
+    
+    from app.database import get_database
+    db = get_database()
+    await db.initialize()
+    
+    try:
+        stats = await db.get_statistics()
+        return stats
+    finally:
+        await db.close()
 
 
 # Serve frontend static files (after API routes)

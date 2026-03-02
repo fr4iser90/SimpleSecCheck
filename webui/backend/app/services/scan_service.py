@@ -196,13 +196,14 @@ async def start_scan(
             # Git clone: Use dedicated function for Git clones (can check in container)
             policy_check_path = get_finding_policy_check_path_for_git_clone(clean_target, clean_finding_policy)
             if not policy_check_path or not os.path.exists(policy_check_path):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Finding policy file not found: {clean_finding_policy} (checked at {policy_check_path or 'invalid path'})"
-                )
-            finding_policy_file = f"/target/{clean_finding_policy}"
-            env_vars.extend(["-e", f"FINDING_POLICY_FILE={finding_policy_file}"])
-            print(f"[Scan Service] ✓ Using finding policy: {finding_policy_file} (found at {policy_check_path})")
+                # Finding policy is optional - warn but don't fail
+                print(f"[Scan Service] ⚠️ Finding policy file not found: {clean_finding_policy} (checked at {policy_check_path or 'invalid path'})")
+                print(f"[Scan Service] ⚠️ Continuing without finding policy - scanner will use default behavior")
+                # Don't set finding_policy_file - scanner will auto-detect if available
+            else:
+                finding_policy_file = f"/target/{clean_finding_policy}"
+                env_vars.extend(["-e", f"FINDING_POLICY_FILE={finding_policy_file}"])
+                print(f"[Scan Service] ✓ Using finding policy: {finding_policy_file} (found at {policy_check_path})")
         else:
             # Local scan: Use dedicated function for local scans (cannot check in container)
             policy_check_path = get_finding_policy_check_path_for_local_scan(target_mount_path_host, clean_finding_policy)
