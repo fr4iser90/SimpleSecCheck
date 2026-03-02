@@ -476,3 +476,7 @@ TARGET_URL=https://your-site.com docker-compose run --rm scanner
 ## 📄 License
 
 SimpleSecCheck is Open Source, MIT-licensed.
+
+**Third-Party Tools:** This project orchestrates various third-party security tools. Each tool is distributed under its own license. Users are responsible for complying with the respective licenses of all integrated tools. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for details.
+
+**Legal Note:** SimpleSecCheck acts as an orchestrator that calls external CLI tools. No third-party source code is directly integrated or statically linked into this project. All tools are executed as separate processes, maintaining clear separation and license boundaries.

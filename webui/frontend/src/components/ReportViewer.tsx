@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react'
 
-export default function ReportViewer() {
+interface ReportViewerProps {
+  scanId?: string | null  // Optional: if provided, load report from /api/results/{scanId}/report
+}
+
+export default function ReportViewer({ scanId }: ReportViewerProps = {}) {
   const [reportUrl, setReportUrl] = useState<string | null>(null)
 
   useEffect(() => {
+    // Determine which endpoint to use
+    const reportEndpoint = scanId 
+      ? `/api/results/${scanId}/report`
+      : '/api/scan/report'
+    
     // Fetch report URL
-    fetch('/api/scan/report')
+    fetch(reportEndpoint)
       .then((response) => {
         if (response.ok) {
           // Create blob URL for iframe
@@ -13,12 +22,21 @@ export default function ReportViewer() {
             const url = URL.createObjectURL(blob)
             setReportUrl(url)
           })
+        } else {
+          console.error('Failed to load report:', response.status, response.statusText)
         }
       })
       .catch((err) => {
         console.error('Failed to load report:', err)
       })
-  }, [])
+    
+    // Cleanup blob URL on unmount
+    return () => {
+      if (reportUrl) {
+        URL.revokeObjectURL(reportUrl)
+      }
+    }
+  }, [scanId])
 
   if (!reportUrl) {
     return (

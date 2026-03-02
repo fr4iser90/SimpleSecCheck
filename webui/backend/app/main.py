@@ -142,6 +142,35 @@ register_signal_handlers(signal_handler)
 # Session Management is optional (enabled in Prod by default, can be enabled in Dev)
 SESSION_MANAGEMENT = os.getenv("SESSION_MANAGEMENT", "true" if IS_PRODUCTION else "false").lower() == "true"
 
+async def queue_cleanup_task():
+    """Background task for cleaning up old queue items"""
+    from app.database import get_database
+    
+    cleanup_interval_hours = int(os.getenv("QUEUE_CLEANUP_INTERVAL_HOURS", "24"))
+    max_age_days = int(os.getenv("QUEUE_CLEANUP_MAX_AGE_DAYS", "7"))
+    
+    print(f"[Queue Cleanup] Background task started (check every {cleanup_interval_hours}h, delete items older than {max_age_days} days)")
+    
+    while True:
+        try:
+            await asyncio.sleep(cleanup_interval_hours * 3600)  # Convert hours to seconds
+            
+            db = get_database()
+            deleted_count = await db.cleanup_old_queue_items(max_age_days=max_age_days)
+            
+            if deleted_count > 0:
+                print(f"[Queue Cleanup] Deleted {deleted_count} old queue items")
+            else:
+                print("[Queue Cleanup] No old queue items to clean up")
+                
+        except Exception as e:
+            print(f"[Queue Cleanup] Error in background task: {e}")
+            import traceback
+            traceback.print_exc()
+            # Wait before retrying
+            await asyncio.sleep(3600)  # Wait 1 hour before retrying on error
+
+
 async def owasp_auto_update_task():
     """Background task for automatic OWASP database updates in production"""
     # Only run in production if enabled
@@ -208,6 +237,10 @@ async def startup_event():
         # Start scanner worker (queue is always enabled)
         await start_scanner_worker()
         print("[Main] Scanner worker started")
+        
+        # Start queue cleanup background task (always enabled)
+        asyncio.create_task(queue_cleanup_task())
+        print("[Main] Queue cleanup background task started")
         
         # Start OWASP auto-update background task (only in production if enabled)
         if IS_PRODUCTION:

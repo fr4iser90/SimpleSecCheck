@@ -104,8 +104,9 @@ async def start_scan(request: ScanRequest, http_request: Request):
         await session_service.increment_scan_count(session_id)
     
     # Return queue_id as scan_id for tracking
+    # Use "pending" status to match queue status (consistent with frontend expectations)
     return ScanStatus(
-        status="queued",
+        status="pending",
         scan_id=result.get("queue_id"),  # Use queue_id as scan_id for tracking
         message=result.get("message", "Scan added to queue"),
     )

@@ -360,6 +360,18 @@ class PostgreSQLDatabase(DatabaseAdapter):
             """)
             return count or 0
     
+    async def cleanup_old_queue_items(self, max_age_days: int = 7) -> int:
+        """Clean up old completed/failed queue items"""
+        async with self.connection_pool.acquire() as conn:
+            result = await conn.execute("""
+                DELETE FROM queue
+                WHERE status IN ('completed', 'failed')
+                AND completed_at < NOW() - INTERVAL '%s days'
+            """, max_age_days)
+            
+            # Extract count from result string "DELETE N"
+            return int(result.split()[-1]) if result.startswith("DELETE") else 0
+    
     async def find_duplicate_in_queue(
         self,
         repository_url: str,

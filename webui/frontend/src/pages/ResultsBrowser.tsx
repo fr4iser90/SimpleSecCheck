@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 interface Scan {
   id: string
@@ -8,6 +9,7 @@ interface Scan {
 }
 
 export default function ResultsBrowser() {
+  const navigate = useNavigate()
   const [scans, setScans] = useState<Scan[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -24,8 +26,16 @@ export default function ResultsBrowser() {
       })
   }, [])
 
-  const openReport = (reportPath: string) => {
-    window.open(reportPath, '_blank')
+  const openReport = (scanId: string) => {
+    // Navigate to scan view with the scan_id
+    // The ScanView will automatically load the report if results_dir is available
+    navigate('/scan', { 
+      state: { 
+        status: 'done',
+        scan_id: scanId,
+        results_dir: scanId, // Use scan_id as results_dir (it's the directory name)
+      } 
+    })
   }
 
   return (
@@ -33,7 +43,7 @@ export default function ResultsBrowser() {
       <div className="card">
         <h2>Browse Results</h2>
         <p style={{ marginBottom: '2rem', opacity: 0.8 }}>
-          These are local files from the results/ directory. No database, no tracking - just file browser.
+          These are local files from the results/ directory. Click on a scan to view its report.
         </p>
 
         {loading ? (
@@ -54,6 +64,31 @@ export default function ResultsBrowser() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
+                  cursor: scan.has_report ? 'pointer' : 'default',
+                  transition: 'all 0.2s ease',
+                  ...(scan.has_report && {
+                    ':hover': {
+                      background: 'var(--glass-bg-light)',
+                      borderColor: '#007bff',
+                    }
+                  })
+                }}
+                onClick={() => {
+                  if (scan.has_report && scan.report_path) {
+                    openReport(scan.id)
+                  }
+                }}
+                onMouseEnter={(e) => {
+                  if (scan.has_report) {
+                    e.currentTarget.style.background = 'var(--glass-bg-light)'
+                    e.currentTarget.style.borderColor = '#007bff'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (scan.has_report) {
+                    e.currentTarget.style.background = 'var(--glass-bg-dark)'
+                    e.currentTarget.style.borderColor = 'var(--glass-border-dark)'
+                  }
                 }}
               >
                 <div>
@@ -65,9 +100,28 @@ export default function ResultsBrowser() {
                   </div>
                 </div>
                 {scan.has_report && scan.report_path && (
-                  <button onClick={() => openReport(scan.report_path!)}>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openReport(scan.id)
+                    }}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: '#007bff',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                    }}
+                  >
                     📄 View Report
                   </button>
+                )}
+                {!scan.has_report && (
+                  <span style={{ opacity: 0.5, fontSize: '0.875rem' }}>
+                    No report available
+                  </span>
                 )}
               </div>
             ))}

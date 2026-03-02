@@ -5,13 +5,33 @@ import LiveLogs from '../components/LiveLogs'
 import StepsSidebar from '../components/StepsSidebar'
 import AIPromptModal from '../components/AIPromptModal'
 
+// Backend is the source of truth!
+// Backend uses TWO status systems:
+// 1. Queue system: 'pending', 'running', 'completed', 'failed'
+// 2. Scan system: 'idle', 'running', 'done', 'error'
 interface ScanStatusData {
-  status: 'idle' | 'running' | 'done' | 'error'
+  status: 'idle' | 'running' | 'done' | 'error' | 'pending' | 'completed' | 'failed'
   scan_id: string | null
   results_dir: string | null
   started_at: string | null
   error_code?: number | null
   error_message?: string | null
+}
+
+interface QueueStatus {
+  queue_id: string
+  repository_name: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  position?: number
+  created_at: string
+  scan_id?: string
+}
+
+interface Step {
+  number: number
+  name: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  message?: string
 }
 
 export default function ScanView() {
@@ -28,30 +48,62 @@ export default function ScanView() {
     }
   )
 
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null)
+  const [steps, setSteps] = useState<Step[]>([])
   const [isStepsSidebarOpen, setIsStepsSidebarOpen] = useState(false)
   const [isLogsSidebarOpen, setIsLogsSidebarOpen] = useState(false)
   const [isAIPromptModalOpen, setIsAIPromptModalOpen] = useState(false)
 
-  // Listen for messages from iframe (HTML Report)
+  // Check if scan_id is a queue_id (UUID format)
+  const isQueueId = (id: string | null): boolean => {
+    if (!id) return false
+    // UUID format: 8-4-4-4-12 hex characters
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    return uuidRegex.test(id)
+  }
+
+  // Poll queue status if scan_id is a queue_id
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      // Security: Only accept messages from same origin
-      if (event.origin !== window.location.origin && !event.origin.includes('localhost:8080')) {
-        return
+    if (status.scan_id && isQueueId(status.scan_id) && (status.status === 'pending' || status.status === 'idle')) {
+      const fetchQueueStatus = async () => {
+        try {
+          const response = await fetch(`/api/queue/${status.scan_id}/status`)
+          if (response.ok) {
+            const data = await response.json()
+            setQueueStatus(data)
+            
+            // Update status based on queue status (Backend is source of truth!)
+            // Map queue status to scan status for consistency
+            if (data.status === 'running') {
+              setStatus(prev => ({ ...prev, status: 'running' }))
+            } else if (data.status === 'completed') {
+              // Queue uses 'completed', but we need 'done' for scan system
+              if (data.scan_id) {
+                setStatus(prev => ({ ...prev, status: 'done', scan_id: data.scan_id }))
+              } else {
+                setStatus(prev => ({ ...prev, status: 'completed' }))
+              }
+            } else if (data.status === 'failed') {
+              // Queue uses 'failed', but we need 'error' for scan system
+              setStatus(prev => ({ ...prev, status: 'error' }))
+            } else if (data.status === 'pending') {
+              setStatus(prev => ({ ...prev, status: 'pending' }))
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch queue status:', error)
+        }
       }
-      
-      if (event.data && event.data.type === 'OPEN_AI_PROMPT_MODAL') {
-        setIsAIPromptModalOpen(true)
-      }
+
+      fetchQueueStatus()
+      const interval = setInterval(fetchQueueStatus, 3000) // Poll every 3 seconds
+      return () => clearInterval(interval)
     }
+  }, [status.scan_id, status.status])
 
-    window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
-  }, [])
-
-  // Poll status every 2 seconds if scan is running
+  // Poll scan status if running (non-queue scan or after queue scan started)
   useEffect(() => {
-    if (status.status === 'running' && status.scan_id) {
+    if (status.status === 'running' && status.scan_id && !isQueueId(status.scan_id)) {
       const interval = setInterval(async () => {
         try {
           const response = await fetch('/api/scan/status')
@@ -72,11 +124,92 @@ export default function ScanView() {
     }
   }, [status.status, status.scan_id])
 
-  // Show loading/running state
-  if (status.status === 'running' || (status.status === 'done' && !status.results_dir)) {
+  // Fetch steps from logs
+  useEffect(() => {
+    if (status.status === 'running' && status.scan_id) {
+      const fetchSteps = async () => {
+        try {
+          const response = await fetch('/api/scan/logs')
+          if (response.ok) {
+            const data = await response.json()
+            if (data.lines && Array.isArray(data.lines)) {
+              // Parse steps from log lines (same logic as StepsSidebar)
+              const stepMap = new Map<number, Step>()
+              
+              data.lines.forEach((line: string) => {
+                const stepMatch = line.match(/([⏳✓❌]?)\s*Step\s+(\d+):\s*(.+)/i)
+                if (stepMatch) {
+                  const [, statusIcon, stepNum, message] = stepMatch
+                  const stepNumber = parseInt(stepNum, 10)
+                  
+                  let stepStatus: Step['status'] = 'pending'
+                  if (statusIcon === '✓') stepStatus = 'completed'
+                  else if (statusIcon === '⏳') stepStatus = 'running'
+                  else if (statusIcon === '❌') stepStatus = 'failed'
+                  
+                  const nameMatch = message.match(/^(.+?)(?:\s+\.\.\.|\s+completed|$)/i)
+                  const stepName = nameMatch ? nameMatch[1].trim() : message.trim()
+                  
+                  if (!stepMap.has(stepNumber)) {
+                    stepMap.set(stepNumber, {
+                      number: stepNumber,
+                      name: stepName,
+                      status: stepStatus,
+                      message: message.trim(),
+                    })
+                  } else {
+                    const existing = stepMap.get(stepNumber)!
+                    existing.status = stepStatus
+                    existing.message = message.trim()
+                  }
+                }
+              })
+              
+              const sortedSteps = Array.from(stepMap.values()).sort((a, b) => a.number - b.number)
+              setSteps(sortedSteps)
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch steps:', error)
+        }
+      }
+
+      fetchSteps()
+      const interval = setInterval(fetchSteps, 2000) // Poll every 2 seconds
+      return () => clearInterval(interval)
+    }
+  }, [status.status, status.scan_id])
+
+  // Listen for messages from iframe (HTML Report)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin && !event.origin.includes('localhost:8080')) {
+        return
+      }
+      
+      if (event.data && event.data.type === 'OPEN_AI_PROMPT_MODAL') {
+        setIsAIPromptModalOpen(true)
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
+  // Calculate progress percentage
+  const calculateProgress = (): number => {
+    if (steps.length === 0) return 0
+    const completed = steps.filter(s => s.status === 'completed').length
+    return Math.round((completed / steps.length) * 100)
+  }
+
+  // Show queue waiting state (Backend queue status: 'pending')
+  if (status.status === 'pending') {
+    const estimatedWaitMinutes = queueStatus?.position ? Math.ceil(queueStatus.position * 2) : 0 // Rough estimate: 2 min per scan
+    
     return (
       <div style={{ 
-        height: 'calc(100vh - 80px)', // Full height minus header
+        height: 'calc(100vh - 80px)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -84,16 +217,213 @@ export default function ScanView() {
         gap: '2rem',
         padding: '2rem',
       }}>
+        <div style={{ textAlign: 'center', maxWidth: '600px' }}>
+          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>⏳</div>
+          <h2>Waiting in Queue</h2>
+          <p style={{ opacity: 0.7, marginTop: '0.5rem', fontSize: '1.1rem' }}>
+            Your scan is queued and will start automatically
+          </p>
+          
+          {queueStatus ? (
+            <>
+              <div style={{
+                marginTop: '2rem',
+                padding: '1.5rem',
+                background: 'var(--glass-bg-dark)',
+                border: '1px solid var(--glass-border-dark)',
+                borderRadius: '12px',
+                width: '100%',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <span style={{ opacity: 0.8 }}>Position in Queue:</span>
+                  <strong style={{ fontSize: '1.5rem' }}>#{queueStatus.position || '?'}</strong>
+                </div>
+                {estimatedWaitMinutes > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                    <span style={{ opacity: 0.8 }}>Estimated Wait:</span>
+                    <strong>{estimatedWaitMinutes} minutes</strong>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ opacity: '0.8' }}>Repository:</span>
+                  <strong>{queueStatus.repository_name}</strong>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{
+              marginTop: '2rem',
+              padding: '1.5rem',
+              background: 'var(--glass-bg-dark)',
+              border: '1px solid var(--glass-border-dark)',
+              borderRadius: '12px',
+              width: '100%',
+            }}>
+              <div style={{ opacity: 0.7 }}>Loading queue information...</div>
+            </div>
+          )}
+
+          <div style={{
+            marginTop: '2rem',
+            width: '100%',
+            maxWidth: '600px',
+            background: 'var(--glass-bg-dark)',
+            border: '1px solid var(--glass-border-dark)',
+            borderRadius: '8px',
+            padding: '1rem',
+          }}>
+            <div style={{ marginBottom: '0.5rem', fontSize: '0.9rem', opacity: 0.8 }}>
+              Waiting for your turn...
+            </div>
+            <div style={{
+              width: '100%',
+              height: '8px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '4px',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                width: '100%',
+                height: '100%',
+                background: 'linear-gradient(90deg, #007bff, #0056b3)',
+                animation: 'pulse 2s ease-in-out infinite',
+              }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show loading/running state with steps (Backend status: 'running' from both systems)
+  if (status.status === 'running' || ((status.status === 'done' || status.status === 'completed') && !status.results_dir)) {
+    const progress = calculateProgress()
+    
+    return (
+      <div style={{ 
+        height: 'calc(100vh - 80px)',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '2rem',
+        gap: '2rem',
+      }}>
+        {/* Header with Progress */}
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⏳</div>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔄</div>
           <h2>Scan in Progress...</h2>
           <p style={{ opacity: 0.7, marginTop: '0.5rem' }}>
             Scan ID: {status.scan_id}
           </p>
+          
+          {/* Progress Bar */}
+          {steps.length > 0 && (
+            <div style={{
+              marginTop: '2rem',
+              maxWidth: '800px',
+              margin: '2rem auto 0',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ fontSize: '0.9rem', opacity: 0.8 }}>Progress</span>
+                <strong style={{ fontSize: '1.1rem' }}>{progress}%</strong>
+              </div>
+              <div style={{
+                width: '100%',
+                height: '12px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                borderRadius: '6px',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  width: `${progress}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #28a745, #20c997)',
+                  transition: 'width 0.3s ease',
+                }} />
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Steps Cards */}
+        {steps.length > 0 && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+            gap: '1rem',
+            maxWidth: '1200px',
+            margin: '0 auto',
+            width: '100%',
+          }}>
+            {steps.map((step) => {
+              const getStepColor = () => {
+                switch (step.status) {
+                  case 'completed': return '#28a745'
+                  case 'running': return '#007bff'
+                  case 'failed': return '#dc3545'
+                  default: return '#6c757d'
+                }
+              }
+              
+              const getStepIcon = () => {
+                switch (step.status) {
+                  case 'completed': return '✅'
+                  case 'running': return '⏳'
+                  case 'failed': return '❌'
+                  default: return '⏸️'
+                }
+              }
+
+              return (
+                <div
+                  key={step.number}
+                  style={{
+                    padding: '1.5rem',
+                    background: 'var(--glass-bg-dark)',
+                    border: `2px solid ${getStepColor()}`,
+                    borderRadius: '12px',
+                    transition: 'all 0.3s ease',
+                    opacity: step.status === 'pending' ? 0.6 : 1,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                    <span style={{ fontSize: '1.5rem' }}>{getStepIcon()}</span>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '1rem' }}>
+                        Step {step.number}
+                      </div>
+                      <div style={{ fontSize: '0.875rem', opacity: 0.8, marginTop: '0.25rem' }}>
+                        {step.name}
+                      </div>
+                    </div>
+                  </div>
+                  {step.status === 'running' && (
+                    <div style={{
+                      width: '100%',
+                      height: '4px',
+                      background: 'rgba(0, 123, 255, 0.2)',
+                      borderRadius: '2px',
+                      overflow: 'hidden',
+                      marginTop: '0.5rem',
+                    }}>
+                      <div style={{
+                        width: '60%',
+                        height: '100%',
+                        background: '#007bff',
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                      }} />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Logs Section */}
         <div style={{ 
           width: '100%', 
-          maxWidth: '800px',
+          maxWidth: '1200px',
+          margin: '0 auto',
           background: 'var(--glass-bg-dark)',
           border: '1px solid var(--glass-border-dark)',
           borderRadius: '8px',
@@ -101,7 +431,9 @@ export default function ScanView() {
         }}>
           <LiveLogs />
         </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
           <button
             onClick={() => setIsStepsSidebarOpen(true)}
             style={{
@@ -113,15 +445,15 @@ export default function ScanView() {
               cursor: 'pointer',
             }}
           >
-            📋 View Steps
+            📋 View Steps Details
           </button>
         </div>
       </div>
     )
   }
 
-  // Show error state
-  if (status.status === 'error') {
+  // Show error state (Backend status: 'error' from scan system or 'failed' from queue system)
+  if (status.status === 'error' || status.status === 'failed') {
     return (
       <div style={{ 
         height: 'calc(100vh - 80px)',
@@ -181,11 +513,11 @@ export default function ScanView() {
     )
   }
 
-  // Show full-page report when scan is done
-  if (status.status === 'done' && status.results_dir) {
+  // Show full-page report when scan is done (Backend status: 'done' from scan system or 'completed' from queue system)
+  if ((status.status === 'done' || status.status === 'completed') && status.results_dir) {
     return (
       <div style={{ 
-        height: 'calc(100vh - 80px)', // Full height minus header
+        height: 'calc(100vh - 80px)',
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
@@ -196,7 +528,7 @@ export default function ScanView() {
           overflow: 'hidden',
           position: 'relative',
         }}>
-          <ReportViewer />
+          <ReportViewer scanId={status.scan_id} />
         </div>
 
         {/* Floating Action Buttons */}

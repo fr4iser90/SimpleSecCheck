@@ -102,6 +102,11 @@ class DatabaseAdapter(ABC):
         pass
     
     @abstractmethod
+    async def cleanup_old_queue_items(self, max_age_days: int = 7) -> int:
+        """Clean up old completed/failed queue items, returns count of deleted items"""
+        pass
+    
+    @abstractmethod
     async def find_duplicate_in_queue(
         self,
         repository_url: str,

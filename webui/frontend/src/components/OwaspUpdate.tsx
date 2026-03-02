@@ -25,9 +25,9 @@ export default function OwaspUpdate() {
   const logsEndRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
   
-  // In production, hide completely (auto-update runs in background)
-  // In dev, always show (manual control)
-  const shouldShow = !config?.is_production
+  // In production: Show status, but hide button if auto-update is enabled
+  // In dev: Always show everything (manual control)
+  const shouldShowButton = !config?.is_production || !config?.features?.owasp_auto_update_enabled
 
   // Poll for status and logs
   useEffect(() => {
@@ -161,10 +161,7 @@ export default function OwaspUpdate() {
     }
   }
 
-  // Don't render in production (auto-update runs in background)
-  if (!shouldShow) {
-    return null
-  }
+  // Always show status, but conditionally show button
 
   return (
     <div>
@@ -176,59 +173,66 @@ export default function OwaspUpdate() {
             This may take 5-15 minutes depending on your connection.
           </p>
         </div>
-        <div>
-          {status.status === 'idle' && (
-            <button
-              onClick={handleStartUpdate}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-                fontSize: '1rem',
-              }}
-            >
-              🔄 Update Database
-            </button>
-          )}
-          {status.status === 'running' && (
-            <button
-              onClick={handleStopUpdate}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: '#dc3545',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-                fontSize: '1rem',
-              }}
-            >
-              ⏹️ Stop Update
-            </button>
-          )}
-          {(status.status === 'done' || status.status === 'error') && (
-            <button
-              onClick={handleStartUpdate}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-                fontSize: '1rem',
-              }}
-            >
-              🔄 Update Again
-            </button>
-          )}
-        </div>
+        {shouldShowButton && (
+          <div>
+            {status.status === 'idle' && (
+              <button
+                onClick={handleStartUpdate}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '1rem',
+                }}
+              >
+                🔄 Update Database
+              </button>
+            )}
+            {status.status === 'running' && (
+              <button
+                onClick={handleStopUpdate}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '1rem',
+                }}
+              >
+                ⏹️ Stop Update
+              </button>
+            )}
+            {(status.status === 'done' || status.status === 'error') && (
+              <button
+                onClick={handleStartUpdate}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '1rem',
+                }}
+              >
+                🔄 Update Again
+              </button>
+            )}
+          </div>
+        )}
+        {!shouldShowButton && config?.is_production && (
+          <div style={{ opacity: 0.7, fontSize: '0.9rem' }}>
+            Auto-update enabled
+          </div>
+        )}
       </div>
 
       <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(0, 0, 0, 0.2)', borderRadius: '4px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>

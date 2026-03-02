@@ -17,6 +17,7 @@ export interface FrontendConfig {
     metadata_collection: 'always' | 'optional'
     auto_shutdown: boolean
     zip_upload: boolean
+    owasp_auto_update_enabled: boolean
   }
   queue: {
     max_length: number
@@ -60,6 +61,7 @@ export function useConfig() {
             metadata_collection: 'optional',
             auto_shutdown: true,
             zip_upload: true,
+            owasp_auto_update_enabled: false,
           },
           queue: null,
           rate_limits: null,

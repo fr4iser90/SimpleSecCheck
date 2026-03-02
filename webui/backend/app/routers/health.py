@@ -30,6 +30,7 @@ async def health():
 async def get_config():
     """Get frontend configuration based on environment (backend-driven UI)"""
     zip_upload_enabled = os.getenv("ZIP_UPLOAD_ENABLED", "false").lower() == "true" if IS_PRODUCTION else True
+    owasp_auto_update_enabled = os.getenv("OWASP_AUTO_UPDATE_ENABLED", "true" if IS_PRODUCTION else "false").lower() == "true"
     
     return {
         "environment": ENVIRONMENT,
@@ -48,6 +49,7 @@ async def get_config():
             "metadata_collection": "always" if IS_PRODUCTION else "optional",
             "auto_shutdown": not IS_PRODUCTION,
             "zip_upload": zip_upload_enabled,
+            "owasp_auto_update_enabled": owasp_auto_update_enabled,
         },
         "queue": {
             "max_length": int(os.getenv("MAX_QUEUE_LENGTH", "1000")),
