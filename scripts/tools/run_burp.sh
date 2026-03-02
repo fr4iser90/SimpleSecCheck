@@ -4,12 +4,12 @@
 # Expected Environment Variables:
 # ZAP_TARGET: Target URL to scan (e.g., http://host.docker.internal:8000)
 # RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
-# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/scan.log)
 # BURP_CONFIG_PATH: Path to Burp Suite configuration file
 
 ZAP_TARGET="${ZAP_TARGET:-http://host.docker.internal:8000}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
-LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/scan.log}"
 BURP_CONFIG_PATH="${BURP_CONFIG_PATH:-/SimpleSecCheck/config/tools/burp/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 

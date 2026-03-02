@@ -4,11 +4,11 @@
 # Expected Environment Variables or Arguments:
 # ZAP_TARGET: Target URL to scan (e.g., http://example.com)
 # RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
-# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/scan.log)
 
 ZAP_TARGET="${ZAP_TARGET:-http://host.docker.internal:8000}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
-LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/scan.log}"
 NUCLEI_CONFIG_PATH="${NUCLEI_CONFIG_PATH:-/SimpleSecCheck/config/tools/nuclei/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 

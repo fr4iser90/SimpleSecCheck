@@ -12,7 +12,7 @@ from datetime import datetime
 
 from app.database import get_database
 from app.services.queue_service import get_queue_service
-from app.services.step_service import initialize_step_tracking, extract_steps_for_frontend
+from app.services.step_service import initialize_step_tracking, extract_steps_for_frontend, initialize_steps_log
 
 
 class ScannerWorker:
@@ -66,6 +66,9 @@ class ScannerWorker:
     
     async def _worker_loop(self):
         """Main worker loop - continuously polls queue for jobs"""
+        import time
+        last_log_time = 0
+        print("[Scanner Worker] Worker loop started and running")
         while self.is_running:
             try:
                 # Check if we can start more scans
@@ -74,11 +77,18 @@ class ScannerWorker:
                     job = await self.db.get_next_queue_item()
                     
                     if job:
+                        print(f"[Scanner Worker] Found job: {job['queue_id']} for {job.get('repository_url', 'unknown')} (status: {job.get('status', 'unknown')})")
                         # Start scan task
                         task = asyncio.create_task(self._process_scan_job(job))
                         self.running_scans[job["queue_id"]] = task
                     else:
                         # No jobs available, wait a bit
+                        # Log every 10 seconds to avoid spam
+                        current_time = time.time()
+                        if current_time - last_log_time >= 10:
+                            queue_length = await self.db.get_queue_length()
+                            print(f"[Scanner Worker] No pending jobs found (queue length: {queue_length}, running scans: {len(self.running_scans)})")
+                            last_log_time = current_time
                         await asyncio.sleep(1)
                 else:
                     # Max concurrent scans reached, wait
@@ -90,10 +100,13 @@ class ScannerWorker:
                     if task.done()
                 ]
                 for queue_id in completed:
+                    print(f"[Scanner Worker] Scan {queue_id} completed, cleaning up")
                     del self.running_scans[queue_id]
                 
             except Exception as e:
                 print(f"[Scanner Worker] Error in worker loop: {e}")
+                import traceback
+                traceback.print_exc()
                 await asyncio.sleep(5)  # Wait before retrying
     
     async def _process_scan_job(self, job: Dict[str, Any]):
@@ -103,26 +116,37 @@ class ScannerWorker:
         branch = job.get("branch")
         commit_hash = job.get("commit_hash")
         
+        print(f"[Scanner Worker] Processing job {queue_id} for {repository_url}")
+        
         try:
-            # Update status to running
+            # Generate scan_id BEFORE starting scan (so frontend can find logs immediately)
+            from datetime import datetime
+            scan_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Update status to running AND set scan_id immediately
             await self.db.update_queue_status(
                 queue_id=queue_id,
                 status="running",
+                scan_id=scan_id,  # Set scan_id immediately so frontend can find logs
                 started_at=datetime.utcnow(),
             )
+            print(f"[Scanner Worker] Updated job {queue_id} status to running with scan_id={scan_id}")
             
-            # Execute scan
-            scan_id = await self._execute_scan(
+            # Execute scan (uses the scan_id we just generated)
+            print(f"[Scanner Worker] Starting scan execution for {queue_id} (scan_id={scan_id})")
+            actual_scan_id = await self._execute_scan(
                 repository_url=repository_url,
                 branch=branch,
                 commit_hash=commit_hash,
+                scan_id=scan_id,  # Pass scan_id to _execute_scan
             )
+            print(f"[Scanner Worker] Scan execution completed: scan_id={actual_scan_id}")
             
-            # Update status to completed
+            # Update status to completed (scan_id should already be set, but update just in case)
             await self.db.update_queue_status(
                 queue_id=queue_id,
                 status="completed",
-                scan_id=scan_id,
+                scan_id=actual_scan_id or scan_id,  # Use actual_scan_id if different
                 completed_at=datetime.utcnow(),
             )
             
@@ -141,6 +165,7 @@ class ScannerWorker:
         repository_url: str,
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
+        scan_id: Optional[str] = None,
     ) -> str:
         """
         Execute scan using run-docker.sh
@@ -162,8 +187,9 @@ class ScannerWorker:
         results_dir = get_webui_results_dir()
         cli_script = get_webui_cli_script()
         
-        # Generate scan_id
-        scan_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        # Use provided scan_id or generate new one
+        if not scan_id:
+            scan_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         
         # Create a minimal current_scan dict for git_service and step tracking
         current_scan = {
@@ -276,7 +302,10 @@ class ScannerWorker:
         results_dir_path = get_results_dir_for_scan(project_name, scan_id)
         results_dir_path_obj = Path(results_dir_path)
         
-        # Ensure logs directory exists for step logging
+        # Initialize steps.log BEFORE scan starts (creates directory and steps.log)
+        initialize_steps_log(scan_id, results_dir_path, current_scan, repository_url)
+        
+        # Ensure logs directory exists
         logs_dir = results_dir_path_obj / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
         
@@ -301,7 +330,8 @@ class ScannerWorker:
         )
         
         # Stream output and extract steps for frontend in real-time
-        # run-docker.sh now streams output immediately (not buffered), so we see steps as they happen
+        # Write ALL logs to scan.log (live, for frontend) - parallel to security-check.sh writing
+        scan_log = results_dir_path_obj / "logs" / "scan.log"
         output_lines = []
         while True:
             line = await process.stdout.readline()
@@ -310,6 +340,13 @@ class ScannerWorker:
             line_str = line.decode('utf-8', errors='ignore').strip()
             output_lines.append(line_str)
             print(f"[Scanner Worker] {line_str}")
+            
+            # Write ALL logs to scan.log (live, not buffered)
+            try:
+                with open(scan_log, "a", encoding="utf-8") as f:
+                    f.write(f"{line_str}\n")
+            except Exception as e:
+                print(f"[Scanner Worker] Error writing to scan.log: {e}")
             
             # Extract steps for frontend display (also writes to steps.log)
             step_line = extract_steps_for_frontend(line_str, current_scan, results_dir_path_obj)

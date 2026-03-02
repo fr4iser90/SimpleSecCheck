@@ -3,7 +3,7 @@
 
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
-LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/scan.log}"
 TERRAFORM_SECURITY_CONFIG_PATH="${TERRAFORM_SECURITY_CONFIG_PATH:-/SimpleSecCheck/config/tools/terraform-security/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 

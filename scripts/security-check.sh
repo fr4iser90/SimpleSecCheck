@@ -17,7 +17,7 @@ TOOL_SCRIPTS_DIR="$BASE_PROJECT_DIR/scripts/tools"
 export TARGET_PATH_IN_CONTAINER="/target" # Where host code is mounted for scanning
 export RESULTS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results"
 export LOGS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/logs"
-export LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log" # Central log file
+export LOG_FILE="$LOGS_DIR_IN_CONTAINER/scan.log" # Central log file
 
 # --- Tool Specific Configurations (absolute paths INSIDE container) ---
 export SEMGREP_RULES_PATH_IN_CONTAINER="$BASE_PROJECT_DIR/config/rules"
@@ -141,7 +141,7 @@ if [ -z "${PROJECT_RESULTS_DIR:-}" ]; then
     fi
     export RESULTS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results/$SCAN_DIR"
     export LOGS_DIR_IN_CONTAINER="$BASE_PROJECT_DIR/results/$SCAN_DIR/logs"
-    export LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log"
+    export LOG_FILE="$LOGS_DIR_IN_CONTAINER/scan.log"
     LOCK_FILE="$RESULTS_DIR_IN_CONTAINER/.scan-running"
 else
     # Running via run-docker.sh: PROJECT_RESULTS_DIR is already the scan-specific directory
@@ -150,7 +150,7 @@ else
     # So /SimpleSecCheck/results is already the correct scan directory
     export RESULTS_DIR_IN_CONTAINER="/SimpleSecCheck/results"
     export LOGS_DIR_IN_CONTAINER="/SimpleSecCheck/results/logs"
-    export LOG_FILE="$LOGS_DIR_IN_CONTAINER/security-check.log"
+    export LOG_FILE="$LOGS_DIR_IN_CONTAINER/scan.log"
     LOCK_FILE="$RESULTS_DIR_IN_CONTAINER/.scan-running"
 fi
 
@@ -162,7 +162,7 @@ mkdir -p "$RESULTS_DIR_IN_CONTAINER" "$LOGS_DIR_IN_CONTAINER"
 # Note: Your tool scripts also use `tee -a "$LOG_FILE"` so they will append.
 echo "----- SimpleSecCheck Scan Run Initialized: $(date '+%Y-%m-%d %H:%M:%S') -----" > "$LOG_FILE"
 
-# Initialize steps.log file for this run (parallel to security-check.log)
+# Initialize steps.log file for this run (parallel to scan.log)
 STEPS_LOG="${LOGS_DIR_IN_CONTAINER}/steps.log"
 echo "----- SimpleSecCheck Steps Log Initialized: $(date '+%Y-%m-%d %H:%M:%S') -----" > "$STEPS_LOG"
 export STEPS_LOG

@@ -4,13 +4,13 @@
 # Expected Environment Variables or Arguments:
 # TARGET_PATH: Path to the code to scan (e.g., /target)
 # RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
-# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/scan.log)
 # CODEQL_CONFIG_PATH: Path to CodeQL configuration file
 # CODEQL_QUERIES_PATH: Path to CodeQL queries directory
 
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
-LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/scan.log}"
 CODEQL_CONFIG_PATH="${CODEQL_CONFIG_PATH:-/SimpleSecCheck/config/tools/codeql/config.yaml}"
 CODEQL_QUERIES_PATH="${CODEQL_QUERIES_PATH:-/SimpleSecCheck/config/tools/codeql/queries}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"

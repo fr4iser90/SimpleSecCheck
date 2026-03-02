@@ -6,12 +6,12 @@ set -e # Exit immediately if a command exits with a non-zero status.
 # Expected Environment Variables:
 # ZAP_TARGET: Target URL for ZAP (e.g., http://host.docker.internal:8000)
 # RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
-# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/scan.log)
 # ZAP_STARTUP_DELAY: Optional delay in seconds to wait for target to be ready (default 25)
 
 ZAP_TARGET="${ZAP_TARGET:-http://host.docker.internal:8000}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}" # This is an absolute path like /SimpleSecCheck/results
-LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/scan.log}"
 ZAP_STARTUP_DELAY="${ZAP_STARTUP_DELAY:-25}"
 
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"

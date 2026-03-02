@@ -376,7 +376,7 @@ async def monitor_scan(process: subprocess.Popen, scan_id: str, current_scan: di
     
     # Use results_dir from current_scan (set by initialize_steps_log)
     results_dir_path = current_scan["results_dir"]
-    log_file = Path(results_dir_path) / "logs" / "security-check.log"
+    log_file = Path(results_dir_path) / "logs" / "scan.log"
     
     # Determine if scan is completed
     # Priority order:
@@ -493,7 +493,7 @@ async def recheck_scan_status(scan_id: str, results_dir: Optional[str], return_c
     
     # Use results_dir from current_scan (set by initialize_steps_log)
     results_dir_path_str = current_scan["results_dir"]
-    log_file = Path(results_dir_path_str) / "logs" / "security-check.log"
+    log_file = Path(results_dir_path_str) / "logs" / "scan.log"
     
     scan_done = False
     if log_file.exists():
@@ -547,7 +547,7 @@ async def get_scan_status(current_scan: dict, results_dir: Path) -> ScanStatus:
     # If status is "running", check if scan is really done by looking at log file
     if current_scan["status"] == "running" and current_scan["scan_id"]:
         results_dir_path = current_scan["results_dir"]
-        log_file = Path(results_dir_path) / "logs" / "security-check.log"
+        log_file = Path(results_dir_path) / "logs" / "scan.log"
         if log_file.exists():
             try:
                 with open(log_file, "r", encoding="utf-8", errors="ignore") as f:

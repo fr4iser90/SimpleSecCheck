@@ -407,7 +407,7 @@ After scanning, results are available in the `results/[project]_[timestamp]/` di
 - **`trivy.json`** - Dependency and vulnerability scan results (code scans only)
 - **`docker-bench.json`** - Docker daemon compliance results (network scans only)
 - **`zap-report.xml`** - Web application vulnerability report (web scans only)
-- **`security-check.log`** - Complete scan log
+- **`scan.log`** - Complete scan log
 
 Open the HTML report in your browser for the best experience!
 

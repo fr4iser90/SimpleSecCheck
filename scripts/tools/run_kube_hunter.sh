@@ -4,10 +4,10 @@
 # Expected Environment Variables:
 # KUBE_HUNTER_CONFIG_PATH: Path to Kube-hunter configuration file
 # RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
-# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/scan.log)
 
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
-LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/scan.log}"
 KUBE_HUNTER_CONFIG_PATH="${KUBE_HUNTER_CONFIG_PATH:-/SimpleSecCheck/config/tools/kube-hunter/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 

@@ -4,13 +4,13 @@
 # Expected Environment Variables or Arguments:
 # TARGET_PATH: Path to scan (e.g., /target for filesystem, or image name)
 # RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
-# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/scan.log)
 # TRIVY_SCAN_TYPE: Type of scan, e.g., 'fs' for filesystem, 'image' for image. Defaults to 'fs'.
 # TRIVY_CONFIG_PATH: Path to Trivy configuration file.
 
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
-LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/scan.log}"
 TRIVY_SCAN_TYPE="${TRIVY_SCAN_TYPE:-fs}"
 TRIVY_CONFIG_PATH="${TRIVY_CONFIG_PATH:-/SimpleSecCheck/config/tools/trivy/config.yaml}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"

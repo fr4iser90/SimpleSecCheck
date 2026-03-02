@@ -66,17 +66,19 @@ def derive_project_name(target: str) -> str:
         return os.path.basename(target.rstrip("/")) or "target"
 
 
-def initialize_steps_log(scan_id: str, results_dir: Path, current_scan: dict, target: str) -> None:
+def initialize_steps_log(scan_id: str, results_dir_path: str, current_scan: dict, target: str) -> None:
     """
     Initialize steps.log file for a new scan.
     STRAIGHT FORWARD: Create directory, create steps.log, done.
-    """
-    # Derive PROJECT_NAME
-    project_name = derive_project_name(target)
     
-    # Create directory: PROJECT_NAME_scan_id
-    project_dir = f"{project_name}_{scan_id}"
-    scan_dir = results_dir / project_dir
+    Args:
+        scan_id: Scan identifier
+        results_dir_path: Full path to scan results directory (e.g., "/app/results/PROJECT_SCAN_ID")
+        current_scan: Current scan dictionary
+        target: Target URL/path being scanned
+    """
+    # results_dir_path is already the full path from get_results_dir_for_scan()
+    scan_dir = Path(results_dir_path)
     scan_dir.mkdir(parents=True, exist_ok=True)
     (scan_dir / "logs").mkdir(parents=True, exist_ok=True)
     

@@ -4,13 +4,13 @@
 # Expected Environment Variables or Arguments:
 # TARGET_PATH: Path to scan (e.g., /target for filesystem)
 # RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
-# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/scan.log)
 # OWASP_DC_CONFIG_PATH: Path to OWASP Dependency Check configuration file.
 # OWASP_DC_DATA_DIR: Directory for OWASP Dependency Check data and cache.
 
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
-LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/scan.log}"
 OWASP_DC_CONFIG_PATH="${OWASP_DC_CONFIG_PATH:-/SimpleSecCheck/config/tools/owasp-dependency-check/config.yaml}"
 OWASP_DC_DATA_DIR="${OWASP_DC_DATA_DIR:-/SimpleSecCheck/owasp-dependency-check-data}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"

@@ -4,11 +4,11 @@
 # Expected Environment Variables or Arguments:
 # TARGET_PATH: Path to the code to scan (e.g., /target)
 # RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
-# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/scan.log)
 
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
-LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/scan.log}"
 SEMGREP_RULES_PATH="${SEMGREP_RULES_PATH:-/SimpleSecCheck/config/rules}" # Default rules path
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-}"

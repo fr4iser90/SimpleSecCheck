@@ -8,7 +8,7 @@
 
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
-LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/scan.log}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"
 
 mkdir -p "$RESULTS_DIR" "$(dirname "$LOG_FILE")"
@@ -40,7 +40,7 @@ from pathlib import Path
 
 TARGET_PATH = os.environ.get('TARGET_PATH', '/target')
 RESULTS_DIR = os.environ.get('RESULTS_DIR', '/SimpleSecCheck/results')
-LOG_FILE = os.environ.get('LOG_FILE', '/SimpleSecCheck/logs/security-check.log')
+LOG_FILE = os.environ.get('LOG_FILE', '/SimpleSecCheck/logs/scan.log')
 
 def find_manifest_files(target_path):
     """Find all AndroidManifest.xml files."""

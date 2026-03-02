@@ -4,13 +4,13 @@
 # Expected Environment Variables or Arguments:
 # TARGET_PATH: Path to scan (container image name or Docker image)
 # RESULTS_DIR: Directory to store results (e.g., /SimpleSecCheck/results)
-# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/security-check.log)
+# LOG_FILE: Path to the main log file (e.g., /SimpleSecCheck/logs/scan.log)
 # CLAIR_CONFIG_PATH: Path to Clair configuration file.
 # CLAIR_IMAGE: Container image to scan (e.g., alpine:latest)
 
 TARGET_PATH="${TARGET_PATH:-/target}"
 RESULTS_DIR="${RESULTS_DIR:-/SimpleSecCheck/results}"
-LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/security-check.log}"
+LOG_FILE="${LOG_FILE:-/SimpleSecCheck/logs/scan.log}"
 CLAIR_CONFIG_PATH="${CLAIR_CONFIG_PATH:-/SimpleSecCheck/config/tools/clair/config.yaml}"
 CLAIR_IMAGE="${CLAIR_IMAGE:-}"
 SUMMARY_TXT="$RESULTS_DIR/security-summary.txt"

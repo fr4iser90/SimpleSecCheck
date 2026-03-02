@@ -226,7 +226,7 @@ if [ ! -d "/project" ] || [ ! -f "/project/docker-compose.yml" ]; then
 fi
 
 # Create log file for run-docker.sh execution (always, even in container)
-RUN_DOCKER_LOG="$LOGS_DIR/run-docker.log"
+RUN_DOCKER_LOG="$LOGS_DIR/orchestrator.log"
 mkdir -p "$LOGS_DIR"
 touch "$RUN_DOCKER_LOG"
 log_message "Logging to: $RUN_DOCKER_LOG"
@@ -558,7 +558,7 @@ echo -e "${BLUE}📁 Generated Files:${NC}"
 [ -f "$RESULTS_DIR/trivy.json" ] && echo -e "  ${GREEN}✓${NC} Trivy: $RESULTS_DIR/trivy.json"
 [ -f "$RESULTS_DIR/zap-report.xml" ] && echo -e "  ${GREEN}✓${NC} ZAP: $RESULTS_DIR/zap-report.xml"
 [ -f "$RESULTS_DIR/security-summary.html" ] && echo -e "  ${GREEN}✓${NC} HTML Report: $RESULTS_DIR/security-summary.html"
-[ -f "$LOGS_DIR/security-check.log" ] && echo -e "  ${GREEN}✓${NC} Log File: $LOGS_DIR/security-check.log"
+[ -f "$LOGS_DIR/scan.log" ] && echo -e "  ${GREEN}✓${NC} Log File: $LOGS_DIR/scan.log"
 
 echo ""
 log_message "SimpleSecCheck Docker Security Scan Completed: $(date)"

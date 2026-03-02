@@ -49,12 +49,14 @@ async def start_scan(request: ScanRequest, http_request: Request):
     - Prod: Uses PostgreSQL, requires session/rate limiting
     Scanner worker processes scans from queue sequentially.
     """
+    print(f"[Scan Start] Request received: type={request.type}, target={request.target}")
     update_activity()
     
     # Check if only Git scans are allowed (only in Production)
     if IS_PRODUCTION:
         only_git_scans = os.getenv("ONLY_GIT_SCANS", "true").lower() == "true"
         if only_git_scans and request.type != "code":
+            print(f"[Scan Start] Error: Only Git scans allowed, got type={request.type}")
             raise HTTPException(
                 status_code=400,
                 detail=f"Only Git scans (code type) are allowed in production mode. Requested type: {request.type}"
@@ -63,6 +65,7 @@ async def start_scan(request: ScanRequest, http_request: Request):
         # Validate Git URL
         from app.services.git_service import is_git_url
         if request.type == "code" and not is_git_url(request.target):
+            print(f"[Scan Start] Error: Not a Git URL: {request.target}")
             raise HTTPException(
                 status_code=400,
                 detail="Only Git repository URLs are allowed in production mode"
@@ -70,22 +73,27 @@ async def start_scan(request: ScanRequest, http_request: Request):
     
     # Get session ID from request state (set by middleware) or create one if not available
     session_id = getattr(http_request.state, "session_id", None)
+    print(f"[Scan Start] Session ID: {session_id}, SESSION_MANAGEMENT={SESSION_MANAGEMENT}")
     if not session_id:
         if SESSION_MANAGEMENT:
+            print(f"[Scan Start] Error: No session ID, SESSION_MANAGEMENT={SESSION_MANAGEMENT}")
             raise HTTPException(status_code=401, detail="Session required")
         else:
             # In Dev without session management, create a temporary session ID
             session_id = str(uuid.uuid4())
+            print(f"[Scan Start] Created temporary session ID: {session_id}")
     
     # Check rate limits (only if session management is enabled)
     if SESSION_MANAGEMENT:
         session_service = await get_session_service()
         allowed, error_msg = await session_service.check_rate_limit(session_id)
         if not allowed:
+            print(f"[Scan Start] Error: Rate limit exceeded: {error_msg}")
             raise HTTPException(status_code=429, detail=error_msg)
     
     # Add to queue (always enabled)
     queue_service = await get_queue_service()
+    print(f"[Scan Start] Adding to queue: repository_url={request.target}, branch={request.git_branch}")
     
     # Extract branch and commit hash from request if available
     branch = request.git_branch
@@ -98,7 +106,10 @@ async def start_scan(request: ScanRequest, http_request: Request):
         commit_hash=commit_hash,
     )
     
+    print(f"[Scan Start] Queue result: {result}")
+    
     if "error" in result:
+        print(f"[Scan Start] Error adding to queue: {result.get('message')}")
         raise HTTPException(status_code=400, detail=result.get("message", "Failed to add to queue"))
     
     # Increment scan count (only if session management is enabled)
@@ -108,6 +119,7 @@ async def start_scan(request: ScanRequest, http_request: Request):
     
     # Return queue_id as scan_id for tracking
     # Use "pending" status to match queue status (consistent with frontend expectations)
+    print(f"[Scan Start] Success: queue_id={result.get('queue_id')}")
     return ScanStatus(
         status="pending",
         scan_id=result.get("queue_id"),  # Use queue_id as scan_id for tracking
@@ -195,26 +207,27 @@ async def get_logs(http_request: Request = None):
     if not scan_id:
         return {"lines": [], "count": 0}
     
-    # Find steps.log file - MUST match scan_id to avoid reading old scans
-    steps_log = None
+    # Find scan.log file - MUST match scan_id to avoid reading old scans
+    # scan.log is written live by scanner_worker.py and security-check.sh during scan execution
+    log_file = None
     
     # First try: Use results_dir if set and matches scan_id
     if results_dir_path and scan_id in results_dir_path:
-        steps_log = Path(results_dir_path) / "logs" / "steps.log"
+        log_file = Path(results_dir_path) / "logs" / "scan.log"
     
     # Second try: Find by scan_id (MUST match exactly)
     # For queue scans, scan_id is timestamp format (e.g., "20260302_181806")
     # For direct scans, scan_id might be in results_dir name
-    if not steps_log and RESULTS_DIR.exists():
+    if not log_file and RESULTS_DIR and RESULTS_DIR.exists():
         for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
             if scan_dir.is_dir() and scan_id in scan_dir.name:
-                steps_log = scan_dir / "logs" / "steps.log"
+                log_file = scan_dir / "logs" / "scan.log"
                 break
     
     # Read and return all lines - ONLY if file exists and belongs to current scan
-    if steps_log and steps_log.exists():
+    if log_file and log_file.exists():
         try:
-            with open(steps_log, "r", encoding="utf-8", errors="ignore") as f:
+            with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
                 lines = [line.strip() for line in f.readlines() if line.strip()]
             return {"lines": lines, "count": len(lines)}
         except Exception as e:
