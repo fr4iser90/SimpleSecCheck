@@ -57,7 +57,7 @@ export SCAN_TYPE="${SCAN_TYPE:-code}" # Default to code scan
 
 # --- Other Environment Variables for Tool Scripts ---
 export TRIVY_SCAN_TYPE="${TRIVY_SCAN_TYPE:-fs}" # Default scan type for Trivy
-DEFAULT_EXCLUDE_PATHS=".git,node_modules,dist,build,coverage,.next,.nuxt,.cache,results,logs,reddit-browser-data,browser-data,playwright-report,.scannerwork"
+DEFAULT_EXCLUDE_PATHS=".git,node_modules,dist,build,coverage,.next,.nuxt,.cache"
 export SIMPLESECCHECK_EXCLUDE_PATHS="${SIMPLESECCHECK_EXCLUDE_PATHS:-$DEFAULT_EXCLUDE_PATHS}"
 
 # --- Script Control & Setup ---

@@ -7,7 +7,7 @@ interface MyScanItem {
   repository_name: string
   branch?: string
   commit_hash?: string
-  status: 'pending' | 'processing' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed'  // Backend standard
   scan_id?: string
   position?: number
   created_at: string
@@ -64,7 +64,7 @@ export default function MyScansPage() {
     switch (status) {
       case 'pending':
         return '#ffc107' // Yellow
-      case 'processing':
+      case 'running':
         return '#007bff' // Blue
       case 'completed':
         return '#28a745' // Green
@@ -79,8 +79,8 @@ export default function MyScansPage() {
     switch (status) {
       case 'pending':
         return 'Pending'
-      case 'processing':
-        return 'Processing'
+      case 'running':
+        return 'Running'
       case 'completed':
         return 'Completed'
       case 'failed':
@@ -163,7 +163,7 @@ export default function MyScansPage() {
                 <strong>Pending:</strong> {scansData.scans.filter(item => item.status === 'pending').length}
               </div>
               <div>
-                <strong>Processing:</strong> {scansData.scans.filter(item => item.status === 'processing').length}
+                <strong>Running:</strong> {scansData.scans.filter(item => item.status === 'running').length}
               </div>
               <div>
                 <strong>Completed:</strong> {scansData.scans.filter(item => item.status === 'completed').length}

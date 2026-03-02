@@ -278,12 +278,12 @@ class PostgreSQLDatabase(DatabaseAdapter):
             return self._row_to_dict(row)
     
     async def get_queue(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """Get queue items (public, anonymized)"""
+        """Get queue items (public, anonymized) - includes all statuses"""
         async with self.connection_pool.acquire() as conn:
             rows = await conn.fetch("""
-                SELECT queue_id, repository_name, status, position, created_at
+                SELECT queue_id, repository_name, status, position, created_at, scan_id, started_at, completed_at, branch
                 FROM queue
-                ORDER BY created_at ASC
+                ORDER BY created_at DESC
                 LIMIT $1
             """, limit)
             
@@ -353,10 +353,10 @@ class PostgreSQLDatabase(DatabaseAdapter):
             return self._row_to_dict(row)
     
     async def get_queue_length(self) -> int:
-        """Get current queue length"""
+        """Get current queue length (all items, not just pending)"""
         async with self.connection_pool.acquire() as conn:
             count = await conn.fetchval("""
-                SELECT COUNT(*) FROM queue WHERE status = 'pending'
+                SELECT COUNT(*) FROM queue
             """)
             return count or 0
     

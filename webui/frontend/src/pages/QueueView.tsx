@@ -4,14 +4,14 @@ import { useConfig } from '../hooks/useConfig'
 interface QueueItem {
   queue_id: string
   repository_name: string
-  status: 'pending' | 'processing' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed'  // Backend standard
   position?: number
   created_at: string
   branch?: string
 }
 
 interface QueueData {
-  queue: QueueItem[]
+  items: QueueItem[]  // REST standard: collections use "items"
   queue_length: number
   max_queue_length: number
 }
@@ -58,7 +58,7 @@ export default function QueueView() {
     switch (status) {
       case 'pending':
         return '#ffc107' // Yellow
-      case 'processing':
+      case 'running':
         return '#007bff' // Blue
       case 'completed':
         return '#28a745' // Green
@@ -73,8 +73,8 @@ export default function QueueView() {
     switch (status) {
       case 'pending':
         return 'Pending'
-      case 'processing':
-        return 'Processing'
+      case 'running':
+        return 'Running'
       case 'completed':
         return 'Completed'
       case 'failed':
@@ -142,13 +142,13 @@ export default function QueueView() {
                 <strong>Queue Length:</strong> {queueData.queue_length} / {queueData.max_queue_length}
               </div>
               <div>
-                <strong>Pending:</strong> {queueData.queue.filter(item => item.status === 'pending').length}
+                <strong>Pending:</strong> {queueData.items.filter(item => item.status === 'pending').length}
               </div>
               <div>
-                <strong>Processing:</strong> {queueData.queue.filter(item => item.status === 'processing').length}
+                <strong>Running:</strong> {queueData.items.filter(item => item.status === 'running').length}
               </div>
               <div>
-                <strong>Completed:</strong> {queueData.queue.filter(item => item.status === 'completed').length}
+                <strong>Completed:</strong> {queueData.items.filter(item => item.status === 'completed').length}
               </div>
             </div>
           </div>
@@ -171,7 +171,7 @@ export default function QueueView() {
           <div style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>
             Loading queue...
           </div>
-        ) : queueData && queueData.queue.length === 0 ? (
+        ) : queueData && queueData.items.length === 0 ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>
             Queue is empty
           </div>
@@ -188,7 +188,7 @@ export default function QueueView() {
                 </tr>
               </thead>
               <tbody>
-                {queueData.queue.map((item, index) => (
+                {queueData.items.map((item, index) => (
                   <tr key={item.queue_id} style={{ borderBottom: '1px solid #e9ecef' }}>
                     <td style={{ padding: '0.75rem' }}>
                       {item.position !== undefined ? item.position : index + 1}

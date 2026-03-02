@@ -171,9 +171,10 @@ class FileDatabase(DatabaseAdapter):
             public_item = {
                 "queue_id": item["queue_id"],
                 "repository_name": item["repository_name"],  # Already anonymized
-                "status": item["status"],
+                "status": item["status"],  # Backend standard: pending, running, completed, failed
                 "position": item["position"],
                 "created_at": item["created_at"],
+                "branch": item.get("branch"),  # Include branch if available
             }
             public_queue.append(public_item)
         

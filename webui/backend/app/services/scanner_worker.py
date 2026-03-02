@@ -212,10 +212,32 @@ class ScannerWorker:
         # Build command - use run-docker.sh with target path
         cmd = [str(cli_script), "--collect-metadata", target_path]
         
-        # Extract project name from target path
-        if Path(target_path).is_dir():
-            # For temp clone paths like /app/results/tmp/PIDEA_20260302_160637/PIDEA
-            # The last part (PIDEA) is the actual project name
+        # Extract project name from repository URL (not from target path)
+        # This ensures we get the clean repo name without timestamps
+        if is_git_url(repository_url):
+            # Extract repo name from Git URL
+            if "github.com" in repository_url or "gitlab.com" in repository_url:
+                parts = repository_url.rstrip("/").split("/")
+                if len(parts) >= 2:
+                    project_name = parts[-1].replace(".git", "")
+                else:
+                    project_name = "repo"
+            elif repository_url.startswith("git@"):
+                parts = repository_url.split(":")[-1].replace(".git", "").split("/")
+                if len(parts) >= 1:
+                    project_name = parts[-1]
+                else:
+                    project_name = "repo"
+            else:
+                project_name = "repo"
+            
+            # Sanitize project name
+            import re
+            project_name = re.sub(r'[^a-zA-Z0-9_-]', '_', project_name)
+            if not project_name:
+                project_name = "repo"
+        elif Path(target_path).is_dir():
+            # For non-Git paths, use basename
             project_name = Path(target_path).name
         else:
             project_name = "scan"
@@ -229,6 +251,9 @@ class ScannerWorker:
         env["SCAN_ID"] = scan_id  # Pass scan_id to run-docker.sh
         env["RESULTS_DIR"] = results_dir_path  # Use central function
         env["ENVIRONMENT"] = os.getenv("ENVIRONMENT", "dev")  # Pass ENVIRONMENT to run-docker.sh
+        # Set GIT_URL so run-docker.sh can extract correct project name
+        if is_git_url(repository_url):
+            env["GIT_URL"] = repository_url
         
         # Execute scan
         print(f"[Scanner Worker] Starting scan: {scan_id} for {repository_url}")

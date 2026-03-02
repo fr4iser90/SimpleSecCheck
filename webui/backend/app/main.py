@@ -159,47 +159,52 @@ if AUTO_SHUTDOWN_ENABLED and IDLE_TIMEOUT > 0:
 signal_handler = create_signal_handler(current_scan, stop_running_containers)
 register_signal_handlers(signal_handler)
 
-# Production: Initialize services and start scanner worker
-if IS_PRODUCTION:
-    @app.on_event("startup")
-    async def startup_event():
-        """Initialize production services on application startup"""
-        try:
-            # Initialize session service first (needed by middleware)
+# Initialize services based on configuration
+# Queue is ALWAYS enabled (works in both Dev and Prod, uses File-Database in Dev, PostgreSQL in Prod)
+# Session Management is optional (enabled in Prod by default, can be enabled in Dev)
+SESSION_MANAGEMENT = os.getenv("SESSION_MANAGEMENT", "true" if IS_PRODUCTION else "false").lower() == "true"
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on application startup"""
+    try:
+        # Initialize session service if enabled (needed by middleware)
+        if SESSION_MANAGEMENT:
             session_service = await get_session_service()
             print("[Main] Session service initialized")
-            
-            # Initialize queue service
-            queue_service = await get_queue_service()
-            print("[Main] Queue service initialized")
-            
-            # Start scanner worker
-            await start_scanner_worker()
-            print("[Main] Scanner worker started")
-        except Exception as e:
-            print(f"[Main] Failed to initialize production services: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        """Stop production services on application shutdown"""
-        try:
-            # Stop scanner worker
-            await stop_scanner_worker()
-            print("[Main] Scanner worker stopped")
-            
-            # Close session service
+        
+        # Initialize queue service (ALWAYS enabled - works in both Dev and Prod)
+        queue_service = await get_queue_service()
+        print("[Main] Queue service initialized")
+        
+        # Start scanner worker (queue is always enabled)
+        await start_scanner_worker()
+        print("[Main] Scanner worker started")
+    except Exception as e:
+        print(f"[Main] Failed to initialize services: {e}")
+        import traceback
+        traceback.print_exc()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop services on application shutdown"""
+    try:
+        # Stop scanner worker (queue is always enabled)
+        await stop_scanner_worker()
+        print("[Main] Scanner worker stopped")
+        
+        # Close session service if enabled
+        if SESSION_MANAGEMENT:
             session_service = await get_session_service()
             await session_service.close()
             print("[Main] Session service closed")
-            
-            # Close queue service
-            queue_service = await get_queue_service()
-            await queue_service.close()
-            print("[Main] Queue service closed")
-        except Exception as e:
-            print(f"[Main] Error stopping production services: {e}")
+        
+        # Close queue service (always enabled)
+        queue_service = await get_queue_service()
+        await queue_service.close()
+        print("[Main] Queue service closed")
+    except Exception as e:
+        print(f"[Main] Error stopping services: {e}")
 
 
 @app.get("/api/health")
@@ -344,15 +349,21 @@ async def get_git_branches(url: str):
 @app.post("/api/scan/start", response_model=ScanStatus)
 async def start_scan(request: ScanRequest, http_request: Request):
     """
-    Start a scan by calling scripts/run-docker.sh
-    In Production: Adds scan to queue instead of starting directly
-    In Development: Starts scan immediately (single-shot)
+    Start a scan by adding it to the queue (ALWAYS uses queue system).
+    Queue system works in both Dev and Prod:
+    - Dev: Uses File-Database, no session/rate limiting required
+    - Prod: Uses PostgreSQL, requires session/rate limiting
+    Scanner worker processes scans from queue sequentially.
     """
     update_activity()
     
-    # Production: Use queue system
+    # Use queue system (ALWAYS enabled - works in both Dev and Prod)
+    # In Dev: Uses File-Database, no session/rate limiting required
+    # In Prod: Uses PostgreSQL, requires session/rate limiting
+    # Queue is always enabled, so we always use the queue system
+    
+    # Check if only Git scans are allowed (only in Production)
     if IS_PRODUCTION:
-        # Check if only Git scans are allowed
         only_git_scans = os.getenv("ONLY_GIT_SCANS", "true").lower() == "true"
         if only_git_scans and request.type != "code":
             raise HTTPException(
@@ -367,61 +378,87 @@ async def start_scan(request: ScanRequest, http_request: Request):
                 status_code=400,
                 detail="Only Git repository URLs are allowed in production mode"
             )
-        
-        # Get session ID from request state (set by middleware)
-        session_id = getattr(http_request.state, "session_id", None)
-        if not session_id:
+    
+    # Get session ID from request state (set by middleware) or create one if not available
+    session_id = getattr(http_request.state, "session_id", None)
+    if not session_id:
+        if SESSION_MANAGEMENT:
             raise HTTPException(status_code=401, detail="Session required")
-        
-        # Check rate limits
+        else:
+            # In Dev without session management, create a temporary session ID
+            import uuid
+            session_id = str(uuid.uuid4())
+    
+    # Check rate limits (only if session management is enabled)
+    if SESSION_MANAGEMENT:
         session_service = await get_session_service()
         allowed, error_msg = await session_service.check_rate_limit(session_id)
         if not allowed:
             raise HTTPException(status_code=429, detail=error_msg)
-        
-        # Add to queue
-        queue_service = await get_queue_service()
-        
-        # Extract branch and commit hash from request if available
-        branch = request.git_branch
-        commit_hash = None  # TODO: Extract from Git if needed
-        
-        result = await queue_service.add_scan_to_queue(
-            session_id=session_id,
-            repository_url=request.target,
-            branch=branch,
-            commit_hash=commit_hash,
-        )
-        
-        if "error" in result:
-            raise HTTPException(status_code=400, detail=result.get("message", "Failed to add to queue"))
-        
-        # Increment scan count
-        await session_service.increment_scan_count(session_id)
-        
-        return ScanStatus(
-            status="queued",
-            scan_id=None,  # Will be set when scan starts
-            message=result.get("message", "Scan added to queue"),
-        )
     
-    # Development: Start scan immediately
-    else:
-        result = await start_scan_service(
-            request,
-            current_scan,
-            CLI_SCRIPT,
-            BASE_DIR,
-            RESULTS_DIR
-        )
-        
-        return result
+    # Add to queue (always enabled)
+    queue_service = await get_queue_service()
+    
+    # Extract branch and commit hash from request if available
+    branch = request.git_branch
+    commit_hash = None  # TODO: Extract from Git if needed
+    
+    result = await queue_service.add_scan_to_queue(
+        session_id=session_id,
+        repository_url=request.target,
+        branch=branch,
+        commit_hash=commit_hash,
+    )
+    
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result.get("message", "Failed to add to queue"))
+    
+    # Increment scan count (only if session management is enabled)
+    if SESSION_MANAGEMENT:
+        session_service = await get_session_service()
+        await session_service.increment_scan_count(session_id)
+    
+    # Return queue_id as scan_id for tracking
+    return ScanStatus(
+        status="queued",
+        scan_id=result.get("queue_id"),  # Use queue_id as scan_id for tracking
+        message=result.get("message", "Scan added to queue"),
+    )
 
 
 @app.get("/api/scan/status", response_model=ScanStatus)
-async def get_scan_status():
+async def get_scan_status(http_request: Request = None):
     """Get current scan status"""
     update_activity()
+    
+    # Queue is always enabled, so check queue for latest scan if session available
+    # Otherwise fallback to current_scan (for Dev without session)
+    # Try to get session ID to find user's latest scan
+    session_id = None
+    if http_request:
+        session_id = getattr(http_request.state, "session_id", None)
+    
+    if session_id:
+        # Get user's latest scan from queue
+        queue_service = await get_queue_service()
+        user_scans = await queue_service.get_user_queue(session_id)
+        
+        if user_scans:
+            # Get the most recent scan
+            latest_scan = sorted(user_scans, key=lambda x: x.get("created_at", ""), reverse=True)[0]
+            status = latest_scan.get("status", "unknown")
+            scan_id = latest_scan.get("scan_id") or latest_scan.get("queue_id")
+            
+            return ScanStatus(
+                status=status,
+                scan_id=scan_id,
+                results_dir=latest_scan.get("results_dir"),
+                started_at=latest_scan.get("started_at"),
+                error_code=None,
+                error_message=latest_scan.get("error_message")
+            )
+    
+    # Fallback to current_scan (for Dev or when no session)
     return await get_scan_status_service(current_scan, RESULTS_DIR)
 
 
@@ -836,16 +873,13 @@ async def add_to_queue(
 
 @app.get("/api/queue")
 async def get_queue(limit: int = 100):
-    """Get public queue (anonymized)"""
-    if not IS_PRODUCTION:
-        return {"queue": [], "message": "Queue system only available in production mode"}
-    
+    """Get public queue (anonymized) - Queue is always enabled"""
     queue_service = await get_queue_service()
-    queue = await queue_service.get_public_queue(limit=limit)
+    items = await queue_service.get_public_queue(limit=limit)
     queue_length = await queue_service.get_queue_length()
     
     return {
-        "queue": queue,
+        "items": items,  # REST Standard: collections use "items"
         "queue_length": queue_length,
         "max_queue_length": int(os.getenv("MAX_QUEUE_LENGTH", "1000")),
     }
@@ -853,9 +887,7 @@ async def get_queue(limit: int = 100):
 
 @app.get("/api/queue/{queue_id}/status")
 async def get_queue_status(queue_id: str, http_request: Request = None):
-    """Get status of a queue item"""
-    if not IS_PRODUCTION:
-        raise HTTPException(status_code=400, detail="Queue system only available in production mode")
+    """Get status of a queue item - Queue is always enabled"""
     
     queue_service = await get_queue_service()
     queue_item = await queue_service.get_queue_status(queue_id)
@@ -881,9 +913,7 @@ async def get_queue_status(queue_id: str, http_request: Request = None):
 
 @app.get("/api/queue/my-scans")
 async def get_my_scans(http_request: Request):
-    """Get queue items for current session"""
-    if not IS_PRODUCTION:
-        return {"scans": []}
+    """Get queue items for current session - Queue is always enabled"""
     
     session_id = getattr(http_request.state, "session_id", None)
     if not session_id:

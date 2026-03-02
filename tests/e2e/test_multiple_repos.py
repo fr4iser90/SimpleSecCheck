@@ -70,35 +70,31 @@ async def test_multiple_repo_scans(client: httpx.AsyncClient, test_repos: List[D
         print(f"⏳ Waiting for scan to complete (max {TIMEOUT}s)...")
         start_time = time.time()
         completed = False
+        actual_scan_id = None  # Will be set from queue item when scan completes
         
         while time.time() - start_time < TIMEOUT:
-            # Check scan status
-            status_response = await client.get("/api/scan/status")
-            assert status_response.status_code == 200
-            
-            status = status_response.json()
-            current_scan_id = status.get("scan_id")
-            
-            if current_scan_id != scan_id:
-                # Scan completed, check results
-                print(f"✓ Scan {scan_id} completed")
-                completed = True
-                break
-            
-            # Check if scan is still running
-            if status.get("status") == "completed":
-                print(f"✓ Scan {scan_id} completed")
-                completed = True
-                break
-            elif status.get("status") == "error":
-                error_msg = status.get("error", "Unknown error")
-                pytest.fail(f"Scan {scan_id} failed: {error_msg}")
+            # Check queue status to get actual scan_id
+            queue_status_response = await client.get(f"/api/queue/{scan_id}/status")
+            if queue_status_response.status_code == 200:
+                queue_status = queue_status_response.json()
+                if queue_status.get("status") == "completed":
+                    actual_scan_id = queue_status.get("scan_id")
+                    if actual_scan_id:
+                        print(f"✓ Scan {scan_id} completed with scan_id: {actual_scan_id}")
+                        completed = True
+                        break
+                elif queue_status.get("status") == "failed":
+                    error_msg = queue_status.get("error", "Unknown error")
+                    pytest.fail(f"Scan {scan_id} failed: {error_msg}")
             
             await asyncio.sleep(POLL_INTERVAL)
             print(f"  Still running... ({int(time.time() - start_time)}s)")
         
         if not completed:
             pytest.fail(f"Scan {scan_id} did not complete within {TIMEOUT}s")
+        
+        if not actual_scan_id:
+            pytest.fail(f"Scan {scan_id} completed but no scan_id found in queue item")
         
         # Verify results exist
         results_response = await client.get("/api/results")
@@ -107,9 +103,9 @@ async def test_multiple_repo_scans(client: httpx.AsyncClient, test_repos: List[D
         results = results_response.json()
         scans = results.get("scans", [])
         
-        # Find our scan in results
-        scan_found = any(scan_id in scan.get("id", "") for scan in scans)
-        assert scan_found, f"Scan {scan_id} not found in results"
+        # Find our scan in results using actual_scan_id (timestamp format)
+        scan_found = any(actual_scan_id in scan.get("id", "") for scan in scans)
+        assert scan_found, f"Scan {actual_scan_id} not found in results"
         
         print(f"✓ Results found for scan {scan_id}")
         

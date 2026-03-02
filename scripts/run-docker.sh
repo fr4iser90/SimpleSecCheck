@@ -102,7 +102,7 @@ done
 if [ "$CI_MODE" = true ]; then
     SCAN_SCOPE="tracked"
     if [ -z "$SIMPLESECCHECK_EXCLUDE_PATHS" ]; then
-        SIMPLESECCHECK_EXCLUDE_PATHS=".git,node_modules,dist,build,coverage,.next,.nuxt,.cache,results,logs,reddit-browser-data,browser-data,playwright-report,.scannerwork"
+        SIMPLESECCHECK_EXCLUDE_PATHS=".git,node_modules,dist,build,coverage,.next,.nuxt,.cache"
     fi
 fi
 
