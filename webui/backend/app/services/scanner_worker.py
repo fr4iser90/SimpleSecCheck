@@ -25,7 +25,9 @@ class ScannerWorker:
         self.worker_task: Optional[asyncio.Task] = None
     
     async def initialize(self):
-        """Initialize database connection"""
+        """Initialize database connection (idempotent - uses shared connection pool)"""
+        # Database is already initialized by Session/Queue services in startup event
+        # This is just to ensure it's ready (idempotent call)
         await self.db.initialize()
     
     async def close(self):
@@ -38,9 +40,13 @@ class ScannerWorker:
         if self.is_running:
             return
         
+        # Database is already initialized by Session/Queue services in startup event
+        # Just ensure it's ready (idempotent call)
+        await self.db.initialize()
+        
         self.is_running = True
-        await self.initialize()
         self.worker_task = asyncio.create_task(self._worker_loop())
+        print("[Scanner Worker] Worker loop started")
     
     async def stop(self):
         """Stop the worker"""
@@ -140,15 +146,20 @@ class ScannerWorker:
         Returns scan_id
         """
         import sys
-        sys.path.insert(0, "/project/src")
-        sys.path.insert(0, "/SimpleSecCheck/src")
-        from core.path_setup import get_webui_base_dir, get_webui_results_dir
+        sys.path.insert(0, "/app/scanner")
+        from core.path_setup import (
+            get_webui_base_dir, 
+            get_webui_results_dir, 
+            get_webui_cli_script,
+            get_results_dir_for_scan,
+            get_docker_compose_file
+        )
         from app.services.git_service import clone_repository, is_git_url
         
-        # Get paths
+        # Get paths - ALL FROM CENTRAL path_setup.py
         base_dir = get_webui_base_dir()
         results_dir = get_webui_results_dir()
-        cli_script = base_dir / "scripts" / "run-docker.sh"
+        cli_script = get_webui_cli_script()
         
         # Generate scan_id
         scan_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -201,10 +212,23 @@ class ScannerWorker:
         # Build command - use run-docker.sh with target path
         cmd = [str(cli_script), "--collect-metadata", target_path]
         
+        # Extract project name from target path
+        if Path(target_path).is_dir():
+            # For temp clone paths like /app/results/tmp/PIDEA_20260302_160637/PIDEA
+            # The last part (PIDEA) is the actual project name
+            project_name = Path(target_path).name
+        else:
+            project_name = "scan"
+        
+        # Get results directory from central path_setup function
+        results_dir_path = get_results_dir_for_scan(project_name, scan_id)
+        
         # Set environment variables
         env = os.environ.copy()
         env["COLLECT_METADATA"] = "true"  # Always collect metadata in production
         env["SCAN_ID"] = scan_id  # Pass scan_id to run-docker.sh
+        env["RESULTS_DIR"] = results_dir_path  # Use central function
+        env["ENVIRONMENT"] = os.getenv("ENVIRONMENT", "dev")  # Pass ENVIRONMENT to run-docker.sh
         
         # Execute scan
         print(f"[Scanner Worker] Starting scan: {scan_id} for {repository_url}")
@@ -281,7 +305,8 @@ async def get_scanner_worker() -> ScannerWorker:
     global _scanner_worker
     if _scanner_worker is None:
         _scanner_worker = ScannerWorker()
-        await _scanner_worker.initialize()
+        # Database will be initialized in start() - no need to initialize here
+        # as it's already done by Session/Queue services in startup event
     return _scanner_worker
 
 

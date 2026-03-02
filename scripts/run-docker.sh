@@ -156,8 +156,13 @@ PROJECT_DIR="${PROJECT_NAME}_${TIMESTAMP}"
 
 # Script now only runs on host (CLI usage)
 # WebUI calls docker-compose directly, so no container/host distinction needed
-RESULTS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR"
-LOGS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR/logs"
+# Allow RESULTS_DIR to be overridden via environment variable (for production)
+if [ -z "$RESULTS_DIR" ]; then
+    RESULTS_DIR="$SCRIPT_DIR/results/$PROJECT_DIR"
+else
+    log_message "Using RESULTS_DIR from environment: '$RESULTS_DIR'"
+fi
+LOGS_DIR="$RESULTS_DIR/logs"
 log_message "Using script dir: RESULTS_DIR='$RESULTS_DIR'"
 
 # Store original for later reference
@@ -259,7 +264,12 @@ fi
 
 # Script now only runs on host (CLI usage)
 # WebUI calls docker-compose directly, so no container/host distinction needed
-DOCKER_COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+# Use docker-compose.prod.yml in production, docker-compose.yml in dev
+if [ "${ENVIRONMENT:-dev}" = "prod" ]; then
+    DOCKER_COMPOSE_FILE="$SCRIPT_DIR/docker-compose.prod.yml"
+else
+    DOCKER_COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+fi
 DOCKER_COMPOSE_CONTEXT="$SCRIPT_DIR"
 
 # Script now only runs on host (CLI usage)

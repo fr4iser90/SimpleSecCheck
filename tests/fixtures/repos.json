@@ -1,0 +1,16 @@
+{
+  "test_repositories": [
+    {
+      "name": "PIDEA",
+      "url": "https://github.com/fr4iser90/PIDEA",
+      "branch": "main",
+      "description": "Python project for testing"
+    },
+    {
+      "name": "SimpleSecCheck",
+      "url": "https://github.com/fr4iser90/SimpleSecCheck",
+      "branch": "main",
+      "description": "This project itself for testing"
+    }
+  ]
+}

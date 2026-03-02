@@ -4,6 +4,7 @@ Sets up sys.path to include processors and core modules
 """
 import os
 import sys
+from pathlib import Path
 from typing import Optional
 
 
@@ -229,17 +230,23 @@ def get_webui_base_dir():
 def get_webui_cli_script():
     """
     Get WebUI CLI script path (scripts/run-docker.sh).
-    Returns: Path object or None
+    Central function - all services should use this!
+    Returns: Path object
     """
-    base_dir = get_webui_base_dir()
-    if not base_dir:
-        return None
+    environment = os.getenv("ENVIRONMENT", "dev").lower()
     
-    script_path = base_dir / "scripts" / "run-docker.sh"
-    if script_path.exists():
-        return script_path
-    
-    return None
+    if environment == "prod":
+        # In Production: scripts are in /project/scripts (mounted project root)
+        return Path("/project/scripts/run-docker.sh")
+    else:
+        # In Dev: scripts are in base_dir/scripts
+        base_dir = get_webui_base_dir()
+        if base_dir:
+            script_path = base_dir / "scripts" / "run-docker.sh"
+            if script_path.exists():
+                return script_path
+            return script_path  # Return even if doesn't exist (will fail with clear error)
+        return Path("./scripts/run-docker.sh")  # Fallback
 
 
 def get_webui_results_dir():
@@ -252,6 +259,46 @@ def get_webui_results_dir():
         return None
     
     return base_dir / "results"
+
+
+def get_results_dir_for_scan(project_name: str, scan_id: str) -> str:
+    """
+    Get results directory path for a specific scan.
+    Central function - all services should use this!
+    
+    Args:
+        project_name: Name of the project being scanned
+        scan_id: Unique scan identifier (timestamp format)
+    
+    Returns:
+        str: Full path to results directory (e.g., "/app/results/PROJECT_SCAN_ID" in prod)
+    """
+    environment = os.getenv("ENVIRONMENT", "dev").lower()
+    
+    if environment == "prod":
+        # In Production: /app/results (writable, mounted from host)
+        return f"/app/results/{project_name}_{scan_id}"
+    else:
+        # In Dev: Use base_dir/results
+        base_dir = get_webui_base_dir()
+        if base_dir:
+            return str(base_dir / "results" / f"{project_name}_{scan_id}")
+        # Fallback
+        return f"./results/{project_name}_{scan_id}"
+
+
+def get_logs_dir_for_scan(results_dir: str) -> str:
+    """
+    Get logs directory path for a specific scan.
+    Central function - all services should use this!
+    
+    Args:
+        results_dir: Results directory path (from get_results_dir_for_scan)
+    
+    Returns:
+        str: Full path to logs directory (e.g., "/app/results/PROJECT_SCAN_ID/logs")
+    """
+    return f"{results_dir}/logs"
 
 
 def get_webui_logs_dir():
@@ -296,3 +343,36 @@ def get_webui_frontend_paths():
     ]
     
     return paths
+
+
+def get_docker_compose_file():
+    """
+    Get docker-compose file path based on environment.
+    Central function - all services should use this!
+    
+    Returns:
+        str: Path to docker-compose file (e.g., "/project/docker-compose.prod.yml" or "/project/docker-compose.yml")
+    """
+    # Get environment (default to dev)
+    environment = os.getenv("ENVIRONMENT", "dev").lower()
+    
+    # Determine docker-compose filename based on environment
+    if environment == "prod":
+        compose_filename = "docker-compose.prod.yml"
+    else:
+        compose_filename = "docker-compose.yml"
+    
+    # In containers: /project is always mounted (.:/project:ro)
+    return f"/project/{compose_filename}"
+
+
+def get_docker_compose_context():
+    """
+    Get docker-compose context directory (project root).
+    Central function - all services should use this!
+    
+    Returns:
+        str: Path to docker-compose context (always "/project" in containers)
+    """
+    # In containers: /project is always mounted (.:/project:ro)
+    return "/project"

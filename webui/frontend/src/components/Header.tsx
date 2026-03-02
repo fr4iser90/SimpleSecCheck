@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useConfig } from '../hooks/useConfig'
 
 interface ScanStatusData {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -23,6 +24,7 @@ interface ShutdownStatus {
 
 export default function Header() {
   const navigate = useNavigate()
+  const { config } = useConfig()
   const [scanStatus, setScanStatus] = useState<ScanStatusData>({
     status: 'idle',
     scan_id: null,
@@ -30,6 +32,9 @@ export default function Header() {
     started_at: null,
   })
   const [shutdownStatus, setShutdownStatus] = useState<ShutdownStatus | null>(null)
+  
+  // Only show auto-shutdown if enabled in config
+  const showAutoShutdown = config?.features.auto_shutdown ?? true
 
   // Poll scan status
   useEffect(() => {
@@ -58,8 +63,13 @@ export default function Header() {
     return () => clearInterval(interval)
   }, [scanStatus.status])
 
-  // Poll shutdown status
+  // Poll shutdown status (only if auto-shutdown is enabled)
   useEffect(() => {
+    if (!showAutoShutdown) {
+      setShutdownStatus(null)
+      return
+    }
+    
     const fetchShutdownStatus = async () => {
       try {
         const response = await fetch('/api/shutdown/status')
@@ -79,7 +89,7 @@ export default function Header() {
     const interval = setInterval(fetchShutdownStatus, 1000)
 
     return () => clearInterval(interval)
-  }, [])
+  }, [showAutoShutdown])
 
   const getStatusBadge = () => {
     if (scanStatus.status === 'idle') return null
@@ -154,7 +164,7 @@ export default function Header() {
             Scan ID: {scanStatus.scan_id}
           </span>
         )}
-        {shutdownStatus && shutdownStatus.shutdown_in_seconds !== null && shutdownStatus.shutdown_in_seconds > 0 && (
+        {showAutoShutdown && shutdownStatus && shutdownStatus.shutdown_in_seconds !== null && shutdownStatus.shutdown_in_seconds > 0 && (
           <span style={{ 
             color: getTimerColor(shutdownStatus.shutdown_in_seconds),
             fontWeight: 'bold',
@@ -163,7 +173,7 @@ export default function Header() {
             ⏱️ {formatTime(shutdownStatus.shutdown_in_seconds)}
           </span>
         )}
-        {shutdownStatus && (
+        {showAutoShutdown && shutdownStatus && (
           <label style={{ 
             display: 'flex', 
             alignItems: 'center', 
@@ -185,7 +195,7 @@ export default function Header() {
             </span>
           </label>
         )}
-        {shutdownStatus?.auto_shutdown_enabled && (
+        {showAutoShutdown && shutdownStatus?.auto_shutdown_enabled && (
           <button
             onClick={handleShutdownNow}
             style={{
@@ -204,13 +214,28 @@ export default function Header() {
           </button>
         )}
       </div>
-      <nav style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+      <nav style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
         <Link to="/" style={{ color: 'inherit', textDecoration: 'none' }}>
           Home
         </Link>
         <Link to="/results" style={{ color: 'inherit', textDecoration: 'none' }}>
           Results
         </Link>
+        {config?.features.queue_enabled && (
+          <>
+            <Link to="/queue" style={{ color: 'inherit', textDecoration: 'none' }}>
+              Queue
+            </Link>
+            <Link to="/my-scans" style={{ color: 'inherit', textDecoration: 'none' }}>
+              My Scans
+            </Link>
+          </>
+        )}
+        {config?.is_production && (
+          <Link to="/statistics" style={{ color: 'inherit', textDecoration: 'none' }}>
+            Statistics
+          </Link>
+        )}
         <button
           onClick={() => navigate('/')}
           style={{

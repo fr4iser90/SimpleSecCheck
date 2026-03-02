@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { FrontendConfig } from '../hooks/useConfig'
 
 interface ScanStatusData {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -11,6 +12,7 @@ interface ScanStatusData {
 
 interface ScanFormProps {
   onScanStart: (scanStatus: ScanStatusData) => void
+  config: FrontendConfig | null
 }
 
 // Git URL patterns for detection
@@ -25,8 +27,19 @@ function isGitUrl(url: string): boolean {
   return GIT_URL_PATTERNS.some(pattern => pattern.test(url.trim()))
 }
 
-export default function ScanForm({ onScanStart }: ScanFormProps) {
-  const [scanType, setScanType] = useState<'code' | 'website' | 'network'>('code')
+export default function ScanForm({ onScanStart, config }: ScanFormProps) {
+  // Get available scan types from config
+  const availableScanTypes = config?.features.scan_types ?? { code: true, website: true, network: true }
+  const gitOnly = config?.features.git_only ?? false
+  const localPathsAllowed = config?.features.local_paths ?? true
+  const metadataCollection = config?.features.metadata_collection ?? 'optional'
+  
+  // Default to 'code' if available, otherwise first available type
+  const defaultScanType = availableScanTypes.code ? 'code' : 
+    availableScanTypes.website ? 'website' : 
+    availableScanTypes.network ? 'network' : 'code'
+  
+  const [scanType, setScanType] = useState<'code' | 'website' | 'network'>(defaultScanType)
   const [target, setTarget] = useState('')
   const [gitBranch, setGitBranch] = useState('')
   const [availableBranches, setAvailableBranches] = useState<string[]>([])
@@ -34,12 +47,15 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
   const [branchError, setBranchError] = useState<string | null>(null)
   const [ciMode, setCiMode] = useState(false)
   const [findingPolicy, setFindingPolicy] = useState('')
-  const [collectMetadata, setCollectMetadata] = useState(false)
+  const [collectMetadata, setCollectMetadata] = useState(metadataCollection === 'always')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
   // Detect if target is a Git URL
   const isGitRepo = scanType === 'code' && isGitUrl(target)
+  
+  // In production (git_only), only allow Git URLs
+  const isLocalPath = scanType === 'code' && target.trim() && !isGitUrl(target) && target.trim().startsWith('/')
   
   // Fetch branches when Git URL is detected
   useEffect(() => {
@@ -93,6 +109,16 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
       const cleanTarget = target.trim()
       const cleanGitBranch = gitBranch.trim() || null
       const cleanFindingPolicy = findingPolicy.trim() || null
+      
+      // Validate: In production (git_only), only Git URLs are allowed
+      if (gitOnly && scanType === 'code' && !isGitUrl(cleanTarget)) {
+        throw new Error('Production Mode: Only Git repository URLs (GitHub/GitLab) are allowed. Local paths are not permitted.')
+      }
+      
+      // Validate: Local paths not allowed if disabled
+      if (!localPathsAllowed && scanType === 'code' && isLocalPath) {
+        throw new Error('Local paths are not allowed. Please use a Git repository URL.')
+      }
 
       const response = await fetch('/api/scan/start', {
         method: 'POST',
@@ -137,34 +163,45 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
       <div className="form-group">
         <label>Scan Type</label>
         <div className="radio-group">
-          <label>
-            <input
-              type="radio"
-              value="code"
-              checked={scanType === 'code'}
-              onChange={(e) => setScanType(e.target.value as 'code')}
-            />
-            Code
-          </label>
-          <label>
-            <input
-              type="radio"
-              value="website"
-              checked={scanType === 'website'}
-              onChange={(e) => setScanType(e.target.value as 'website')}
-            />
-            Website
-          </label>
-          <label>
-            <input
-              type="radio"
-              value="network"
-              checked={scanType === 'network'}
-              onChange={(e) => setScanType(e.target.value as 'network')}
-            />
-            Network
-          </label>
+          {availableScanTypes.code && (
+            <label>
+              <input
+                type="radio"
+                value="code"
+                checked={scanType === 'code'}
+                onChange={(e) => setScanType(e.target.value as 'code')}
+              />
+              Code
+            </label>
+          )}
+          {availableScanTypes.website && (
+            <label>
+              <input
+                type="radio"
+                value="website"
+                checked={scanType === 'website'}
+                onChange={(e) => setScanType(e.target.value as 'website')}
+              />
+              Website
+            </label>
+          )}
+          {availableScanTypes.network && (
+            <label>
+              <input
+                type="radio"
+                value="network"
+                checked={scanType === 'network'}
+                onChange={(e) => setScanType(e.target.value as 'network')}
+              />
+              Network
+            </label>
+          )}
         </div>
+        {gitOnly && (
+          <small style={{ display: 'block', marginTop: '0.5rem', color: '#856404', fontSize: '0.875rem' }}>
+            ⚠️ Production Mode: Only Git repository scans are allowed (GitHub/GitLab URLs)
+          </small>
+        )}
       </div>
 
       {scanType === 'code' && (
@@ -186,7 +223,7 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
       {scanType !== 'network' && (
         <div className="form-group">
           <label htmlFor="target">
-            Target {scanType === 'code' ? '(Path oder Git URL)' : '(URL)'}
+            Target {scanType === 'code' ? (gitOnly ? '(Git URL only)' : '(Path oder Git URL)') : '(URL)'}
           </label>
           <input
             id="target"
@@ -194,12 +231,17 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             onBlur={(e) => setTarget(e.target.value.trim())} // Auto-trim on blur
-            placeholder={scanType === 'code' ? '/path/to/project oder https://github.com/user/repo' : 'https://example.com'}
+            placeholder={scanType === 'code' ? (gitOnly ? 'https://github.com/user/repo' : '/path/to/project oder https://github.com/user/repo') : 'https://example.com'}
             required
             style={{
-              borderColor: isGitRepo ? '#28a745' : undefined,
+              borderColor: isGitRepo ? '#28a745' : isLocalPath && !localPathsAllowed ? '#dc3545' : undefined,
             }}
           />
+          {isLocalPath && !localPathsAllowed && (
+            <small style={{ display: 'block', marginTop: '0.5rem', color: '#dc3545', fontSize: '0.875rem' }}>
+              ❌ Local paths are not allowed in Production Mode. Please use a Git repository URL (GitHub/GitLab).
+            </small>
+          )}
           {isGitRepo && (
             <>
               <div style={{
@@ -296,19 +338,34 @@ export default function ScanForm({ onScanStart }: ScanFormProps) {
         />
       </div>
 
-      <div className="form-group">
-        <label>
-          <input
-            type="checkbox"
-            checked={collectMetadata}
-            onChange={(e) => setCollectMetadata(e.target.checked)}
-          />
-          Collect Metadata (optional - includes Git info, project path, etc.)
-        </label>
-        <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
-          By default, no metadata is collected for privacy. Enable this to include project information in the scan report.
-        </small>
-      </div>
+      {metadataCollection === 'optional' && (
+        <div className="form-group">
+          <label>
+            <input
+              type="checkbox"
+              checked={collectMetadata}
+              onChange={(e) => setCollectMetadata(e.target.checked)}
+            />
+            Collect Metadata (optional - includes Git info, project path, etc.)
+          </label>
+          <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
+            By default, no metadata is collected for privacy. Enable this to include project information in the scan report.
+          </small>
+        </div>
+      )}
+      {metadataCollection === 'always' && (
+        <div style={{
+          marginBottom: '1rem',
+          padding: '0.75rem',
+          background: 'rgba(40, 167, 69, 0.1)',
+          border: '1px solid #28a745',
+          borderRadius: '6px',
+          fontSize: '0.875rem',
+          color: '#155724'
+        }}>
+          ℹ️ Metadata collection is always enabled in Production Mode for scan deduplication.
+        </div>
+      )}
 
       {error && (
         <div style={{ 

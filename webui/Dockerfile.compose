@@ -35,6 +35,9 @@ WORKDIR /app
 COPY webui/backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy scanner code (needed for path_setup and other core modules)
+COPY scanner/ ./scanner/
+
 # Copy backend
 COPY webui/backend/app/ ./app/
 

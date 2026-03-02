@@ -28,26 +28,31 @@ services:
       - SimpleSecCheck_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ssc_user}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ssc_user} -d ${POSTGRES_DB:-simpleseccheck}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
 
   scanner:
-    # Production Scanner Service - Picks jobs from queue and executes scans
-    # This service runs continuously and processes scan jobs from PostgreSQL queue
+    # Production Scanner Service - Used for executing scans via docker-compose run
+    # NOTE: Scanner Worker runs in WebUI container, not as separate service
+    # This service is only used when WebUI calls docker-compose run scanner
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ./scanner/Dockerfile
       args:
         VERSION: 1.4.0
     image: fr4iser/simpleseccheck:latest
     container_name: SimpleSecCheck_scanner_prod
+    profiles:
+      - scanner  # Only start explicitly, not automatically
     volumes:
       - ./results:/SimpleSecCheck/results
       - ./logs:/SimpleSecCheck/logs
-      - ./config:/SimpleSecCheck/config
+      # Config ist bereits im Image (über COPY scanner/ im Dockerfile) - kein Volume-Mount nötig
+      # Scripts sind bereits im Image (über COPY . /SimpleSecCheck im Dockerfile)
+      # Kein Volume-Mount nötig für Production - Image funktioniert standalone
       # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
       - ./owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
       # ⚠️ PRODUCTION: NO Docker socket - only Git scans allowed, no network scans
@@ -57,29 +62,20 @@ services:
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
       - RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results
       - LOGS_DIR_IN_CONTAINER=/SimpleSecCheck/logs
-      - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/config/rules
-      - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/trivy/config.yaml
-      - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/anchore/config.yaml
+      - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/rules
+      - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/trivy/config.yaml
+      - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/anchore/config.yaml
       - ANCHORE_IMAGE=${ANCHORE_IMAGE:-}
-      - ZAP_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/zap/baseline.conf
+      - ZAP_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/zap/baseline.conf
       - TRIVY_SCAN_TYPE=fs
-      - FP_WHITELIST_FILE=/SimpleSecCheck/config/policy/fp_whitelist.json
+      - FP_WHITELIST_FILE=/SimpleSecCheck/scanner/config/policy/fp_whitelist.json
       # Optional API Tokens (loaded from .env file if present)
       - NVD_API_KEY=${NVD_API_KEY:-}
       - SNYK_TOKEN=${SNYK_TOKEN:-}
-      # Production Mode - Scanner picks jobs from queue
-      - ENVIRONMENT=prod
-      - DATABASE_TYPE=postgresql
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}
-      - QUEUE_MODE=worker  # Scanner runs as queue worker
-      - MAX_CONCURRENT_SCANS=${MAX_CONCURRENT_SCANS:-1}
     networks:
       - SimpleSecCheck_network
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped  # Production: Keep scanner running
-    # Note: Scanner runs continuously, polling queue for jobs
+    # Note: Scanner Worker runs in WebUI container, not here
+    # This service is only used for docker-compose run scanner commands
 
   webui:
     # Production WebUI with Traefik - Start with: docker-compose -f docker-compose.prod.traefik.yml --profile webui up
@@ -95,17 +91,20 @@ services:
     # ports:
     #   - "0.0.0.0:8080:8080"  # Not needed with Traefik
     volumes:
-      - ./scripts:/app/scripts:ro            # CLI Scripts (read-only)
+      # Scripts sind bereits im Image (über COPY . /SimpleSecCheck im Dockerfile)
+      # Kein Volume-Mount nötig für Production - Image funktioniert standalone
       - ./results:/app/results                # Results (read-write: run-docker.sh needs to create subdirs)
       - ./logs:/app/logs:ro                  # Logs (read-only)
-      - ./config:/app/config:ro              # Config (read-only, includes rules)
+      # Config ist bereits im Image (über COPY scanner/ im Dockerfile) - kein Volume-Mount nötig
       - ./docker-compose.prod.traefik.yml:/app/docker-compose.yml:ro  # docker-compose.prod.traefik.yml (read-only, needed by run-docker.sh)
       - ./Dockerfile:/app/Dockerfile:ro       # Dockerfile (read-only, needed for scanner build)
       - .:/project:ro                         # Project root (read-only, needed as build context for scanner)
       - ./owasp-dependency-check-data:/app/owasp-dependency-check-data  # OWASP database (read-write: for updates and checks)
-      # ⚠️ PRODUCTION: NO Docker socket mounted for security!
-      # Scanner runs as separate service that picks jobs from queue
-      # WebUI only manages queue, does NOT execute scans directly
+      # ⚠️ PRODUCTION: Docker socket required for scanner worker to execute scans
+      # The scanner worker (running in this container) needs Docker access to run scan containers
+      # Security: Only the scanner worker process uses Docker, not the WebUI API
+      # Note: Docker socket needs write access to start/stop containers
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker socket (required for scanner worker)
     environment:
       - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1
@@ -173,8 +172,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      scanner:
-        condition: service_started
+      # Note: Scanner Worker runs in this WebUI container, not as separate service
     # Security: no privileged mode, no capabilities
     security_opt:
       - no-new-privileges:true

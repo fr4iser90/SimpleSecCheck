@@ -158,14 +158,16 @@ RUN git clone https://github.com/docker/docker-bench-security.git /opt/docker-be
 # Install Anchore Grype (container image vulnerability scanner)
 RUN curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
 
-# Copy SimpleSecCheck files FIRST (as root)
-COPY . /SimpleSecCheck
+# Copy SimpleSecCheck files (scanner code, scripts, and entrypoint)
+COPY scanner/ /SimpleSecCheck/scanner/
+COPY scripts/ /SimpleSecCheck/scripts/
+COPY entrypoint.sh /entrypoint.sh
 WORKDIR /SimpleSecCheck
 
 # Create required directories and set permissions
 RUN mkdir -p /SimpleSecCheck/results /SimpleSecCheck/logs /SimpleSecCheck/owasp-dependency-check-data /zap/wrk && \
     mkdir -p /zap/wrk/zap && \
-    cp /SimpleSecCheck/config/tools/zap/baseline.conf /zap/wrk/zap/baseline.conf && \
+    cp /SimpleSecCheck/scanner/config/tools/zap/baseline.conf /zap/wrk/zap/baseline.conf && \
     cp -r /opt/ZAP_2.16.1/* /zap/ && \
     ln -sf /zap/zap.sh /zap/zap-x.sh
 
@@ -177,10 +179,10 @@ RUN useradd -m -u 1000 -s /bin/bash scanner && \
 
 # Make scripts executable
 RUN chmod +x /SimpleSecCheck/scripts/security-check.sh
-RUN chmod +x /SimpleSecCheck/src/core/configure.py
+RUN chmod +x /SimpleSecCheck/scanner/core/configure.py
 
 # Compile TypeScript files (uses tsconfig.json automatically)
-RUN cd /SimpleSecCheck/src/reporting && tsc
+RUN cd /SimpleSecCheck/scanner/reporting && tsc
 
 # Install sudo and configure passwordless sudo for scanner user
 RUN apt-get install -y sudo && \
@@ -195,71 +197,71 @@ USER scanner
 
 # Set CodeQL environment variables
 ENV CODEQL_HOME=/opt/codeql
-ENV CODEQL_CONFIG_PATH=/SimpleSecCheck/config/tools/codeql/config.yaml
-ENV CODEQL_QUERIES_PATH=/SimpleSecCheck/config/tools/codeql/queries
+ENV CODEQL_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/codeql/config.yaml
+ENV CODEQL_QUERIES_PATH=/SimpleSecCheck/scanner/config/tools/codeql/queries
 
 # Set Nuclei environment variables
 ENV NUCLEI_HOME=/opt/nuclei
-ENV NUCLEI_CONFIG_PATH=/SimpleSecCheck/config/tools/nuclei/config.yaml
-ENV NUCLEI_TEMPLATES_PATH=/SimpleSecCheck/config/tools/nuclei/templates
+ENV NUCLEI_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/nuclei/config.yaml
+ENV NUCLEI_TEMPLATES_PATH=/SimpleSecCheck/scanner/config/tools/nuclei/templates
 
 # Set OWASP Dependency Check environment variables
 ENV OWASP_DC_HOME=/opt/dependency-check
-ENV OWASP_DC_CONFIG_PATH=/SimpleSecCheck/config/tools/owasp-dependency-check/config.yaml
+ENV OWASP_DC_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/owasp-dependency-check/config.yaml
 ENV OWASP_DC_DATA_DIR=/SimpleSecCheck/owasp-dependency-check-data
 
 # Set Safety environment variables
-ENV SAFETY_CONFIG_PATH=/SimpleSecCheck/config/tools/safety/config.yaml
+ENV SAFETY_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/safety/config.yaml
 
 # Set Snyk environment variables
-ENV SNYK_CONFIG_PATH=/SimpleSecCheck/config/tools/snyk/config.yaml
+ENV SNYK_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/snyk/config.yaml
 
 # Set SonarQube environment variables
-ENV SONARQUBE_CONFIG_PATH=/SimpleSecCheck/config/tools/sonarqube/config.yaml
+ENV SONARQUBE_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/sonarqube/config.yaml
 ENV SONARQUBE_SCANNER_HOME=/opt/sonar-scanner
 
 # Set Checkov environment variables
-ENV TERRAFORM_SECURITY_CONFIG_PATH=/SimpleSecCheck/config/tools/terraform-security/config.yaml
+ENV TERRAFORM_SECURITY_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/terraform-security/config.yaml
 
 # Set TruffleHog environment variables
-ENV TRUFFLEHOG_CONFIG_PATH=/SimpleSecCheck/config/tools/trufflehog/config.yaml
+ENV TRUFFLEHOG_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/trufflehog/config.yaml
 
 # Set GitLeaks environment variables
-ENV GITLEAKS_CONFIG_PATH=/SimpleSecCheck/config/tools/gitleaks/config.yaml
+ENV GITLEAKS_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/gitleaks/config.yaml
 
 # Set Detect-secrets environment variables
-ENV DETECT_SECRETS_CONFIG_PATH=/SimpleSecCheck/config/tools/detect-secrets/config.yaml
+ENV DETECT_SECRETS_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/detect-secrets/config.yaml
 
 # Set Wapiti environment variables
-ENV WAPITI_CONFIG_PATH=/SimpleSecCheck/config/tools/wapiti/config.yaml
+ENV WAPITI_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/wapiti/config.yaml
 
 # Set Nikto environment variables
-ENV NIKTO_CONFIG_PATH=/SimpleSecCheck/config/tools/nikto/config.yaml
+ENV NIKTO_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/nikto/config.yaml
 
 # Set Burp Suite environment variables
-ENV BURP_CONFIG_PATH=/SimpleSecCheck/config/tools/burp/config.yaml
+ENV BURP_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/burp/config.yaml
 ENV BURP_HOME=/opt/burp
 
 # Set Kube-hunter environment variables
-ENV KUBE_HUNTER_CONFIG_PATH=/SimpleSecCheck/config/tools/kube-hunter/config.yaml
+ENV KUBE_HUNTER_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/kube-hunter/config.yaml
 
 # Set Kube-bench environment variables
-ENV KUBE_BENCH_CONFIG_PATH=/SimpleSecCheck/config/tools/kube-bench/config.yaml
+ENV KUBE_BENCH_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/kube-bench/config.yaml
 
 # Set Docker Bench environment variables
-ENV DOCKER_BENCH_CONFIG_PATH=/SimpleSecCheck/config/tools/docker-bench/config.yaml
+ENV DOCKER_BENCH_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/docker-bench/config.yaml
 
 # Set ESLint environment variables
-ENV ESLINT_CONFIG_PATH=/SimpleSecCheck/config/tools/eslint/config.yaml
+ENV ESLINT_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/eslint/config.yaml
 
 # Set Brakeman environment variables
-ENV BRAKEMAN_CONFIG_PATH=/SimpleSecCheck/config/tools/brakeman/config.yaml
+ENV BRAKEMAN_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/brakeman/config.yaml
 
 # Set Bandit environment variables
-ENV BANDIT_CONFIG_PATH=/SimpleSecCheck/config/tools/bandit/config.yaml
+ENV BANDIT_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/bandit/config.yaml
 
 # Set Anchore environment variables
-ENV ANCHORE_CONFIG_PATH=/SimpleSecCheck/config/tools/anchore/config.yaml
+ENV ANCHORE_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/anchore/config.yaml
 
 WORKDIR /zap/wrk
 ENTRYPOINT ["/entrypoint.sh"]

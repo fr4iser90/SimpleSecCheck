@@ -138,6 +138,9 @@ async def get_session_service() -> SessionService:
     if _session_service is None:
         _session_service = SessionService()
         await _session_service.initialize()
+    # Ensure database is initialized (connection pool exists)
+    if hasattr(_session_service.db, 'connection_pool') and _session_service.db.connection_pool is None:
+        await _session_service.initialize()
     return _session_service
 
 

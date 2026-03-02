@@ -8,6 +8,9 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import os
 
+# Global database instance (singleton)
+_database_instance: Optional['DatabaseAdapter'] = None
+
 
 class DatabaseAdapter(ABC):
     """Abstract base class for database adapters"""
@@ -153,12 +156,18 @@ class DatabaseAdapter(ABC):
 def get_database() -> DatabaseAdapter:
     """
     Factory function to get appropriate database adapter based on environment
+    Returns singleton instance to share connection pool across services
     """
-    database_type = os.getenv("DATABASE_TYPE", "file").lower()
+    global _database_instance
     
-    if database_type == "postgresql":
-        from .postgresql_database import PostgreSQLDatabase
-        return PostgreSQLDatabase()
-    else:
-        from .file_database import FileDatabase
-        return FileDatabase()
+    if _database_instance is None:
+        database_type = os.getenv("DATABASE_TYPE", "file").lower()
+        
+        if database_type == "postgresql":
+            from .postgresql_database import PostgreSQLDatabase
+            _database_instance = PostgreSQLDatabase()
+        else:
+            from .file_database import FileDatabase
+            _database_instance = FileDatabase()
+    
+    return _database_instance

@@ -115,23 +115,16 @@ async def start_update(
     # Build command - prefer docker-compose if available (for WebUI container)
     if docker_compose_available:
         # Use docker-compose run (works in WebUI container)
-        # Try multiple paths for docker-compose.yml
-        docker_compose_file = None
-        for path in [
-            base_dir / "docker-compose.yml",
-            Path("/app/docker-compose.yml"),
-            Path("/project/docker-compose.yml"),
-        ]:
-            if path.exists():
-                docker_compose_file = path
-                break
-        
-        if not docker_compose_file:
-            raise HTTPException(status_code=500, detail="docker-compose.yml not found")
+        # Use central function from path_setup (handles dev/prod automatically)
+        import sys
+        sys.path.insert(0, "/app/scanner")
+        from core.path_setup import get_docker_compose_file, get_docker_compose_context
+        docker_compose_file = get_docker_compose_file()
+        docker_compose_context = get_docker_compose_context()
         
         docker_cmd = [
             "docker-compose",
-            "-f", str(docker_compose_file),
+            "-f", docker_compose_file,
             "run", "--rm",
             "-v", f"{host_owasp_dir}:/SimpleSecCheck/owasp-dependency-check-data",
         ]

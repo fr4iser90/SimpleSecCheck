@@ -80,8 +80,7 @@ from app.services.scanner_worker import (
 # Configuration - ALL PATHS FROM CENTRAL path_setup.py
 # NO PATH CALCULATIONS HERE!
 import sys
-sys.path.insert(0, "/project/src")
-sys.path.insert(0, "/SimpleSecCheck/src")
+sys.path.insert(0, "/app/scanner")
 from core.path_setup import (
     get_webui_base_dir,
     get_webui_cli_script,
@@ -160,25 +159,47 @@ if AUTO_SHUTDOWN_ENABLED and IDLE_TIMEOUT > 0:
 signal_handler = create_signal_handler(current_scan, stop_running_containers)
 register_signal_handlers(signal_handler)
 
-# Production: Start scanner worker
+# Production: Initialize services and start scanner worker
 if IS_PRODUCTION:
     @app.on_event("startup")
     async def startup_event():
-        """Start scanner worker on application startup"""
+        """Initialize production services on application startup"""
         try:
+            # Initialize session service first (needed by middleware)
+            session_service = await get_session_service()
+            print("[Main] Session service initialized")
+            
+            # Initialize queue service
+            queue_service = await get_queue_service()
+            print("[Main] Queue service initialized")
+            
+            # Start scanner worker
             await start_scanner_worker()
             print("[Main] Scanner worker started")
         except Exception as e:
-            print(f"[Main] Failed to start scanner worker: {e}")
+            print(f"[Main] Failed to initialize production services: {e}")
+            import traceback
+            traceback.print_exc()
     
     @app.on_event("shutdown")
     async def shutdown_event():
-        """Stop scanner worker on application shutdown"""
+        """Stop production services on application shutdown"""
         try:
+            # Stop scanner worker
             await stop_scanner_worker()
             print("[Main] Scanner worker stopped")
+            
+            # Close session service
+            session_service = await get_session_service()
+            await session_service.close()
+            print("[Main] Session service closed")
+            
+            # Close queue service
+            queue_service = await get_queue_service()
+            await queue_service.close()
+            print("[Main] Queue service closed")
         except Exception as e:
-            print(f"[Main] Error stopping scanner worker: {e}")
+            print(f"[Main] Error stopping production services: {e}")
 
 
 @app.get("/api/health")
@@ -186,6 +207,40 @@ async def health():
     """Health check endpoint"""
     update_activity()
     return {"status": "ok", "service": "SimpleSecCheck WebUI"}
+
+
+@app.get("/api/config")
+async def get_config():
+    """Get frontend configuration based on environment (backend-driven UI)"""
+    zip_upload_enabled = os.getenv("ZIP_UPLOAD_ENABLED", "false").lower() == "true" if IS_PRODUCTION else True
+    
+    return {
+        "environment": ENVIRONMENT,
+        "is_production": IS_PRODUCTION,
+        "features": {
+            "scan_types": {
+                "code": True,
+                "website": not IS_PRODUCTION,
+                "network": not IS_PRODUCTION,
+            },
+            "bulk_scan": not IS_PRODUCTION,
+            "local_paths": not IS_PRODUCTION,
+            "git_only": IS_PRODUCTION,
+            "queue_enabled": IS_PRODUCTION,
+            "session_management": IS_PRODUCTION,
+            "metadata_collection": "always" if IS_PRODUCTION else "optional",
+            "auto_shutdown": not IS_PRODUCTION,
+            "zip_upload": zip_upload_enabled,
+        },
+        "queue": {
+            "max_length": int(os.getenv("MAX_QUEUE_LENGTH", "1000")),
+            "public_view": IS_PRODUCTION,
+        } if IS_PRODUCTION else None,
+        "rate_limits": {
+            "scans_per_session": int(os.getenv("RATE_LIMIT_PER_SESSION_SCANS", "10")),
+            "requests_per_session": int(os.getenv("RATE_LIMIT_PER_SESSION_REQUESTS", "100")),
+        } if IS_PRODUCTION else None,
+    }
 
 
 @app.get("/api/git/branches")
@@ -848,13 +903,11 @@ async def get_statistics():
     
     from app.database import get_database
     db = get_database()
+    # Database is already initialized by startup event, but ensure it's ready
     await db.initialize()
     
-    try:
-        stats = await db.get_statistics()
-        return stats
-    finally:
-        await db.close()
+    stats = await db.get_statistics()
+    return stats
 
 
 # Serve frontend static files (after API routes)

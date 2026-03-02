@@ -42,7 +42,7 @@ class FileDatabase(DatabaseAdapter):
         }
     
     async def initialize(self) -> None:
-        """Initialize file-based database"""
+        """Initialize file-based database (idempotent)"""
         # Create directories
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)

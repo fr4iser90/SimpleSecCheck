@@ -69,6 +69,11 @@ log_message() {
     echo "[SimpleSecCheck Orchestrator] ($(date '+%Y-%m-%d %H:%M:%S')) ($BASHPID) $1" | tee -a "$LOG_FILE"
 }
 
+log_error() {
+    # Logs error message to central log file and stderr
+    echo "[SimpleSecCheck Orchestrator] ($(date '+%Y-%m-%d %H:%M:%S')) ($BASHPID) ERROR: $1" | tee -a "$LOG_FILE" >&2
+}
+
 log_step() {
     # DISABLED: Python backend now handles all step logging with proper formatting (Step X/Y)
     # Python extracts steps from orchestrator log messages and writes to steps.log

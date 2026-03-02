@@ -3,7 +3,7 @@ services:
     # LOKALES BUILDING AKTIVIERT
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ./scanner/Dockerfile
       args:
         VERSION: 1.4.0
     image: fr4iser/simpleseccheck:latest
@@ -11,7 +11,7 @@ services:
     volumes:
       - ./results:/SimpleSecCheck/results
       - ./logs:/SimpleSecCheck/logs
-      - ./config:/SimpleSecCheck/config
+      # Config ist bereits im Image (über COPY scanner/ im Dockerfile) - kein Volume-Mount nötig
       # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
       - ./owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
       - /var/run/docker.sock:/var/run/docker.sock # For Docker Bench
@@ -20,13 +20,13 @@ services:
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
       - RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results
       - LOGS_DIR_IN_CONTAINER=/SimpleSecCheck/logs
-      - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/config/rules
-      - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/trivy/config.yaml
-      - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/anchore/config.yaml
+      - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/rules
+      - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/trivy/config.yaml
+      - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/anchore/config.yaml
       - ANCHORE_IMAGE=${ANCHORE_IMAGE:-}
-      - ZAP_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/config/tools/zap/baseline.conf
+      - ZAP_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/zap/baseline.conf
       - TRIVY_SCAN_TYPE=fs
-      - FP_WHITELIST_FILE=/SimpleSecCheck/config/policy/fp_whitelist.json
+      - FP_WHITELIST_FILE=/SimpleSecCheck/scanner/config/policy/fp_whitelist.json
       # Optional API Tokens (loaded from .env file if present)
       - NVD_API_KEY=${NVD_API_KEY:-}
       - SNYK_TOKEN=${SNYK_TOKEN:-}
@@ -48,10 +48,10 @@ services:
     ports:
       - "127.0.0.1:8080:8080"  # SAFE: Only localhost, not 0.0.0.0
     volumes:
-      - ./scripts:/app/scripts:ro            # CLI Scripts (read-only)
+      - ./scripts:/app/scripts:ro            # CLI Scripts (read-only) - DEVELOPMENT ONLY: Hot-Reload ohne Image-Rebuild
       - ./results:/app/results                # Results (read-write: run-docker.sh needs to create subdirs)
       - ./logs:/app/logs:ro                  # Logs (read-only)
-      - ./config:/app/config:ro              # Config (read-only, includes rules)
+      # Config ist bereits im Image (über COPY scanner/ im Dockerfile) - kein Volume-Mount nötig (Dev: für Hot-Reload könnte man es mounten, aber wir behandeln Dev=Prod)
       - ./docker-compose.yml:/app/docker-compose.yml:ro  # docker-compose.yml (read-only, needed by run-docker.sh)
       - ./Dockerfile:/app/Dockerfile:ro       # Dockerfile (read-only, needed for scanner build)
       - .:/project:ro                         # Project root (read-only, needed as build context for scanner)

@@ -5,6 +5,7 @@ PostgreSQL-based storage for production environment
 
 import os
 import uuid
+import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 import asyncpg
@@ -19,17 +20,47 @@ class PostgreSQLDatabase(DatabaseAdapter):
         self.database_url = os.getenv("DATABASE_URL")
         if not self.database_url:
             raise ValueError("DATABASE_URL environment variable is required for PostgreSQL")
+        
+        # Validate DATABASE_URL format
+        if not self.database_url.startswith("postgresql://"):
+            raise ValueError(f"Invalid DATABASE_URL format: must start with 'postgresql://' (got: {self.database_url[:20]}...)")
+        
+        print(f"[PostgreSQL] Using DATABASE_URL: postgresql://***:***@***/***")
     
     async def initialize(self) -> None:
-        """Initialize PostgreSQL connection pool"""
-        self.connection_pool = await asyncpg.create_pool(
-            self.database_url,
-            min_size=2,
-            max_size=10,
-        )
+        """Initialize PostgreSQL connection pool with retry logic (idempotent)"""
+        # If already initialized, skip
+        if self.connection_pool is not None:
+            return
         
-        # Create tables if they don't exist
-        await self._create_tables()
+        max_retries = 10
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                self.connection_pool = await asyncpg.create_pool(
+                    self.database_url,
+                    min_size=2,
+                    max_size=10,
+                )
+                
+                # Test connection
+                async with self.connection_pool.acquire() as conn:
+                    await conn.fetchval("SELECT 1")
+                
+                print(f"[PostgreSQL] Connection pool initialized successfully")
+                
+                # Create tables if they don't exist
+                await self._create_tables()
+                return
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"[PostgreSQL] Connection failed (attempt {attempt + 1}/{max_retries}): {e}")
+                    print(f"[PostgreSQL] Retrying in {retry_delay} seconds...")
+                    await asyncio.sleep(retry_delay)
+                else:
+                    print(f"[PostgreSQL] Failed to connect after {max_retries} attempts: {e}")
+                    raise
     
     async def close(self) -> None:
         """Close PostgreSQL connection pool"""

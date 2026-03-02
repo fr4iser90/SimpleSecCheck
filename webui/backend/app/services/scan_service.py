@@ -22,8 +22,9 @@ from .git_service import is_git_url, clone_repository, cleanup_temp_repository
 
 # Central path management - ALL paths come from path_setup.py
 import sys
-sys.path.insert(0, "/project/src")
+sys.path.insert(0, "/app/scanner")
 from core.path_setup import (
+    get_logs_dir_for_scan,
     get_scan_results_dir_host, 
     get_target_mount_path_host, 
     get_owasp_data_path_host, 
@@ -117,9 +118,9 @@ async def start_scan(
     
     # STEP 6: Get all paths from central path_setup (NO PATH CALCULATIONS HERE!)
     # IMPORTANT: This must happen AFTER Git clone (if used), so paths are correct
-    scan_results_dir_container = current_scan["results_dir"]  # /app/results/EventPromoter_20260301_140119
+    scan_results_dir_container = current_scan["results_dir"]
     results_dir_host = get_scan_results_dir_host(scan_results_dir_container)
-    logs_dir_host = f"{results_dir_host}/logs"
+    logs_dir_host = get_logs_dir_for_scan(results_dir_host)
     target_mount_path_host = get_target_mount_path_host(clean_target)
     owasp_data_path_host = get_owasp_data_path_host()
     config_path_host = get_config_path_host()
@@ -146,9 +147,12 @@ async def start_scan(
     else:
         print(f"[Scan Service] WARNING: Could not determine config path - relying on docker-compose.yml volumes")
     
-    # Build docker-compose command
-    docker_compose_file = "/project/docker-compose.yml"
-    docker_compose_context = "/project"
+    # Build docker-compose command (use central function from path_setup)
+    import sys
+    sys.path.insert(0, "/app/scanner")
+    from core.path_setup import get_docker_compose_file, get_docker_compose_context
+    docker_compose_file = get_docker_compose_file()
+    docker_compose_context = get_docker_compose_context()
     
     cmd = [
         "docker-compose",
