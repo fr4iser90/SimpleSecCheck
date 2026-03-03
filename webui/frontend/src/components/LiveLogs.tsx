@@ -1,41 +1,101 @@
 import { useEffect, useRef, useState } from 'react'
 
-export default function LiveLogs() {
+interface LiveLogsProps {
+  scanId?: string
+  isActive?: boolean
+}
+
+export default function LiveLogs({ scanId, isActive = false }: LiveLogsProps) {
   const [logs, setLogs] = useState<string[]>([])
   const logsEndRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
 
   useEffect(() => {
-    // Use SSE instead of polling for real-time updates
-    const eventSource = new EventSource('/api/scan/stream')
+    // Only connect if scan is active and scanId is provided
+    if (!isActive || !scanId) {
+      return
+    }
     
-    eventSource.onmessage = (e) => {
+    let ws: WebSocket | null = null
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null
+    let reconnectAttempts = 0
+    const maxReconnectAttempts = 10
+    const reconnectDelay = 3000
+    
+    const connect = () => {
       try {
-        const data = JSON.parse(e.data)
+        const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/scan/stream?scan_id=${scanId}`
+        ws = new WebSocket(wsUrl)
         
-        if (data.error) {
-          console.error('[LiveLogs] SSE error:', data.error)
-          return
+        ws.onopen = () => {
+          console.log('[LiveLogs] WebSocket connected')
+          reconnectAttempts = 0
+          
+          heartbeatInterval = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send('ping')
+            }
+          }, 25000)
         }
         
-        // Update logs from SSE data (all log lines)
-        if (data.logs && Array.isArray(data.logs)) {
-          setLogs(data.logs)
+        ws.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data)
+            
+            if (data.error) {
+              console.error('[LiveLogs] WebSocket error:', data.error)
+              return
+            }
+            
+            // Note: Backend sends logs: [] (empty) for security
+            // LiveLogs component shows "0 lines" intentionally
+            if (data.logs && Array.isArray(data.logs)) {
+              setLogs(data.logs)
+            }
+          } catch (err) {
+            console.error('[LiveLogs] Failed to parse WebSocket data:', err)
+          }
         }
-      } catch (err) {
-        console.error('[LiveLogs] Failed to parse SSE data:', err)
+        
+        ws.onerror = (error) => {
+          console.error('[LiveLogs] WebSocket error:', error)
+        }
+        
+        ws.onclose = () => {
+          console.log('[LiveLogs] WebSocket closed')
+          
+          if (heartbeatInterval) {
+            clearInterval(heartbeatInterval)
+            heartbeatInterval = null
+          }
+          
+          if (reconnectAttempts < maxReconnectAttempts && isActive) {
+            reconnectAttempts++
+            reconnectTimeout = setTimeout(() => {
+              connect()
+            }, reconnectDelay)
+          }
+        }
+      } catch (error) {
+        console.error('[LiveLogs] WebSocket connection error:', error)
       }
     }
     
-    eventSource.onerror = (error) => {
-      console.error('[LiveLogs] SSE connection error:', error)
-      eventSource.close()
-    }
+    connect()
     
     return () => {
-      eventSource.close()
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout)
+      }
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval)
+      }
+      if (ws) {
+        ws.close()
+      }
     }
-  }, [])
+  }, [scanId, isActive])
 
   useEffect(() => {
     if (autoScroll && logsEndRef.current) {

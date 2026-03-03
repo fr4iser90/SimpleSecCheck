@@ -7,7 +7,7 @@ import json
 import asyncio
 import re
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 from app.services import (
     update_activity,
@@ -19,6 +19,7 @@ from app.services import (
 from app.services.ai_prompt_service import collect_findings_from_results, generate_ai_prompt
 from app.services.queue_service import get_queue_service
 from app.services.session_service import get_session_service
+from app.services.websocket_manager import get_websocket_manager
 
 router = APIRouter()
 
@@ -256,159 +257,139 @@ async def get_report():
     )
 
 
-@router.get("/api/scan/stream")
-async def stream_scan_updates(http_request: Request, scan_id: str = None):
+@router.websocket("/api/scan/stream")
+async def websocket_scan_updates(websocket: WebSocket, scan_id: str = None):
     """
-    SSE endpoint for real-time scan updates (steps ONLY, NO logs)
+    WebSocket endpoint for real-time scan updates (steps ONLY, NO logs)
+    Hybrid approach: Log file for persistence + direct WebSocket for real-time
     
     IMPORTANT: scan_id parameter is IGNORED if it's a UUID (queue_id).
     Always gets real scan_id (timestamp) from queue to find logs directory.
     """
+    await websocket.accept()
     update_activity()
     
-    async def event_generator():
-        last_step_count = -1  # Start at -1 to always send initial data
-        first_iteration = True
-        
-        # Check if scan_id parameter is a UUID (queue_id) - if so, ignore it
+    ws_manager = get_websocket_manager()
+    actual_scan_id = None
+    
+    try:
+        # Check if scan_id parameter is a UUID (queue_id) - if so, get scan_id from queue
         is_uuid = False
         if scan_id:
             uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
             is_uuid = bool(re.match(uuid_pattern, scan_id, re.IGNORECASE))
-            if is_uuid:
-                print(f"[SSE Stream] Ignoring UUID parameter (queue_id): {scan_id}, will get scan_id from queue")
         
-        # ALWAYS get scan_id (timestamp) from queue, NEVER use UUID parameter
-        actual_scan_id = None
-        
-        if not http_request:
-            print(f"[SSE Stream] Error: No request provided")
-            yield f"data: {json.dumps({'error': 'No request provided'})}\n\n"
-            return
-        
-        session_id = getattr(http_request.state, "session_id", None)
-        if not session_id:
-            print(f"[SSE Stream] Error: No session_id")
-            yield f"data: {json.dumps({'error': 'No session_id'})}\n\n"
-            return
-        
-        queue_service = await get_queue_service()
-        user_scans = await queue_service.get_user_queue(session_id)
-        
-        if not user_scans:
-            print(f"[SSE Stream] Error: No scans found for session {session_id}")
-            yield f"data: {json.dumps({'error': 'No scans found'})}\n\n"
-            return
-        
-        latest_scan = sorted(user_scans, key=lambda x: x.get("created_at", ""), reverse=True)[0]
-        actual_scan_id = latest_scan.get("scan_id")
-        queue_id_from_scan = latest_scan.get("queue_id")
-        
-        print(f"[SSE Stream] Latest scan: queue_id={queue_id_from_scan}, scan_id={actual_scan_id}, status={latest_scan.get('status')}")
+        if is_uuid:
+            # scan_id is actually a queue_id (UUID), get scan_id (timestamp) from queue
+            print(f"[WebSocket] Parameter is UUID (queue_id): {scan_id}, getting scan_id from queue")
+            queue_service = await get_queue_service()
+            queue_item = await queue_service.get_queue_status(scan_id)
+            
+            if not queue_item:
+                print(f"[WebSocket] Error: Queue item not found for queue_id={scan_id}")
+                await websocket.send_json({"error": "Queue item not found"})
+                await websocket.close()
+                return
+            
+            actual_scan_id = queue_item.get("scan_id")
+            print(f"[WebSocket] Found queue item: queue_id={scan_id}, scan_id={actual_scan_id}, status={queue_item.get('status')}")
+            
+            if not actual_scan_id:
+                print(f"[WebSocket] Warning: scan_id not set yet for queue_id={scan_id}, scan not started")
+                await websocket.send_json({"error": "Scan not started yet (scan_id not set)"})
+                await websocket.close()
+                return
+        else:
+            # scan_id is already a timestamp, use it directly
+            actual_scan_id = scan_id
+            print(f"[WebSocket] Using scan_id parameter directly (timestamp): {actual_scan_id}")
         
         if not actual_scan_id:
-            print(f"[SSE Stream] Warning: scan_id not set yet for queue_id={queue_id_from_scan}, scan not started")
-            yield f"data: {json.dumps({'error': 'Scan not started yet (scan_id not set)'})}\n\n"
+            await websocket.send_json({"error": "No scan_id provided or invalid"})
+            await websocket.close()
             return
         
-        print(f"[SSE Stream] Using scan_id (timestamp): {actual_scan_id} to find logs directory")
+        print(f"[WebSocket] Connecting: scan_id={actual_scan_id}")
         
-        if not actual_scan_id:
-            yield f"data: {json.dumps({'error': 'No active scan found'})}\n\n"
-            return
+        # Connect to WebSocket manager
+        await ws_manager.connect(websocket, actual_scan_id)
         
-        # Find steps.log file ONCE (not in every loop iteration)
+        # Send initial steps from log file (Recovery: if user reconnects)
         steps_log_file = None
         if RESULTS_DIR and RESULTS_DIR.exists():
             for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
                 if scan_dir.is_dir() and actual_scan_id in scan_dir.name:
                     steps_log_file = scan_dir / "logs" / "steps.log"
-                    print(f"[SSE Stream] Using scan_id (timestamp): {actual_scan_id} to find logs directory")
-                    print(f"[SSE Stream] Found steps.log: {steps_log_file}")
                     break
-            if not steps_log_file:
-                print(f"[SSE Stream] Warning: No directory found with scan_id={actual_scan_id} in {RESULTS_DIR}")
-        else:
-            print(f"[SSE Stream] Error: RESULTS_DIR not available or doesn't exist: {RESULTS_DIR}")
         
+        if steps_log_file and steps_log_file.exists():
+            steps = []
+            step_map = {}
+            
+            with open(steps_log_file, "r", encoding="utf-8", errors="ignore") as f:
+                step_lines = [line.strip() for line in f.readlines() if line.strip() and not line.strip().startswith("-----")]
+            
+            for line in step_lines:
+                step_match = re.match(r'([⏳✓❌]?)\s*Step\s+(\d+):\s*(.+)', line, re.IGNORECASE)
+                if step_match:
+                    status_icon, step_num_str, message = step_match.groups()
+                    step_number = int(step_num_str)
+                    
+                    status = 'pending'
+                    if status_icon == '✓':
+                        status = 'completed'
+                    elif status_icon == '⏳':
+                        status = 'running'
+                    elif status_icon == '❌':
+                        status = 'failed'
+                    
+                    name_match = re.match(r'^(.+?)(?:\s+\.\.\.|\s+completed|$)', message, re.IGNORECASE)
+                    step_name = name_match.group(1).strip() if name_match else message.strip()
+                    
+                    if step_number not in step_map:
+                        step_map[step_number] = {
+                            "number": step_number,
+                            "name": step_name,
+                            "status": status,
+                            "message": message.strip()
+                        }
+                    else:
+                        step_map[step_number]["status"] = status
+                        step_map[step_number]["message"] = message.strip()
+            
+            steps = sorted(step_map.values(), key=lambda x: x["number"])
+            
+            # Send initial steps
+            await websocket.send_json({
+                "type": "initial_steps",
+                "steps": steps,
+                "scan_id": actual_scan_id,
+                "timestamp": asyncio.get_event_loop().time()
+            })
+        
+        # Keep connection alive and wait for updates from WebSocket manager
+        # The manager will send updates directly when scanner_worker writes steps
         while True:
-            # Check if client disconnected
-            if await http_request.is_disconnected() if http_request else False:
+            # Heartbeat: wait for ping or timeout
+            try:
+                # Wait for ping from client (or timeout after 30 seconds)
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                # Echo ping as pong
+                if data == "ping":
+                    await websocket.send_json({"type": "pong"})
+            except asyncio.TimeoutError:
+                # Send heartbeat
+                await websocket.send_json({"type": "heartbeat"})
+            except WebSocketDisconnect:
                 break
             
-            try:
-                steps = []
-                step_map = {}
-                
-                # Read steps from steps.log
-                if steps_log_file and steps_log_file.exists():
-                    with open(steps_log_file, "r", encoding="utf-8", errors="ignore") as f:
-                        step_lines = [line.strip() for line in f.readlines() if line.strip() and not line.strip().startswith("-----")]
-                    
-                    for line in step_lines:
-                        step_match = re.match(r'([⏳✓❌]?)\s*Step\s+(\d+):\s*(.+)', line, re.IGNORECASE)
-                        if step_match:
-                            status_icon, step_num_str, message = step_match.groups()
-                            step_number = int(step_num_str)
-                            
-                            status = 'pending'
-                            if status_icon == '✓':
-                                status = 'completed'
-                            elif status_icon == '⏳':
-                                status = 'running'
-                            elif status_icon == '❌':
-                                status = 'failed'
-                            
-                            name_match = re.match(r'^(.+?)(?:\s+\.\.\.|\s+completed|$)', message, re.IGNORECASE)
-                            step_name = name_match.group(1).strip() if name_match else message.strip()
-                            
-                            if step_number not in step_map:
-                                step_map[step_number] = {
-                                    "number": step_number,
-                                    "name": step_name,
-                                    "status": status,
-                                    "message": message.strip()
-                                }
-                            else:
-                                # Update existing step
-                                step_map[step_number]["status"] = status
-                                step_map[step_number]["message"] = message.strip()
-                
-                steps = sorted(step_map.values(), key=lambda x: x["number"])
-                
-                current_step_count = len(steps)
-                
-                # Send initial steps on first iteration OR when new steps are added
-                if first_iteration or current_step_count > last_step_count:
-                    data = {
-                        "logs": [],
-                        "steps": steps,
-                        "scan_id": actual_scan_id,
-                        "timestamp": asyncio.get_event_loop().time()
-                    }
-                    
-                    yield f"data: {json.dumps(data)}\n\n"
-                    
-                    last_step_count = current_step_count
-                    first_iteration = False
-                
-                # Check if scan is done (no new updates for 5 seconds)
-                # This is a simple heuristic - in production you might want to check queue status
-                await asyncio.sleep(0.5)  # Check every 500ms
-                
-            except Exception as e:
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
-                await asyncio.sleep(1)  # Wait before retrying
-    
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"  # Disable nginx buffering
-        }
-    )
+    except WebSocketDisconnect:
+        print(f"[WebSocket] Client disconnected: scan_id={actual_scan_id}")
+    except Exception as e:
+        print(f"[WebSocket] Error: {e}")
+    finally:
+        if actual_scan_id:
+            await ws_manager.disconnect(websocket, actual_scan_id)
 
 
 @router.get("/api/scan/ai-prompt")

@@ -91,7 +91,7 @@ class ScannerWorker:
                             if started_at.tzinfo:
                                 started_at = started_at.replace(tzinfo=None)
                             age_minutes = (datetime.utcnow() - started_at).total_seconds() / 60
-                            if age_minutes > 5:  # Stuck if older than 5 minutes
+                            if age_minutes > 2:  # Stuck if older than 2 minutes (reduced from 5 for faster recovery)
                                 stuck_jobs.append(job)
                         except (ValueError, AttributeError) as e:
                             print(f"[Scanner Worker] Error parsing started_at for job {queue_id}: {e}")
@@ -108,7 +108,7 @@ class ScannerWorker:
                                 if created_at.tzinfo:
                                     created_at = created_at.replace(tzinfo=None)
                                 age_minutes = (datetime.utcnow() - created_at).total_seconds() / 60
-                                if age_minutes > 5:  # Stuck if older than 5 minutes
+                                if age_minutes > 2:  # Stuck if older than 2 minutes (reduced from 5 for faster recovery)
                                     stuck_jobs.append(job)
                             except (ValueError, AttributeError) as e:
                                 print(f"[Scanner Worker] Error parsing created_at for job {queue_id}: {e}")
@@ -136,9 +136,9 @@ class ScannerWorker:
         print("[Scanner Worker] Worker loop started and running")
         while self.is_running:
             try:
-                # Check for stuck jobs every 30 seconds
+                # Check for stuck jobs every 15 seconds (more frequent for faster recovery)
                 current_time = time.time()
-                if current_time - last_stuck_check >= 30:
+                if current_time - last_stuck_check >= 15:
                     await self._check_and_reset_stuck_jobs()
                     last_stuck_check = current_time
                 
@@ -423,6 +423,72 @@ class ScannerWorker:
             step_line = extract_steps_for_frontend(line_str, current_scan, results_dir_path_obj)
             if step_line:
                 print(f"[Scanner Worker] [Step] {step_line}")
+                
+                # Send step update directly to WebSocket clients (Hybrid: File + WebSocket)
+                # Use asyncio.create_task to send async from sync callback
+                try:
+                    import asyncio
+                    from app.services.websocket_manager import get_websocket_manager
+                    
+                    async def send_websocket_update():
+                        try:
+                            ws_manager = get_websocket_manager()
+                            
+                            # Parse step from step_line to send structured data
+                            import re
+                            step_match = re.match(r'([⏳✓❌]?)\s*Step\s+(\d+):\s*(.+)', step_line, re.IGNORECASE)
+                            if step_match:
+                                status_icon, step_num_str, message = step_match.groups()
+                                step_number = int(step_num_str)
+                                
+                                status = 'pending'
+                                if status_icon == '✓':
+                                    status = 'completed'
+                                elif status_icon == '⏳':
+                                    status = 'running'
+                                elif status_icon == '❌':
+                                    status = 'failed'
+                                
+                                name_match = re.match(r'^(.+?)(?:\s+\.\.\.|\s+completed|$)', message, re.IGNORECASE)
+                                step_name = name_match.group(1).strip() if name_match else message.strip()
+                                
+                                # Build current steps list from current_scan
+                                steps = []
+                                step_names = current_scan.get("step_names", {})
+                                for name, num in sorted(step_names.items(), key=lambda x: x[1]):
+                                    # Determine status for each step
+                                    step_status = 'pending'
+                                    if name in step_names:
+                                        # Check if this is the current step
+                                        if num == step_number:
+                                            step_status = status
+                                        elif num < step_number:
+                                            step_status = 'completed'
+                                    
+                                    steps.append({
+                                        "number": num,
+                                        "name": name,
+                                        "status": step_status,
+                                        "message": f"Step {num}: {name}"
+                                    })
+                                
+                                # Send update to WebSocket clients
+                                await ws_manager.send_step_update(scan_id, {"steps": steps})
+                        except Exception as e:
+                            print(f"[Scanner Worker] Error sending to WebSocket: {e}")
+                    
+                    # Schedule async task (runs in background)
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            asyncio.create_task(send_websocket_update())
+                        else:
+                            loop.run_until_complete(send_websocket_update())
+                    except RuntimeError:
+                        # No event loop, skip WebSocket update
+                        pass
+                except Exception as e:
+                    print(f"[Scanner Worker] Error scheduling WebSocket update: {e}")
         
         # Execute scan using docker_runner
         print(f"[Scanner Worker] Starting scan: {scan_id} for {repository_url}")

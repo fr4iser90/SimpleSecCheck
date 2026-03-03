@@ -19,38 +19,100 @@ export default function StepsSidebar({ isOpen, onClose }: StepsSidebarProps) {
   useEffect(() => {
     if (!isOpen) return
 
-    // Use SSE instead of polling for real-time updates
-    const eventSource = new EventSource('/api/scan/stream')
+    // Get scan_id from URL or props (for now, we'll need to pass it)
+    // For simplicity, we'll use the same approach as ScanView
+    const urlParams = new URLSearchParams(window.location.search)
+    const scanId = urlParams.get('scan_id') || undefined
     
-    eventSource.onmessage = (e) => {
+    if (!scanId) {
+      setLoading(false)
+      return
+    }
+
+    let ws: WebSocket | null = null
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null
+    let reconnectAttempts = 0
+    const maxReconnectAttempts = 10
+    const reconnectDelay = 3000
+    
+    const connect = () => {
       try {
-        const data = JSON.parse(e.data)
+        const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/scan/stream?scan_id=${scanId}`
+        ws = new WebSocket(wsUrl)
         
-        if (data.error) {
-          console.error('[StepsSidebar] SSE error:', data.error)
-          setLoading(false)
-          return
+        ws.onopen = () => {
+          console.log('[StepsSidebar] WebSocket connected')
+          reconnectAttempts = 0
+          
+          heartbeatInterval = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send('ping')
+            }
+          }, 25000)
         }
         
-        // Update steps from SSE data (already parsed by backend)
-        if (data.steps && Array.isArray(data.steps)) {
-          setSteps(data.steps)
+        ws.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data)
+            
+            if (data.error) {
+              console.error('[StepsSidebar] WebSocket error:', data.error)
+              setLoading(false)
+              return
+            }
+            
+            // Update steps from WebSocket data
+            if (data.steps && Array.isArray(data.steps)) {
+              setSteps(data.steps)
+              setLoading(false)
+            }
+          } catch (error) {
+            console.error('[StepsSidebar] Failed to parse WebSocket data:', error)
+            setLoading(false)
+          }
+        }
+        
+        ws.onerror = (error) => {
+          console.error('[StepsSidebar] WebSocket error:', error)
           setLoading(false)
+        }
+        
+        ws.onclose = () => {
+          console.log('[StepsSidebar] WebSocket closed')
+          
+          if (heartbeatInterval) {
+            clearInterval(heartbeatInterval)
+            heartbeatInterval = null
+          }
+          
+          if (reconnectAttempts < maxReconnectAttempts && isOpen) {
+            reconnectAttempts++
+            reconnectTimeout = setTimeout(() => {
+              connect()
+            }, reconnectDelay)
+          } else {
+            setLoading(false)
+          }
         }
       } catch (error) {
-        console.error('[StepsSidebar] Failed to parse SSE data:', error)
+        console.error('[StepsSidebar] WebSocket connection error:', error)
         setLoading(false)
       }
     }
     
-    eventSource.onerror = (error) => {
-      console.error('[StepsSidebar] SSE connection error:', error)
-      setLoading(false)
-      eventSource.close()
-    }
+    connect()
     
     return () => {
-      eventSource.close()
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout)
+      }
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval)
+      }
+      if (ws) {
+        ws.close()
+      }
     }
   }, [isOpen])
 

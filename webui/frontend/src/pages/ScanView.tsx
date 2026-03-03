@@ -124,43 +124,101 @@ export default function ScanView() {
     }
   }, [status.status, status.scan_id])
 
-  // SSE: Real-time scan updates (steps and logs)
+  // WebSocket: Real-time scan updates (steps and logs)
   useEffect(() => {
     if (status.status === 'running' && status.scan_id) {
-      // Use SSE instead of polling for real-time updates
-      const eventSource = new EventSource(`/api/scan/stream?scan_id=${status.scan_id}`)
+      let ws: WebSocket | null = null
+      let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+      let heartbeatInterval: ReturnType<typeof setInterval> | null = null
+      let reconnectAttempts = 0
+      const maxReconnectAttempts = 10
+      const reconnectDelay = 3000 // 3 seconds
       
-      eventSource.onmessage = (e) => {
+      const connect = () => {
         try {
-          const data = JSON.parse(e.data)
+          // Convert HTTP to WebSocket URL
+          const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/scan/stream?scan_id=${status.scan_id}`
+          ws = new WebSocket(wsUrl)
           
-          if (data.error) {
-            console.error('[ScanView] SSE error:', data.error)
-            return
+          ws.onopen = () => {
+            console.log('[ScanView] WebSocket connected')
+            reconnectAttempts = 0
+            
+            // Send ping every 25 seconds to keep connection alive
+            heartbeatInterval = setInterval(() => {
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send('ping')
+              }
+            }, 25000)
           }
           
-          // Update steps from SSE data
-          if (data.steps && Array.isArray(data.steps)) {
-            setSteps(data.steps)
+          ws.onmessage = (e) => {
+            try {
+              const data = JSON.parse(e.data)
+              
+              if (data.error) {
+                console.error('[ScanView] WebSocket error:', data.error)
+                return
+              }
+              
+              // Handle different message types
+              if (data.type === 'initial_steps' || data.type === 'step_update') {
+                // Update steps from WebSocket data
+                if (data.steps && Array.isArray(data.steps)) {
+                  setSteps(data.steps)
+                }
+              } else if (data.type === 'pong' || data.type === 'heartbeat') {
+                // Heartbeat response, do nothing
+                return
+              }
+            } catch (error) {
+              console.error('[ScanView] Failed to parse WebSocket data:', error)
+            }
           }
           
-          // Update logs if needed (for future use)
-          if (data.logs && Array.isArray(data.logs)) {
-            // Logs are available but not currently displayed in ScanView
-            // Could be used for LiveLogs component
+          ws.onerror = (error) => {
+            console.error('[ScanView] WebSocket error:', error)
+          }
+          
+          ws.onclose = () => {
+            console.log('[ScanView] WebSocket closed')
+            
+            // Clear heartbeat
+            if (heartbeatInterval) {
+              clearInterval(heartbeatInterval)
+              heartbeatInterval = null
+            }
+            
+            // Reconnect if not manually closed and within max attempts
+            if (reconnectAttempts < maxReconnectAttempts && status.status === 'running') {
+              reconnectAttempts++
+              console.log(`[ScanView] Reconnecting in ${reconnectDelay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`)
+              reconnectTimeout = setTimeout(() => {
+                connect()
+              }, reconnectDelay)
+            } else if (reconnectAttempts >= maxReconnectAttempts) {
+              console.error('[ScanView] Max reconnection attempts reached')
+            }
           }
         } catch (error) {
-          console.error('[ScanView] Failed to parse SSE data:', error)
+          console.error('[ScanView] WebSocket connection error:', error)
         }
       }
       
-      eventSource.onerror = (error) => {
-        console.error('[ScanView] SSE connection error:', error)
-        eventSource.close()
-      }
+      // Initial connection
+      connect()
       
       return () => {
-        eventSource.close()
+        // Cleanup
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout)
+        }
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval)
+        }
+        if (ws) {
+          ws.close()
+        }
       }
     }
   }, [status.status, status.scan_id])
@@ -414,7 +472,7 @@ export default function ScanView() {
           borderRadius: '8px',
           padding: '1.5rem',
         }}>
-          <LiveLogs />
+          <LiveLogs scanId={status.scan_id || undefined} isActive={status.status === 'running'} />
         </div>
 
         {/* Action Buttons */}
@@ -644,7 +702,7 @@ export default function ScanView() {
                   padding: '1.5rem',
                 }}
               >
-                <LiveLogs />
+                <LiveLogs scanId={status.scan_id || undefined} isActive={!!status.scan_id} />
               </div>
             </div>
           </>
