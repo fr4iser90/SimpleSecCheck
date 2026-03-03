@@ -214,44 +214,30 @@ export default function Header() {
           </button>
         )}
       </div>
-      <nav style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-        <Link to="/" style={{ color: 'inherit', textDecoration: 'none' }}>
-          Home
+      <nav className="nav-links">
+        <Link to="/" className="nav-pill nav-pill-primary">
+          New Scan
         </Link>
         {!config?.is_production && (
-          <Link to="/results" style={{ color: 'inherit', textDecoration: 'none' }}>
+          <Link to="/results" className="nav-pill">
             Results
           </Link>
         )}
         {config?.features.queue_enabled && (
           <>
-            <Link to="/queue" style={{ color: 'inherit', textDecoration: 'none' }}>
+            <Link to="/queue" className="nav-pill">
               Queue
             </Link>
-            <Link to="/my-scans" style={{ color: 'inherit', textDecoration: 'none' }}>
+            <Link to="/my-scans" className="nav-pill">
               My Scans
             </Link>
           </>
         )}
         {config?.is_production && (
-          <Link to="/statistics" style={{ color: 'inherit', textDecoration: 'none' }}>
+          <Link to="/statistics" className="nav-pill">
             Statistics
           </Link>
         )}
-        <button
-          onClick={() => navigate('/')}
-          style={{
-            background: 'var(--glass-bg-dark)',
-            border: '1px solid var(--glass-border-dark)',
-            borderRadius: '8px',
-            color: 'var(--text-dark)',
-            padding: '0.5rem 1rem',
-            cursor: 'pointer',
-            fontSize: '0.9rem',
-          }}
-        >
-          New Scan
-        </button>
         <a
           href="https://coff.ee/fr4iser"
           target="_blank"
