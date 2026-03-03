@@ -433,7 +433,7 @@ class ScanOrchestrator:
         # Register Initialization
         if "Initialization" not in self.step_registry.steps:
             self.step_registry.step_counter += 1
-            self.step_registry.steps["Initialization"] = Step(
+            init_step = Step(
                 number=self.step_registry.step_counter,
                 name="Initialization",
                 status=StepStatus.PENDING,
@@ -441,14 +441,14 @@ class ScanOrchestrator:
                 started_at=None,
                 completed_at=None
             )
-            log_line = f"⊘ Step {self.step_registry.step_counter}: Initialization (pending)"
-            self.step_registry._write_to_log(log_line)
+            self.step_registry.steps["Initialization"] = init_step
+            self.step_registry._write_to_log(init_step)
         
         # Register all scanner steps (or selected ones)
         for scanner in scanners:
             if scanner.name not in self.step_registry.steps:
                 self.step_registry.step_counter += 1
-                self.step_registry.steps[scanner.name] = Step(
+                scanner_step = Step(
                     number=self.step_registry.step_counter,
                     name=scanner.name,
                     status=StepStatus.PENDING,
@@ -456,13 +456,13 @@ class ScanOrchestrator:
                     started_at=None,
                     completed_at=None
                 )
-                log_line = f"⊘ Step {self.step_registry.step_counter}: {scanner.name} (pending)"
-                self.step_registry._write_to_log(log_line)
+                self.step_registry.steps[scanner.name] = scanner_step
+                self.step_registry._write_to_log(scanner_step)
         
         # Register Metadata Collection (if enabled)
         if self.collect_metadata and "Metadata Collection" not in self.step_registry.steps:
             self.step_registry.step_counter += 1
-            self.step_registry.steps["Metadata Collection"] = Step(
+            metadata_step = Step(
                 number=self.step_registry.step_counter,
                 name="Metadata Collection",
                 status=StepStatus.PENDING,
@@ -470,13 +470,13 @@ class ScanOrchestrator:
                 started_at=None,
                 completed_at=None
             )
-            log_line = f"⊘ Step {self.step_registry.step_counter}: Metadata Collection (pending)"
-            self.step_registry._write_to_log(log_line)
+            self.step_registry.steps["Metadata Collection"] = metadata_step
+            self.step_registry._write_to_log(metadata_step)
         
         # Register Completion
         if "Completion" not in self.step_registry.steps:
             self.step_registry.step_counter += 1
-            self.step_registry.steps["Completion"] = Step(
+            completion_step = Step(
                 number=self.step_registry.step_counter,
                 name="Completion",
                 status=StepStatus.PENDING,
@@ -484,8 +484,8 @@ class ScanOrchestrator:
                 started_at=None,
                 completed_at=None
             )
-            log_line = f"⊘ Step {self.step_registry.step_counter}: Completion (pending)"
-            self.step_registry._write_to_log(log_line)
+            self.step_registry.steps["Completion"] = completion_step
+            self.step_registry._write_to_log(completion_step)
         
         # Send initial update to frontend with all steps
         asyncio.create_task(self.step_registry._send_update())

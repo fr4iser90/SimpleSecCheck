@@ -178,8 +178,7 @@ class StepRegistry:
         
         # Write to steps.log
         step = self.steps[step_name]
-        log_line = f"⊘ Step {step.number}: {step.message}"
-        self._write_to_log(log_line)
+        self._write_to_log(step)
         
         # Send WebSocket update
         asyncio.create_task(self._send_update())
