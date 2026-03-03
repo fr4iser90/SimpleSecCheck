@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useConfig } from '../hooks/useConfig'
 
 interface ScanStatusData {
@@ -23,7 +23,6 @@ interface ShutdownStatus {
 }
 
 export default function Header() {
-  const navigate = useNavigate()
   const { config } = useConfig()
   const [scanStatus, setScanStatus] = useState<ScanStatusData>({
     status: 'idle',
