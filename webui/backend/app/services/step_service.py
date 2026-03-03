@@ -1,27 +1,26 @@
 """
 Step Service
-Handles step extraction and logging for frontend display
+Modern approach: Reads steps.log directly (written by Step Registry)
+No more log parsing - Step Registry handles all step tracking!
 """
 import re
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict
 
 
 def initialize_step_tracking(current_scan: dict) -> None:
-    """Initialize step tracking structures - STRAIGHT FORWARD"""
+    """Initialize step tracking structures - kept for compatibility"""
     current_scan["process_output_lock"] = threading.Lock()
     current_scan["step_counter"] = 0
     current_scan["step_names"] = {}
 
 
 def reset_step_tracking(current_scan: dict, preserve_git_clone: bool = False) -> None:
-    """Reset step tracking - STRAIGHT FORWARD"""
+    """Reset step tracking - kept for compatibility"""
     if preserve_git_clone and "Git Clone" in current_scan.get("step_names", {}):
-        # Git Clone is Step 1, keep it, next step will be 2
         git_clone_num = current_scan["step_names"]["Git Clone"]
         current_scan["step_counter"] = git_clone_num
-        # Keep only Git Clone in step_names
         git_clone_name = "Git Clone"
         current_scan["step_names"] = {git_clone_name: git_clone_num}
     else:
@@ -30,7 +29,7 @@ def reset_step_tracking(current_scan: dict, preserve_git_clone: bool = False) ->
 
 
 def register_step(step_name: str, current_scan: dict) -> int:
-    """Register a new step and return its step number - STRAIGHT FORWARD"""
+    """Register a new step - kept for compatibility"""
     lock = current_scan["process_output_lock"]
     with lock:
         if step_name not in current_scan["step_names"]:
@@ -40,53 +39,42 @@ def register_step(step_name: str, current_scan: dict) -> int:
 
 
 def log_step(step_name: str, step_message: str, current_scan: dict, results_dir: Path, scan_id: str) -> None:
-    """Log a step message - STRAIGHT FORWARD"""
+    """Log a step message - kept for compatibility (Git Clone, etc.)"""
     step_num = current_scan["step_names"].get(step_name)
     if step_num:
         write_step_to_log(step_message, scan_id, current_scan, results_dir)
 
 
 def derive_project_name(target: str) -> str:
-    """Derive PROJECT_NAME from target (same logic as run-docker.sh line 114)"""
+    """Derive PROJECT_NAME from target"""
     import os
     if not target:
         return "scan"
     
     if target.startswith(("http://", "https://")):
         if "github.com" in target or "gitlab.com" in target:
-            # Git URL: extract repo name
             parts = target.rstrip("/").split("/")
             return parts[-1].replace(".git", "") if len(parts) >= 2 else "scan"
         else:
-            # Website URL: extract domain
             domain = target.replace("http://", "").replace("https://", "").split("/")[0].split(":")[0]
             return domain or "scan"
     else:
-        # Local path: use basename
         return os.path.basename(target.rstrip("/")) or "target"
 
 
 def initialize_steps_log(scan_id: str, results_dir_path: str, current_scan: dict, target: str) -> None:
     """
     Initialize steps.log file for a new scan.
-    STRAIGHT FORWARD: Create directory, create steps.log, done.
-    
-    Args:
-        scan_id: Scan identifier
-        results_dir_path: Full path to scan results directory (e.g., "/app/results/PROJECT_SCAN_ID")
-        current_scan: Current scan dictionary
-        target: Target URL/path being scanned
+    Step Registry will take over from here!
     """
-    # results_dir_path is already the full path from get_results_dir_for_scan()
     scan_dir = Path(results_dir_path)
     scan_dir.mkdir(parents=True, exist_ok=True)
     (scan_dir / "logs").mkdir(parents=True, exist_ok=True)
     
-    # Store in current_scan
     current_scan["results_dir"] = str(scan_dir)
     print(f"[Step Service] Created scan directory: {scan_dir}")
     
-    # Create/clear steps.log
+    # Create/clear steps.log (Step Registry will write to it)
     steps_log = scan_dir / "logs" / "steps.log"
     from datetime import datetime
     with open(steps_log, "w", encoding="utf-8") as f:
@@ -94,173 +82,91 @@ def initialize_steps_log(scan_id: str, results_dir_path: str, current_scan: dict
 
 
 def write_step_to_log(step_line: str, scan_id: str, current_scan: dict, results_dir: Path):
-    """Write step to steps.log file - STRAIGHT FORWARD"""
+    """Write step to steps.log file - kept for compatibility (Git Clone, etc.)"""
     results_dir_path = current_scan.get("results_dir")
     
-    # results_dir MUST be set by initialize_steps_log() - no fallbacks!
     if not results_dir_path:
-        return  # Skip if not initialized
+        return
     
     steps_log = Path(results_dir_path) / "logs" / "steps.log"
     with open(steps_log, "a", encoding="utf-8") as f:
         f.write(f"{step_line}\n")
 
 
-def extract_steps_for_frontend(line: str, current_scan: dict, results_dir: Path) -> Optional[str]:
+def read_steps_from_log(results_dir: Path) -> List[Dict[str, any]]:
     """
-    Extract ONLY steps from log lines for frontend.
-    Returns formatted step line if it's a step, None otherwise.
-    Backend logs everything - this is ONLY for frontend display.
-    Also writes steps to steps.log file.
+    Read steps from steps.log file (written by Step Registry)
+    
+    Args:
+        results_dir: Path to scan results directory
+    
+    Returns:
+        List of step dictionaries
     """
-    # Remove ANSI color codes
-    clean_line = re.sub(r'\x1b\[[0-9;]*m', '', line).strip()
-    if not clean_line:
-        return None
+    steps_log = results_dir / "logs" / "steps.log"
     
-    formatted_line = None
+    if not steps_log.exists():
+        return []
     
-    # Initialization messages (Step 1 or Step 2 if Git Clone exists)
-    if not formatted_line:
-        if re.search(r'SimpleSecCheck.*Scan.*Started|Orchestrator script started', clean_line, re.IGNORECASE):
-            with current_scan["process_output_lock"]:
-                if "Initialization" not in current_scan["step_names"]:
-                    # If Git Clone already exists as Step 1, make Initialization Step 2
-                    if "Git Clone" in current_scan.get("step_names", {}):
-                        current_scan["step_counter"] += 1
-                        step_num = current_scan["step_counter"]
+    steps = []
+    step_map = {}  # {step_number: step_dict}
+    
+    try:
+        with open(steps_log, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("-----"):
+                    continue
+                
+                # Parse step line: "⏳ Step 1: Running Semgrep scan..."
+                # Format: [icon] Step [number]: [message]
+                step_match = re.match(r'([⏳✓❌⊘]?)\s*Step\s+(\d+):\s*(.+)', line, re.IGNORECASE)
+                if step_match:
+                    status_icon, step_num_str, message = step_match.groups()
+                    step_number = int(step_num_str)
+                    
+                    # Determine status from icon
+                    status = 'pending'
+                    if status_icon == '✓':
+                        status = 'completed'
+                    elif status_icon == '⏳':
+                        status = 'running'
+                    elif status_icon == '❌':
+                        status = 'failed'
+                    elif status_icon == '⊘':
+                        status = 'skipped'
+                    
+                    # Extract step name from message
+                    # Examples: "Running Semgrep scan..." -> "Semgrep"
+                    #           "Semgrep scan completed" -> "Semgrep"
+                    name_match = re.match(r'^(.+?)(?:\s+scan|\s+\.\.\.|\s+completed|\s+failed|\s+skipped|$)', message, re.IGNORECASE)
+                    step_name = name_match.group(1).strip() if name_match else message.strip()
+                    
+                    # Update or create step
+                    if step_number not in step_map:
+                        step_map[step_number] = {
+                            "number": step_number,
+                            "name": step_name,
+                            "status": status,
+                            "message": message.strip()
+                        }
                     else:
-                        current_scan["step_counter"] = 1
-                        step_num = 1
-                    current_scan["step_names"]["Initialization"] = step_num
-                    formatted_line = f"✓ Step {step_num}: Initializing scan..."
+                        # Update existing step (status might change)
+                        step_map[step_number]["status"] = status
+                        step_map[step_number]["message"] = message.strip()
+                        # Update name if it's more specific
+                        if len(step_name) > len(step_map[step_number]["name"]):
+                            step_map[step_number]["name"] = step_name
+        
+        # Convert to sorted list
+        steps = sorted(step_map.values(), key=lambda s: s["number"])
+        
+    except Exception as e:
+        print(f"[Step Service] Error reading steps.log: {e}")
     
-    # Extract scan steps from orchestrator messages
-    # Pattern: "--- Orchestrating X Scan ---" (only log when starting, not when finishing)
-    if not formatted_line:
-        orchestrating_match = re.search(r'---\s*Orchestrating\s+(.+?)\s+Scan\s+---', clean_line, re.IGNORECASE)
-        if orchestrating_match:
-            tool_name = orchestrating_match.group(1).strip()
-            with current_scan["process_output_lock"]:
-                # Only create step if not already seen
-                if tool_name not in current_scan["step_names"]:
-                    current_scan["step_counter"] += 1
-                    current_scan["step_names"][tool_name] = current_scan["step_counter"]
-                step_num = current_scan["step_names"][tool_name]
-                formatted_line = f"⏳ Step {step_num}: Running {tool_name} scan..."
-    
-    # Pattern: "--- X Scan Orchestration Finished ---" (log completion)
-    if not formatted_line:
-        finished_match = re.search(r'---\s*(.+?)\s+Scan\s+Orchestration\s+Finished\s+---', clean_line, re.IGNORECASE)
-        if finished_match:
-            tool_name = finished_match.group(1).strip()
-            with current_scan["process_output_lock"]:
-                # Get step number (should already exist from "Orchestrating" message)
-                step_num = current_scan["step_names"].get(tool_name)
-                if step_num:  # Only log if we've seen the start
-                    formatted_line = f"✓ Step {step_num}: {tool_name} scan completed"
-    
-    # OWASP Dependency Check database download (special case - can take 5-15 minutes)
-    if not formatted_line:
-        if re.search(r'Downloading vulnerability database.*may take|OWASP.*database.*not found.*Downloading', clean_line, re.IGNORECASE):
-            with current_scan["process_output_lock"]:
-                if "OWASP Database Download" not in current_scan["step_names"]:
-                    # Find OWASP step number
-                    owasp_step = current_scan["step_names"].get("OWASP Dependency Check")
-                    if owasp_step:
-                        current_scan["step_names"]["OWASP Database Download"] = owasp_step
-                        step_num = owasp_step
-                        formatted_line = f"⏳ Step {step_num}: Downloading OWASP vulnerability database (this may take 5-15 minutes)..."
-    
-    # OWASP database ready/using existing
-    if not formatted_line:
-        if re.search(r'Using existing.*OWASP.*database|OWASP.*database.*ready', clean_line, re.IGNORECASE):
-            with current_scan["process_output_lock"]:
-                if "OWASP Database Ready" not in current_scan["step_names"]:
-                    owasp_step = current_scan["step_names"].get("OWASP Dependency Check")
-                    if owasp_step:
-                        current_scan["step_names"]["OWASP Database Ready"] = owasp_step
-                        formatted_line = f"✓ Step {owasp_step}: OWASP database ready"
-    
-    # Metadata collection (only if enabled)
-    if not formatted_line:
-        if re.search(r'---\s*Collecting\s+Metadata\s+---|Collecting scan metadata|Collecting.*metadata.*enabled', clean_line, re.IGNORECASE):
-            with current_scan["process_output_lock"]:
-                if "Metadata Collection" not in current_scan["step_names"]:
-                    current_scan["step_counter"] += 1
-                    current_scan["step_names"]["Metadata Collection"] = current_scan["step_counter"]
-                    step_num = current_scan["step_counter"]
-                    formatted_line = f"⏳ Step {step_num}: Collecting metadata..."
-    
-    # Metadata collection completion (only show once)
-    if not formatted_line:
-        if re.search(r'---\s*Metadata\s+Collection\s+Finished\s+---|Metadata collection.*completed|Metadata.*saved successfully|Metadata collection.*finished|Metadata.*collection.*done', clean_line, re.IGNORECASE):
-            with current_scan["process_output_lock"]:
-                step_num = current_scan["step_names"].get("Metadata Collection")
-                if step_num:
-                    # Check if already completed to avoid duplicates
-                    completed_key = "Metadata Collection_completed"
-                    if completed_key not in current_scan.get("completed_steps", set()):
-                        if "completed_steps" not in current_scan:
-                            current_scan["completed_steps"] = set()
-                        current_scan["completed_steps"].add(completed_key)
-                        formatted_line = f"✓ Step {step_num}: Metadata collection completed"
-    
-    # Report generation (only show once)
-    if not formatted_line:
-        if re.search(r'Generating.*HTML report|HTML report generation', clean_line, re.IGNORECASE):
-            with current_scan["process_output_lock"]:
-                if "Report Generation" not in current_scan["step_names"]:
-                    current_scan["step_counter"] += 1
-                    current_scan["step_names"]["Report Generation"] = current_scan["step_counter"]
-                    step_num = current_scan["step_counter"]
-                    formatted_line = f"⏳ Step {step_num}: Generating report..."
-    
-    # Report completion
-    if not formatted_line:
-        if re.search(r'Report.*generated|HTML report.*created', clean_line, re.IGNORECASE):
-            with current_scan["process_output_lock"]:
-                step_num = current_scan["step_names"].get("Report Generation")
-                if step_num:
-                    formatted_line = f"✓ Step {step_num}: Report generation completed"
-    
-    # Scan completion (only show once, must be last step)
-    if not formatted_line:
-        if re.search(r'SimpleSecCheck.*Scan.*Completed|Scan.*completed successfully', clean_line, re.IGNORECASE):
-            with current_scan["process_output_lock"]:
-                if "Completion" not in current_scan["step_names"]:
-                    current_scan["step_counter"] += 1
-                    current_scan["step_names"]["Completion"] = current_scan["step_counter"]
-                    step_num = current_scan["step_counter"]
-                    formatted_line = f"✓ Step {step_num}: Scan completed successfully"
-    
-    # Errors: Only log critical errors as steps, ignore non-critical warnings
-    # Non-critical: HTML report, webui.js, ai_prompt_modal.js (these don't affect OVERALL_SUCCESS)
-    if not formatted_line:
-        if re.search(r'\[ERROR\]|\[ORCHESTRATOR ERROR\]', clean_line, re.IGNORECASE):
-            # Ignore non-critical errors that don't affect scan success
-            non_critical_patterns = [
-                r'HTML report.*not found',
-                r'webui\.js.*not found',
-                r'ai_prompt_modal\.js.*not found',
-                r'TypeScript compilation.*failed',
-                r'project_detector\.py.*not found',
-                r'Metadata script.*not found',
-            ]
-            is_critical = True
-            for pattern in non_critical_patterns:
-                if re.search(pattern, clean_line, re.IGNORECASE):
-                    is_critical = False
-                    break
-            
-            # Only log critical errors as steps
-            if is_critical:
-                formatted_line = f"❌ {clean_line}"
-    
-    # Write to steps.log file if we found a step
-    if formatted_line:
-        scan_id = current_scan.get("scan_id")
-        if scan_id:
-            write_step_to_log(formatted_line, scan_id, current_scan, results_dir)
-    
-    return formatted_line
+    return steps
+
+
+# extract_steps_for_frontend REMOVED - Step Registry handles all step tracking now!
+# Steps are written directly by Step Registry in orchestrator.py
+# No log parsing needed - read_steps_from_log() reads structured data from steps.log

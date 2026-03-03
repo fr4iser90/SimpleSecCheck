@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from .container_service import stop_running_containers
 from .shutdown_service import schedule_shutdown, cancel_shutdown, SHUTDOWN_AFTER_SCAN, AUTO_SHUTDOWN_ENABLED, SHUTDOWN_DELAY
-from .step_service import extract_steps_for_frontend, initialize_step_tracking, reset_step_tracking, initialize_steps_log
+from .step_service import initialize_step_tracking, reset_step_tracking, initialize_steps_log
 from .git_service import is_git_url, clone_repository, cleanup_temp_repository
 
 # Central path management - ALL paths come from path_setup.py
@@ -240,8 +240,8 @@ async def start_scan(
     if request.type == "network":
         cmd.extend(["-v", "/var/run/docker.sock:/var/run/docker.sock:ro"])
     
-    # Scanner command
-    cmd.extend(["scanner", "/SimpleSecCheck/scripts/security-check.sh"])
+    # Scanner command - Use modern Python orchestrator instead of bash script
+    cmd.extend(["scanner", "python3", "-m", "scanner.core.orchestrator"])
     
     print(f"[Scan Service] Executing docker-compose command: {' '.join(cmd)}")
     
@@ -349,8 +349,8 @@ async def capture_process_output(process: subprocess.Popen, scan_id: str, curren
                 ]):
                     print(f"[Process Output] {clean_line}")
                 
-                # Extract steps for frontend (this also writes to steps.log)
-                extract_steps_for_frontend(clean_line, current_scan, results_dir)
+                # Step Registry writes directly to steps.log - no need to parse logs here
+                # Steps are read via read_steps_from_log() in WebSocket endpoint
     except Exception as e:
         print(f"[Process Output Error] {e}")
         import traceback

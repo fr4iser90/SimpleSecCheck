@@ -1,0 +1,108 @@
+"""
+Detect-secrets Scanner
+Python implementation of run_detect_secrets.sh
+"""
+import os
+from pathlib import Path
+from typing import List, Optional
+from scanner.core.base_scanner import BaseScanner
+
+
+class DetectSecretsScanner(BaseScanner):
+    """Detect-secrets scanner implementation"""
+    
+    def __init__(
+        self,
+        target_path: str,
+        results_dir: str,
+        log_file: str,
+        config_path: Optional[str] = None,
+        exclude_paths: Optional[str] = None
+    ):
+        """
+        Initialize Detect-secrets scanner
+        
+        Args:
+            target_path: Path to scan
+            results_dir: Results directory
+            log_file: Log file path
+            config_path: Path to detect-secrets config file (optional)
+            exclude_paths: Comma-separated paths to exclude
+        """
+        super().__init__("Detect-secrets", target_path, results_dir, log_file, config_path)
+        self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
+    
+    def get_exclude_args(self) -> List[str]:
+        """Get detect-secrets exclude arguments"""
+        exclude_args = []
+        
+        if self.exclude_paths:
+            for path in self.exclude_paths.split(","):
+                path = path.strip()
+                if path:
+                    exclude_args.extend(["--exclude-files", f".*/{path}/.*"])
+        
+        return exclude_args
+    
+    def scan(self) -> bool:
+        """Run Detect-secrets scan"""
+        if not self.check_tool_installed("detect-secrets"):
+            self.log("detect-secrets not found in PATH", "ERROR")
+            return False
+        
+        self.log(f"Running secret detection scan on {self.target_path}...")
+        
+        json_output = self.results_dir / "detect-secrets.json"
+        text_output = self.results_dir / "detect-secrets.txt"
+        
+        exclude_args = self.get_exclude_args()
+        
+        # JSON report
+        self.log("Running secret detection scan...")
+        cmd = ["detect-secrets", "scan", "--all-files", *exclude_args, str(self.target_path)]
+        
+        result = self.run_command(cmd, capture_output=True)
+        if result.returncode == 0 and result.stdout:
+            with open(json_output, "w", encoding="utf-8") as f:
+                f.write(result.stdout)
+        else:
+            self.log("JSON report generation failed", "WARNING")
+            json_output.write_text("{}")
+        
+        # Text report (same command, different output)
+        self.log("Running text report generation...")
+        result = self.run_command(cmd, capture_output=True)
+        if result.returncode == 0 and result.stdout:
+            with open(text_output, "w", encoding="utf-8") as f:
+                f.write(result.stdout)
+        else:
+            self.log("Text report generation failed", "WARNING")
+            text_output.write_text("No secrets detected or scan failed.\n")
+        
+        if json_output.exists() or text_output.exists():
+            self.log("Detect-secrets scan completed successfully", "SUCCESS")
+            return True
+        else:
+            self.log("No detect-secrets report was generated!", "ERROR")
+            return False
+
+
+if __name__ == "__main__":
+    import sys
+    
+    target_path = os.getenv("TARGET_PATH", "/target")
+    results_dir = os.getenv("RESULTS_DIR", "/SimpleSecCheck/results")
+    log_file = os.getenv("LOG_FILE", "/SimpleSecCheck/logs/scan.log")
+    config_path = os.getenv("DETECT_SECRETS_CONFIG_PATH", "/SimpleSecCheck/config/tools/detect-secrets/config.yaml")
+    exclude_paths = os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
+    
+    scanner = DetectSecretsScanner(
+        target_path=target_path,
+        results_dir=results_dir,
+        log_file=log_file,
+        config_path=config_path,
+        exclude_paths=exclude_paths
+    )
+    
+    success = scanner.run()
+    sys.exit(0 if success else 1)

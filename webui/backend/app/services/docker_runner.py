@@ -222,6 +222,7 @@ class DockerRunner:
         collect_metadata: bool = False,
         scan_scope: str = "full",
         exclude_paths: str = "",
+        scan_id: Optional[str] = None,
     ) -> List[str]:
         """
         Build docker-compose run command
@@ -246,8 +247,15 @@ class DockerRunner:
             ("ZAP_TARGET", zap_target),
             ("TARGET_URL", zap_target),
             ("PROJECT_RESULTS_DIR", results_dir),
+            ("RESULTS_DIR_IN_CONTAINER", "/SimpleSecCheck/results"),  # Container path
+            ("LOGS_DIR_IN_CONTAINER", "/SimpleSecCheck/logs"),  # Container path
+            ("TARGET_PATH_IN_CONTAINER", "/target"),  # Container path
             ("COLLECT_METADATA", "true" if collect_metadata else "false"),
         ]
+        
+        # Add SCAN_ID if provided
+        if scan_id:
+            env_vars.append(("SCAN_ID", scan_id))
         
         if scan_type == "code":
             env_vars.extend([
@@ -298,7 +306,8 @@ class DockerRunner:
             cmd.extend(["-v", f"{host_path}:{container_path}"])
         
         # Command to run in container
-        cmd.extend(["scanner", "/SimpleSecCheck/scripts/security-check.sh"])
+        # Use modern Python orchestrator instead of bash script
+        cmd.extend(["scanner", "python3", "-m", "scanner.core.orchestrator"])
         
         return cmd
     
@@ -428,6 +437,7 @@ class DockerRunner:
             collect_metadata=collect_metadata,
             scan_scope=scan_scope,
             exclude_paths=exclude_paths,
+            scan_id=scan_id,
         )
         
         self.log_message("Executing docker-compose command...")

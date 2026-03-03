@@ -13,7 +13,7 @@ from datetime import datetime
 
 from app.database import get_database
 from app.services.queue_service import get_queue_service
-from app.services.step_service import initialize_step_tracking, extract_steps_for_frontend, initialize_steps_log, derive_project_name, write_step_to_log
+from app.services.step_service import initialize_step_tracking, initialize_steps_log, derive_project_name, write_step_to_log
 
 
 class ScannerWorker:
@@ -419,59 +419,30 @@ class ScannerWorker:
             except Exception as e:
                 print(f"[Scanner Worker] Error writing to scan.log: {e}")
             
-            # Extract steps for frontend display (also writes to steps.log)
-            step_line = extract_steps_for_frontend(line_str, current_scan, results_dir_path_obj)
-            if step_line:
-                print(f"[Scanner Worker] [Step] {step_line}")
+            # Step Registry writes directly to steps.log - read it periodically
+            # Use a simple debounce mechanism to avoid reading too frequently
+            import time
+            last_step_check = getattr(output_callback, '_last_step_check', 0)
+            current_time = time.time()
+            
+            # Check steps.log every 0.5 seconds
+            if current_time - last_step_check > 0.5:
+                output_callback._last_step_check = current_time
                 
-                # Send step update directly to WebSocket clients (Hybrid: File + WebSocket)
-                # Use asyncio.create_task to send async from sync callback
+                # Read steps from steps.log and send to WebSocket
                 try:
                     import asyncio
                     from app.services.websocket_manager import get_websocket_manager
+                    from app.services.step_service import read_steps_from_log
                     
                     async def send_websocket_update():
                         try:
                             ws_manager = get_websocket_manager()
                             
-                            # Parse step from step_line to send structured data
-                            import re
-                            step_match = re.match(r'([⏳✓❌]?)\s*Step\s+(\d+):\s*(.+)', step_line, re.IGNORECASE)
-                            if step_match:
-                                status_icon, step_num_str, message = step_match.groups()
-                                step_number = int(step_num_str)
-                                
-                                status = 'pending'
-                                if status_icon == '✓':
-                                    status = 'completed'
-                                elif status_icon == '⏳':
-                                    status = 'running'
-                                elif status_icon == '❌':
-                                    status = 'failed'
-                                
-                                name_match = re.match(r'^(.+?)(?:\s+\.\.\.|\s+completed|$)', message, re.IGNORECASE)
-                                step_name = name_match.group(1).strip() if name_match else message.strip()
-                                
-                                # Build current steps list from current_scan
-                                steps = []
-                                step_names = current_scan.get("step_names", {})
-                                for name, num in sorted(step_names.items(), key=lambda x: x[1]):
-                                    # Determine status for each step
-                                    step_status = 'pending'
-                                    if name in step_names:
-                                        # Check if this is the current step
-                                        if num == step_number:
-                                            step_status = status
-                                        elif num < step_number:
-                                            step_status = 'completed'
-                                    
-                                    steps.append({
-                                        "number": num,
-                                        "name": name,
-                                        "status": step_status,
-                                        "message": f"Step {num}: {name}"
-                                    })
-                                
+                            # Read steps from steps.log (written by Step Registry)
+                            steps = read_steps_from_log(results_dir_path_obj)
+                            
+                            if steps:
                                 # Send update to WebSocket clients
                                 await ws_manager.send_step_update(scan_id, {"steps": steps})
                         except Exception as e:

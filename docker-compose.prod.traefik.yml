@@ -47,6 +47,15 @@ services:
     container_name: SimpleSecCheck_scanner_prod
     profiles:
       - scanner  # Only start explicitly, not automatically
+    # Resource Limits - Scanner is CPU/Memory intensive (runs multiple security tools)
+    deploy:
+      resources:
+        limits:
+          cpus: '${SCANNER_CPU_LIMIT:-4.0}'      # Max 4 CPUs (adjust based on server)
+          memory: '${SCANNER_MEMORY_LIMIT:-8G}'  # Max 8GB RAM (adjust based on server)
+        reservations:
+          cpus: '${SCANNER_CPU_RESERVATION:-1.0}'  # Reserve 1 CPU
+          memory: '${SCANNER_MEMORY_RESERVATION:-2G}'  # Reserve 2GB RAM
     volumes:
       - ./results:/SimpleSecCheck/results
       - ./logs:/SimpleSecCheck/logs
@@ -185,6 +194,15 @@ services:
     tmpfs:
       - /tmp:noexec,nosuid,size=100m
     restart: unless-stopped  # Production: Auto-restart
+    # Resource Limits - WebUI is lightweight (FastAPI + React frontend)
+    deploy:
+      resources:
+        limits:
+          cpus: '${WEBUI_CPU_LIMIT:-2.0}'      # Max 2 CPUs (usually needs less)
+          memory: '${WEBUI_MEMORY_LIMIT:-2G}'  # Max 2GB RAM (usually needs less)
+        reservations:
+          cpus: '${WEBUI_CPU_RESERVATION:-0.5}'  # Reserve 0.5 CPU
+          memory: '${WEBUI_MEMORY_RESERVATION:-512M}'  # Reserve 512MB RAM
     labels:
       # Traefik Enable
       - "traefik.enable=true"
