@@ -321,7 +321,8 @@ class FileDatabase(DatabaseAdapter):
                     scan_date = datetime.fromisoformat(metadata["scan_date"])
                     if scan_date > max_age:
                         return metadata
-            except Exception:
+            except Exception as exc:
+                print(f"[FileDatabase] Failed to read metadata file {metadata_file}: {exc}")
                 continue
         
         return None

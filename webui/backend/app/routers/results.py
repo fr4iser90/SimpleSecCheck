@@ -4,7 +4,12 @@ Results Routes
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
+import os
 from app.services import update_activity
+
+# Environment guard (read directly from runtime ENV)
+ENVIRONMENT = os.getenv("ENVIRONMENT", "dev").lower()
+IS_PRODUCTION = ENVIRONMENT == "prod"
 
 router = APIRouter()
 
@@ -24,6 +29,8 @@ async def list_results():
     List all scan results (file browser)
     No database - just reads results/ directory
     """
+    if IS_PRODUCTION:
+        raise HTTPException(status_code=403, detail="Results endpoint disabled in production")
     update_activity()
     if not RESULTS_DIR.exists():
         return {"scans": []}
@@ -45,6 +52,8 @@ async def list_results():
 @router.get("/api/results/{scan_id}/report")
 async def get_result_report(scan_id: str):
     """Get HTML report from specific scan"""
+    if IS_PRODUCTION:
+        raise HTTPException(status_code=403, detail="Results endpoint disabled in production")
     report_file = RESULTS_DIR / scan_id / "security-summary.html"
     
     if not report_file.exists():
@@ -63,6 +72,8 @@ async def get_result_ai_prompt(
     language: str = Query("english", description="Prompt language (english, chinese, german)"),
 ):
     """Get saved AI prompt JSON for a specific scan and language."""
+    if IS_PRODUCTION:
+        raise HTTPException(status_code=403, detail="Results endpoint disabled in production")
     update_activity()
     normalized = language.lower()
     prompt_file = RESULTS_DIR / scan_id / f"ai-prompt-{normalized}.json"
