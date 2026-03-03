@@ -261,6 +261,10 @@ class ScannerWorker:
         selected_scanners = job.get("selected_scanners")  # List of scanner names to run
         
         print(f"[Scanner Worker] Processing job {queue_id} for {repository_url}")
+        if selected_scanners:
+            print(f"[Scanner Worker] Selected scanners: {selected_scanners}")
+        else:
+            print(f"[Scanner Worker] No selected scanners - will run all scanners")
         
         try:
             # Generate scan_id BEFORE starting scan (so frontend can find logs immediately)
