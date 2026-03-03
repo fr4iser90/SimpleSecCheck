@@ -251,6 +251,7 @@ class DockerRunner:
             ("LOGS_DIR_IN_CONTAINER", "/SimpleSecCheck/logs"),  # Container path
             ("TARGET_PATH_IN_CONTAINER", "/target"),  # Container path
             ("COLLECT_METADATA", "true" if collect_metadata else "false"),
+            ("PYTHONPATH", "/SimpleSecCheck"),  # Set PYTHONPATH so scanner module can be found
         ]
         
         # Add SCAN_ID if provided
@@ -307,7 +308,12 @@ class DockerRunner:
         
         # Command to run in container
         # Use modern Python orchestrator instead of bash script
-        cmd.extend(["scanner", "python3", "-m", "scanner.core.orchestrator"])
+        # PYTHONPATH is set as environment variable above, but we also set it explicitly in the command
+        cmd.extend([
+            "scanner",
+            "sh", "-c",
+            "cd /SimpleSecCheck && PYTHONPATH=/SimpleSecCheck:$PYTHONPATH python3 -m scanner.core.orchestrator"
+        ])
         
         return cmd
     
