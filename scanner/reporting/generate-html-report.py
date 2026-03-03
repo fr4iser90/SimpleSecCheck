@@ -612,12 +612,12 @@ def main():
         # Read and embed JavaScript files inline (required for both Blob URLs and file://)
         embedded_scripts = ""
         js_files = ['ai_prompt_modal.js', 'webui.js']
-        SCRIPT_DIR = Path(__file__).parent.absolute()  # src/reporting/
+        SCRIPT_DIR = Path(__file__).parent.absolute()  # scanner/reporting/
         
         # Try multiple possible locations for JS files (in order of preference)
         possible_dirs = [
-            Path("/SimpleSecCheck/src/reporting"),  # Container absolute path (PRIMARY)
-            SCRIPT_DIR,  # src/reporting/ (relative to script)
+            Path("/SimpleSecCheck/scanner/reporting"),  # Container absolute path (PRIMARY)
+            SCRIPT_DIR,  # scanner/reporting/ (relative to script)
             Path(RESULTS_DIR),  # results/ (fallback - files copied after report generation)
         ]
         

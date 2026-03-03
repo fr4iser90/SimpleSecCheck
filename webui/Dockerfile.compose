@@ -38,6 +38,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy scanner code (needed for path_setup and other core modules)
 COPY scanner/ ./scanner/
 
+# Compile TypeScript files in scanner/reporting (needed for HTML reports)
+RUN cd scanner/reporting && npm install && npx tsc
+
 # Copy backend
 COPY webui/backend/app/ ./app/
 

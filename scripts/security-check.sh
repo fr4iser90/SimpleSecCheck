@@ -1311,7 +1311,7 @@ else
 fi
 
 # --- Reporting Phase ---
-HTML_REPORT_PY_SCRIPT="$BASE_PROJECT_DIR/src/reporting/generate-html-report.py"
+HTML_REPORT_PY_SCRIPT="$BASE_PROJECT_DIR/scanner/reporting/generate-html-report.py"
 HTML_REPORT_OUTPUT_FILE="$RESULTS_DIR_IN_CONTAINER/security-summary.html"
 
 # generate-html-report.py expects RESULTS_DIR and ZAP_TARGET as env vars.
@@ -1345,27 +1345,27 @@ else
 fi
 
 # Copy webui.js (compiled from webui.ts during Docker build)
-WEBUI_JS_SOURCE="$BASE_PROJECT_DIR/src/reporting/webui.js"
+WEBUI_JS_SOURCE="$BASE_PROJECT_DIR/scanner/reporting/webui.js"
 WEBUI_JS_DEST="$RESULTS_DIR_IN_CONTAINER/webui.js"
 if [ -f "$WEBUI_JS_SOURCE" ]; then
     cp "$WEBUI_JS_SOURCE" "$WEBUI_JS_DEST"
     log_message "webui.js copied to $WEBUI_JS_DEST"
 else
     log_message "[ERROR] webui.js not found at $WEBUI_JS_SOURCE - TypeScript compilation may have failed!"
-    log_message "[ERROR] Listing files in $BASE_PROJECT_DIR/src/reporting/:"
-    ls -la "$BASE_PROJECT_DIR/src/reporting/" || true
+    log_message "[ERROR] Listing files in $BASE_PROJECT_DIR/scanner/reporting/:"
+    ls -la "$BASE_PROJECT_DIR/scanner/reporting/" || true
 fi
 
 # Copy ai_prompt_modal.js (compiled from ai_prompt_modal.ts during Docker build)
-AI_PROMPT_MODAL_JS_SOURCE="$BASE_PROJECT_DIR/src/reporting/ai_prompt_modal.js"
+AI_PROMPT_MODAL_JS_SOURCE="$BASE_PROJECT_DIR/scanner/reporting/ai_prompt_modal.js"
 AI_PROMPT_MODAL_JS_DEST="$RESULTS_DIR_IN_CONTAINER/ai_prompt_modal.js"
 if [ -f "$AI_PROMPT_MODAL_JS_SOURCE" ]; then
     cp "$AI_PROMPT_MODAL_JS_SOURCE" "$AI_PROMPT_MODAL_JS_DEST"
     log_message "ai_prompt_modal.js copied to $AI_PROMPT_MODAL_JS_DEST"
 else
     log_message "[ERROR] ai_prompt_modal.js not found at $AI_PROMPT_MODAL_JS_SOURCE - TypeScript compilation may have failed!"
-    log_message "[ERROR] Listing files in $BASE_PROJECT_DIR/src/reporting/:"
-    ls -la "$BASE_PROJECT_DIR/src/reporting/" || true
+    log_message "[ERROR] Listing files in $BASE_PROJECT_DIR/scanner/reporting/:"
+    ls -la "$BASE_PROJECT_DIR/scanner/reporting/" || true
 fi
 
 log_step_complete "Scan completed successfully"
