@@ -551,7 +551,7 @@ export default function ScanView() {
           overflow: 'hidden',
           position: 'relative',
         }}>
-          <ReportViewer scanId={status.scan_id} />
+          <ReportViewer scanId={status.results_dir} />
         </div>
 
         {/* Floating Action Buttons */}
