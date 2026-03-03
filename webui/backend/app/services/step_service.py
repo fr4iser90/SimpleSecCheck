@@ -194,7 +194,7 @@ def extract_steps_for_frontend(line: str, current_scan: dict, results_dir: Path)
     
     # Metadata collection completion (only show once)
     if not formatted_line:
-        if re.search(r'---\s*Metadata\s+Collection\s+Finished\s+---|Metadata collection.*completed successfully|Metadata.*saved successfully', clean_line, re.IGNORECASE):
+        if re.search(r'---\s*Metadata\s+Collection\s+Finished\s+---|Metadata collection.*completed|Metadata.*saved successfully|Metadata collection.*finished|Metadata.*collection.*done', clean_line, re.IGNORECASE):
             with current_scan["process_output_lock"]:
                 step_num = current_scan["step_names"].get("Metadata Collection")
                 if step_num:

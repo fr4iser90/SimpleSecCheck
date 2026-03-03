@@ -1328,12 +1328,14 @@ if [ -f "$HTML_REPORT_PY_SCRIPT" ]; then
         log_step_complete "Report generation completed"
     else
         EXIT_CODE=$?
-        log_message "[ORCHESTRATOR ERROR] HTML report generation script ($HTML_REPORT_PY_SCRIPT) failed with exit code $EXIT_CODE."
-        OVERALL_SUCCESS=false
+        log_message "[WARNING] HTML report generation script ($HTML_REPORT_PY_SCRIPT) failed with exit code $EXIT_CODE."
+        log_message "[WARNING] HTML report generation failed (non-critical, scan results are still valid)"
+        # Do NOT set OVERALL_SUCCESS=false - HTML report is non-critical
     fi
 else
-    log_message "[ORCHESTRATOR ERROR] HTML report script $HTML_REPORT_PY_SCRIPT not found!"
-    OVERALL_SUCCESS=false
+    log_message "[WARNING] HTML report script $HTML_REPORT_PY_SCRIPT not found!"
+    log_message "[WARNING] HTML report generation skipped (non-critical, scan results are still valid)"
+    # Do NOT set OVERALL_SUCCESS=false - HTML report is non-critical
 fi
 
 # Copy webui.js (compiled from webui.ts during Docker build)

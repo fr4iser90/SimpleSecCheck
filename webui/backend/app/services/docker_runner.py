@@ -6,6 +6,7 @@ Orchestrates docker-compose run commands for security scans
 
 import os
 import re
+import json
 import subprocess
 import tempfile
 import shutil
@@ -38,6 +39,7 @@ class DockerRunner:
         """
         self.log_file = log_file
         self.overall_success = False
+        self.output_lines = []  # Store output lines (for debugging/logging purposes)
         
     def log_message(self, message: str, level: str = "INFO"):
         """Log message to stdout and log file"""
@@ -454,6 +456,9 @@ class DockerRunner:
                     log_f.write(line_str + "\n")
                     log_f.flush()
                     
+                    # Store output line for analysis
+                    self.output_lines.append(line_str)
+                    
                     # Call output callback if provided
                     if output_callback:
                         output_callback(line_str)
@@ -465,17 +470,30 @@ class DockerRunner:
             with open(self.log_file, "a", encoding="utf-8") as log_f:
                 log_f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Docker Compose exit code: {exit_code}\n")
             
+            # Exit code 0 = all security scans succeeded (HTML report errors are non-critical)
+            # Exit code != 0 = actual security scan failed
             if exit_code == 0:
                 self.log_message("Security scan completed successfully!", "SUCCESS")
                 self.overall_success = True
             else:
                 self.log_message(f"Docker Compose command failed with exit code: {exit_code}", "ERROR")
-                self.log_message("Security scan completed with warnings", "WARNING")
+                self.log_message("One or more security scans encountered errors", "ERROR")
                 self.overall_success = False
                 
         except Exception as e:
             self.log_message(f"Error executing docker-compose: {e}", "ERROR")
             self.overall_success = False
+        
+        # Parse scanner statuses from output and save to JSON file
+        scanner_statuses = self._parse_scanner_statuses()
+        if scanner_statuses and results_dir:
+            scanner_status_file = os.path.join(results_dir, "scanner-statuses.json")
+            try:
+                with open(scanner_status_file, "w", encoding="utf-8") as f:
+                    json.dump(scanner_statuses, f, indent=2)
+                self.log_message(f"Scanner statuses saved to: {scanner_status_file}")
+            except Exception as e:
+                self.log_message(f"Failed to save scanner statuses: {e}", "WARNING")
         
         # Cleanup temp snapshot
         if temp_snapshot_dir and os.path.exists(temp_snapshot_dir):
@@ -486,3 +504,42 @@ class DockerRunner:
                 self.log_message(f"Failed to cleanup temp snapshot: {e}", "WARNING")
         
         return self.overall_success
+    
+    def _parse_scanner_statuses(self) -> Dict[str, str]:
+        """
+        Parse scanner statuses from output lines.
+        Looks for lines like "  Semgrep:       SUCCESS" or "  Trivy:         FAILED"
+        
+        Returns:
+            Dictionary mapping scanner names to their status (SUCCESS, FAILED, SKIPPED, N/A)
+        """
+        scanner_statuses = {}
+        
+        if not self.output_lines:
+            return scanner_statuses
+        
+        # Pattern to match: "  ScannerName:       STATUS"
+        # Matches scanner names with optional hyphens/underscores
+        pattern = r'\s+([A-Za-z][A-Za-z0-9_-]+):\s+(SUCCESS|FAILED|SKIPPED|N/A)'
+        
+        # Look for "Scanner Status Summary" section
+        in_summary_section = False
+        for line in self.output_lines:
+            # Check if we're in the summary section
+            if "Scanner Status Summary" in line or "Scanner Status" in line:
+                in_summary_section = True
+                continue
+            
+            # Stop parsing if we hit the next section
+            if in_summary_section and ("Key Results Location" in line or "FINAL STATUS" in line or "===" in line):
+                break
+            
+            # Parse scanner status lines
+            if in_summary_section:
+                match = re.search(pattern, line, re.IGNORECASE)
+                if match:
+                    scanner_name = match.group(1)
+                    status = match.group(2).upper()
+                    scanner_statuses[scanner_name] = status
+        
+        return scanner_statuses

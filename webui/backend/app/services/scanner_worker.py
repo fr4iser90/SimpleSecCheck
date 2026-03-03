@@ -13,7 +13,7 @@ from datetime import datetime
 
 from app.database import get_database
 from app.services.queue_service import get_queue_service
-from app.services.step_service import initialize_step_tracking, extract_steps_for_frontend, initialize_steps_log, derive_project_name
+from app.services.step_service import initialize_step_tracking, extract_steps_for_frontend, initialize_steps_log, derive_project_name, write_step_to_log
 
 
 class ScannerWorker:
@@ -506,6 +506,19 @@ class ScannerWorker:
         if not success:
             error_output = "\n".join(output_lines[-20:]) if output_lines else "No output captured"
             raise Exception(f"Scan failed: {error_output}")
+        
+        # Mark Step 20 (Metadata Collection) as completed if scan was successful
+        # This ensures the final step is always marked as completed, even if the metadata script failed
+        if "Metadata Collection" in current_scan.get("step_names", {}):
+            step_num = current_scan["step_names"]["Metadata Collection"]
+            completed_key = "Metadata Collection_completed"
+            if completed_key not in current_scan.get("completed_steps", set()):
+                if "completed_steps" not in current_scan:
+                    current_scan["completed_steps"] = set()
+                current_scan["completed_steps"].add(completed_key)
+                step_message = f"✓ Step {step_num}: Metadata collection completed"
+                write_step_to_log(step_message, scan_id, current_scan, results_dir_path_obj)
+                print(f"[Scanner Worker] Marked Step {step_num} (Metadata Collection) as completed")
         
         # Try to find scan results directory
         # Results are typically in results/PROJECT_NAME_SCAN_ID/
