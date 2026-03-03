@@ -259,11 +259,7 @@ export default function MyScansPage() {
                       {item.status === 'completed' && item.scan_id && (
                         <a
                           href={`/results?scan_id=${item.scan_id}`}
-                          style={{
-                            color: 'var(--primary)',
-                            textDecoration: 'none',
-                            fontSize: '0.875rem'
-                          }}
+                          className="action-button action-completed"
                         >
                           View Results
                         </a>

@@ -187,6 +187,30 @@ input:focus, select:focus {
   color: #fff;
 }
 
+/* Action buttons */
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.85rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.action-button.action-completed {
+  background: rgba(40, 167, 69, 0.15);
+  color: #28a745;
+  border: 1px solid #28a745;
+}
+
+.action-button.action-completed:hover {
+  background: rgba(40, 167, 69, 0.25);
+}
+
 /* Logs */
 .logs-container {
   background: #000;

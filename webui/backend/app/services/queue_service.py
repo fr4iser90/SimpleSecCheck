@@ -122,7 +122,8 @@ class QueueService:
     
     async def get_public_queue(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get public queue (anonymized)"""
-        return await self.db.get_queue(limit=limit)
+        items = await self.db.get_queue(limit=limit)
+        return [item for item in items if item.get("status") in ("pending", "running")]
     
     async def get_user_queue(self, session_id: str) -> List[Dict[str, Any]]:
         """Get queue items for a specific session"""
