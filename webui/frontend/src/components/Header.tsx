@@ -250,6 +250,33 @@ export default function Header() {
         >
           New Scan
         </button>
+        <a
+          href="https://coff.ee/fr4iser"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.5rem 1rem',
+            background: '#FFDD00',
+            color: 'black',
+            borderRadius: '8px',
+            fontWeight: 500,
+            textDecoration: 'none',
+            fontSize: '0.9rem',
+            transition: 'background-color 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#FFE44D'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#FFDD00'
+          }}
+        >
+          <span>☕</span>
+          Buy me a coffee
+        </a>
       </nav>
     </header>
   )

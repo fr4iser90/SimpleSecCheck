@@ -272,6 +272,7 @@ class DockerRunner:
         
         if finding_policy:
             env_vars.append(("FINDING_POLICY_FILE", finding_policy))
+            env_vars.append(("FINDING_POLICY_FILE_IN_CONTAINER", finding_policy))  # Also set for metadata collection
         
         for key, value in env_vars:
             cmd.extend(["-e", f"{key}={value}"])

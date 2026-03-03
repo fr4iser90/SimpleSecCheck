@@ -138,7 +138,13 @@ def generate_metadata_section(metadata):
         html_parts.append('<tr><td colspan="2" style="padding: 1rem 0.75rem 0.5rem; font-weight: bold; border-top: 1px solid rgba(255,255,255,0.2);">Scan Configuration:</td></tr>')
         
         if scan_config.get("finding_policy_used"):
-            html_parts.append('<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">Finding Policy:</td><td style="padding: 0.75rem;">✅ Enabled</td></tr>')
+            finding_policy_path = metadata.get("finding_policy", "")
+            if finding_policy_path:
+                # Remove /target/ prefix if present for display
+                display_path = finding_policy_path.replace("/target/", "") if finding_policy_path.startswith("/target/") else finding_policy_path
+                html_parts.append(f'<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">Finding Policy:</td><td style="padding: 0.75rem;">✅ Enabled (<code style="background: rgba(0,0,0,0.2); padding: 0.2rem 0.5rem; border-radius: 4px;">{html.escape(display_path)}</code>)</td></tr>')
+            else:
+                html_parts.append('<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">Finding Policy:</td><td style="padding: 0.75rem;">✅ Enabled</td></tr>')
         
         if scan_config.get("ci_mode"):
             html_parts.append('<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">CI Mode:</td><td style="padding: 0.75rem;">✅ Enabled</td></tr>')
@@ -542,8 +548,16 @@ def main():
     ios_findings_summary = ios_plist_summary(ios_plist_json_path)
     accepted_findings = []
 
-    # Load finding policy - only if explicitly provided (NO DEFAULT!)
+    # Load scan metadata (only if user enabled metadata collection)
+    scan_metadata = load_metadata(RESULTS_DIR)
+    
+    # Load finding policy - check environment variable first, then metadata
     policy_path = os.environ.get("FINDING_POLICY_FILE")
+    if not policy_path or policy_path.strip() == "":
+        # Try to get from metadata if available
+        if scan_metadata and scan_metadata.get("finding_policy"):
+            policy_path = scan_metadata.get("finding_policy")
+    
     if not policy_path or policy_path.strip() == "":
         # No policy specified - don't use any policy
         finding_policy = {}
@@ -557,9 +571,6 @@ def main():
     accepted_findings.extend(semgrep_accepted)
     accepted_findings.extend(gitleaks_accepted)
     accepted_findings.extend(bandit_accepted)
-    
-    # Load scan metadata (only if user enabled metadata collection)
-    scan_metadata = load_metadata(RESULTS_DIR)
 
     try:
         # Extract ZAP alerts list if available, otherwise use empty list

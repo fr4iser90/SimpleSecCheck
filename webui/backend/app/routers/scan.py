@@ -146,7 +146,7 @@ async def start_scan(request: ScanRequest, http_request: Request):
     
     # Add to queue (always enabled)
     queue_service = await get_queue_service()
-    print(f"[Scan Start] Adding to queue: repository_url={request.target}, branch={request.git_branch}")
+    print(f"[Scan Start] Adding to queue: repository_url={request.target}, branch={request.git_branch}, selected_scanners={request.selected_scanners}")
     
     # Extract branch and commit hash from request if available
     branch = request.git_branch
@@ -157,6 +157,7 @@ async def start_scan(request: ScanRequest, http_request: Request):
         repository_url=request.target,
         branch=branch,
         commit_hash=commit_hash,
+        selected_scanners=request.selected_scanners,
     )
     
     print(f"[Scan Start] Queue result: {result}")
