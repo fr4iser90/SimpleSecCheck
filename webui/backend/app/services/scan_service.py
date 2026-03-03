@@ -121,7 +121,6 @@ async def start_scan(
     # IMPORTANT: This must happen AFTER Git clone (if used), so paths are correct
     scan_results_dir_container = current_scan["results_dir"]
     results_dir_host = get_scan_results_dir_host(scan_results_dir_container)
-    logs_dir_host = get_logs_dir_for_scan(results_dir_host)
     target_mount_path_host = get_target_mount_path_host(clean_target)
     owasp_data_path_host = get_owasp_data_path_host()
     config_path_host = get_config_path_host()
@@ -170,6 +169,8 @@ async def start_scan(
     env_vars = [
         "-e", f"SCAN_TYPE={request.type}",
         "-e", f"PROJECT_RESULTS_DIR={results_dir_host}",
+        "-e", f"RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results",
+        "-e", f"LOGS_DIR_IN_CONTAINER=/SimpleSecCheck/results/logs",
         "-e", f"COLLECT_METADATA={'true' if request.collect_metadata else 'false'}",
         "-e", f"TARGET_PATH_HOST={original_target_mount_path_host}",
     ]
@@ -229,7 +230,6 @@ async def start_scan(
             cmd.extend(["-v", f"{original_target_mount_path_host}:/original-target:ro"])
             env_vars.extend(["-e", "ORIGINAL_TARGET_PATH=/original-target"])
     cmd.extend(["-v", f"{results_dir_host}:/SimpleSecCheck/results"])
-    cmd.extend(["-v", f"{logs_dir_host}:/SimpleSecCheck/logs"])
     
     if config_volume:
         cmd.extend(config_volume)

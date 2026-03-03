@@ -1,9 +1,8 @@
 """
 Step Service
-Modern approach: Reads steps.log directly (written by Step Registry)
-No more log parsing - Step Registry handles all step tracking!
+Modern approach: Reads steps.log directly (JSON Lines format - structured, no regex parsing!)
+Step Registry handles all step tracking!
 """
-import re
 import threading
 from pathlib import Path
 from typing import Optional, List, Dict
@@ -39,10 +38,27 @@ def register_step(step_name: str, current_scan: dict) -> int:
 
 
 def log_step(step_name: str, step_message: str, current_scan: dict, results_dir: Path, scan_id: str) -> None:
-    """Log a step message - kept for compatibility (Git Clone, etc.)"""
+    """Log a step message in JSON format (structured, no regex parsing!)"""
     step_num = current_scan["step_names"].get(step_name)
     if step_num:
-        write_step_to_log(step_message, scan_id, current_scan, results_dir)
+        # Parse status from message (old format: "⏳ Step 1: ..." or "✓ Step 1: ...")
+        status = "running"
+        if "✓" in step_message or "completed" in step_message.lower():
+            status = "completed"
+        elif "⏳" in step_message or "running" in step_message.lower():
+            status = "running"
+        elif "❌" in step_message or "failed" in step_message.lower():
+            status = "failed"
+        elif "⊘" in step_message or "skipped" in step_message.lower():
+            status = "skipped"
+        
+        # Extract message (remove icon and "Step X:" prefix)
+        import re
+        message_match = re.match(r'[⏳✓❌⊘]?\s*Step\s+\d+:\s*(.+)', step_message)
+        clean_message = message_match.group(1) if message_match else step_message
+        
+        # Write in JSON format (same as StepRegistry)
+        write_step_to_log(step_num, step_name, status, clean_message, scan_id, current_scan, results_dir)
 
 
 def derive_project_name(target: str) -> str:
@@ -74,28 +90,91 @@ def initialize_steps_log(scan_id: str, results_dir_path: str, current_scan: dict
     current_scan["results_dir"] = str(scan_dir)
     print(f"[Step Service] Created scan directory: {scan_dir}")
     
-    # Create/clear steps.log (Step Registry will write to it)
+    # Create/clear steps.log (JSON Lines format - one JSON object per line)
     steps_log = scan_dir / "logs" / "steps.log"
     from datetime import datetime
     with open(steps_log, "w", encoding="utf-8") as f:
-        f.write(f"----- SimpleSecCheck Steps Log Initialized: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -----\n")
+        f.write(f'{{"init": "SimpleSecCheck Steps Log", "timestamp": "{datetime.now().isoformat()}"}}\n')
 
-
-def write_step_to_log(step_line: str, scan_id: str, current_scan: dict, results_dir: Path):
-    """Write step to steps.log file - kept for compatibility (Git Clone, etc.)"""
+def write_step_to_log(step_number: int, step_name: str, status: str, message: str, scan_id: str, current_scan: dict, results_dir: Path):
+    """Write step to steps.log file in JSON format (structured, no regex parsing!) and send WebSocket update"""
     results_dir_path = current_scan.get("results_dir")
     
     if not results_dir_path:
         return
     
     steps_log = Path(results_dir_path) / "logs" / "steps.log"
+    
+    # Ensure steps.log exists (initialize if needed)
+    if not steps_log.exists():
+        from datetime import datetime
+        with open(steps_log, "w", encoding="utf-8") as f:
+            f.write(f'{{"init": "SimpleSecCheck Steps Log", "timestamp": "{datetime.now().isoformat()}"}}\n')
+    
+    # Write step as JSON line (same format as StepRegistry)
+    import json
+    from datetime import datetime
+    step_dict = {
+        "number": step_number,
+        "name": step_name,
+        "status": status,  # 'pending', 'running', 'completed', 'failed', 'skipped'
+        "message": message,
+        "started_at": datetime.now().isoformat() if status in ["running", "completed", "failed", "skipped"] else None,
+        "completed_at": datetime.now().isoformat() if status in ["completed", "failed", "skipped"] else None,
+        "timestamp": datetime.now().isoformat()
+    }
     with open(steps_log, "a", encoding="utf-8") as f:
-        f.write(f"{step_line}\n")
+        f.write(json.dumps(step_dict) + "\n")
+    
+    # Send WebSocket update (read all steps from log and send update)
+    try:
+        import asyncio
+        from app.services.websocket_manager import get_websocket_manager
+        
+        async def send_websocket_update():
+            try:
+                ws_manager = get_websocket_manager()
+                
+                # Read all steps from log (to get complete picture)
+                steps = read_steps_from_log(Path(results_dir_path))
+                
+                if steps:
+                    # Calculate total_steps and progress_percentage
+                    total_steps = max([s["number"] for s in steps], default=0)
+                    if total_steps == 0:
+                        progress_percentage = 0
+                    else:
+                        completed = sum(1 for s in steps if s.get("status") == "completed")
+                        running = sum(1 for s in steps if s.get("status") == "running")
+                        failed = sum(1 for s in steps if s.get("status") == "failed")
+                        progress_percentage = round(((completed + failed + (running * 0.5)) / total_steps) * 100)
+                    
+                    # Send update to WebSocket clients
+                    await ws_manager.send_step_update(scan_id, {
+                        "steps": steps,
+                        "total_steps": total_steps,
+                        "progress_percentage": progress_percentage
+                    })
+            except Exception as e:
+                print(f"[Step Service] Error sending WebSocket update: {e}")
+        
+        # Schedule async task (runs in background)
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(send_websocket_update())
+            else:
+                loop.run_until_complete(send_websocket_update())
+        except RuntimeError:
+            # No event loop, skip WebSocket update
+            pass
+    except Exception as e:
+        print(f"[Step Service] Error scheduling WebSocket update: {e}")
 
 
 def read_steps_from_log(results_dir: Path) -> List[Dict[str, any]]:
     """
-    Read steps from steps.log file (written by Step Registry)
+    Read steps from steps.log file (JSON Lines format - structured, no regex parsing!)
     
     Args:
         results_dir: Path to scan results directory
@@ -109,54 +188,43 @@ def read_steps_from_log(results_dir: Path) -> List[Dict[str, any]]:
         return []
     
     steps = []
-    step_map = {}  # {step_number: step_dict}
+    step_map = {}  # {step_number: step_dict} - keep latest status per step
     
     try:
+        import json
         with open(steps_log, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 line = line.strip()
-                if not line or line.startswith("-----"):
+                if not line:
                     continue
                 
-                # Parse step line: "⏳ Step 1: Running Semgrep scan..."
-                # Format: [icon] Step [number]: [message]
-                step_match = re.match(r'([⏳✓❌⊘]?)\s*Step\s+(\d+):\s*(.+)', line, re.IGNORECASE)
-                if step_match:
-                    status_icon, step_num_str, message = step_match.groups()
-                    step_number = int(step_num_str)
+                try:
+                    # Parse JSON line (structured format - no regex needed!)
+                    step_data = json.loads(line)
                     
-                    # Determine status from icon
-                    status = 'pending'
-                    if status_icon == '✓':
-                        status = 'completed'
-                    elif status_icon == '⏳':
-                        status = 'running'
-                    elif status_icon == '❌':
-                        status = 'failed'
-                    elif status_icon == '⊘':
-                        status = 'skipped'
+                    # Skip init line
+                    if "init" in step_data:
+                        continue
                     
-                    # Extract step name from message
-                    # Examples: "Running Semgrep scan..." -> "Semgrep"
-                    #           "Semgrep scan completed" -> "Semgrep"
-                    name_match = re.match(r'^(.+?)(?:\s+scan|\s+\.\.\.|\s+completed|\s+failed|\s+skipped|$)', message, re.IGNORECASE)
-                    step_name = name_match.group(1).strip() if name_match else message.strip()
+                    # Extract step data directly from JSON
+                    step_number = step_data.get("number")
+                    step_name = step_data.get("name")
+                    status = step_data.get("status", "pending")
+                    message = step_data.get("message", "")
                     
-                    # Update or create step
-                    if step_number not in step_map:
-                        step_map[step_number] = {
-                            "number": step_number,
-                            "name": step_name,
-                            "status": status,
-                            "message": message.strip()
-                        }
-                    else:
-                        # Update existing step (status might change)
-                        step_map[step_number]["status"] = status
-                        step_map[step_number]["message"] = message.strip()
-                        # Update name if it's more specific
-                        if len(step_name) > len(step_map[step_number]["name"]):
-                            step_map[step_number]["name"] = step_name
+                    if not step_number or not step_name:
+                        continue
+                    
+                    # Use step_number as key (one entry per step, latest status wins)
+                    step_map[step_number] = {
+                        "number": step_number,
+                        "name": step_name,
+                        "status": status,  # Already in correct format: 'pending', 'running', 'completed', 'failed', 'skipped'
+                        "message": message
+                    }
+                except json.JSONDecodeError:
+                    # Skip invalid JSON lines (e.g., old format lines)
+                    continue
         
         # Convert to sorted list
         steps = sorted(step_map.values(), key=lambda s: s["number"])

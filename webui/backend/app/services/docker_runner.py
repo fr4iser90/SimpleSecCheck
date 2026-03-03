@@ -40,6 +40,7 @@ class DockerRunner:
         self.log_file = log_file
         self.overall_success = False
         self.output_lines = []  # Store output lines (for debugging/logging purposes)
+        self.process: Optional[asyncio.subprocess.Process] = None  # Track subprocess for cleanup
         
     def log_message(self, message: str, level: str = "INFO"):
         """Log message to stdout and log file"""
@@ -248,7 +249,7 @@ class DockerRunner:
             ("TARGET_URL", zap_target),
             ("PROJECT_RESULTS_DIR", results_dir),
             ("RESULTS_DIR_IN_CONTAINER", "/SimpleSecCheck/results"),  # Container path
-            ("LOGS_DIR_IN_CONTAINER", "/SimpleSecCheck/logs"),  # Container path
+            ("LOGS_DIR_IN_CONTAINER", "/SimpleSecCheck/results/logs"),  # Container path (logs is subdirectory of results)
             ("TARGET_PATH_IN_CONTAINER", "/target"),  # Container path
             ("COLLECT_METADATA", "true" if collect_metadata else "false"),
             ("PYTHONPATH", "/SimpleSecCheck"),  # Set PYTHONPATH so scanner module can be found
@@ -278,7 +279,6 @@ class DockerRunner:
         # Volume mounts
         volumes = [
             (results_dir, "/SimpleSecCheck/results"),
-            (logs_dir, "/SimpleSecCheck/logs"),
         ]
         
         if scan_type == "code" and target_mount_path:
@@ -457,7 +457,7 @@ class DockerRunner:
         # Execute docker-compose asynchronously
         try:
             # Create async subprocess
-            process = await asyncio.create_subprocess_exec(
+            self.process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
@@ -467,25 +467,38 @@ class DockerRunner:
             with open(self.log_file, "a", encoding="utf-8") as log_f:
                 log_f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting docker-compose command\n")
                 
-                while True:
-                    line = await process.stdout.readline()
-                    if not line:
-                        break
-                    
-                    line_str = line.decode('utf-8', errors='ignore').rstrip()
-                    print(line_str)
-                    log_f.write(line_str + "\n")
-                    log_f.flush()
-                    
-                    # Store output line for analysis
-                    self.output_lines.append(line_str)
-                    
-                    # Call output callback if provided
-                    if output_callback:
-                        output_callback(line_str)
+                try:
+                    while True:
+                        line = await self.process.stdout.readline()
+                        if not line:
+                            break
+                        
+                        line_str = line.decode('utf-8', errors='ignore').rstrip()
+                        print(line_str)
+                        log_f.write(line_str + "\n")
+                        log_f.flush()
+                        
+                        # Store output line for analysis
+                        self.output_lines.append(line_str)
+                        
+                        # Call output callback if provided
+                        if output_callback:
+                            output_callback(line_str)
+                except asyncio.CancelledError:
+                    # Handle cancellation - stop the process
+                    self.log_message("Scan cancelled, stopping docker-compose process...", "WARNING")
+                    if self.process and self.process.returncode is None:
+                        self.process.terminate()
+                        try:
+                            await asyncio.wait_for(self.process.wait(), timeout=5.0)
+                        except asyncio.TimeoutError:
+                            self.log_message("Process didn't terminate, force killing...", "WARNING")
+                            self.process.kill()
+                            await self.process.wait()
+                    raise
             
             # Wait for process to finish
-            exit_code = await process.wait()
+            exit_code = await self.process.wait()
             
             # Log exit code
             with open(self.log_file, "a", encoding="utf-8") as log_f:
@@ -501,9 +514,24 @@ class DockerRunner:
                 self.log_message("One or more security scans encountered errors", "ERROR")
                 self.overall_success = False
                 
+        except asyncio.CancelledError:
+            # Re-raise cancellation
+            raise
         except Exception as e:
             self.log_message(f"Error executing docker-compose: {e}", "ERROR")
             self.overall_success = False
+        finally:
+            # Ensure process is stopped
+            if self.process and self.process.returncode is None:
+                self.log_message("Cleaning up docker-compose process...", "WARNING")
+                try:
+                    self.process.terminate()
+                    await asyncio.wait_for(self.process.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    self.process.kill()
+                    await self.process.wait()
+                except Exception as e:
+                    self.log_message(f"Error cleaning up process: {e}", "WARNING")
         
         # Parse scanner statuses from output and save to JSON file
         scanner_statuses = self._parse_scanner_statuses()

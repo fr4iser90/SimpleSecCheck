@@ -376,38 +376,43 @@ async def websocket_scan_updates(websocket: WebSocket, scan_id: str = None):
         
         if steps_log_file and steps_log_file.exists():
             steps = []
-            step_map = {}
+            step_map = {}  # {step_number: step_dict} - keep latest status per step
             
+            # Read JSON Lines format (structured - no regex parsing!)
+            import json
             with open(steps_log_file, "r", encoding="utf-8", errors="ignore") as f:
-                step_lines = [line.strip() for line in f.readlines() if line.strip() and not line.strip().startswith("-----")]
-            
-            for line in step_lines:
-                step_match = re.match(r'([⏳✓❌]?)\s*Step\s+(\d+):\s*(.+)', line, re.IGNORECASE)
-                if step_match:
-                    status_icon, step_num_str, message = step_match.groups()
-                    step_number = int(step_num_str)
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
                     
-                    status = 'pending'
-                    if status_icon == '✓':
-                        status = 'completed'
-                    elif status_icon == '⏳':
-                        status = 'running'
-                    elif status_icon == '❌':
-                        status = 'failed'
-                    
-                    name_match = re.match(r'^(.+?)(?:\s+\.\.\.|\s+completed|$)', message, re.IGNORECASE)
-                    step_name = name_match.group(1).strip() if name_match else message.strip()
-                    
-                    if step_number not in step_map:
+                    try:
+                        # Parse JSON line (structured format - no regex needed!)
+                        step_data = json.loads(line)
+                        
+                        # Skip init line
+                        if "init" in step_data:
+                            continue
+                        
+                        # Extract step data directly from JSON
+                        step_number = step_data.get("number")
+                        step_name = step_data.get("name")
+                        status = step_data.get("status", "pending")
+                        message = step_data.get("message", "")
+                        
+                        if not step_number or not step_name:
+                            continue
+                        
+                        # Use step_number as key (one entry per step, latest status wins)
                         step_map[step_number] = {
                             "number": step_number,
                             "name": step_name,
-                            "status": status,
-                            "message": message.strip()
+                            "status": status,  # Already in correct format: 'pending', 'running', 'completed', 'failed', 'skipped'
+                            "message": message
                         }
-                    else:
-                        step_map[step_number]["status"] = status
-                        step_map[step_number]["message"] = message.strip()
+                    except json.JSONDecodeError:
+                        # Skip invalid JSON lines (e.g., old format lines)
+                        continue
             
             steps = sorted(step_map.values(), key=lambda x: x["number"])
             

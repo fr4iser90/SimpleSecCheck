@@ -18,7 +18,7 @@ from .shutdown_service import (
     SHUTDOWN_DELAY,
     IDLE_TIMEOUT
 )
-from .step_service import write_step_to_log
+
 from .scan_service import (
     ScanRequest,
     ScanStatus,
@@ -66,7 +66,6 @@ __all__ = [
     "SHUTDOWN_AFTER_SCAN",
     "SHUTDOWN_DELAY",
     "IDLE_TIMEOUT",
-    "write_step_to_log",
     "ScanRequest",
     "ScanStatus",
     "start_scan",

@@ -23,6 +23,7 @@ class ScannerWorker:
         self.db = get_database()
         self.max_concurrent_scans = int(os.getenv("MAX_CONCURRENT_SCANS", "1"))
         self.running_scans: Dict[str, asyncio.Task] = {}
+        self.running_runners: Dict[str, Any] = {}  # {scan_id: DockerRunner} - track runners for cleanup
         self.is_running = False
         self.worker_task: Optional[asyncio.Task] = None
     
@@ -54,9 +55,44 @@ class ScannerWorker:
         """Stop the worker"""
         self.is_running = False
         
-        # Wait for running scans to complete
+        # Stop all running docker-compose processes
+        print(f"[Scanner Worker] Stopping {len(self.running_runners)} running scan(s)...")
+        for scan_id, runner in self.running_runners.items():
+            if runner and runner.process and runner.process.returncode is None:
+                print(f"[Scanner Worker] Stopping docker-compose process for scan {scan_id}...")
+                try:
+                    runner.process.terminate()
+                    await asyncio.wait_for(runner.process.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    print(f"[Scanner Worker] Force killing docker-compose process for scan {scan_id}...")
+                    runner.process.kill()
+                    await runner.process.wait()
+                except Exception as e:
+                    print(f"[Scanner Worker] Error stopping process for scan {scan_id}: {e}")
+        
+        # Stop all Docker containers from running scans
+        from app.services.container_service import stop_running_containers
+        for scan_id in list(self.running_scans.keys()):
+            # Create dummy current_scan dict for stop_running_containers
+            current_scan = {"container_ids": []}
+            stopped = stop_running_containers(current_scan)
+            if stopped:
+                print(f"[Scanner Worker] Stopped {len(stopped)} container(s) for scan {scan_id}")
+        
+        # Cancel all running scan tasks
         if self.running_scans:
-            await asyncio.gather(*self.running_scans.values(), return_exceptions=True)
+            for scan_id, task in self.running_scans.items():
+                if not task.done():
+                    print(f"[Scanner Worker] Cancelling scan task {scan_id}...")
+                    task.cancel()
+            # Wait for tasks to complete (with timeout)
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self.running_scans.values(), return_exceptions=True),
+                    timeout=10.0
+                )
+            except asyncio.TimeoutError:
+                print("[Scanner Worker] Timeout waiting for scan tasks to complete")
         
         if self.worker_task:
             self.worker_task.cancel()
@@ -473,16 +509,24 @@ class ScannerWorker:
         
         # Execute scan using docker_runner
         print(f"[Scanner Worker] Starting scan: {scan_id} for {repository_url}")
-        success = await runner.run_scan_async(
-            target=target_path,
-            scan_id=scan_id,
-            project_name=project_name,
-            results_dir=results_dir_path,
-            ci_mode=False,  # WebUI always does full scans
-            finding_policy=None,  # Auto-detect
-            collect_metadata=True,
-            output_callback=output_callback,
-        )
+        
+        # Track runner for cleanup
+        self.running_runners[scan_id] = runner
+        
+        try:
+            success = await runner.run_scan_async(
+                target=target_path,
+                scan_id=scan_id,
+                project_name=project_name,
+                results_dir=results_dir_path,
+                ci_mode=False,  # WebUI always does full scans
+                finding_policy=None,  # Auto-detect
+                collect_metadata=True,
+                output_callback=output_callback,
+            )
+        finally:
+            # Remove from tracking when done
+            self.running_runners.pop(scan_id, None)
         
         if not success:
             error_output = "\n".join(output_lines[-20:]) if output_lines else "No output captured"
@@ -497,8 +541,16 @@ class ScannerWorker:
                 if "completed_steps" not in current_scan:
                     current_scan["completed_steps"] = set()
                 current_scan["completed_steps"].add(completed_key)
-                step_message = f"✓ Step {step_num}: Metadata collection completed"
-                write_step_to_log(step_message, scan_id, current_scan, results_dir_path_obj)
+                # Write step in JSON format (structured, no regex parsing!)
+                write_step_to_log(
+                    step_number=step_num,
+                    step_name="Metadata Collection",
+                    status="completed",
+                    message="Metadata collection completed",
+                    scan_id=scan_id,
+                    current_scan=current_scan,
+                    results_dir=results_dir_path_obj
+                )
                 print(f"[Scanner Worker] Marked Step {step_num} (Metadata Collection) as completed")
         
         # Try to find scan results directory

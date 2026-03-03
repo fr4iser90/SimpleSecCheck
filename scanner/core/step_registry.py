@@ -4,6 +4,7 @@ Direct step communication - no log parsing!
 Modern approach: Steps register themselves and communicate directly via WebSocket
 """
 import asyncio
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -53,15 +54,18 @@ class StepRegistry:
         self.step_counter = 0
         self.lock = asyncio.Lock()
         
-        # Create logs directory
-        self.logs_dir = results_dir / "logs"
+        # Use LOGS_DIR_IN_CONTAINER environment variable (NO FALLBACK!)
+        logs_dir_env = os.getenv("LOGS_DIR_IN_CONTAINER")
+        if not logs_dir_env:
+            raise ValueError("LOGS_DIR_IN_CONTAINER environment variable is required but not set")
+        self.logs_dir = Path(logs_dir_env)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.steps_log = self.logs_dir / "steps.log"
         
-        # Initialize steps.log (only if it doesn't exist - preserve Git Clone step if already written)
+        # Initialize steps.log (JSON Lines format - one JSON object per line)
         if not self.steps_log.exists():
             with open(self.steps_log, "w", encoding="utf-8") as f:
-                f.write(f"----- SimpleSecCheck Steps Log Initialized: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -----\n")
+                f.write(f'{{"init": "SimpleSecCheck Steps Log", "timestamp": "{datetime.now().isoformat()}"}}\n')
         else:
             # Read existing steps from log (e.g., Git Clone step written before orchestrator starts)
             self._load_existing_steps()
@@ -91,9 +95,8 @@ class StepRegistry:
         step.status = StepStatus.RUNNING
         step.started_at = datetime.now()
         
-        # Write to steps.log
-        log_line = f"⏳ Step {step.number}: {step.message}"
-        self._write_to_log(log_line)
+        # Write to steps.log (structured JSON format)
+        self._write_to_log(step)
         
         # Send WebSocket update
         asyncio.create_task(self._send_update())
@@ -118,9 +121,8 @@ class StepRegistry:
         if message:
             step.message = message
         
-        # Write to steps.log
-        log_line = f"✓ Step {step.number}: {step.message or f'{step_name} completed'}"
-        self._write_to_log(log_line)
+        # Write to steps.log (structured JSON format)
+        self._write_to_log(step)
         
         # Send WebSocket update
         asyncio.create_task(self._send_update())
@@ -143,9 +145,8 @@ class StepRegistry:
         if message:
             step.message = message
         
-        # Write to steps.log
-        log_line = f"❌ Step {step.number}: {step.message or f'{step_name} failed'}"
-        self._write_to_log(log_line)
+        # Write to steps.log (structured JSON format)
+        self._write_to_log(step)
         
         # Send WebSocket update
         asyncio.create_task(self._send_update())
@@ -230,52 +231,57 @@ class StepRegistry:
         return self.steps.get(step_name)
     
     def _load_existing_steps(self):
-        """Load existing steps from steps.log (e.g., Git Clone step)"""
-        import re
+        """Load existing steps from steps.log (JSON Lines format - no regex parsing!)"""
+        import json
         try:
             with open(self.steps_log, "r", encoding="utf-8", errors="ignore") as f:
                 for line in f:
                     line = line.strip()
-                    if not line or line.startswith("-----"):
+                    if not line:
                         continue
                     
-                    # Parse step line: "⏳ Step 1: Cloning Git repository..."
-                    step_match = re.match(r'([⏳✓❌⊘]?)\s*Step\s+(\d+):\s*(.+)', line, re.IGNORECASE)
-                    if step_match:
-                        status_icon, step_num_str, message = step_match.groups()
-                        step_number = int(step_num_str)
+                    try:
+                        # Parse JSON line (structured format - no regex needed!)
+                        step_data = json.loads(line)
                         
-                        # Extract step name from message
-                        # Examples: "Cloning Git repository..." -> "Git Clone"
-                        #           "Running Semgrep scan..." -> "Semgrep"
-                        if "git" in message.lower() and "clone" in message.lower():
-                            step_name = "Git Clone"
-                        elif "initializ" in message.lower():
-                            step_name = "Initialization"
-                        elif "metadata" in message.lower():
-                            step_name = "Metadata Collection"
-                        elif "complet" in message.lower() and "scan" in message.lower():
-                            step_name = "Completion"
-                        else:
-                            # Try to extract scanner name
-                            name_match = re.match(r'^Running\s+(.+?)\s+scan', message, re.IGNORECASE)
-                            if name_match:
-                                step_name = name_match.group(1).strip()
-                            else:
-                                # Fallback: use first few words
-                                words = message.split()[:2]
-                                step_name = " ".join(words)
+                        # Skip init line
+                        if "init" in step_data:
+                            continue
                         
-                        # Determine status from icon
-                        status = StepStatus.PENDING
-                        if status_icon == '✓':
-                            status = StepStatus.COMPLETED
-                        elif status_icon == '⏳':
-                            status = StepStatus.RUNNING
-                        elif status_icon == '❌':
-                            status = StepStatus.FAILED
-                        elif status_icon == '⊘':
-                            status = StepStatus.SKIPPED
+                        # Extract step data
+                        step_number = step_data.get("number")
+                        step_name = step_data.get("name")
+                        status_str = step_data.get("status", "pending")
+                        message = step_data.get("message", "")
+                        started_at_str = step_data.get("started_at")
+                        completed_at_str = step_data.get("completed_at")
+                        
+                        if not step_number or not step_name:
+                            continue
+                        
+                        # Convert status string to enum
+                        status_map = {
+                            "pending": StepStatus.PENDING,
+                            "running": StepStatus.RUNNING,
+                            "completed": StepStatus.COMPLETED,
+                            "failed": StepStatus.FAILED,
+                            "skipped": StepStatus.SKIPPED
+                        }
+                        status = status_map.get(status_str, StepStatus.PENDING)
+                        
+                        # Parse timestamps
+                        started_at = None
+                        completed_at = None
+                        if started_at_str:
+                            try:
+                                started_at = datetime.fromisoformat(started_at_str)
+                            except (ValueError, AttributeError):
+                                pass
+                        if completed_at_str:
+                            try:
+                                completed_at = datetime.fromisoformat(completed_at_str)
+                            except (ValueError, AttributeError):
+                                pass
                         
                         # Register step if not already registered
                         if step_name not in self.steps:
@@ -283,21 +289,34 @@ class StepRegistry:
                                 number=step_number,
                                 name=step_name,
                                 status=status,
-                                message=message.strip(),
-                                started_at=datetime.now() if status != StepStatus.PENDING else None,
-                                completed_at=datetime.now() if status in [StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.SKIPPED] else None
+                                message=message,
+                                started_at=started_at,
+                                completed_at=completed_at
                             )
                             # Update step_counter to highest step number
                             if step_number > self.step_counter:
                                 self.step_counter = step_number
+                    except json.JSONDecodeError:
+                        # Skip invalid JSON lines (e.g., old format lines)
+                        continue
         except Exception as e:
             print(f"[Step Registry] Error loading existing steps: {e}")
     
-    def _write_to_log(self, line: str):
-        """Write line to steps.log file"""
+    def _write_to_log(self, step: Step):
+        """Write step as JSON line to steps.log file (structured format, no parsing needed!)"""
         try:
+            import json
+            step_dict = {
+                "number": step.number,
+                "name": step.name,
+                "status": step.status.value,  # 'pending', 'running', 'completed', 'failed', 'skipped'
+                "message": step.message,
+                "started_at": step.started_at.isoformat() if step.started_at else None,
+                "completed_at": step.completed_at.isoformat() if step.completed_at else None,
+                "timestamp": datetime.now().isoformat()
+            }
             with open(self.steps_log, "a", encoding="utf-8") as f:
-                f.write(f"{line}\n")
+                f.write(json.dumps(step_dict) + "\n")
         except Exception as e:
             print(f"[Step Registry] Error writing to steps.log: {e}")
     

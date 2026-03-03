@@ -98,8 +98,22 @@ class PostgreSQLDatabase(DatabaseAdapter):
                     started_at TIMESTAMP,
                     completed_at TIMESTAMP,
                     scan_id TEXT,
+                    metadata JSONB,
                     CONSTRAINT status_check CHECK (status IN ('pending', 'running', 'completed', 'failed'))
                 )
+            """)
+            
+            # Add metadata column if it doesn't exist (migration for existing databases)
+            await conn.execute("""
+                DO $$ 
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'queue' AND column_name = 'metadata'
+                    ) THEN
+                        ALTER TABLE queue ADD COLUMN metadata JSONB;
+                    END IF;
+                END $$;
             """)
             
             # Create index for faster queue lookups
