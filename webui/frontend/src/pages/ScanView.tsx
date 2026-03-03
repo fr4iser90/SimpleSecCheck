@@ -49,6 +49,7 @@ export default function ScanView() {
 
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null)
   const [steps, setSteps] = useState<Step[]>([])
+  const [progress, setProgress] = useState<number>(0)
   const [isStepsSidebarOpen, setIsStepsSidebarOpen] = useState(false)
   const [isLogsSidebarOpen, setIsLogsSidebarOpen] = useState(false)
   const [isAIPromptModalOpen, setIsAIPromptModalOpen] = useState(false)
@@ -166,6 +167,10 @@ export default function ScanView() {
                 if (data.steps && Array.isArray(data.steps)) {
                   setSteps(data.steps)
                 }
+                // Update progress from backend (calculated in step_registry.py)
+                if (data.progress_percentage !== undefined) {
+                  setProgress(data.progress_percentage)
+                }
               } else if (data.type === 'pong' || data.type === 'heartbeat') {
                 // Heartbeat response, do nothing
                 return
@@ -238,12 +243,7 @@ export default function ScanView() {
     return () => window.removeEventListener('message', handleMessage)
   }, [])
 
-  // Calculate progress percentage
-  const calculateProgress = (): number => {
-    if (steps.length === 0) return 0
-    const completed = steps.filter(s => s.status === 'completed').length
-    return Math.round((completed / steps.length) * 100)
-  }
+  // Progress is now calculated in backend and sent via WebSocket
 
   // Show queue waiting state (Backend queue status: 'pending')
   if (status.status === 'pending') {
@@ -339,7 +339,6 @@ export default function ScanView() {
 
   // Show loading/running state with steps (Backend status: 'running' from both systems)
   if (status.status === 'running' || ((status.status === 'done' || status.status === 'completed') && !status.results_dir)) {
-    const progress = calculateProgress()
     
     return (
       <div style={{ 

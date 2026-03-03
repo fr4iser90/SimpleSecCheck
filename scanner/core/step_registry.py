@@ -204,6 +204,27 @@ class StepRegistry:
         """Get total number of registered steps"""
         return self.step_counter
     
+    def get_progress_percentage(self) -> int:
+        """
+        Calculate progress percentage based on step statuses
+        
+        Returns:
+            Progress percentage (0-100)
+        """
+        total_steps = self.get_total_steps()
+        if total_steps == 0:
+            return 0
+        
+        completed = sum(1 for step in self.steps.values() if step.status == StepStatus.COMPLETED)
+        running = sum(1 for step in self.steps.values() if step.status == StepStatus.RUNNING)
+        failed = sum(1 for step in self.steps.values() if step.status == StepStatus.FAILED)
+        
+        # Progress = (completed + failed + (running * 0.5)) / total_steps
+        # Running step counts as 50% progress
+        progress = (completed + failed + (running * 0.5)) / total_steps
+        
+        return round(progress * 100)
+    
     def get_step(self, step_name: str) -> Optional[Step]:
         """Get a step by name"""
         return self.steps.get(step_name)
@@ -291,7 +312,8 @@ class StepRegistry:
                 self.scan_id,
                 {
                     "steps": steps,
-                    "total_steps": self.get_total_steps()
+                    "total_steps": self.get_total_steps(),
+                    "progress_percentage": self.get_progress_percentage()
                 }
             )
         except Exception as e:

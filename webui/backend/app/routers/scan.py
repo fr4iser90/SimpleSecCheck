@@ -411,10 +411,23 @@ async def websocket_scan_updates(websocket: WebSocket, scan_id: str = None):
             
             steps = sorted(step_map.values(), key=lambda x: x["number"])
             
+            # Calculate total_steps and progress_percentage from steps
+            total_steps = max([s["number"] for s in steps], default=0)
+            if total_steps == 0:
+                progress_percentage = 0
+            else:
+                completed = sum(1 for s in steps if s.get("status") == "completed")
+                running = sum(1 for s in steps if s.get("status") == "running")
+                failed = sum(1 for s in steps if s.get("status") == "failed")
+                # Progress = (completed + failed + (running * 0.5)) / total_steps
+                progress_percentage = round(((completed + failed + (running * 0.5)) / total_steps) * 100)
+            
             # Send initial steps
             await websocket.send_json({
                 "type": "initial_steps",
                 "steps": steps,
+                "total_steps": total_steps,
+                "progress_percentage": progress_percentage,
                 "scan_id": actual_scan_id,
                 "timestamp": asyncio.get_event_loop().time()
             })

@@ -249,8 +249,18 @@ class ScanOrchestrator:
                 # Filter out None values (optional parameters that weren't provided)
                 scanner_kwargs = {k: v for k, v in scanner_kwargs.items() if v is not None or k in ["target_path", "results_dir", "log_file"]}
                 
+                # CRITICAL FIX: Only pass parameters that actually exist in the scanner signature
+                # Filter out any parameters that don't exist in the signature
+                valid_kwargs = {}
+                for param_name, param_value in scanner_kwargs.items():
+                    if param_name in param_names:
+                        valid_kwargs[param_name] = param_value
+                    else:
+                        # Log warning if we're trying to pass an invalid parameter
+                        self.log_message(f"[WARNING] Skipping invalid parameter '{param_name}' for {scanner.name} (not in signature)")
+                
                 # Instantiate and run scanner
-                scanner_instance = scanner_class(**scanner_kwargs)
+                scanner_instance = scanner_class(**valid_kwargs)
                 
                 success = scanner_instance.run()
                 

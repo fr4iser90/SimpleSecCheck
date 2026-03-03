@@ -66,6 +66,8 @@ class WebSocketManager:
         data = {
             "type": "step_update",
             "steps": step_data.get("steps", []),
+            "total_steps": step_data.get("total_steps"),
+            "progress_percentage": step_data.get("progress_percentage"),
             "scan_id": scan_id,
             "timestamp": asyncio.get_event_loop().time()
         }
