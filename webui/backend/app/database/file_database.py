@@ -134,6 +134,7 @@ class FileDatabase(DatabaseAdapter):
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
         selected_scanners: Optional[List[str]] = None,
+        finding_policy: Optional[str] = None,
     ) -> str:
         """Add scan to queue"""
         queue_id = str(uuid.uuid4())
@@ -147,6 +148,7 @@ class FileDatabase(DatabaseAdapter):
             "branch": branch,
             "commit_hash": commit_hash,
             "selected_scanners": selected_scanners,  # List of scanner names
+            "finding_policy": finding_policy,
             "status": "pending",
             "position": position,
             "created_at": datetime.utcnow().isoformat(),
@@ -162,7 +164,7 @@ class FileDatabase(DatabaseAdapter):
         """Get queue item by ID"""
         for item in self._queue:
             if item["queue_id"] == queue_id:
-                return item
+                return self._inject_metadata_fields(item)
         return None
     
     async def get_queue(self, limit: int = 100) -> List[Dict[str, Any]]:
@@ -215,7 +217,7 @@ class FileDatabase(DatabaseAdapter):
         
         # Sort by created_at (FIFO)
         pending.sort(key=lambda x: x["created_at"])
-        return pending[0]
+        return self._inject_metadata_fields(pending[0])
     
     async def get_queue_length(self) -> int:
         """Get current queue length (active items only)"""
@@ -245,13 +247,19 @@ class FileDatabase(DatabaseAdapter):
         repository_url: str,
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
+        finding_policy: Optional[str] = None,
+        include_completed: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Find duplicate scan in queue"""
         for item in self._queue:
             if item["repository_url"] == repository_url:
+                if not include_completed and item.get("status") not in ("pending", "running"):
+                    continue
                 if branch and item.get("branch") != branch:
                     continue
                 if commit_hash and item.get("commit_hash") != commit_hash:
+                    continue
+                if finding_policy is not None and item.get("finding_policy") != finding_policy:
                     continue
                 # Found duplicate
                 return item
@@ -328,6 +336,10 @@ class FileDatabase(DatabaseAdapter):
         if url.startswith("git@"):
             url = url.replace("git@", "https://").replace(":", "/")
         return url
+
+    def _inject_metadata_fields(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize metadata fields into top-level keys"""
+        return item
     
     # Statistics
     async def increment_statistics(

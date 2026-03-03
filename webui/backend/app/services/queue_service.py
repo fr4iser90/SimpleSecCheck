@@ -18,6 +18,8 @@ class QueueService:
         self.db = get_database()
         self.max_queue_length = int(os.getenv("MAX_QUEUE_LENGTH", "1000"))
         self.deduplication_enabled = os.getenv("QUEUE_DEDUPLICATION", "true").lower() == "true"
+        self.deduplication_include_completed = os.getenv("QUEUE_DEDUPLICATION_INCLUDE_COMPLETED", "false").lower() == "true"
+        self.deduplication_by_policy = os.getenv("QUEUE_DEDUPLICATION_BY_POLICY", "true").lower() == "true"
     
     async def initialize(self):
         """Initialize database connection"""
@@ -49,6 +51,7 @@ class QueueService:
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
         selected_scanners: Optional[List[str]] = None,
+        finding_policy: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Add scan to queue with deduplication
@@ -65,18 +68,28 @@ class QueueService:
         
         # Check for duplicates if deduplication is enabled
         if self.deduplication_enabled:
+            dedupe_policy = finding_policy if self.deduplication_by_policy else None
             duplicate = await self.db.find_duplicate_in_queue(
-                repository_url, branch, commit_hash
+                repository_url,
+                branch,
+                commit_hash,
+                dedupe_policy,
+                include_completed=self.deduplication_include_completed,
             )
             
             if duplicate:
+                duplicate_status = duplicate.get("status")
+                message = "Identical scan already in queue. You will receive the same results."
+                if duplicate_status == "completed":
+                    message = "Scan already completed for this repo/commit. Returning existing results."
                 # Return existing queue item
                 return {
                     "queue_id": duplicate["queue_id"],
-                    "status": duplicate["status"],
-                    "message": "Identical scan already in queue. You will receive the same results.",
+                    "status": duplicate_status,
+                    "message": message,
                     "duplicate_of": duplicate["queue_id"],
                     "position": duplicate.get("position"),
+                    "scan_id": duplicate.get("scan_id"),
                 }
         
         # Anonymize repository name
@@ -90,6 +103,7 @@ class QueueService:
             branch=branch,
             commit_hash=commit_hash,
             selected_scanners=selected_scanners,
+            finding_policy=finding_policy,
         )
         
         # Get queue item

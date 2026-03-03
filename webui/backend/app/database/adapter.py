@@ -61,6 +61,7 @@ class DatabaseAdapter(ABC):
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
         selected_scanners: Optional[List[str]] = None,
+        finding_policy: Optional[str] = None,
     ) -> str:
         """Add scan to queue, returns queue_id"""
         pass
@@ -113,6 +114,8 @@ class DatabaseAdapter(ABC):
         repository_url: str,
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
+        finding_policy: Optional[str] = None,
+        include_completed: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Find duplicate scan in queue"""
         pass

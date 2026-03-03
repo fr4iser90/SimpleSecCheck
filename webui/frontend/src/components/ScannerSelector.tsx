@@ -85,7 +85,7 @@ export default function ScannerSelector({
   
   return (
     <div className="form-group">
-      <label>Scanner Selection (Optional)</label>
+      <label>Scanner Selection</label>
       <details 
         open={isOpen}
         onToggle={(e) => setIsOpen((e.target as HTMLDetailsElement).open)}
@@ -101,7 +101,7 @@ export default function ScannerSelector({
           userSelect: 'none',
           listStyle: 'none'
         }}>
-          🔧 Select which scanners to run. Leave empty to use all scanners.
+          🔧 Select which scanners to run. At least one scanner must be selected.
         </summary>
         
         <div style={{ marginTop: '1rem' }}>
@@ -203,7 +203,7 @@ export default function ScannerSelector({
                 ))}
               </div>
               
-              {selectedScanners.length > 0 && (
+              {selectedScanners.length > 0 ? (
                 <div style={{ 
                   marginTop: '0.75rem',
                   padding: '0.5rem',
@@ -214,6 +214,18 @@ export default function ScannerSelector({
                   color: '#155724'
                 }}>
                   ✓ {selectedScanners.length} scanner(s) selected
+                </div>
+              ) : (
+                <div style={{ 
+                  marginTop: '0.75rem',
+                  padding: '0.5rem',
+                  background: 'rgba(220, 53, 69, 0.1)',
+                  border: '1px solid #dc3545',
+                  borderRadius: '4px',
+                  fontSize: '0.875rem',
+                  color: '#a71d2a'
+                }}>
+                  ⚠️ Bitte wähle mindestens einen Scanner aus, um den Scan zu starten.
                 </div>
               )}
             </>

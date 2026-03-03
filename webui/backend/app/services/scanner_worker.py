@@ -259,6 +259,7 @@ class ScannerWorker:
         branch = job.get("branch")
         commit_hash = job.get("commit_hash")
         selected_scanners = job.get("selected_scanners")  # List of scanner names to run
+        finding_policy = job.get("finding_policy")
         
         print(f"[Scanner Worker] Processing job {queue_id} for {repository_url}")
         if selected_scanners:
@@ -288,6 +289,7 @@ class ScannerWorker:
                 commit_hash=commit_hash,
                 scan_id=scan_id,  # Pass scan_id to _execute_scan
                 selected_scanners=selected_scanners,  # Pass selected scanners
+                finding_policy=finding_policy,
             )
             print(f"[Scanner Worker] Scan execution completed: scan_id={actual_scan_id}")
             
@@ -316,6 +318,7 @@ class ScannerWorker:
         commit_hash: Optional[str] = None,
         scan_id: Optional[str] = None,
         selected_scanners: Optional[List[str]] = None,
+        finding_policy: Optional[str] = None,
     ) -> str:
         """
         Execute scan using docker_runner.py (replaces run-docker.sh)
@@ -447,6 +450,13 @@ class ScannerWorker:
         else:
             # Clear if not set
             os.environ.pop("SELECTED_SCANNERS", None)
+        # Set finding policy (if provided)
+        if finding_policy:
+            os.environ["FINDING_POLICY_FILE"] = finding_policy
+            os.environ["FINDING_POLICY_FILE_IN_CONTAINER"] = finding_policy
+        else:
+            os.environ.pop("FINDING_POLICY_FILE", None)
+            os.environ.pop("FINDING_POLICY_FILE_IN_CONTAINER", None)
         
         # Use docker_runner instead of run-docker.sh
         from app.services.docker_runner import DockerRunner
@@ -539,7 +549,7 @@ class ScannerWorker:
                 project_name=project_name,
                 results_dir=results_dir_path,
                 ci_mode=False,  # WebUI always does full scans
-                finding_policy=None,  # Auto-detect
+                finding_policy=finding_policy,
                 collect_metadata=True,
                 output_callback=output_callback,
             )

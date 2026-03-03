@@ -259,6 +259,7 @@ class PostgreSQLDatabase(DatabaseAdapter):
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
         selected_scanners: Optional[List[str]] = None,
+        finding_policy: Optional[str] = None,
     ) -> str:
         """Add scan to queue"""
         import json
@@ -284,7 +285,10 @@ class PostgreSQLDatabase(DatabaseAdapter):
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """, uuid.UUID(queue_id), uuid.UUID(session_id), repository_url,
                     repository_name, branch, commit_hash, "pending", position,
-                    json.dumps({"selected_scanners": selected_scanners}) if selected_scanners else None)
+                    json.dumps({
+                        "selected_scanners": selected_scanners,
+                        "finding_policy": finding_policy,
+                    }) if selected_scanners or finding_policy else None)
             except Exception:
                 # Fallback: if metadata column doesn't exist, try without it
                 await conn.execute("""
@@ -299,7 +303,6 @@ class PostgreSQLDatabase(DatabaseAdapter):
     
     async def get_queue_item(self, queue_id: str) -> Optional[Dict[str, Any]]:
         """Get queue item by ID"""
-        import json
         async with self.connection_pool.acquire() as conn:
             row = await conn.fetchrow("""
                 SELECT * FROM queue WHERE queue_id = $1
@@ -308,18 +311,7 @@ class PostgreSQLDatabase(DatabaseAdapter):
             if not row:
                 return None
             
-            result = self._row_to_dict(row)
-            
-            # Extract selected_scanners from metadata if present
-            if "metadata" in result and result["metadata"]:
-                try:
-                    metadata = json.loads(result["metadata"]) if isinstance(result["metadata"], str) else result["metadata"]
-                    if isinstance(metadata, dict) and "selected_scanners" in metadata:
-                        result["selected_scanners"] = metadata["selected_scanners"]
-                except (json.JSONDecodeError, TypeError):
-                    pass  # Ignore if metadata is not valid JSON
-            
-            return result
+            return self._inject_metadata_fields(self._row_to_dict(row))
     
     async def get_queue(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get queue items (public, anonymized) - includes all statuses"""
@@ -394,19 +386,7 @@ class PostgreSQLDatabase(DatabaseAdapter):
             if not row:
                 return None
             
-            result = self._row_to_dict(row)
-            
-            # Extract selected_scanners from metadata if present
-            if "metadata" in result and result["metadata"]:
-                try:
-                    import json
-                    metadata = json.loads(result["metadata"]) if isinstance(result["metadata"], str) else result["metadata"]
-                    if isinstance(metadata, dict) and "selected_scanners" in metadata:
-                        result["selected_scanners"] = metadata["selected_scanners"]
-                except (json.JSONDecodeError, TypeError):
-                    pass  # Ignore if metadata is not valid JSON
-            
-            return result
+            return self._inject_metadata_fields(self._row_to_dict(row))
     
     async def get_queue_length(self) -> int:
         """Get current queue length (active items only)"""
@@ -434,6 +414,8 @@ class PostgreSQLDatabase(DatabaseAdapter):
         repository_url: str,
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
+        finding_policy: Optional[str] = None,
+        include_completed: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Find duplicate scan in queue"""
         normalized_url = self._normalize_url(repository_url)
@@ -451,8 +433,17 @@ class PostgreSQLDatabase(DatabaseAdapter):
             query += f" AND commit_hash = ${param_num}"
             values.append(commit_hash)
             param_num += 1
-        
-        query += " AND status IN ('pending', 'running') LIMIT 1"
+
+        if finding_policy is not None:
+            query += f" AND metadata->>'finding_policy' = ${param_num}"
+            values.append(finding_policy)
+            param_num += 1
+
+        if include_completed:
+            query += " AND status IN ('pending', 'running', 'completed')"
+        else:
+            query += " AND status IN ('pending', 'running')"
+        query += " LIMIT 1"
         
         async with self.connection_pool.acquire() as conn:
             row = await conn.fetchrow(query, *values)
@@ -662,6 +653,21 @@ class PostgreSQLDatabase(DatabaseAdapter):
                 result[key] = value.isoformat()
             else:
                 result[key] = value
+        return result
+
+    def _inject_metadata_fields(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract metadata JSON into top-level fields"""
+        if "metadata" in result and result["metadata"]:
+            try:
+                import json
+                metadata = json.loads(result["metadata"]) if isinstance(result["metadata"], str) else result["metadata"]
+                if isinstance(metadata, dict):
+                    if "selected_scanners" in metadata:
+                        result["selected_scanners"] = metadata["selected_scanners"]
+                    if "finding_policy" in metadata:
+                        result["finding_policy"] = metadata["finding_policy"]
+            except (json.JSONDecodeError, TypeError):
+                pass  # Ignore if metadata is not valid JSON
         return result
     
     def _dict_to_jsonb(self, data: Dict[str, Any]) -> str:

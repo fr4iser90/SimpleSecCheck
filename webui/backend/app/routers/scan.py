@@ -158,6 +158,7 @@ async def start_scan(request: ScanRequest, http_request: Request):
         branch=branch,
         commit_hash=commit_hash,
         selected_scanners=request.selected_scanners,
+        finding_policy=request.finding_policy,
     )
     
     print(f"[Scan Start] Queue result: {result}")

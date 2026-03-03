@@ -52,6 +52,10 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const [selectedScanners, setSelectedScanners] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isScanDisabled = loading || selectedScanners.length === 0
+  const scanDisabledReason = selectedScanners.length === 0
+    ? 'Bitte wähle mindestens einen Scanner aus.'
+    : undefined
   
   // Detect if target is a Git URL
   const isGitRepo = scanType === 'code' && isGitUrl(target)
@@ -389,9 +393,11 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
         </div>
       )}
 
-      <button type="submit" className="primary" disabled={loading}>
-        {loading ? 'Starting...' : ' Start Scan'}
-      </button>
+      <span title={scanDisabledReason} style={{ display: 'inline-block' }}>
+        <button type="submit" className="primary" disabled={isScanDisabled}>
+          {loading ? 'Starting...' : ' Start Scan'}
+        </button>
+      </span>
     </form>
   )
 }
