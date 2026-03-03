@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Optional, Callable
 
+SUPPORTED_PROMPT_LANGUAGES = ["english", "chinese", "german"]
+
 # Setup paths using central path_setup module
 # NO PATH CALCULATIONS HERE - everything is handled by path_setup.py
 sys.path.insert(0, "/app/scanner")
@@ -444,6 +446,47 @@ def generate_ai_prompt(findings: List[Dict], language: str = "english", policy_p
         return _generate_german_prompt(findings, policy_path)
     else:
         return _generate_english_prompt(findings, policy_path)
+
+
+def persist_ai_prompts(
+    results_dir: Path,
+    base_dir: Optional[Path] = None,
+    policy_path: str = "config/finding-policy.json",
+    languages: Optional[List[str]] = None,
+) -> Dict[str, str]:
+    """
+    Generate and persist AI prompts for the provided results directory.
+    Returns a mapping of language -> prompt file path for successfully written prompts.
+    """
+    results_dir = Path(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    findings = collect_findings_from_results(results_dir, base_dir=base_dir)
+    if not findings:
+        raise ValueError("No findings found in scan results")
+
+    prompt_languages = languages or SUPPORTED_PROMPT_LANGUAGES
+    written: Dict[str, str] = {}
+
+    for lang in prompt_languages:
+        normalized = lang.lower()
+        if normalized not in SUPPORTED_PROMPT_LANGUAGES:
+            continue
+
+        prompt_text = generate_ai_prompt(findings, language=normalized, policy_path=policy_path)
+        prompt_payload = {
+            "prompt": prompt_text,
+            "findings_count": len(findings),
+            "language": normalized,
+            "policy_path": policy_path,
+        }
+
+        prompt_file = results_dir / f"ai-prompt-{normalized}.json"
+        with open(prompt_file, "w", encoding="utf-8") as f:
+            json.dump(prompt_payload, f, indent=2, ensure_ascii=False)
+        written[normalized] = str(prompt_file)
+
+    return written
 
 
 def _generate_split_prompt(findings: List[Dict], language: str, policy_path: str, max_findings: int) -> str:

@@ -4,6 +4,7 @@ import { useTranslation, Language } from '../i18n'
 interface AIPromptModalProps {
   isOpen: boolean
   onClose: () => void
+  scanId?: string | null
 }
 
 interface PromptData {
@@ -23,7 +24,7 @@ const mapUILanguageToPromptLanguage = (uiLang: Language): string => {
   return mapping[uiLang] || 'english'
 }
 
-export default function AIPromptModal({ isOpen, onClose }: AIPromptModalProps) {
+export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModalProps) {
   const { t, language: uiLanguage, setLanguage: setUILanguage, languages } = useTranslation()
   
   // Prompt language (for backend API)
@@ -40,7 +41,7 @@ export default function AIPromptModal({ isOpen, onClose }: AIPromptModalProps) {
     if (isOpen) {
       loadPrompt()
     }
-  }, [isOpen, promptLanguage, policyPath])
+  }, [isOpen, promptLanguage, policyPath, scanId])
 
   const loadPrompt = async () => {
     setLoading(true)
@@ -48,9 +49,11 @@ export default function AIPromptModal({ isOpen, onClose }: AIPromptModalProps) {
     
     try {
       const backendLanguage = mapUILanguageToPromptLanguage(promptLanguage)
-      const response = await fetch(
-        `/api/scan/ai-prompt?language=${backendLanguage}&policy_path=${encodeURIComponent(policyPath)}`
-      )
+      const endpoint = scanId
+        ? `/api/results/${scanId}/ai-prompt?language=${backendLanguage}`
+        : `/api/scan/ai-prompt?language=${backendLanguage}&policy_path=${encodeURIComponent(policyPath)}`
+
+      const response = await fetch(endpoint)
       
       if (response.ok) {
         const data: PromptData = await response.json()

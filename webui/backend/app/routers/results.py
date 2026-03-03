@@ -2,7 +2,7 @@
 Results Routes
 """
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from app.services import update_activity
 
@@ -53,5 +53,25 @@ async def get_result_report(scan_id: str):
     return FileResponse(
         report_file,
         media_type="text/html",
+        headers={"Content-Disposition": "inline"}
+    )
+
+
+@router.get("/api/results/{scan_id}/ai-prompt")
+async def get_result_ai_prompt(
+    scan_id: str,
+    language: str = Query("english", description="Prompt language (english, chinese, german)"),
+):
+    """Get saved AI prompt JSON for a specific scan and language."""
+    update_activity()
+    normalized = language.lower()
+    prompt_file = RESULTS_DIR / scan_id / f"ai-prompt-{normalized}.json"
+
+    if not prompt_file.exists():
+        raise HTTPException(status_code=404, detail="AI prompt not found")
+
+    return FileResponse(
+        prompt_file,
+        media_type="application/json",
         headers={"Content-Disposition": "inline"}
     )

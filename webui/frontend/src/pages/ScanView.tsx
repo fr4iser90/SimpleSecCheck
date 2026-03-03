@@ -694,6 +694,7 @@ export default function ScanView() {
         <AIPromptModal
           isOpen={isAIPromptModalOpen}
           onClose={() => setIsAIPromptModalOpen(false)}
+          scanId={status.results_dir}
         />
       </div>
     )

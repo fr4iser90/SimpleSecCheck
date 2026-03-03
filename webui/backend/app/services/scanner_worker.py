@@ -591,6 +591,20 @@ class ScannerWorker:
                 if result_dir.is_dir() and scan_id in result_dir.name:
                     scan_results_dir = result_dir
                     break
+
+        # Persist AI prompts for each supported language
+        if scan_results_dir:
+            try:
+                from app.services.ai_prompt_service import persist_ai_prompts, SUPPORTED_PROMPT_LANGUAGES
+                persist_ai_prompts(
+                    results_dir=scan_results_dir,
+                    base_dir=base_dir,
+                    policy_path="config/finding-policy.json",
+                    languages=SUPPORTED_PROMPT_LANGUAGES,
+                )
+                print(f"[Scanner Worker] AI prompts saved in {scan_results_dir}")
+            except Exception as e:
+                print(f"[Scanner Worker] Failed to persist AI prompts: {e}")
         
         # Save metadata for deduplication
         try:
