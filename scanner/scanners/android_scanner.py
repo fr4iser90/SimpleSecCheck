@@ -4,7 +4,7 @@ Python implementation of run_android_manifest_scanner.sh
 """
 import os
 import json
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner

@@ -211,24 +211,40 @@ class PostgreSQLDatabase(DatabaseAdapter):
         """Update session data"""
         if not kwargs:
             return False
-        
-        set_clauses = []
-        values = []
-        param_num = 1
-        
-        for key, value in kwargs.items():
-            set_clauses.append(f"{key} = ${param_num}")
-            values.append(value)
-            param_num += 1
-        
-        values.append(uuid.UUID(session_id))
-        
+
+        # Only allow known session columns to be updated
+        allowed_fields = {
+            "scans_requested",
+            "rate_limit_scans",
+            "rate_limit_requests",
+            "ip_address",
+            "expires_at",
+        }
+
+        # Filter kwargs to allowed fields
+        sanitized = {key: value for key, value in kwargs.items() if key in allowed_fields}
+        if not sanitized:
+            return False
+
         async with self.connection_pool.acquire() as conn:
-            result = await conn.execute(f"""
-                UPDATE sessions SET {', '.join(set_clauses)}
-                WHERE session_id = ${param_num}
-            """, *values)
-            
+            result = await conn.execute(
+                """
+                UPDATE sessions SET
+                    scans_requested = COALESCE($1, scans_requested),
+                    rate_limit_scans = COALESCE($2, rate_limit_scans),
+                    rate_limit_requests = COALESCE($3, rate_limit_requests),
+                    ip_address = COALESCE($4, ip_address),
+                    expires_at = COALESCE($5, expires_at)
+                WHERE session_id = $6
+                """,
+                sanitized.get("scans_requested"),
+                sanitized.get("rate_limit_scans"),
+                sanitized.get("rate_limit_requests"),
+                sanitized.get("ip_address"),
+                sanitized.get("expires_at"),
+                uuid.UUID(session_id),
+            )
+
             return result == "UPDATE 1"
     
     async def delete_session(self, session_id: str) -> bool:
