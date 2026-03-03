@@ -12,6 +12,13 @@ from abc import ABC, abstractmethod
 class BaseScanner(ABC):
     """Base class for all scanners - provides common functionality"""
     
+    # Metadaten als Klassenattribute - werden von Subklassen überschrieben
+    SCAN_TYPES: List = []  # Liste von ScanType Enum-Werten
+    PRIORITY: int = 0  # Execution order (lower = earlier)
+    REQUIRES_CONDITION: Optional[str] = None  # Optional condition (e.g., "IS_NATIVE", "CLAIR_IMAGE")
+    SCRIPT_PATH: Optional[str] = None  # Path to Bash fallback script
+    ENV_VARS: Dict[str, str] = {}  # Default environment variables
+    
     def __init__(
         self,
         name: str,

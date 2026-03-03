@@ -6,10 +6,19 @@ import os
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class AnchoreScanner(BaseScanner):
     """Anchore scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 31
+    REQUIRES_CONDITION = "ANCHORE_IMAGE"
+    ENV_VARS = {
+        "ANCHORE_CONFIG_PATH": "/SimpleSecCheck/config/tools/anchore/config.yaml"
+    }
     
     def __init__(
         self,

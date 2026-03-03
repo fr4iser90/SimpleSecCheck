@@ -8,7 +8,7 @@ import asyncio
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from app.database import get_database
@@ -222,6 +222,7 @@ class ScannerWorker:
         
         branch = job.get("branch")
         commit_hash = job.get("commit_hash")
+        selected_scanners = job.get("selected_scanners")  # List of scanner names to run
         
         print(f"[Scanner Worker] Processing job {queue_id} for {repository_url}")
         
@@ -246,6 +247,7 @@ class ScannerWorker:
                 branch=branch,
                 commit_hash=commit_hash,
                 scan_id=scan_id,  # Pass scan_id to _execute_scan
+                selected_scanners=selected_scanners,  # Pass selected scanners
             )
             print(f"[Scanner Worker] Scan execution completed: scan_id={actual_scan_id}")
             
@@ -273,6 +275,7 @@ class ScannerWorker:
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
         scan_id: Optional[str] = None,
+        selected_scanners: Optional[List[str]] = None,
     ) -> str:
         """
         Execute scan using docker_runner.py (replaces run-docker.sh)
@@ -397,6 +400,13 @@ class ScannerWorker:
         # Set GIT_URL so docker_runner can extract correct project name
         if is_git_url(repository_url):
             os.environ["GIT_URL"] = repository_url
+        # Set selected scanners (comma-separated list)
+        if selected_scanners:
+            import json
+            os.environ["SELECTED_SCANNERS"] = json.dumps(selected_scanners)
+        else:
+            # Clear if not set
+            os.environ.pop("SELECTED_SCANNERS", None)
         
         # Use docker_runner instead of run-docker.sh
         from app.services.docker_runner import DockerRunner

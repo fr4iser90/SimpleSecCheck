@@ -258,6 +258,11 @@ class DockerRunner:
         if scan_id:
             env_vars.append(("SCAN_ID", scan_id))
         
+        # Add SELECTED_SCANNERS if provided (from environment or parameter)
+        selected_scanners = os.environ.get("SELECTED_SCANNERS")
+        if selected_scanners:
+            env_vars.append(("SELECTED_SCANNERS", selected_scanners))
+        
         if scan_type == "code":
             env_vars.extend([
                 ("SIMPLESECCHECK_EXCLUDE_PATHS", exclude_paths),

@@ -8,10 +8,19 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class SafetyScanner(BaseScanner):
     """Safety scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 5
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "SAFETY_CONFIG_PATH": "/SimpleSecCheck/config/tools/safety/config.yaml"
+    }
     
     def __init__(
         self,

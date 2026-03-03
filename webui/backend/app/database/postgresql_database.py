@@ -244,8 +244,10 @@ class PostgreSQLDatabase(DatabaseAdapter):
         repository_name: str,
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
+        selected_scanners: Optional[List[str]] = None,
     ) -> str:
         """Add scan to queue"""
+        import json
         queue_id = str(uuid.uuid4())
         
         # Calculate position (count of pending items)
@@ -255,18 +257,35 @@ class PostgreSQLDatabase(DatabaseAdapter):
             """)
             position = (position_result or 0) + 1
             
-            await conn.execute("""
-                INSERT INTO queue (
-                    queue_id, session_id, repository_url, repository_name,
-                    branch, commit_hash, status, position
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            """, uuid.UUID(queue_id), uuid.UUID(session_id), repository_url,
-                repository_name, branch, commit_hash, "pending", position)
+            # Store selected_scanners as JSON string in metadata column (if exists) or as text
+            selected_scanners_json = json.dumps(selected_scanners) if selected_scanners else None
+            
+            # Try to insert with selected_scanners in metadata field (if column exists)
+            # If column doesn't exist, we'll store it in a text field or skip it
+            try:
+                await conn.execute("""
+                    INSERT INTO queue (
+                        queue_id, session_id, repository_url, repository_name,
+                        branch, commit_hash, status, position, metadata
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                """, uuid.UUID(queue_id), uuid.UUID(session_id), repository_url,
+                    repository_name, branch, commit_hash, "pending", position,
+                    json.dumps({"selected_scanners": selected_scanners}) if selected_scanners else None)
+            except Exception:
+                # Fallback: if metadata column doesn't exist, try without it
+                await conn.execute("""
+                    INSERT INTO queue (
+                        queue_id, session_id, repository_url, repository_name,
+                        branch, commit_hash, status, position
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """, uuid.UUID(queue_id), uuid.UUID(session_id), repository_url,
+                    repository_name, branch, commit_hash, "pending", position)
         
         return queue_id
     
     async def get_queue_item(self, queue_id: str) -> Optional[Dict[str, Any]]:
         """Get queue item by ID"""
+        import json
         async with self.connection_pool.acquire() as conn:
             row = await conn.fetchrow("""
                 SELECT * FROM queue WHERE queue_id = $1
@@ -275,7 +294,18 @@ class PostgreSQLDatabase(DatabaseAdapter):
             if not row:
                 return None
             
-            return self._row_to_dict(row)
+            result = self._row_to_dict(row)
+            
+            # Extract selected_scanners from metadata if present
+            if "metadata" in result and result["metadata"]:
+                try:
+                    metadata = json.loads(result["metadata"]) if isinstance(result["metadata"], str) else result["metadata"]
+                    if isinstance(metadata, dict) and "selected_scanners" in metadata:
+                        result["selected_scanners"] = metadata["selected_scanners"]
+                except (json.JSONDecodeError, TypeError):
+                    pass  # Ignore if metadata is not valid JSON
+            
+            return result
     
     async def get_queue(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get queue items (public, anonymized) - includes all statuses"""

@@ -8,10 +8,20 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class CodeQLScanner(BaseScanner):
     """CodeQL scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 3
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "CODEQL_CONFIG_PATH": "/SimpleSecCheck/config/tools/codeql/config.yaml",
+        "CODEQL_QUERIES_PATH": "/SimpleSecCheck/config/tools/codeql/queries"
+    }
     
     def __init__(
         self,

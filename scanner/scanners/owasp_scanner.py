@@ -8,10 +8,20 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class OWASPScanner(BaseScanner):
     """OWASP Dependency Check scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 4
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "OWASP_DC_CONFIG_PATH": "/SimpleSecCheck/config/tools/owasp-dependency-check/config.yaml",
+        "OWASP_DC_DATA_DIR": "/SimpleSecCheck/owasp-dependency-check-data"
+    }
     
     def __init__(
         self,

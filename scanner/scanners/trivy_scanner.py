@@ -6,10 +6,19 @@ import os
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class TrivyScanner(BaseScanner):
     """Trivy scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 2
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "TRIVY_CONFIG_PATH": "/SimpleSecCheck/config/tools/trivy/config.yaml"
+    }
     
     def __init__(
         self,

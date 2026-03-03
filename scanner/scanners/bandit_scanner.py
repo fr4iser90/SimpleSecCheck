@@ -8,10 +8,19 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class BanditScanner(BaseScanner):
     """Bandit scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 24
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "BANDIT_CONFIG_PATH": "/SimpleSecCheck/config/tools/bandit/config.yaml"
+    }
     
     def __init__(
         self,

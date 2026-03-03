@@ -7,10 +7,19 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class SemgrepScanner(BaseScanner):
     """Semgrep scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 1
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "SEMGREP_RULES_PATH": "/SimpleSecCheck/config/rules"
+    }
     
     def __init__(
         self,

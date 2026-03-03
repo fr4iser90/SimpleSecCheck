@@ -7,10 +7,17 @@ import json
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class NucleiScanner(BaseScanner):
     """Nuclei scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.WEBSITE]
+    PRIORITY = 2
+    REQUIRES_CONDITION = None
+    ENV_VARS = {}
     
     def __init__(
         self,

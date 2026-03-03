@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { FrontendConfig } from '../hooks/useConfig'
+import ScannerSelector from './ScannerSelector'
 
 interface ScanStatusData {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -48,6 +49,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const [ciMode, setCiMode] = useState(false)
   const [findingPolicy, setFindingPolicy] = useState('')
   const [collectMetadata, setCollectMetadata] = useState(metadataCollection === 'always')
+  const [selectedScanners, setSelectedScanners] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
@@ -132,6 +134,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
           ci_mode: ciMode,
           finding_policy: cleanFindingPolicy,
           collect_metadata: collectMetadata,
+          selected_scanners: selectedScanners.length > 0 ? selectedScanners : undefined,
         }),
       })
 
@@ -337,6 +340,12 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
           placeholder="config/finding-policy.json"
         />
       </div>
+
+      <ScannerSelector
+        scanType={scanType}
+        selectedScanners={selectedScanners}
+        onSelectionChange={setSelectedScanners}
+      />
 
       {metadataCollection === 'optional' && (
         <div className="form-group">

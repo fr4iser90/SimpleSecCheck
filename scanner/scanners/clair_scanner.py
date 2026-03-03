@@ -7,10 +7,19 @@ import json
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class ClairScanner(BaseScanner):
     """Clair scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 30
+    REQUIRES_CONDITION = "CLAIR_IMAGE"
+    ENV_VARS = {
+        "CLAIR_CONFIG_PATH": "/SimpleSecCheck/config/tools/clair/config.yaml"
+    }
     
     def __init__(
         self,

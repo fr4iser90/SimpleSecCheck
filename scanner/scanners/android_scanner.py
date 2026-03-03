@@ -8,10 +8,19 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class AndroidScanner(BaseScanner):
     """Android Manifest scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 40
+    REQUIRES_CONDITION = "IS_NATIVE"
+    ENV_VARS = {
+        "ANDROID_CONFIG_PATH": "/SimpleSecCheck/config/tools/android/config.yaml"
+    }
     
     def __init__(
         self,

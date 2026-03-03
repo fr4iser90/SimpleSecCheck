@@ -58,9 +58,13 @@ class StepRegistry:
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.steps_log = self.logs_dir / "steps.log"
         
-        # Initialize steps.log
-        with open(self.steps_log, "w", encoding="utf-8") as f:
-            f.write(f"----- SimpleSecCheck Steps Log Initialized: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -----\n")
+        # Initialize steps.log (only if it doesn't exist - preserve Git Clone step if already written)
+        if not self.steps_log.exists():
+            with open(self.steps_log, "w", encoding="utf-8") as f:
+                f.write(f"----- SimpleSecCheck Steps Log Initialized: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -----\n")
+        else:
+            # Read existing steps from log (e.g., Git Clone step written before orchestrator starts)
+            self._load_existing_steps()
     
     def start_step(self, step_name: str, message: str = "") -> int:
         """
@@ -199,6 +203,74 @@ class StepRegistry:
     def get_total_steps(self) -> int:
         """Get total number of registered steps"""
         return self.step_counter
+    
+    def get_step(self, step_name: str) -> Optional[Step]:
+        """Get a step by name"""
+        return self.steps.get(step_name)
+    
+    def _load_existing_steps(self):
+        """Load existing steps from steps.log (e.g., Git Clone step)"""
+        import re
+        try:
+            with open(self.steps_log, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("-----"):
+                        continue
+                    
+                    # Parse step line: "⏳ Step 1: Cloning Git repository..."
+                    step_match = re.match(r'([⏳✓❌⊘]?)\s*Step\s+(\d+):\s*(.+)', line, re.IGNORECASE)
+                    if step_match:
+                        status_icon, step_num_str, message = step_match.groups()
+                        step_number = int(step_num_str)
+                        
+                        # Extract step name from message
+                        # Examples: "Cloning Git repository..." -> "Git Clone"
+                        #           "Running Semgrep scan..." -> "Semgrep"
+                        if "git" in message.lower() and "clone" in message.lower():
+                            step_name = "Git Clone"
+                        elif "initializ" in message.lower():
+                            step_name = "Initialization"
+                        elif "metadata" in message.lower():
+                            step_name = "Metadata Collection"
+                        elif "complet" in message.lower() and "scan" in message.lower():
+                            step_name = "Completion"
+                        else:
+                            # Try to extract scanner name
+                            name_match = re.match(r'^Running\s+(.+?)\s+scan', message, re.IGNORECASE)
+                            if name_match:
+                                step_name = name_match.group(1).strip()
+                            else:
+                                # Fallback: use first few words
+                                words = message.split()[:2]
+                                step_name = " ".join(words)
+                        
+                        # Determine status from icon
+                        status = StepStatus.PENDING
+                        if status_icon == '✓':
+                            status = StepStatus.COMPLETED
+                        elif status_icon == '⏳':
+                            status = StepStatus.RUNNING
+                        elif status_icon == '❌':
+                            status = StepStatus.FAILED
+                        elif status_icon == '⊘':
+                            status = StepStatus.SKIPPED
+                        
+                        # Register step if not already registered
+                        if step_name not in self.steps:
+                            self.steps[step_name] = Step(
+                                number=step_number,
+                                name=step_name,
+                                status=status,
+                                message=message.strip(),
+                                started_at=datetime.now() if status != StepStatus.PENDING else None,
+                                completed_at=datetime.now() if status in [StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.SKIPPED] else None
+                            )
+                            # Update step_counter to highest step number
+                            if step_number > self.step_counter:
+                                self.step_counter = step_number
+        except Exception as e:
+            print(f"[Step Registry] Error loading existing steps: {e}")
     
     def _write_to_log(self, line: str):
         """Write line to steps.log file"""

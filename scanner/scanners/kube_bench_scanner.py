@@ -6,10 +6,17 @@ import os
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class KubeBenchScanner(BaseScanner):
     """Kube-bench scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.NETWORK]
+    PRIORITY = 2
+    REQUIRES_CONDITION = None
+    ENV_VARS = {}
     
     def __init__(
         self,

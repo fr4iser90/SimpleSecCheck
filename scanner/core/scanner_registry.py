@@ -106,6 +106,51 @@ class ScannerRegistry:
     def get_scanner(cls, name: str) -> Optional[Scanner]:
         """Get a specific scanner by name"""
         return cls._scanners.get(name)
+    
+    @classmethod
+    def register_from_class(cls, scanner_class):
+        """
+        Register a scanner from its class (auto-discovery)
+        
+        Args:
+            scanner_class: Scanner class that inherits from BaseScanner
+        """
+        # Get scanner name from class name (e.g., SemgrepScanner -> Semgrep)
+        class_name = scanner_class.__name__
+        scanner_name = class_name.replace("Scanner", "").replace("OWASP", "OWASP Dependency Check")
+        
+        # Get metadata from class attributes
+        scan_types = getattr(scanner_class, "SCAN_TYPES", [])
+        priority = getattr(scanner_class, "PRIORITY", 0)
+        requires_condition = getattr(scanner_class, "REQUIRES_CONDITION", None)
+        script_path = getattr(scanner_class, "SCRIPT_PATH", None)
+        env_vars = getattr(scanner_class, "ENV_VARS", {}).copy()
+        
+        # Add PYTHON_SCANNER_CLASS to env_vars
+        module = scanner_class.__module__
+        env_vars["PYTHON_SCANNER_CLASS"] = f"{module}.{class_name}"
+        
+        # Build script path if not provided
+        if not script_path:
+            BASE_DIR = "/SimpleSecCheck"
+            TOOLS_DIR = f"{BASE_DIR}/scripts/tools"
+            # Convert class name to script name (e.g., SemgrepScanner -> run_semgrep.sh)
+            script_name = class_name.lower().replace("scanner", "").replace("owasp", "owasp_dependency_check")
+            script_name = script_name.replace("codeql", "codeql").replace("npm", "npm_audit")
+            script_name = script_name.replace("terraform", "terraform_security")
+            script_path = f"{TOOLS_DIR}/run_{script_name}.sh"
+        
+        # Create and register Scanner
+        scanner = Scanner(
+            name=scanner_name,
+            scan_types=scan_types,
+            script_path=script_path,
+            priority=priority,
+            requires_condition=requires_condition,
+            env_vars=env_vars
+        )
+        
+        cls.register(scanner)
 
 
 # Auto-register all scanners on import
@@ -435,5 +480,6 @@ def _register_all_scanners():
     ))
 
 
-# Auto-register on import
+# Auto-register on import (legacy manual registration - will be replaced by auto-registration)
+# This is kept as fallback for scanners that don't have metadata yet
 _register_all_scanners()

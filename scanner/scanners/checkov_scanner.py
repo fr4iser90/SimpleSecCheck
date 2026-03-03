@@ -6,10 +6,19 @@ import os
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class CheckovScanner(BaseScanner):
     """Checkov scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 12
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "CHECKOV_CONFIG_PATH": "/SimpleSecCheck/config/tools/checkov/config.yaml"
+    }
     
     def __init__(
         self,

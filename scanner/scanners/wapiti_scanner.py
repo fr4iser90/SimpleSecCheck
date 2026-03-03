@@ -6,10 +6,17 @@ import os
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class WapitiScanner(BaseScanner):
     """Wapiti scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.WEBSITE]
+    PRIORITY = 3
+    REQUIRES_CONDITION = None
+    ENV_VARS = {}
     
     def __init__(
         self,

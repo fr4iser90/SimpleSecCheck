@@ -48,6 +48,7 @@ class QueueService:
         repository_url: str,
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
+        selected_scanners: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Add scan to queue with deduplication
@@ -88,6 +89,7 @@ class QueueService:
             repository_name=repository_name,
             branch=branch,
             commit_hash=commit_hash,
+            selected_scanners=selected_scanners,
         )
         
         # Get queue item

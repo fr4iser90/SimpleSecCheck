@@ -41,6 +41,58 @@ def init_scan_router(is_production: bool, session_management: bool, results_dir:
     current_scan = scan_state
 
 
+@router.get("/api/scanners")
+async def get_scanners(scan_type: str = None):
+    """
+    Get list of available scanners (dynamically from ScannerRegistry)
+    
+    Args:
+        scan_type: Optional filter by scan type ('code', 'website', 'network')
+    
+    Returns:
+        List of scanners with metadata
+    """
+    update_activity()
+    
+    try:
+        import sys
+        sys.path.insert(0, "/app/scanner")
+        from scanner.core.scanner_registry import ScannerRegistry, ScanType
+        
+        # Get all scanners or filter by type
+        if scan_type:
+            try:
+                scan_type_enum = ScanType(scan_type)
+                scanners = ScannerRegistry.get_scanners_for_type(scan_type_enum)
+            except ValueError:
+                # Invalid scan type, return empty list
+                return {"scanners": []}
+        else:
+            scanners = ScannerRegistry.get_all_scanners()
+        
+        # Format for frontend
+        result = []
+        for scanner in scanners:
+            result.append({
+                "name": scanner.name,
+                "scan_types": [st.value for st in scanner.scan_types],
+                "priority": scanner.priority,
+                "requires_condition": scanner.requires_condition,
+                "enabled": scanner.enabled
+            })
+        
+        # Sort by priority
+        result.sort(key=lambda x: x["priority"])
+        
+        return {"scanners": result}
+    except Exception as e:
+        print(f"[Get Scanners] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        # Return empty list on error (graceful degradation)
+        return {"scanners": []}
+
+
 @router.post("/api/scan/start", response_model=ScanStatus)
 async def start_scan(request: ScanRequest, http_request: Request):
     """

@@ -60,6 +60,7 @@ class DatabaseAdapter(ABC):
         repository_name: str,
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
+        selected_scanners: Optional[List[str]] = None,
     ) -> str:
         """Add scan to queue, returns queue_id"""
         pass

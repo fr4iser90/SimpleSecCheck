@@ -7,10 +7,19 @@ import shutil
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class ZAPScanner(BaseScanner):
     """ZAP scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.WEBSITE]
+    PRIORITY = 1
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "ZAP_CONFIG_PATH": "/SimpleSecCheck/config/tools/zap/baseline.conf"
+    }
     
     def __init__(
         self,

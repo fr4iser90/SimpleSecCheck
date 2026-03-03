@@ -8,10 +8,19 @@ import plistlib
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class iOSScanner(BaseScanner):
     """iOS Plist scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 41
+    REQUIRES_CONDITION = "IS_NATIVE"
+    ENV_VARS = {
+        "IOS_CONFIG_PATH": "/SimpleSecCheck/config/tools/ios/config.yaml"
+    }
     
     def __init__(
         self,

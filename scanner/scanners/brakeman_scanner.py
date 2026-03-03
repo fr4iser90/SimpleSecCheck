@@ -6,10 +6,19 @@ import os
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class BrakemanScanner(BaseScanner):
     """Brakeman scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 23
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "BRAKEMAN_CONFIG_PATH": "/SimpleSecCheck/config/tools/brakeman/config.yaml"
+    }
     
     def __init__(
         self,

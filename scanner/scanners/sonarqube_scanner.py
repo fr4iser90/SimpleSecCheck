@@ -8,10 +8,19 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class SonarQubeScanner(BaseScanner):
     """SonarQube scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 7
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "SONARQUBE_CONFIG_PATH": "/SimpleSecCheck/config/tools/sonarqube/config.yaml"
+    }
     
     def __init__(
         self,

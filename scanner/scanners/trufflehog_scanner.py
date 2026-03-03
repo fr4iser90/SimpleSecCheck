@@ -7,10 +7,19 @@ import json
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class TruffleHogScanner(BaseScanner):
     """TruffleHog scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 16
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "TRUFFLEHOG_CONFIG_PATH": "/SimpleSecCheck/config/tools/trufflehog/config.yaml"
+    }
     
     def __init__(
         self,

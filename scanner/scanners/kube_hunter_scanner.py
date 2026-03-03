@@ -6,10 +6,19 @@ import os
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class KubeHunterScanner(BaseScanner):
     """Kube-hunter scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.NETWORK]
+    PRIORITY = 1
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "KUBE_HUNTER_CONFIG_PATH": "/SimpleSecCheck/config/tools/kube-hunter/config.yaml"
+    }
     
     def __init__(
         self,

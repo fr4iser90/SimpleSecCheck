@@ -6,10 +6,19 @@ import os
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class TerraformSecurityScanner(BaseScanner):
     """Terraform Security scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 11
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "TERRAFORM_SECURITY_CONFIG_PATH": "/SimpleSecCheck/config/tools/terraform-security/config.yaml"
+    }
     
     def __init__(
         self,

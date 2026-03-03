@@ -7,10 +7,19 @@ import json
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class NpmAuditScanner(BaseScanner):
     """npm audit scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.CODE]
+    PRIORITY = 21
+    REQUIRES_CONDITION = None
+    ENV_VARS = {
+        "NPM_AUDIT_CONFIG_PATH": "/SimpleSecCheck/config/tools/npm-audit/config.yaml"
+    }
     
     def __init__(
         self,

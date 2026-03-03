@@ -41,6 +41,7 @@ class ScanRequest(BaseModel):
     ci_mode: bool = False
     finding_policy: Optional[str] = None
     collect_metadata: bool = False  # OPTIONAL: Only collect metadata if user explicitly enables it
+    selected_scanners: Optional[list[str]] = None  # Optional: List of scanner names to run (empty = all scanners)
 
 
 class ScanStatus(BaseModel):

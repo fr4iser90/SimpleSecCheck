@@ -8,10 +8,17 @@ import re
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.scanner_registry import ScanType
 
 
 class DockerBenchScanner(BaseScanner):
     """Docker Bench scanner implementation"""
+    
+    # Metadaten für Auto-Registrierung
+    SCAN_TYPES = [ScanType.NETWORK]
+    PRIORITY = 3
+    REQUIRES_CONDITION = None
+    ENV_VARS = {}
     
     def __init__(
         self,

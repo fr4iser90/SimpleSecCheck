@@ -133,6 +133,7 @@ class FileDatabase(DatabaseAdapter):
         repository_name: str,
         branch: Optional[str] = None,
         commit_hash: Optional[str] = None,
+        selected_scanners: Optional[List[str]] = None,
     ) -> str:
         """Add scan to queue"""
         queue_id = str(uuid.uuid4())
@@ -145,6 +146,7 @@ class FileDatabase(DatabaseAdapter):
             "repository_name": repository_name,
             "branch": branch,
             "commit_hash": commit_hash,
+            "selected_scanners": selected_scanners,  # List of scanner names
             "status": "pending",
             "position": position,
             "created_at": datetime.utcnow().isoformat(),
