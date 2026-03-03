@@ -73,6 +73,17 @@ class WebSocketManager:
         }
         await self.send_to_scan(scan_id, data)
     
+    async def send_scan_completed(self, scan_id: str, results_dir: str):
+        """Send scan completed notification to all connections for a scan_id"""
+        data = {
+            "type": "scan_completed",
+            "scan_id": scan_id,
+            "results_dir": results_dir,
+            "status": "done",
+            "timestamp": asyncio.get_event_loop().time()
+        }
+        await self.send_to_scan(scan_id, data)
+    
     def get_connection_count(self, scan_id: str) -> int:
         """Get number of connections for a scan_id"""
         return len(self.connections.get(scan_id, set()))

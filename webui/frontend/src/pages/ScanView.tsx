@@ -62,9 +62,9 @@ export default function ScanView() {
     return uuidRegex.test(id)
   }
 
-  // Poll queue status if scan_id is a queue_id
+  // Poll queue status if scan_id is a queue_id (ALWAYS poll, not just when pending/idle!)
   useEffect(() => {
-    if (status.scan_id && isQueueId(status.scan_id) && (status.status === 'pending' || status.status === 'idle')) {
+    if (status.scan_id && isQueueId(status.scan_id) && (status.status === 'pending' || status.status === 'idle' || status.status === 'running')) {
       const fetchQueueStatus = async () => {
         try {
           const response = await fetch(`/api/queue/${status.scan_id}/status`)
@@ -79,7 +79,9 @@ export default function ScanView() {
             } else if (data.status === 'completed') {
               // Queue uses 'completed', but we need 'done' for scan system
               if (data.scan_id) {
-                setStatus(prev => ({ ...prev, status: 'done', scan_id: data.scan_id }))
+                // Get results_dir from scan_id (results_dir is typically the scan_id directory name)
+                const resultsDir = data.scan_id // Use scan_id as results_dir identifier
+                setStatus(prev => ({ ...prev, status: 'done', scan_id: data.scan_id, results_dir: resultsDir }))
               } else {
                 setStatus(prev => ({ ...prev, status: 'completed' }))
               }
@@ -171,6 +173,14 @@ export default function ScanView() {
                 if (data.progress_percentage !== undefined) {
                   setProgress(data.progress_percentage)
                 }
+              } else if (data.type === 'scan_completed') {
+                // Scan is completed - update status and show summary
+                console.log('[ScanView] Scan completed via WebSocket:', data)
+                setStatus(prev => ({
+                  ...prev,
+                  status: data.status || 'done',
+                  results_dir: data.results_dir || prev.results_dir
+                }))
               } else if (data.type === 'pong' || data.type === 'heartbeat') {
                 // Heartbeat response, do nothing
                 return

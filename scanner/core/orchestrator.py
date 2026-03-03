@@ -535,6 +535,10 @@ class ScanOrchestrator:
         
         # Completion
         self.step_registry.start_step("Completion", "Finalizing scan...")
+        
+        # Generate HTML report
+        self._generate_html_report()
+        
         # Always complete successfully if at least some scanners ran
         # (even if some failed, we still want a summary)
         self.log_message("SimpleSecCheck Scan Completed")
@@ -544,6 +548,50 @@ class ScanOrchestrator:
             self.step_registry.complete_step("Completion", "Scan completed with some errors")
         # Always return 0 to allow summary generation
         return 0
+    
+    def _generate_html_report(self):
+        """Generate HTML report after scan completion"""
+        html_report_script = self.base_dir / "scanner" / "reporting" / "generate-html-report.py"
+        html_report_output = self.results_dir / "security-summary.html"
+        
+        if not html_report_script.exists():
+            self.log_message(f"[WARNING] HTML report script not found: {html_report_script}")
+            return
+        
+        self.log_message(f"Generating HTML report: {html_report_output}")
+        
+        # Set environment variables for the script
+        import os
+        env = os.environ.copy()
+        env["OUTPUT_FILE"] = str(html_report_output)
+        env["RESULTS_DIR"] = str(self.results_dir)
+        env["SCAN_TYPE"] = self.scan_type.value
+        env["PYTHONUNBUFFERED"] = "1"
+        
+        try:
+            result = subprocess.run(
+                ["python3", str(html_report_script)],
+                env=env,
+                cwd=str(self.base_dir),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=300  # 5 minute timeout for report generation
+            )
+            
+            # Write output to log
+            if result.stdout:
+                with open(self.log_file, "a", encoding="utf-8") as f:
+                    f.write(result.stdout)
+            
+            if result.returncode == 0:
+                self.log_message(f"HTML report generated successfully: {html_report_output}")
+            else:
+                self.log_message(f"[WARNING] HTML report generation failed with exit code {result.returncode} (non-critical)")
+        except subprocess.TimeoutExpired:
+            self.log_message("[WARNING] HTML report generation timed out (non-critical)")
+        except Exception as e:
+            self.log_message(f"[WARNING] HTML report generation error: {e} (non-critical)")
 
 
 async def main():

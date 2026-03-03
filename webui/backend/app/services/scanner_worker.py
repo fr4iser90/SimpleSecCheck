@@ -489,8 +489,23 @@ class ScannerWorker:
                             steps = read_steps_from_log(results_dir_path_obj)
                             
                             if steps:
+                                # Calculate total_steps and progress_percentage
+                                total_steps = max([s["number"] for s in steps], default=0)
+                                if total_steps == 0:
+                                    progress_percentage = 0
+                                else:
+                                    completed = sum(1 for s in steps if s.get("status") == "completed")
+                                    running = sum(1 for s in steps if s.get("status") == "running")
+                                    failed = sum(1 for s in steps if s.get("status") == "failed")
+                                    # Progress = (completed + failed + (running * 0.5)) / total_steps
+                                    progress_percentage = round(((completed + failed + (running * 0.5)) / total_steps) * 100)
+                                
                                 # Send update to WebSocket clients
-                                await ws_manager.send_step_update(scan_id, {"steps": steps})
+                                await ws_manager.send_step_update(scan_id, {
+                                    "steps": steps,
+                                    "total_steps": total_steps,
+                                    "progress_percentage": progress_percentage
+                                })
                         except Exception as e:
                             print(f"[Scanner Worker] Error sending to WebSocket: {e}")
                     
@@ -589,6 +604,18 @@ class ScannerWorker:
                 print(f"[Scanner Worker] Cleaned up temp clone: {temp_clone_path}")
             except Exception as e:
                 print(f"[Scanner Worker] Failed to cleanup temp clone: {e}")
+        
+        # Send WebSocket notification that scan is completed
+        try:
+            from app.services.websocket_manager import get_websocket_manager
+            ws_manager = get_websocket_manager()
+            # Use the directory name (e.g., "SimpleSecCheck_20260303_203059")
+            # This is what the frontend expects for results_dir
+            results_dir_name = results_dir_path_obj.name
+            await ws_manager.send_scan_completed(scan_id, results_dir_name)
+            print(f"[Scanner Worker] Sent scan_completed WebSocket notification for {scan_id} with results_dir={results_dir_name}")
+        except Exception as e:
+            print(f"[Scanner Worker] Failed to send scan_completed notification: {e}")
         
         return scan_id
 
