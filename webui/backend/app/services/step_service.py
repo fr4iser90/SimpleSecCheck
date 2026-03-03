@@ -234,10 +234,28 @@ def extract_steps_for_frontend(line: str, current_scan: dict, results_dir: Path)
                     step_num = current_scan["step_counter"]
                     formatted_line = f"✓ Step {step_num}: Scan completed successfully"
     
-    # Errors (show as steps, but don't count as steps)
+    # Errors: Only log critical errors as steps, ignore non-critical warnings
+    # Non-critical: HTML report, webui.js, ai_prompt_modal.js (these don't affect OVERALL_SUCCESS)
     if not formatted_line:
         if re.search(r'\[ERROR\]|\[ORCHESTRATOR ERROR\]', clean_line, re.IGNORECASE):
-            formatted_line = f"❌ {clean_line}"
+            # Ignore non-critical errors that don't affect scan success
+            non_critical_patterns = [
+                r'HTML report.*not found',
+                r'webui\.js.*not found',
+                r'ai_prompt_modal\.js.*not found',
+                r'TypeScript compilation.*failed',
+                r'project_detector\.py.*not found',
+                r'Metadata script.*not found',
+            ]
+            is_critical = True
+            for pattern in non_critical_patterns:
+                if re.search(pattern, clean_line, re.IGNORECASE):
+                    is_critical = False
+                    break
+            
+            # Only log critical errors as steps
+            if is_critical:
+                formatted_line = f"❌ {clean_line}"
     
     # Write to steps.log file if we found a step
     if formatted_line:

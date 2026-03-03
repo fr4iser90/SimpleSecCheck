@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import ReportViewer from '../components/ReportViewer'
-import LiveLogs from '../components/LiveLogs'
 import StepsSidebar from '../components/StepsSidebar'
 import AIPromptModal from '../components/AIPromptModal'
 
@@ -462,35 +461,7 @@ export default function ScanView() {
           </div>
         )}
 
-        {/* Logs Section */}
-        <div style={{ 
-          width: '100%', 
-          maxWidth: '1200px',
-          margin: '0 auto',
-          background: 'var(--glass-bg-dark)',
-          border: '1px solid var(--glass-border-dark)',
-          borderRadius: '8px',
-          padding: '1.5rem',
-        }}>
-          <LiveLogs scanId={status.scan_id || undefined} isActive={status.status === 'running'} />
-        </div>
-
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-          <button
-            onClick={() => setIsStepsSidebarOpen(true)}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: 'var(--glass-bg-dark)',
-              border: '1px solid var(--glass-border-dark)',
-              borderRadius: '8px',
-              color: 'var(--text-dark)',
-              cursor: 'pointer',
-            }}
-          >
-            📋 View Steps Details
-          </button>
-        </div>
+        {/* Logs Section removed - Backend sends logs: [] for security, no need to display */}
       </div>
     )
   }
@@ -702,7 +673,9 @@ export default function ScanView() {
                   padding: '1.5rem',
                 }}
               >
-                <LiveLogs scanId={status.scan_id || undefined} isActive={!!status.scan_id} />
+                <div style={{ opacity: 0.7, textAlign: 'center', padding: '2rem' }}>
+                  Logs are not displayed for security reasons.
+                </div>
               </div>
             </div>
           </>

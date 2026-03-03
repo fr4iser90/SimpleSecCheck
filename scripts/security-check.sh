@@ -1022,7 +1022,13 @@ fi
 # Only run native app scanners for code scans with detected native projects
 if [ "$SCAN_TYPE" = "code" ]; then
     log_message "--- Detecting Native Mobile App Projects ---"
-    IS_NATIVE=$(python3 "$BASE_PROJECT_DIR/src/core/project_detector.py" --target "$TARGET_PATH_IN_CONTAINER" --format json | jq -r '.has_native' 2>/dev/null || echo "false")
+    PROJECT_DETECTOR_SCRIPT="$BASE_PROJECT_DIR/scanner/core/project_detector.py"
+    if [ -f "$PROJECT_DETECTOR_SCRIPT" ]; then
+        IS_NATIVE=$(python3 "$PROJECT_DETECTOR_SCRIPT" --target "$TARGET_PATH_IN_CONTAINER" --format json | jq -r '.has_native' 2>/dev/null || echo "false")
+    else
+        log_message "[WARNING] project_detector.py not found at $PROJECT_DETECTOR_SCRIPT, skipping native app detection"
+        IS_NATIVE="false"
+    fi
     
     if [ "$IS_NATIVE" = "true" ]; then
         log_message "--- Native app project detected, running mobile scanners ---"
@@ -1241,7 +1247,7 @@ fi
 if [ "${COLLECT_METADATA:-false}" = "true" ]; then
     log_message "--- Collecting Metadata ---"
     log_message "Collecting scan metadata (user enabled metadata collection)..."
-    METADATA_SCRIPT="$BASE_PROJECT_DIR/src/core/scan_metadata.py"
+    METADATA_SCRIPT="$BASE_PROJECT_DIR/scanner/core/scan_metadata.py"
     if [ -f "$METADATA_SCRIPT" ]; then
         # Prepare finding_policy parameter (empty string becomes None)
         FINDING_POLICY_PARAM="${FINDING_POLICY_FILE_IN_CONTAINER:-}"
@@ -1261,7 +1267,7 @@ if [ "${COLLECT_METADATA:-false}" = "true" ]; then
         if python3 -c "
 import sys
 import traceback
-sys.path.insert(0, '$BASE_PROJECT_DIR/src')
+sys.path.insert(0, '$BASE_PROJECT_DIR/scanner')
 try:
     from core.scan_metadata import collect_scan_metadata, save_metadata
     
@@ -1298,7 +1304,7 @@ except Exception as e:
             log_message "[WARN] Check log file for details: $LOG_FILE"
         fi
     else
-        log_message "[WARN] Metadata script not found: $METADATA_SCRIPT"
+        log_message "[WARN] Metadata script not found at $METADATA_SCRIPT"
     fi
 else
     log_message "Metadata collection disabled (default: privacy-first)"
