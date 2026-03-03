@@ -218,8 +218,8 @@ class FileDatabase(DatabaseAdapter):
         return pending[0]
     
     async def get_queue_length(self) -> int:
-        """Get current queue length"""
-        return len(self._queue)
+        """Get current queue length (active items only)"""
+        return len([item for item in self._queue if item.get("status") in ("pending", "running")])
     
     async def cleanup_old_queue_items(self, max_age_days: int = 7) -> int:
         """Clean up old completed/failed queue items"""

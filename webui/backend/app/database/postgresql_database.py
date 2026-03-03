@@ -394,13 +394,26 @@ class PostgreSQLDatabase(DatabaseAdapter):
             if not row:
                 return None
             
-            return self._row_to_dict(row)
+            result = self._row_to_dict(row)
+            
+            # Extract selected_scanners from metadata if present
+            if "metadata" in result and result["metadata"]:
+                try:
+                    import json
+                    metadata = json.loads(result["metadata"]) if isinstance(result["metadata"], str) else result["metadata"]
+                    if isinstance(metadata, dict) and "selected_scanners" in metadata:
+                        result["selected_scanners"] = metadata["selected_scanners"]
+                except (json.JSONDecodeError, TypeError):
+                    pass  # Ignore if metadata is not valid JSON
+            
+            return result
     
     async def get_queue_length(self) -> int:
-        """Get current queue length (all items, not just pending)"""
+        """Get current queue length (active items only)"""
         async with self.connection_pool.acquire() as conn:
             count = await conn.fetchval("""
                 SELECT COUNT(*) FROM queue
+                WHERE status IN ('pending', 'running')
             """)
             return count or 0
     
