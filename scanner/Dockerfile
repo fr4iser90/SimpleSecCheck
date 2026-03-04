@@ -191,104 +191,16 @@ RUN apt-get install -y sudo && \
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Ensure writable home/cache locations for CLI tools
-ENV HOME=/home/scanner
-ENV XDG_CACHE_HOME=/home/scanner/.cache
-ENV XDG_CONFIG_HOME=/home/scanner/.config
-ENV SEMGREP_USER_LOG_FILE=/home/scanner/.cache/semgrep/semgrep.log
-ENV TRIVY_CACHE_DIR=/home/scanner/.cache/trivy
-ENV TRIVY_HOME=/home/scanner/.trivy
-ENV SAFETY_CACHE_DIR=/home/scanner/.cache/safety
-ENV SAFETY_CONFIG_DIR=/home/scanner/.safety
-ENV SONAR_USER_HOME=/home/scanner/.sonar
-ENV CHECKOV_HOME=/home/scanner/.checkov
-ENV POLICY_SENTRY_CACHE_PATH=/home/scanner/.policy_sentry
-
-# Pre-create cache directories to avoid permission errors
-RUN mkdir -p /home/scanner/.cache/semgrep \
-    /home/scanner/.cache/trivy \
-    /home/scanner/.cache/safety \
-    /home/scanner/.sonar \
-    /home/scanner/.config \
-    /home/scanner/.safety \
-    /home/scanner/.trivy \
-    /home/scanner/.checkov \
-    /home/scanner/.policy_sentry && \
-    chown -R scanner:scanner /home/scanner
+# Ensure writable home/cache locations for CLI tools (generic)
+ENV HOME=/tmp/scanner
+ENV XDG_CACHE_HOME=/tmp/scanner/.cache
+ENV XDG_CONFIG_HOME=/tmp/scanner/.config
 
 # Switch to non-root user
 USER scanner
 
 # Ensure scanner modules are importable regardless of working directory
 ENV PYTHONPATH=/SimpleSecCheck
-
-# Set CodeQL environment variables
-ENV CODEQL_HOME=/opt/codeql
-ENV CODEQL_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/codeql/config.yaml
-ENV CODEQL_QUERIES_PATH=/SimpleSecCheck/scanner/config/tools/codeql/queries
-
-# Set Nuclei environment variables
-ENV NUCLEI_HOME=/opt/nuclei
-ENV NUCLEI_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/nuclei/config.yaml
-ENV NUCLEI_TEMPLATES_PATH=/SimpleSecCheck/scanner/config/tools/nuclei/templates
-
-# Set OWASP Dependency Check environment variables
-ENV OWASP_DC_HOME=/opt/dependency-check
-ENV OWASP_DC_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/owasp-dependency-check/config.yaml
-ENV OWASP_DC_DATA_DIR=/SimpleSecCheck/owasp-dependency-check-data
-
-# Set Safety environment variables
-ENV SAFETY_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/safety/config.yaml
-
-# Set Snyk environment variables
-ENV SNYK_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/snyk/config.yaml
-
-# Set SonarQube environment variables
-ENV SONARQUBE_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/sonarqube/config.yaml
-ENV SONARQUBE_SCANNER_HOME=/opt/sonar-scanner
-
-# Set Checkov environment variables
-ENV TERRAFORM_SECURITY_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/terraform-security/config.yaml
-
-# Set TruffleHog environment variables
-ENV TRUFFLEHOG_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/trufflehog/config.yaml
-
-# Set GitLeaks environment variables
-ENV GITLEAKS_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/gitleaks/config.yaml
-
-# Set Detect-secrets environment variables
-ENV DETECT_SECRETS_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/detect-secrets/config.yaml
-
-# Set Wapiti environment variables
-ENV WAPITI_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/wapiti/config.yaml
-
-# Set Nikto environment variables
-ENV NIKTO_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/nikto/config.yaml
-
-# Set Burp Suite environment variables
-ENV BURP_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/burp/config.yaml
-ENV BURP_HOME=/opt/burp
-
-# Set Kube-hunter environment variables
-ENV KUBE_HUNTER_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/kube-hunter/config.yaml
-
-# Set Kube-bench environment variables
-ENV KUBE_BENCH_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/kube-bench/config.yaml
-
-# Set Docker Bench environment variables
-ENV DOCKER_BENCH_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/docker-bench/config.yaml
-
-# Set ESLint environment variables
-ENV ESLINT_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/eslint/config.yaml
-
-# Set Brakeman environment variables
-ENV BRAKEMAN_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/brakeman/config.yaml
-
-# Set Bandit environment variables
-ENV BANDIT_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/bandit/config.yaml
-
-# Set Anchore environment variables
-ENV ANCHORE_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/anchore/config.yaml
 
 WORKDIR /zap/wrk
 ENTRYPOINT ["/entrypoint.sh"]
