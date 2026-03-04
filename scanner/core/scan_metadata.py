@@ -141,7 +141,6 @@ def collect_scan_metadata(
     metadata = {
         "scan_type": scan_type,
         "target_path": target_path,  # Container path (/target)
-        "target_path_absolute": actual_path_for_name,  # Host path if available
         "project_name": None,
         "results_dir": results_dir,
         "finding_policy": finding_policy,

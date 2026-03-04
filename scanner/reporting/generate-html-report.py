@@ -102,12 +102,7 @@ def generate_metadata_section(metadata):
     html_parts.append('<p style="color: #6c757d; margin-bottom: 1.5rem;">Metadata was collected because you enabled "Collect Metadata" option.</p>')
     html_parts.append('<table style="width: 100%; border-collapse: collapse;">')
     
-    # Project Information
-    if metadata.get("project_name"):
-        html_parts.append(f'<tr><td style="padding: 0.75rem; font-weight: bold; width: 30%;">Project Name:</td><td style="padding: 0.75rem;">{html.escape(str(metadata.get("project_name", "")))}</td></tr>')
-    
-    if metadata.get("target_path_absolute"):
-        html_parts.append(f'<tr><td style="padding: 0.75rem; font-weight: bold;">Project Path:</td><td style="padding: 0.75rem; word-break: break-all;">{html.escape(str(metadata.get("target_path_absolute", "")))}</td></tr>')
+    # Project Information (host path removed for privacy/security)
     
     if metadata.get("scan_type"):
         html_parts.append(f'<tr><td style="padding: 0.75rem; font-weight: bold;">Scan Type:</td><td style="padding: 0.75rem;">{html.escape(str(metadata.get("scan_type", "")))}</td></tr>')

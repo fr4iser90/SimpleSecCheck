@@ -144,6 +144,11 @@ def write_step_to_log(step_number: int, step_name: str, status: str, message: st
                     started_at=None,
                     completed_at=None,
                 )
+                from datetime import datetime
+                print(
+                    f"[Step Service] [{datetime.utcnow().isoformat()}] Upserted step to DB: "
+                    f"scan_id={scan_id} step={step_number} status={status}"
+                )
             except Exception as e:
                 print(f"[Step Service] Error upserting step to DB: {e}")
 
@@ -184,6 +189,11 @@ def write_step_to_log(step_number: int, step_name: str, status: str, message: st
                         "total_steps": total_steps,
                         "progress_percentage": progress_percentage
                     })
+                    from datetime import datetime
+                    print(
+                        f"[Step Service] [{datetime.utcnow().isoformat()}] "
+                        f"Sent WS update: scan_id={scan_id} steps={len(steps)} progress={progress_percentage}%"
+                    )
             except Exception as e:
                 print(f"[Step Service] Error sending WebSocket update: {e}")
         

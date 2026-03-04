@@ -472,6 +472,41 @@ class ScannerWorker:
         # Stream output and extract steps for frontend in real-time
         scan_log = results_dir_path_obj / "logs" / "scan.log"
         output_lines = []
+
+        # Periodic step streaming (decoupled from log output)
+        step_stream_task: Optional[asyncio.Task] = None
+        step_stream_running = True
+
+        async def stream_steps_periodically():
+            """Send step updates regularly so UI stays realtime even when logs are quiet."""
+            from app.services.websocket_manager import get_websocket_manager
+            from app.services.step_service import read_steps_from_db, upsert_steps_from_log
+
+            ws_manager = get_websocket_manager()
+            while step_stream_running:
+                try:
+                    # Hydrate DB from steps.log to ensure DB stays current
+                    await upsert_steps_from_log(scan_id, results_dir_path_obj)
+                    steps = await read_steps_from_db(scan_id)
+                    if steps:
+                        total_steps = max([s["number"] for s in steps], default=0)
+                        if total_steps == 0:
+                            progress_percentage = 0
+                        else:
+                            completed = sum(1 for s in steps if s.get("status") == "completed")
+                            running = sum(1 for s in steps if s.get("status") == "running")
+                            failed = sum(1 for s in steps if s.get("status") == "failed")
+                            progress_percentage = round(((completed + failed + (running * 0.5)) / total_steps) * 100)
+
+                        await ws_manager.send_step_update(scan_id, {
+                            "steps": steps,
+                            "total_steps": total_steps,
+                            "progress_percentage": progress_percentage,
+                        })
+                except Exception as e:
+                    print(f"[Scanner Worker] Error streaming steps: {e}")
+
+                await asyncio.sleep(0.5)
         
         def output_callback(line_str: str):
             """Callback for each output line from docker-compose"""
@@ -550,6 +585,9 @@ class ScannerWorker:
         self.running_runners[scan_id] = runner
         
         try:
+            # Start periodic step streaming
+            step_stream_task = asyncio.create_task(stream_steps_periodically())
+
             success = await runner.run_scan_async(
                 target=target_path,
                 scan_id=scan_id,
@@ -561,6 +599,10 @@ class ScannerWorker:
                 output_callback=output_callback,
             )
         finally:
+            # Stop periodic step streaming
+            step_stream_running = False
+            if step_stream_task:
+                step_stream_task.cancel()
             # Remove from tracking when done
             self.running_runners.pop(scan_id, None)
         
