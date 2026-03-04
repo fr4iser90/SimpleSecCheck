@@ -67,7 +67,7 @@ class QueueService:
             }
         
         # Check for duplicates if deduplication is enabled
-        if self.deduplication_enabled:
+        if self.deduplication_enabled and commit_hash:
             dedupe_policy = finding_policy if self.deduplication_by_policy else None
             duplicate = await self.db.find_duplicate_in_queue(
                 repository_url,

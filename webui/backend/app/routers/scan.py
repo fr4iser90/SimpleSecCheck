@@ -5,6 +5,7 @@ import os
 import uuid
 import json
 import asyncio
+import subprocess
 import re
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -150,7 +151,27 @@ async def start_scan(request: ScanRequest, http_request: Request):
     
     # Extract branch and commit hash from request if available
     branch = request.git_branch
-    commit_hash = None  # TODO: Extract from Git if needed
+    commit_hash = None
+    if branch and request.type == "code":
+        try:
+            git_url = request.target
+            if not git_url.startswith("git@") and not git_url.endswith(".git") and not git_url.endswith("/"):
+                git_url = f"{git_url}.git"
+            result = subprocess.run(
+                ["git", "ls-remote", "--heads", git_url, branch],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                commit_hash = result.stdout.split()[0].strip()
+                print(f"[Scan Start] Resolved commit hash for {branch}: {commit_hash}")
+            else:
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                print(f"[Scan Start] Commit hash lookup failed: {error_msg}")
+        except Exception as exc:
+            print(f"[Scan Start] Commit hash lookup error: {exc}")
     
     result = await queue_service.add_scan_to_queue(
         session_id=session_id,
