@@ -101,9 +101,16 @@ async def get_my_result_report(scan_id: str, http_request: Request):
     if not has_access:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    queue_item = await db.get_queue_item(scan_id)
+    queue_item = None
+    try:
+        import uuid
+        uuid.UUID(scan_id)
+        queue_item = await db.get_queue_item(scan_id)
+    except (ValueError, TypeError):
+        queue_item = None
+
     if not queue_item:
-        # Try to find queue item by scan_id
+        # Try to find queue item by scan_id (timestamp-based)
         try:
             queue_items = await db.get_queue_by_session(session_id)
             queue_item = next((item for item in queue_items if item.get("scan_id") == scan_id), None)

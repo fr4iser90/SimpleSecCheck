@@ -79,9 +79,12 @@ export default function ScanView() {
             } else if (data.status === 'completed') {
               // Queue uses 'completed', but we need 'done' for scan system
               if (data.scan_id) {
-                // Get results_dir from scan_id (results_dir is typically the scan_id directory name)
-                const resultsDir = data.scan_id // Use scan_id as results_dir identifier
-                setStatus(prev => ({ ...prev, status: 'done', scan_id: data.scan_id, results_dir: resultsDir }))
+                setStatus(prev => ({
+                  ...prev,
+                  status: 'done',
+                  scan_id: data.scan_id,
+                  results_dir: data.results_dir || prev.results_dir,
+                }))
               } else {
                 setStatus(prev => ({ ...prev, status: 'completed' }))
               }
@@ -179,6 +182,7 @@ export default function ScanView() {
                 setStatus(prev => ({
                   ...prev,
                   status: data.status || 'done',
+                  scan_id: data.scan_id || prev.scan_id,
                   results_dir: data.results_dir || prev.results_dir
                 }))
               } else if (data.type === 'pong' || data.type === 'heartbeat') {
@@ -551,7 +555,7 @@ export default function ScanView() {
           overflow: 'hidden',
           position: 'relative',
         }}>
-          <ReportViewer scanId={status.results_dir} />
+          <ReportViewer scanId={status.scan_id} />
         </div>
 
         {/* Floating Action Buttons */}
@@ -694,7 +698,7 @@ export default function ScanView() {
         <AIPromptModal
           isOpen={isAIPromptModalOpen}
           onClose={() => setIsAIPromptModalOpen(false)}
-          scanId={status.results_dir}
+          scanId={status.scan_id}
         />
       </div>
     )
