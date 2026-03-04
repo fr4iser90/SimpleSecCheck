@@ -327,7 +327,7 @@ class ScannerWorker:
         finding_policy: Optional[str] = None,
     ) -> Dict[str, str]:
         """
-        Execute scan using docker_runner.py (replaces run-docker.sh)
+        Execute scan using docker_runner.py
         Returns scan_id
         """
         import sys
@@ -464,7 +464,7 @@ class ScannerWorker:
             os.environ.pop("FINDING_POLICY_FILE", None)
             os.environ.pop("FINDING_POLICY_FILE_IN_CONTAINER", None)
         
-        # Use docker_runner instead of run-docker.sh
+        # Use docker_runner (Python)
         from app.services.docker_runner import DockerRunner
         
         runner = DockerRunner(log_file=str(logs_dir / "orchestrator.log"))

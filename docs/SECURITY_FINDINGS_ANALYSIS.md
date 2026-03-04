@@ -192,7 +192,7 @@ All false positives have been added to `config/finding-policy.json`:
 After updating `config/finding-policy.json`, re-run the security scan to verify that all false positives are properly suppressed:
 
 ```bash
-./run-docker.sh --finding-policy config/finding-policy.json /path/to/project
+python3 -m scanner.core.orchestrator  # use FINDING_POLICY_FILE env var for policy file
 ```
 
 The scan should now show 0 findings (or only true positives if any exist).

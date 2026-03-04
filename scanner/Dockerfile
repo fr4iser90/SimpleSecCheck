@@ -158,9 +158,8 @@ RUN git clone https://github.com/docker/docker-bench-security.git /opt/docker-be
 # Install Anchore Grype (container image vulnerability scanner)
 RUN curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
 
-# Copy SimpleSecCheck files (scanner code, scripts, and entrypoint)
+# Copy SimpleSecCheck files (scanner code and entrypoint)
 COPY scanner/ /SimpleSecCheck/scanner/
-COPY scripts/ /SimpleSecCheck/scripts/
 COPY entrypoint.sh /entrypoint.sh
 WORKDIR /SimpleSecCheck
 
@@ -178,7 +177,6 @@ RUN useradd -m -u 1000 -s /bin/bash scanner && \
     chown -R scanner:scanner /SimpleSecCheck /zap
 
 # Make scripts executable
-RUN chmod +x /SimpleSecCheck/scripts/security-check.sh
 RUN chmod +x /SimpleSecCheck/scanner/core/configure.py
 
 # Compile TypeScript files (uses tsconfig.json automatically)
@@ -265,4 +263,4 @@ ENV ANCHORE_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/anchore/config.yaml
 
 WORKDIR /zap/wrk
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["bash"]
+CMD ["python3", "-m", "scanner.core.orchestrator"]

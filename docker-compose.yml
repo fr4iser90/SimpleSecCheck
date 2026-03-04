@@ -13,7 +13,7 @@ services:
       - ./logs:/SimpleSecCheck/logs
       # Config ist bereits im Image (über COPY scanner/ im Dockerfile) - kein Volume-Mount nötig
       # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
-      - ./owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
+      - ./scanner/data/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
       - /var/run/docker.sock:/var/run/docker.sock # For Docker Bench
     environment:
       - TARGET_URL=${TARGET_URL:-http://host.docker.internal:8000}
@@ -50,7 +50,7 @@ services:
     volumes:
       - ./results:/app/results                # Results (read-write: run-docker.sh needs to create subdirs)
       - .:/project:ro                         # Project root (read-only, needed as build context for scanner and scripts)
-      - ./owasp-dependency-check-data:/app/owasp-dependency-check-data  # OWASP database (read-write: for updates and checks)
+      - ./scanner/data/owasp-dependency-check-data:/app/owasp-dependency-check-data  # OWASP database (read-write: for updates and checks)
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket (read-only, for docker-compose)
     environment:
       - SIMPLESECCHECK_ROOT=/app

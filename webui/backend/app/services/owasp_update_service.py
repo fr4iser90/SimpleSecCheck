@@ -75,7 +75,7 @@ async def start_update(
         # We're in a container, use host path for volume mounting
         # Don't try to create it - it's on the host, not in the container
         # Docker/docker-compose will create it automatically when mounting
-        host_owasp_dir = Path(host_project_root) / "owasp-dependency-check-data"
+        host_owasp_dir = Path(host_project_root) / "scanner" / "data" / "owasp-dependency-check-data"
     else:
         # Running on host, use provided path directly
         host_owasp_dir = owasp_data_dir

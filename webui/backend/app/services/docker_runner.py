@@ -1,6 +1,6 @@
 """
 Docker Runner Service
-Replaces run-docker.sh with pure Python implementation
+Pure Python implementation for docker-compose scans
 Orchestrates docker-compose run commands for security scans
 """
 
@@ -291,7 +291,7 @@ class DockerRunner:
             # Fallback: try to get from HOST_PROJECT_ROOT environment variable
             host_project_root = os.environ.get("HOST_PROJECT_ROOT")
             if host_project_root:
-                owasp_data_path = os.path.join(host_project_root, "owasp-dependency-check-data")
+                owasp_data_path = os.path.join(host_project_root, "scanner", "data", "owasp-dependency-check-data")
                 self.log_message(f"[OWASP Volume] Using HOST_PROJECT_ROOT fallback: {owasp_data_path}")
         
         if owasp_data_path:
@@ -302,8 +302,8 @@ class DockerRunner:
         else:
             self.log_message("[OWASP Volume] ERROR: OWASP data path not found and HOST_PROJECT_ROOT not set!", "ERROR")
             # Still try to mount a default path to avoid scan failure
-            volumes.append(("/app/owasp-dependency-check-data", "/SimpleSecCheck/owasp-dependency-check-data"))
-            self.log_message("[OWASP Volume] Using fallback container path: /app/owasp-dependency-check-data", "WARNING")
+            volumes.append(("/app/scanner/data/owasp-dependency-check-data", "/SimpleSecCheck/owasp-dependency-check-data"))
+            self.log_message("[OWASP Volume] Using fallback container path: /app/scanner/data/owasp-dependency-check-data", "WARNING")
         
         # Docker socket for network scans
         if scan_type == "network":

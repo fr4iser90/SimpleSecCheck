@@ -66,7 +66,7 @@ except ImportError:
 RESULTS_DIR = get_results_dir()
 if not RESULTS_DIR:
     sys.stderr.write("[ERROR] RESULTS_DIR environment variable is not set!\n")
-    sys.stderr.write("[ERROR] This script must be called via security-check.sh or with RESULTS_DIR set.\n")
+    sys.stderr.write("[ERROR] This script must be called via the Python orchestrator or with RESULTS_DIR set.\n")
     sys.exit(1)
 
 OUTPUT_FILE = get_output_file()
@@ -284,7 +284,7 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
         html_parts.append('<ol style="margin: 0.5rem 0 0 1.5rem; padding: 0;">')
         html_parts.append('<li style="margin-bottom: 0.5rem;">Create a file named <code>finding-policy.json</code> in your project (e.g., <code>config/finding-policy.json</code>)</li>')
         html_parts.append('<li style="margin-bottom: 0.5rem;">Use the example structure above as a template</li>')
-        html_parts.append('<li style="margin-bottom: 0.5rem;">Run the scan with: <code>./run-docker.sh --finding-policy config/finding-policy.json /path/to/project</code></li>')
+        html_parts.append('<li style="margin-bottom: 0.5rem;">Run the scan with: <code>FINDING_POLICY_FILE=config/finding-policy.json python3 -m scanner.core.orchestrator</code></li>')
         html_parts.append('<li>Accepted findings will appear in the "Accepted Findings" section with your rationale</li>')
         html_parts.append('</ol>')
         html_parts.append('</div>')

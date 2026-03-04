@@ -1,6 +1,6 @@
 """
 Modern Python Orchestrator
-Replaces security-check.sh with dynamic, registry-based scanner execution
+Replaces the legacy shell-based orchestrator with dynamic, registry-based scanner execution
 No hardcoded steps, no log parsing - direct step communication!
 """
 import os

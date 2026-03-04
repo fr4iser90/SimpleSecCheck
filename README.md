@@ -94,17 +94,17 @@ docker-compose run --rm \
   -v /path/to/project:/target:ro \
   -v $(pwd)/results:/SimpleSecCheck/results \
   -v $(pwd)/logs:/SimpleSecCheck/logs \
-  -v $(pwd)/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
-  scanner /SimpleSecCheck/scripts/security-check.sh
+-v $(pwd)/scanner/data/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
+  scanner python3 -m scanner.core.orchestrator
 
 # Or use Docker Hub image (standalone)
 docker run --rm \
   -v /path/to/project:/target:ro \
   -v $(pwd)/results:/SimpleSecCheck/results \
   -v $(pwd)/logs:/SimpleSecCheck/logs \
-  -v $(pwd)/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
+-v $(pwd)/scanner/data/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
   fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/scripts/security-check.sh
+  python3 -m scanner.core.orchestrator
 
 # Scan a website
 docker-compose run --rm \
@@ -112,7 +112,7 @@ docker-compose run --rm \
   -e ZAP_TARGET=https://example.com \
   -v $(pwd)/results:/SimpleSecCheck/results \
   -v $(pwd)/logs:/SimpleSecCheck/logs \
-  scanner /SimpleSecCheck/scripts/security-check.sh
+  scanner python3 -m scanner.core.orchestrator
 ```
 
 See [docs/CLI_DOCKER.md](docs/CLI_DOCKER.md) for more examples.
@@ -170,11 +170,11 @@ docker run --rm \
   -v $(pwd)/trivy:/SimpleSecCheck/trivy \
   -v $(pwd)/anchore:/SimpleSecCheck/anchore \
   -v $(pwd)/zap:/SimpleSecCheck/zap \
-  -v $(pwd)/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
+-v $(pwd)/scanner/data/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e SCAN_TYPE=code \
   fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/scripts/security-check.sh
+  python3 -m scanner.core.orchestrator
 
 # Scan a Git repository (GitHub/GitLab URL)
 # Note: Use WebUI for Git repository scanning (automatically clones and cleans up)
@@ -190,7 +190,7 @@ docker run --rm \
   -v $(pwd)/rules:/SimpleSecCheck/rules \
   -v $(pwd)/zap:/SimpleSecCheck/zap \
   fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/scripts/security-check.sh
+  python3 -m scanner.core.orchestrator
 
 # Scan local network/Docker infrastructure
 docker run --rm \
@@ -201,7 +201,7 @@ docker run --rm \
   -v $(pwd)/rules:/SimpleSecCheck/rules \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   fr4iser/simpleseccheck:latest \
-  /SimpleSecCheck/scripts/security-check.sh
+  python3 -m scanner.core.orchestrator
 ```
 
 ### Scan Examples
@@ -214,7 +214,7 @@ docker-compose run --rm \
   -e ZAP_TARGET=https://example.com \
   -v $(pwd)/results:/SimpleSecCheck/results \
   -v $(pwd)/logs:/SimpleSecCheck/logs \
-  scanner /SimpleSecCheck/scripts/security-check.sh
+  scanner python3 -m scanner.core.orchestrator
 ```
 ![Website Scan Example](docs/assets/1.png)
 
@@ -225,22 +225,21 @@ docker-compose run --rm \
   -v /path/to/your/project:/target:ro \
   -v $(pwd)/results:/SimpleSecCheck/results \
   -v $(pwd)/logs:/SimpleSecCheck/logs \
-  -v $(pwd)/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
-  scanner /SimpleSecCheck/scripts/security-check.sh
+-v $(pwd)/scanner/data/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
+  scanner python3 -m scanner.core.orchestrator
 ```
 ![Codebase Scan Example](docs/assets/2.png)
 
 #### 🔗 Git Repository Scanning
 Scan a Git repository directly from GitHub or GitLab (use WebUI for automatic cloning):
 ```bash
-./scripts/run-docker.sh https://github.com/user/repo
-./scripts/run-docker.sh https://gitlab.com/user/repo
+python3 -m scanner.core.orchestrator  # (use WebUI for Git scans)
 ```
 
 #### 🏠 Local Network Scanning
 Scan applications in your local Docker network (e.g., `http://host.docker.internal:8000`):
 ```bash
-./scripts/run-docker.sh network
+python3 -m scanner.core.orchestrator  # (set SCAN_TYPE=network)
 ```
 ![Local Network Scan Example](docs/assets/3.png)
 
@@ -336,21 +335,21 @@ The OWASP Dependency Check vulnerability database is cached locally to avoid re-
 
 ```bash
 # Update database (uses public rate limits, slower)
-./scripts/update-owasp-db.sh
+python3 -m scanner.core.owasp_update
 
 # Update with NVD API key (faster, recommended)
-NVD_API_KEY=your-key ./scripts/update-owasp-db.sh
+NVD_API_KEY=your-key python3 -m scanner.core.owasp_update
 
 # Or set NVD_API_KEY in .env file
 echo "NVD_API_KEY=your-key" >> .env
-./scripts/update-owasp-db.sh
+python3 -m scanner.core.owasp_update
 ```
 
 **Using Docker directly:**
 
 ```bash
 docker run --rm \
-  -v $(pwd)/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
+-v $(pwd)/scanner/data/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data \
   -e NVD_API_KEY=${NVD_API_KEY:-} \
   fr4iser/simpleseccheck:latest \
   dependency-check --updateonly --data /SimpleSecCheck/owasp-dependency-check-data ${NVD_API_KEY:+--nvdApiKey=$NVD_API_KEY}

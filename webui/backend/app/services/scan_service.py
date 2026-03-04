@@ -298,7 +298,7 @@ async def start_scan(
 
 
 async def capture_process_output(process: subprocess.Popen, scan_id: str, current_scan: dict, results_dir: Path):
-    """Capture stdout/stderr from run-docker.sh process and store for streaming"""
+    """Capture stdout/stderr from scan process and store for streaming"""
     try:
         print(f"[Process Output] Starting to capture output for scan {scan_id}, PID={process.pid}")
         loop = asyncio.get_event_loop()
@@ -339,7 +339,7 @@ async def capture_process_output(process: subprocess.Popen, scan_id: str, curren
                     "Scan completed",
                     "Scan failed",
                     "failed with exit code",
-                    "Starting run-docker.sh",
+                    "Starting scan",
                     "Converting container paths",
                     "Verifying host paths",
                     "Mounting volumes",

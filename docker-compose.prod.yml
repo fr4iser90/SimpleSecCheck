@@ -49,7 +49,7 @@ services:
       # Scripts sind bereits im Image (über COPY . /SimpleSecCheck im Dockerfile)
       # Kein Volume-Mount nötig für Production - Image funktioniert standalone
       # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
-      - ./owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
+      - ./scanner/data/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
       # ⚠️ PRODUCTION: NO Docker socket - only Git scans allowed, no network scans
       # Git scans don't require Docker socket (only network scans need it for Docker Bench)
     environment:
@@ -86,7 +86,7 @@ services:
     volumes:
       - ./results:/app/results                # Results (read-write: run-docker.sh needs to create subdirs)
       - .:/project:ro                         # Project root (read-only, needed as build context for scanner)
-      - ./owasp-dependency-check-data:/app/owasp-dependency-check-data  # OWASP database (read-write: for updates and checks)
+      - ./scanner/data/owasp-dependency-check-data:/app/owasp-dependency-check-data  # OWASP database (read-write: for updates and checks)
     environment:
       - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1
@@ -188,7 +188,7 @@ services:
     volumes:
       - ./results:/app/results
       - .:/project:ro
-      - ./owasp-dependency-check-data:/app/owasp-dependency-check-data
+      - ./scanner/data/owasp-dependency-check-data:/app/owasp-dependency-check-data
       - /var/run/docker.sock:/var/run/docker.sock  # Docker socket required for scan execution
     environment:
       - SIMPLESECCHECK_ROOT=/app

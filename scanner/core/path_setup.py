@@ -160,7 +160,7 @@ def get_owasp_data_path_host() -> str:
     if not host_project_root:
         return None
     
-    return os.path.join(host_project_root, "owasp-dependency-check-data")
+    return os.path.join(host_project_root, "scanner", "data", "owasp-dependency-check-data")
 
 
 def get_config_path_host() -> str:
@@ -221,7 +221,7 @@ def get_webui_base_dir():
     # This file is in src/core/, so go up 2 levels to get project root
     current_file = Path(__file__)
     project_root = current_file.parent.parent.parent
-    if (project_root / "scripts" / "run-docker.sh").exists():
+    if (project_root / "scripts").exists():
         return project_root
     
     return None
@@ -229,13 +229,12 @@ def get_webui_base_dir():
 
 def get_webui_cli_script():
     """
-    Get WebUI CLI script path (scripts/run-docker.sh).
-    Central function - all services should use this!
-    EINHEITLICH: Dev und Prod verwenden beide /project/scripts/run-docker.sh
+    Get WebUI CLI script path (legacy, unused).
+    Central function - kept for backward compatibility.
     Returns: Path object
     """
-    # EINHEITLICH: Immer /project/scripts/run-docker.sh (weil .:/project:ro in beiden gemountet)
-    return Path("/project/scripts/run-docker.sh")
+    # Legacy path removed; return project root marker instead
+    return Path("/project")
 
 
 def get_webui_results_dir():
@@ -302,7 +301,7 @@ def get_webui_owasp_data_dir():
     if not base_dir:
         return None
     
-    return base_dir / "owasp-dependency-check-data"
+    return base_dir / "scanner" / "data" / "owasp-dependency-check-data"
 
 
 def get_webui_frontend_paths():

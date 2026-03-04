@@ -124,8 +124,8 @@ WEBUI_AUTO_SHUTDOWN=false
 ### Current: Docker Socket (Read-Only)
 
 **How it works:**
-- WebUI calls `scripts/run-docker.sh`
-- Script uses `docker-compose` which needs Docker socket
+- WebUI calls the Python DockerRunner + orchestrator
+- Uses `docker-compose` which needs Docker socket
 - Socket mounted read-only (`:ro`)
 
 **Security:**
@@ -137,7 +137,7 @@ WEBUI_AUTO_SHUTDOWN=false
 
 **Better approach:**
 - Use Docker API directly instead of `docker-compose`
-- Requires refactoring `scripts/run-docker.sh`
+- Requires refactoring DockerRunner (Python)
 - Can use TLS certificates for authentication
 - More granular permission control
 

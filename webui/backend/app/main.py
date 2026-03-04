@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 SimpleSecCheck WebUI Backend
-Minimal FastAPI backend that wraps the CLI (scripts/run-docker.sh)
+Minimal FastAPI backend that wraps the Python DockerRunner
 Single-shot principle: No database, no state, just CLI wrapper
 """
 

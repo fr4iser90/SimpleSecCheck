@@ -165,7 +165,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Semgrep",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_semgrep.sh",  # Fallback to Bash if Python not available
+        script_path="",  # Python-only orchestrator
         priority=1,
         env_vars={
             "SEMGREP_RULES_PATH": f"{BASE_DIR}/config/rules",
@@ -176,7 +176,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Trivy",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_trivy.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=2,
         env_vars={
             "TRIVY_CONFIG_PATH": f"{BASE_DIR}/config/tools/trivy/config.yaml",
@@ -187,7 +187,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="CodeQL",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_codeql.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=3,
         env_vars={
             "CODEQL_CONFIG_PATH": f"{BASE_DIR}/config/tools/codeql/config.yaml",
@@ -199,11 +199,11 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="OWASP Dependency Check",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_owasp_dependency_check.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=4,
         env_vars={
             "OWASP_DC_CONFIG_PATH": f"{BASE_DIR}/config/tools/owasp-dependency-check/config.yaml",
-            "OWASP_DC_DATA_DIR": f"{BASE_DIR}/owasp-dependency-check-data",
+            "OWASP_DC_DATA_DIR": f"{BASE_DIR}/scanner/data/owasp-dependency-check-data",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.owasp_scanner.OWASPScanner"
         }
     ))
@@ -211,7 +211,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Safety",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_safety.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=5,
         env_vars={
             "SAFETY_CONFIG_PATH": f"{BASE_DIR}/config/tools/safety/config.yaml",
@@ -222,7 +222,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Snyk",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_snyk.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=6,
         env_vars={
             "SNYK_CONFIG_PATH": f"{BASE_DIR}/config/tools/snyk/config.yaml",
@@ -233,7 +233,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="SonarQube",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_sonarqube.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=7,
         env_vars={
             "SONARQUBE_CONFIG_PATH": f"{BASE_DIR}/config/tools/sonarqube/config.yaml",
@@ -245,7 +245,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Terraform Security",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_terraform_security.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=11,
         env_vars={
             "TERRAFORM_SECURITY_CONFIG_PATH": f"{BASE_DIR}/config/tools/terraform-security/config.yaml",
@@ -256,7 +256,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Checkov",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_checkov.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=12,
         env_vars={
             "CHECKOV_CONFIG_PATH": f"{BASE_DIR}/config/tools/checkov/config.yaml",
@@ -268,7 +268,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="TruffleHog",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_trufflehog.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=16,
         env_vars={
             "TRUFFLEHOG_CONFIG_PATH": f"{BASE_DIR}/config/tools/trufflehog/config.yaml",
@@ -279,7 +279,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="GitLeaks",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_gitleaks.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=17,
         env_vars={
             "GITLEAKS_CONFIG_PATH": f"{BASE_DIR}/config/tools/gitleaks/config.yaml",
@@ -290,7 +290,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Detect-secrets",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_detect_secrets.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=18,
         env_vars={
             "DETECT_SECRETS_CONFIG_PATH": f"{BASE_DIR}/config/tools/detect-secrets/config.yaml",
@@ -302,7 +302,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="npm audit",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_npm_audit.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=21,
         env_vars={
             "NPM_AUDIT_CONFIG_PATH": f"{BASE_DIR}/config/tools/npm-audit/config.yaml",
@@ -313,7 +313,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="ESLint",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_eslint.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=22,
         env_vars={
             "ESLINT_CONFIG_PATH": f"{BASE_DIR}/config/tools/eslint/config.yaml",
@@ -324,7 +324,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Brakeman",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_brakeman.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=23,
         env_vars={
             "BRAKEMAN_CONFIG_PATH": f"{BASE_DIR}/config/tools/brakeman/config.yaml",
@@ -335,7 +335,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Bandit",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_bandit.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=24,
         env_vars={
             "BANDIT_CONFIG_PATH": f"{BASE_DIR}/config/tools/bandit/config.yaml",
@@ -347,7 +347,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Clair",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_clair.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=30,
         requires_condition="CLAIR_IMAGE",
         env_vars={
@@ -359,7 +359,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Anchore",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_anchore.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=31,
         requires_condition="ANCHORE_IMAGE",
         env_vars={
@@ -372,7 +372,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Android",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_android_manifest_scanner.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=40,
         requires_condition="IS_NATIVE",
         env_vars={
@@ -383,7 +383,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="iOS",
         scan_types=[ScanType.CODE],
-        script_path=f"{TOOLS_DIR}/run_ios_plist_scanner.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=41,
         requires_condition="IS_NATIVE",
         env_vars={
@@ -396,7 +396,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="ZAP",
         scan_types=[ScanType.WEBSITE],
-        script_path=f"{TOOLS_DIR}/run_zap.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=1,
         env_vars={
             "ZAP_CONFIG_PATH": f"{BASE_DIR}/config/tools/zap/baseline.conf",
@@ -407,7 +407,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Nuclei",
         scan_types=[ScanType.WEBSITE],
-        script_path=f"{TOOLS_DIR}/run_nuclei.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=2,
         env_vars={
             "PYTHON_SCANNER_CLASS": "scanner.scanners.nuclei_scanner.NucleiScanner"
@@ -417,7 +417,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Wapiti",
         scan_types=[ScanType.WEBSITE],
-        script_path=f"{TOOLS_DIR}/run_wapiti.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=3,
         env_vars={
             "PYTHON_SCANNER_CLASS": "scanner.scanners.wapiti_scanner.WapitiScanner"
@@ -427,7 +427,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Nikto",
         scan_types=[ScanType.WEBSITE],
-        script_path=f"{TOOLS_DIR}/run_nikto.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=4,
         env_vars={
             "PYTHON_SCANNER_CLASS": "scanner.scanners.nikto_scanner.NiktoScanner"
@@ -437,7 +437,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Burp",
         scan_types=[ScanType.WEBSITE],
-        script_path=f"{TOOLS_DIR}/run_burp.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=5,
         env_vars={
             "PYTHON_SCANNER_CLASS": "scanner.scanners.burp_scanner.BurpScanner"
@@ -449,7 +449,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Kube-hunter",
         scan_types=[ScanType.NETWORK],
-        script_path=f"{TOOLS_DIR}/run_kube_hunter.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=1,
         env_vars={
             "KUBE_HUNTER_CONFIG_PATH": f"{BASE_DIR}/config/tools/kube-hunter/config.yaml",
@@ -460,7 +460,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Kube-bench",
         scan_types=[ScanType.NETWORK],
-        script_path=f"{TOOLS_DIR}/run_kube_bench.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=2,
         env_vars={
             "KUBE_BENCH_CONFIG_PATH": f"{BASE_DIR}/config/tools/kube-bench/config.yaml",
@@ -471,7 +471,7 @@ def _register_all_scanners():
     ScannerRegistry.register(Scanner(
         name="Docker Bench",
         scan_types=[ScanType.NETWORK],
-        script_path=f"{TOOLS_DIR}/run_docker_bench.sh",  # Fallback to Bash
+        script_path="",  # Python-only orchestrator
         priority=3,
         env_vars={
             "DOCKER_BENCH_CONFIG_PATH": f"{BASE_DIR}/config/tools/docker-bench/config.yaml",

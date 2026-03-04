@@ -38,7 +38,7 @@ npm run dev
 
 ## Architecture
 
-- **Backend**: FastAPI - calls `scripts/run-docker.sh` (no logic duplication)
+- **Backend**: FastAPI - uses Python DockerRunner + orchestrator (no logic duplication)
 - **Frontend**: React + TypeScript - minimal UI
 - **No Database**: File system only
 - **No State**: Each scan is independent

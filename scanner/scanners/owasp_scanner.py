@@ -20,7 +20,7 @@ class OWASPScanner(BaseScanner):
     REQUIRES_CONDITION = None
     ENV_VARS = {
         "OWASP_DC_CONFIG_PATH": "/SimpleSecCheck/config/tools/owasp-dependency-check/config.yaml",
-        "OWASP_DC_DATA_DIR": "/SimpleSecCheck/owasp-dependency-check-data"
+        "OWASP_DC_DATA_DIR": "/SimpleSecCheck/scanner/data/owasp-dependency-check-data"
     }
     
     def __init__(
@@ -44,7 +44,7 @@ class OWASPScanner(BaseScanner):
             exclude_paths: Comma-separated paths to exclude
         """
         super().__init__("OWASP Dependency Check", target_path, results_dir, log_file, config_path)
-        self.data_dir = Path(data_dir) if data_dir else Path("/SimpleSecCheck/owasp-dependency-check-data")
+        self.data_dir = Path(data_dir) if data_dir else Path("/SimpleSecCheck/scanner/data/owasp-dependency-check-data")
         self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     def initialize_database(self):
@@ -181,7 +181,7 @@ if __name__ == "__main__":
     results_dir = os.getenv("RESULTS_DIR", "/SimpleSecCheck/results")
     log_file = os.getenv("LOG_FILE", "/SimpleSecCheck/logs/scan.log")
     config_path = os.getenv("OWASP_DC_CONFIG_PATH", "/SimpleSecCheck/config/tools/owasp-dependency-check/config.yaml")
-    data_dir = os.getenv("OWASP_DC_DATA_DIR", "/SimpleSecCheck/owasp-dependency-check-data")
+    data_dir = os.getenv("OWASP_DC_DATA_DIR", "/SimpleSecCheck/scanner/data/owasp-dependency-check-data")
     exclude_paths = os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     scanner = OWASPScanner(
