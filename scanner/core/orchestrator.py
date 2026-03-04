@@ -190,50 +190,20 @@ class ScanOrchestrator:
                     if param_name in scanner_kwargs:
                         continue
                     
-                    # Suche in scanner.env_vars
-                    if scanner.env_vars:
+                    # 1) Explicit param -> env mapping from registry (preferred)
+                    if getattr(scanner, "param_env_map", None):
+                        env_key = scanner.param_env_map.get(param_name)
+                        if env_key and env_key != "PYTHON_SCANNER_CLASS":
+                            env_value = os.getenv(env_key) or (scanner.env_vars or {}).get(env_key)
+                            if env_value is not None:
+                                scanner_kwargs[param_name] = env_value
+
+                    # 2) Fallback: search only within scanner.env_vars (no global overrides)
+                    if param_name not in scanner_kwargs and scanner.env_vars:
                         env_key = find_env_var_for_param(param_name, scanner.env_vars)
                         if env_key and env_key != "PYTHON_SCANNER_CLASS":
                             env_value = os.getenv(env_key) or scanner.env_vars[env_key]
                             scanner_kwargs[param_name] = env_value
-                    
-                    # Suche auch in globalen env vars (vollständig dynamisch!)
-                    # Generiere mögliche env_var Namen basierend auf Parameter-Name
-                    param_upper = param_name.upper()
-                    
-                    # Generiere alle möglichen env_var Namen dynamisch
-                    # z.B. exclude_paths -> EXCLUDE_PATHS, SIMPLESECCHECK_EXCLUDE_PATHS, etc.
-                    possible_env_vars = [
-                        param_upper,  # Exakter Match: EXCLUDE_PATHS
-                        f"SIMPLESECCHECK_{param_upper}",  # SIMPLESECCHECK_EXCLUDE_PATHS
-                    ]
-                    
-                    # Suche auch nach Pattern: SCANNER_NAME_PARAM_NAME
-                    # Dazu müssen wir alle env vars durchsuchen (nicht ideal, aber dynamisch)
-                    for env_key, env_value in os.environ.items():
-                        if env_key.upper().endswith(f"_{param_upper}"):
-                            # Handle special types
-                            if param_name == "startup_delay":
-                                try:
-                                    scanner_kwargs[param_name] = int(env_value)
-                                except ValueError:
-                                    pass
-                            else:
-                                scanner_kwargs[param_name] = env_value
-                            break
-                    else:
-                        # Try the predefined patterns
-                        for env_var_name in possible_env_vars:
-                            env_value = os.getenv(env_var_name)
-                            if env_value:
-                                if param_name == "startup_delay":
-                                    try:
-                                        scanner_kwargs[param_name] = int(env_value)
-                                    except ValueError:
-                                        pass
-                                else:
-                                    scanner_kwargs[param_name] = env_value
-                                break
                     
                     # Default values (nur wenn Parameter optional ist und nicht gefunden wurde)
                     if param_name not in scanner_kwargs:

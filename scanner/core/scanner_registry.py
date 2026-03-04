@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional
 from pathlib import Path
+import inspect
 
 
 class ScanType(Enum):
@@ -25,6 +26,7 @@ class Scanner:
     priority: int = 0  # Execution order (lower = earlier)
     requires_condition: Optional[str] = None  # Optional condition (e.g., "IS_NATIVE", "CLAIR_IMAGE")
     env_vars: Optional[Dict[str, str]] = None  # Additional environment variables
+    param_env_map: Optional[Dict[str, str]] = None  # Explicit param -> env var mapping
 
 
 class ScannerRegistry:
@@ -34,7 +36,52 @@ class ScannerRegistry:
     @classmethod
     def register(cls, scanner: Scanner):
         """Register a scanner"""
+        # Auto-build param_env_map from Python scanner class if not provided
+        if scanner.param_env_map is None and scanner.env_vars:
+            python_scanner_class = scanner.env_vars.get("PYTHON_SCANNER_CLASS")
+            if python_scanner_class:
+                try:
+                    module_path, class_name = python_scanner_class.rsplit(".", 1)
+                    module = __import__(module_path, fromlist=[class_name])
+                    scanner_class = getattr(module, class_name)
+                    scanner.param_env_map = cls._build_param_env_map(scanner_class, scanner.env_vars)
+                except Exception:
+                    scanner.param_env_map = None
         cls._scanners[scanner.name] = scanner
+
+    @staticmethod
+    def _build_param_env_map(scanner_class, env_vars: Dict[str, str]) -> Dict[str, str]:
+        """Build explicit param->env var mapping using scanner class signature and its env vars."""
+        param_env_map: Dict[str, str] = {}
+        try:
+            sig = inspect.signature(scanner_class.__init__)
+        except (TypeError, ValueError):
+            return param_env_map
+
+        param_names = set(sig.parameters.keys())
+        param_names.discard("self")
+
+        for param_name in param_names:
+            param_upper = param_name.upper()
+            # Exact match first
+            for env_key in env_vars.keys():
+                if env_key.upper() == param_upper:
+                    param_env_map[param_name] = env_key
+                    break
+            else:
+                # Suffix match: *_PARAM_NAME
+                for env_key in env_vars.keys():
+                    if env_key.upper().endswith(f"_{param_upper}"):
+                        param_env_map[param_name] = env_key
+                        break
+                else:
+                    # Containment match within the scanner's own env vars only
+                    for env_key in env_vars.keys():
+                        if param_upper in env_key.upper():
+                            param_env_map[param_name] = env_key
+                            break
+
+        return param_env_map
     
     @classmethod
     def get_scanners_for_type(cls, scan_type: ScanType, conditions: Optional[Dict[str, any]] = None) -> List[Scanner]:
@@ -147,7 +194,8 @@ class ScannerRegistry:
             script_path=script_path,
             priority=priority,
             requires_condition=requires_condition,
-            env_vars=env_vars
+            env_vars=env_vars,
+            param_env_map=getattr(scanner_class, "PARAM_ENV_MAP", None)
         )
         
         cls.register(scanner)
