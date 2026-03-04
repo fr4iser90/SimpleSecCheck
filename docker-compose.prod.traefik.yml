@@ -113,6 +113,8 @@ services:
     environment:
       - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
       # Host project root for OWASP volume mounting (used by run-docker.sh)
       - HOST_PROJECT_ROOT=${PWD}
       
@@ -179,8 +181,6 @@ services:
     networks:
       - SimpleSecCheck_network
       - proxy  # Traefik network
-    profiles:
-      - webui  # Only start with: docker-compose -f docker-compose.prod.traefik.yml --profile webui up
     depends_on:
       postgres:
         condition: service_healthy
@@ -207,7 +207,7 @@ services:
       - "traefik.docker.network=proxy"
       
       # Frontend Router (nur für nicht-/api Requests)
-      - "traefik.http.routers.simpleseccheck-frontend.rule=Host(`simpleseccheck.${DOMAIN}`) && !PathPrefix(`/api`)"
+      - "traefik.http.routers.simpleseccheck-frontend.rule=Host(`ssc.${DOMAIN}`) && !PathPrefix(`/api`)"
       - "traefik.http.routers.simpleseccheck-frontend.entrypoints=websecure"
       - "traefik.http.routers.simpleseccheck-frontend.tls=true"
       - "traefik.http.routers.simpleseccheck-frontend.tls.certresolver=http_resolver"
@@ -217,9 +217,10 @@ services:
       
       # Frontend Service
       - "traefik.http.services.simpleseccheck-frontend.loadbalancer.server.port=8080"
+      - "traefik.http.routers.simpleseccheck-frontend.service=simpleseccheck-frontend"
       
       # API Router (für /api Requests)
-      - "traefik.http.routers.simpleseccheck-api.rule=Host(`simpleseccheck.${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.simpleseccheck-api.rule=Host(`ssc.${DOMAIN}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.simpleseccheck-api.entrypoints=websecure"
       - "traefik.http.routers.simpleseccheck-api.tls=true"
       - "traefik.http.routers.simpleseccheck-api.tls.certresolver=http_resolver"
@@ -228,10 +229,11 @@ services:
       # API Service
       - "traefik.http.services.simpleseccheck-api.loadbalancer.server.port=8080"
       # Rate limiting middleware chain (default@file + rate-limit@docker)
-      - "traefik.http.routers.simpleseccheck-api.middlewares=default@file,rate-limit@docker"
+      - "traefik.http.routers.simpleseccheck-api.middlewares=default@file,ssc-rate-limit@docker"
+      - "traefik.http.routers.simpleseccheck-api.service=simpleseccheck-frontend"
       # Rate limit middleware (docker provider)
-      - "traefik.http.middlewares.rate-limit.ratelimit.average=50"
-      - "traefik.http.middlewares.rate-limit.ratelimit.burst=100"
+      - "traefik.http.middlewares.ssc-rate-limit.ratelimit.average=50"
+      - "traefik.http.middlewares.ssc-rate-limit.ratelimit.burst=100"
 
   scanner-worker:
     # Separate worker for executing scans (isolated from public WebUI)
@@ -251,6 +253,8 @@ services:
     environment:
       - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
       - HOST_PROJECT_ROOT=${PWD}
       - ENVIRONMENT=prod
       - DATABASE_TYPE=postgresql

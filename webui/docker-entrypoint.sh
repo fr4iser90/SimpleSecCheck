@@ -1,6 +1,43 @@
 #!/bin/bash
 set -e
 
+# Optionally remap webui user/group to host UID/GID for volume permissions
+PUID=${PUID:-1000}
+PGID=${PGID:-1000}
+echo "[Entrypoint] Requested PUID=$PUID PGID=$PGID"
+CURRENT_UID=$(id -u webui)
+CURRENT_GID=$(id -g webui)
+
+if [ "$PGID" != "$CURRENT_GID" ]; then
+    if getent group "$PGID" >/dev/null 2>&1; then
+        usermod -g "$PGID" webui
+    else
+        groupmod -g "$PGID" webui
+    fi
+fi
+
+if [ "$PUID" != "$CURRENT_UID" ]; then
+    usermod -u "$PUID" webui
+fi
+
+CHOWN_UID=$(id -u webui)
+CHOWN_GID=$(id -g webui)
+
+# Ensure results directory exists and is writable by webui
+RESULTS_DIR=${RESULTS_DIR:-/app/results}
+if [ ! -d "$RESULTS_DIR" ]; then
+    echo "[Entrypoint] Creating results directory at $RESULTS_DIR"
+    mkdir -p "$RESULTS_DIR"
+fi
+echo "[Entrypoint] Ensuring ownership for $RESULTS_DIR (uid=$CHOWN_UID gid=$CHOWN_GID)"
+chown -R "$CHOWN_UID:$CHOWN_GID" "$RESULTS_DIR" 2>/dev/null || true
+chmod -R u+rwX,g+rwX "$RESULTS_DIR" 2>/dev/null || true
+
+if ! gosu webui test -w "$RESULTS_DIR"; then
+    echo "[Entrypoint] WARNING: $RESULTS_DIR is still not writable by webui (uid=$CHOWN_UID gid=$CHOWN_GID)"
+    ls -ld "$RESULTS_DIR" || true
+fi
+
 # Dynamically determine Docker socket GID and add webui user to docker group
 # This works across different systems where the docker socket GID may vary
 if [ -S /var/run/docker.sock ]; then

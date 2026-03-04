@@ -90,6 +90,8 @@ services:
     environment:
       - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
       # Host project root for OWASP volume mounting (used by run-docker.sh)
       - HOST_PROJECT_ROOT=${PWD}
       
@@ -155,8 +157,6 @@ services:
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
     networks:
       - SimpleSecCheck_network
-    profiles:
-      - webui  # Only start with: docker-compose -f docker-compose.prod.yml --profile webui up
     depends_on:
       postgres:
         condition: service_healthy
@@ -193,6 +193,8 @@ services:
     environment:
       - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
       - HOST_PROJECT_ROOT=${PWD}
       - ENVIRONMENT=prod
       - DATABASE_TYPE=postgresql

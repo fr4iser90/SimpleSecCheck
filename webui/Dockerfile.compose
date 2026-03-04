@@ -1,9 +1,34 @@
-# Combined Dockerfile for docker-compose (backend + frontend)
+# Multi-stage Dockerfile for docker-compose (backend + frontend)
+
+# ----------------------------
+# Frontend build stage
+# ----------------------------
+FROM node:20.19.2-bullseye-slim AS frontend-build
+
+WORKDIR /app/frontend
+COPY webui/frontend/package*.json ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+COPY webui/frontend/ ./
+RUN node node_modules/typescript/bin/tsc && node node_modules/vite/bin/vite.js build
+
+# ----------------------------
+# Reporting build stage (TypeScript)
+# ----------------------------
+FROM node:20.19.2-bullseye-slim AS reporting-build
+
+WORKDIR /app/scanner/reporting
+COPY scanner/reporting/package*.json ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+COPY scanner/reporting/ ./
+RUN node node_modules/typescript/bin/tsc
+
+# ----------------------------
+# Runtime stage
+# ----------------------------
 FROM python:3.11-slim
 
-# Install Node.js, docker-compose, gosu, and git for frontend build and CLI execution (as root, before user creation)
+# Install docker-compose, gosu, curl, and git for runtime execution
 RUN apt-get update && apt-get install -y \
-    nodejs npm \
     curl \
     gosu \
     git \
@@ -22,15 +47,7 @@ RUN curl -L "https://github.com/docker/compose/releases/latest/download/docker-c
     && chmod +x /usr/local/bin/docker-compose \
     && docker-compose --version
 
-# Build frontend (as root)
-WORKDIR /app/frontend
-COPY webui/frontend/package*.json ./
-# Use npm install if package-lock.json doesn't exist, otherwise npm ci
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
-COPY webui/frontend/ ./
-RUN npm run build
-
-# Setup backend (as root)
+# Setup backend
 WORKDIR /app
 COPY webui/backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
@@ -38,15 +55,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy scanner code (needed for path_setup and other core modules)
 COPY scanner/ ./scanner/
 
-# Compile TypeScript files in scanner/reporting (needed for HTML reports)
-RUN cd scanner/reporting && npm install && npx tsc
+# Copy compiled reporting artifacts
+COPY --from=reporting-build /app/scanner/reporting /app/scanner/reporting
 
 # Copy backend
 COPY webui/backend/app/ ./app/
 
 # Copy built frontend to static directory
 RUN mkdir -p /app/static
-RUN cp -r /app/frontend/dist/* /app/static/
+COPY --from=frontend-build /app/frontend/dist/ /app/static/
 
 # Create non-root user (UID 1000, matches scanner user)
 # Docker group will be created dynamically at runtime by entrypoint script
@@ -72,4 +89,3 @@ ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Run application as non-root user (entrypoint will switch to webui)
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]
-#CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

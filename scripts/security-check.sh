@@ -154,9 +154,19 @@ else
     LOCK_FILE="$RESULTS_DIR_IN_CONTAINER/.scan-running"
 fi
 
-# Fix ownership on mounted volumes to allow scanner user to write
-sudo chown -R scanner:scanner "$RESULTS_DIR_IN_CONTAINER" "$LOGS_DIR_IN_CONTAINER" 2>/dev/null || true
+# Ensure results/logs directories exist and are writable (avoid root-owned files)
 mkdir -p "$RESULTS_DIR_IN_CONTAINER" "$LOGS_DIR_IN_CONTAINER"
+chmod -R u+rwX,g+rwX "$RESULTS_DIR_IN_CONTAINER" "$LOGS_DIR_IN_CONTAINER" 2>/dev/null || true
+
+if [ ! -w "$RESULTS_DIR_IN_CONTAINER" ]; then
+    log_message "[WARNING] Results dir not writable by current user (uid=$(id -u) gid=$(id -g)): $RESULTS_DIR_IN_CONTAINER"
+    ls -ld "$RESULTS_DIR_IN_CONTAINER" || true
+fi
+
+if [ ! -w "$LOGS_DIR_IN_CONTAINER" ]; then
+    log_message "[WARNING] Logs dir not writable by current user (uid=$(id -u) gid=$(id -g)): $LOGS_DIR_IN_CONTAINER"
+    ls -ld "$LOGS_DIR_IN_CONTAINER" || true
+fi
 
 # Initialize log file for this run
 # Note: Your tool scripts also use `tee -a "$LOG_FILE"` so they will append.
