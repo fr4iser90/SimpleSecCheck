@@ -26,6 +26,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - SimpleSecCheck_network
+      - SimpleSecCheck_internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ssc_user} -d ${POSTGRES_DB:-simpleseccheck}"]
@@ -109,11 +110,6 @@ services:
       - ./Dockerfile:/app/Dockerfile:ro       # Dockerfile (read-only, needed for scanner build)
       - .:/project:ro                         # Project root (read-only, needed as build context for scanner)
       - ./owasp-dependency-check-data:/app/owasp-dependency-check-data  # OWASP database (read-write: for updates and checks)
-      # ⚠️ PRODUCTION: Docker socket required for scanner worker to execute scans
-      # The scanner worker (running in this container) needs Docker access to run scan containers
-      # Security: Only the scanner worker process uses Docker, not the WebUI API
-      # Note: Docker socket needs write access to start/stop containers
-      - /var/run/docker.sock:/var/run/docker.sock  # Docker socket (required for scanner worker)
     environment:
       - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1
@@ -145,6 +141,8 @@ services:
       - SESSION_COOKIE_HTTPONLY=true
       - SESSION_COOKIE_SECURE=true
       - SESSION_COOKIE_SAMESITE=lax
+      # WebUI only: disable scanner worker in this container
+      - SCANNER_WORKER_ENABLED=false
       
       # Queue Configuration
       - MAX_QUEUE_LENGTH=${MAX_QUEUE_LENGTH:-1000}
@@ -229,10 +227,99 @@ services:
       
       # API Service
       - "traefik.http.services.simpleseccheck-api.loadbalancer.server.port=8080"
+      # Rate limiting middleware chain (default@file + rate-limit@docker)
+      - "traefik.http.routers.simpleseccheck-api.middlewares=default@file,rate-limit@docker"
+      # Rate limit middleware (docker provider)
+      - "traefik.http.middlewares.rate-limit.ratelimit.average=50"
+      - "traefik.http.middlewares.rate-limit.ratelimit.burst=100"
+
+  scanner-worker:
+    # Separate worker for executing scans (isolated from public WebUI)
+    build:
+      context: .
+      dockerfile: ./webui/Dockerfile.compose
+    container_name: SimpleSecCheck_scanner_worker
+    # No public ports
+    volumes:
+      - ./results:/app/results
+      - ./logs:/app/logs:ro
+      - ./docker-compose.prod.traefik.yml:/app/docker-compose.yml:ro
+      - ./Dockerfile:/app/Dockerfile:ro
+      - .:/project:ro
+      - ./owasp-dependency-check-data:/app/owasp-dependency-check-data
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker socket required for scan execution
+    environment:
+      - SIMPLESECCHECK_ROOT=/app
+      - PYTHONUNBUFFERED=1
+      - HOST_PROJECT_ROOT=${PWD}
+      - ENVIRONMENT=prod
+      - DATABASE_TYPE=postgresql
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}
+      - SESSION_MANAGEMENT=true
+      - QUEUE_ENABLED=true
+      - METADATA_COLLECTION=always
+      - ONLY_GIT_SCANS=true
+      # Worker enabled here
+      - SCANNER_WORKER_ENABLED=true
+      # Session config (required for queue access in prod)
+      - SESSION_DURATION=${SESSION_DURATION:-86400}
+      - SESSION_STORAGE=postgresql
+      - SESSION_COOKIE_NAME=${SESSION_COOKIE_NAME:-session_id}
+      - SESSION_HEADER_NAME=${SESSION_HEADER_NAME:-X-Session-ID}
+      - SESSION_COOKIE_HTTPONLY=true
+      - SESSION_COOKIE_SECURE=true
+      - SESSION_COOKIE_SAMESITE=lax
+      # Queue config
+      - MAX_QUEUE_LENGTH=${MAX_QUEUE_LENGTH:-1000}
+      - MAX_CONCURRENT_SCANS=${MAX_CONCURRENT_SCANS:-1}
+      - QUEUE_DEDUPLICATION=true
+      - QUEUE_FAIRNESS_MODE=fifo
+      # Rate Limiting
+      - RATE_LIMIT_PER_SESSION_SCANS=${RATE_LIMIT_PER_SESSION_SCANS:-10}
+      - RATE_LIMIT_PER_SESSION_REQUESTS=${RATE_LIMIT_PER_SESSION_REQUESTS:-100}
+      - RATE_LIMIT_PER_IP_SCANS=${RATE_LIMIT_PER_IP_SCANS:-50}
+      - RATE_LIMIT_PER_IP_REQUESTS=${RATE_LIMIT_PER_IP_REQUESTS:-1000}
+      # Size Limits
+      - MAX_ZIP_UPLOAD_SIZE=${MAX_ZIP_UPLOAD_SIZE:-100M}
+      - MAX_GIT_REPO_SIZE=${MAX_GIT_REPO_SIZE:-500M}
+      - MAX_SCAN_DISK_USAGE=${MAX_SCAN_DISK_USAGE:-2G}
+      # Scan Deduplication
+      - SCAN_DEDUPLICATION_ENABLED=true
+      - SCAN_DEDUPLICATION_AGE_DAYS=${SCAN_DEDUPLICATION_AGE_DAYS:-7}
+      # Optional Features
+      - STATISTICS_ENABLED=${STATISTICS_ENABLED:-true}
+      - ZIP_UPLOAD_ENABLED=${ZIP_UPLOAD_ENABLED:-true}
+      # OWASP Auto-Update Configuration (Production only)
+      - OWASP_AUTO_UPDATE_ENABLED=${OWASP_AUTO_UPDATE_ENABLED:-true}
+      - OWASP_AUTO_UPDATE_INTERVAL_DAYS=${OWASP_AUTO_UPDATE_INTERVAL_DAYS:-7}
+      - OWASP_AUTO_UPDATE_CHECK_INTERVAL_HOURS=${OWASP_AUTO_UPDATE_CHECK_INTERVAL_HOURS:-24}
+      # CORS Configuration (not used by worker, but keep consistent)
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
+    networks:
+      - SimpleSecCheck_network
+      - SimpleSecCheck_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
 networks:
   SimpleSecCheck_network:
     driver: bridge
+  SimpleSecCheck_internal:
+    driver: bridge
+    internal: true
   proxy:
     external: true  # Traefik network (must exist)
 

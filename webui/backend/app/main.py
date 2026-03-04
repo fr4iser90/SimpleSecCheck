@@ -94,9 +94,14 @@ IS_PRODUCTION = ENVIRONMENT == "prod"
 
 # CORS configuration
 cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if os.getenv("CORS_ALLOWED_ORIGINS") else []
-if not cors_origins or cors_origins == [""]:
-    # Default to localhost for development
-    cors_origins = ["http://localhost:8080", "http://127.0.0.1:8080"]
+cors_origins = [origin.strip() for origin in cors_origins if origin.strip()]
+if not cors_origins:
+    if IS_PRODUCTION:
+        # In production, require explicit allowed origins
+        cors_origins = []
+    else:
+        # Default to localhost for development
+        cors_origins = ["http://localhost:8080", "http://127.0.0.1:8080"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -141,6 +146,8 @@ register_signal_handlers(signal_handler)
 # Queue is ALWAYS enabled (works in both Dev and Prod, uses File-Database in Dev, PostgreSQL in Prod)
 # Session Management is optional (enabled in Prod by default, can be enabled in Dev)
 SESSION_MANAGEMENT = os.getenv("SESSION_MANAGEMENT", "true" if IS_PRODUCTION else "false").lower() == "true"
+# Scanner worker can be disabled for WebUI-only deployments
+SCANNER_WORKER_ENABLED = os.getenv("SCANNER_WORKER_ENABLED", "true").lower() == "true"
 
 async def queue_cleanup_task():
     """Background task for cleaning up old queue items"""
@@ -234,9 +241,12 @@ async def startup_event():
         queue_service = await get_queue_service()
         print("[Main] Queue service initialized")
         
-        # Start scanner worker (queue is always enabled)
-        await start_scanner_worker()
-        print("[Main] Scanner worker started")
+        # Start scanner worker (optional; disable for WebUI-only deployments)
+        if SCANNER_WORKER_ENABLED:
+            await start_scanner_worker()
+            print("[Main] Scanner worker started")
+        else:
+            print("[Main] Scanner worker disabled (SCANNER_WORKER_ENABLED=false)")
         
         # Start queue cleanup background task (always enabled)
         asyncio.create_task(queue_cleanup_task())
@@ -255,9 +265,10 @@ async def startup_event():
 async def shutdown_event():
     """Stop services on application shutdown"""
     try:
-        # Stop scanner worker (queue is always enabled)
-        await stop_scanner_worker()
-        print("[Main] Scanner worker stopped")
+        # Stop scanner worker (only if enabled)
+        if SCANNER_WORKER_ENABLED:
+            await stop_scanner_worker()
+            print("[Main] Scanner worker stopped")
         
         # Close session service if enabled
         if SESSION_MANAGEMENT:
