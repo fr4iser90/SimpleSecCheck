@@ -194,6 +194,19 @@ RUN chmod +x /entrypoint.sh
 # Switch to non-root user
 USER scanner
 
+# Ensure writable home/cache locations for CLI tools
+ENV HOME=/home/scanner
+ENV XDG_CACHE_HOME=/home/scanner/.cache
+ENV XDG_CONFIG_HOME=/home/scanner/.config
+ENV SEMGREP_USER_LOG_FILE=/home/scanner/.cache/semgrep/semgrep.log
+ENV TRIVY_CACHE_DIR=/home/scanner/.cache/trivy
+ENV SAFETY_CACHE_DIR=/home/scanner/.cache/safety
+ENV SONAR_USER_HOME=/home/scanner/.sonar
+
+# Pre-create cache directories to avoid permission errors
+RUN mkdir -p /home/scanner/.cache/semgrep /home/scanner/.cache/trivy /home/scanner/.cache/safety /home/scanner/.sonar /home/scanner/.config && \
+    chown -R scanner:scanner /home/scanner/.cache /home/scanner/.sonar /home/scanner/.config
+
 # Ensure scanner modules are importable regardless of working directory
 ENV PYTHONPATH=/SimpleSecCheck
 
