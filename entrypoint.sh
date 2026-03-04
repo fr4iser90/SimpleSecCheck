@@ -4,6 +4,7 @@ set -e
 # Ensure mounted volumes exist and are writable by scanner
 RESULTS_DIR="${RESULTS_DIR_IN_CONTAINER:-/SimpleSecCheck/results}"
 LOGS_DIR="${LOGS_DIR_IN_CONTAINER:-/SimpleSecCheck/results/logs}"
+TARGET_DIR="${TARGET_PATH_IN_CONTAINER:-/target}"
 
 mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
 chmod -R u+rwX,g+rwX "$RESULTS_DIR" "$LOGS_DIR" 2>/dev/null || true
@@ -16,6 +17,13 @@ fi
 if ! test -w "$LOGS_DIR"; then
     echo "[Entrypoint] WARNING: $LOGS_DIR is not writable by current user (uid=$(id -u) gid=$(id -g))"
     ls -ld "$LOGS_DIR" || true
+fi
+
+if ! test -d "$TARGET_DIR"; then
+    echo "[Entrypoint] WARNING: Target directory $TARGET_DIR is missing. Ensure /target is mounted correctly."
+    ls -ld "/target" || true
+else
+    echo "[Entrypoint] Target directory available at $TARGET_DIR"
 fi
 
 # Run the command passed as arguments

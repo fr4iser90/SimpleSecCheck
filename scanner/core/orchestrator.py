@@ -194,7 +194,8 @@ class ScanOrchestrator:
                     if scanner.env_vars:
                         env_key = find_env_var_for_param(param_name, scanner.env_vars)
                         if env_key and env_key != "PYTHON_SCANNER_CLASS":
-                            scanner_kwargs[param_name] = scanner.env_vars[env_key]
+                            env_value = os.getenv(env_key) or scanner.env_vars[env_key]
+                            scanner_kwargs[param_name] = env_value
                     
                     # Suche auch in globalen env vars (vollständig dynamisch!)
                     # Generiere mögliche env_var Namen basierend auf Parameter-Name

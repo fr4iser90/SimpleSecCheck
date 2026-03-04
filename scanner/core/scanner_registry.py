@@ -168,7 +168,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=1,
         env_vars={
-            "SEMGREP_RULES_PATH": f"{BASE_DIR}/config/rules",
+            "SEMGREP_RULES_PATH": f"{BASE_DIR}/scanner/config/rules",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.semgrep_scanner.SemgrepScanner"  # Use Python scanner
         }
     ))
@@ -179,7 +179,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=2,
         env_vars={
-            "TRIVY_CONFIG_PATH": f"{BASE_DIR}/config/tools/trivy/config.yaml",
+            "TRIVY_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/trivy/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.trivy_scanner.TrivyScanner"
         }
     ))
@@ -190,8 +190,8 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=3,
         env_vars={
-            "CODEQL_CONFIG_PATH": f"{BASE_DIR}/config/tools/codeql/config.yaml",
-            "CODEQL_QUERIES_PATH": f"{BASE_DIR}/config/tools/codeql/queries",
+            "CODEQL_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/codeql/config.yaml",
+            "CODEQL_QUERIES_PATH": f"{BASE_DIR}/scanner/config/tools/codeql/queries",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.codeql_scanner.CodeQLScanner"
         }
     ))
@@ -202,8 +202,8 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=4,
         env_vars={
-            "OWASP_DC_CONFIG_PATH": f"{BASE_DIR}/config/tools/owasp-dependency-check/config.yaml",
-            "OWASP_DC_DATA_DIR": f"{BASE_DIR}/scanner/data/owasp-dependency-check-data",
+            "OWASP_DC_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/owasp-dependency-check/config.yaml",
+            "OWASP_DC_DATA_DIR": f"{BASE_DIR}/owasp-dependency-check-data",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.owasp_scanner.OWASPScanner"
         }
     ))
@@ -214,7 +214,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=5,
         env_vars={
-            "SAFETY_CONFIG_PATH": f"{BASE_DIR}/config/tools/safety/config.yaml",
+            "SAFETY_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/safety/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.safety_scanner.SafetyScanner"
         }
     ))
@@ -225,7 +225,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=6,
         env_vars={
-            "SNYK_CONFIG_PATH": f"{BASE_DIR}/config/tools/snyk/config.yaml",
+            "SNYK_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/snyk/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.snyk_scanner.SnykScanner"
         }
     ))
@@ -236,7 +236,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=7,
         env_vars={
-            "SONARQUBE_CONFIG_PATH": f"{BASE_DIR}/config/tools/sonarqube/config.yaml",
+            "SONARQUBE_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/sonarqube/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.sonarqube_scanner.SonarQubeScanner"
         }
     ))
@@ -248,7 +248,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=11,
         env_vars={
-            "TERRAFORM_SECURITY_CONFIG_PATH": f"{BASE_DIR}/config/tools/terraform-security/config.yaml",
+            "TERRAFORM_SECURITY_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/terraform-security/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.terraform_scanner.TerraformSecurityScanner"
         }
     ))
@@ -259,7 +259,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=12,
         env_vars={
-            "CHECKOV_CONFIG_PATH": f"{BASE_DIR}/config/tools/checkov/config.yaml",
+            "CHECKOV_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/checkov/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.checkov_scanner.CheckovScanner"
         }
     ))
@@ -271,7 +271,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=16,
         env_vars={
-            "TRUFFLEHOG_CONFIG_PATH": f"{BASE_DIR}/config/tools/trufflehog/config.yaml",
+            "TRUFFLEHOG_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/trufflehog/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.trufflehog_scanner.TruffleHogScanner"
         }
     ))
@@ -282,7 +282,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=17,
         env_vars={
-            "GITLEAKS_CONFIG_PATH": f"{BASE_DIR}/config/tools/gitleaks/config.yaml",
+            "GITLEAKS_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/gitleaks/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.gitleaks_scanner.GitLeaksScanner"
         }
     ))
@@ -293,7 +293,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=18,
         env_vars={
-            "DETECT_SECRETS_CONFIG_PATH": f"{BASE_DIR}/config/tools/detect-secrets/config.yaml",
+            "DETECT_SECRETS_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/detect-secrets/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.detect_secrets_scanner.DetectSecretsScanner"
         }
     ))
@@ -305,7 +305,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=21,
         env_vars={
-            "NPM_AUDIT_CONFIG_PATH": f"{BASE_DIR}/config/tools/npm-audit/config.yaml",
+            "NPM_AUDIT_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/npm-audit/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.npm_audit_scanner.NpmAuditScanner"
         }
     ))
@@ -316,7 +316,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=22,
         env_vars={
-            "ESLINT_CONFIG_PATH": f"{BASE_DIR}/config/tools/eslint/config.yaml",
+            "ESLINT_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/eslint/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.eslint_scanner.ESLintScanner"
         }
     ))
@@ -327,7 +327,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=23,
         env_vars={
-            "BRAKEMAN_CONFIG_PATH": f"{BASE_DIR}/config/tools/brakeman/config.yaml",
+            "BRAKEMAN_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/brakeman/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.brakeman_scanner.BrakemanScanner"
         }
     ))
@@ -338,7 +338,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=24,
         env_vars={
-            "BANDIT_CONFIG_PATH": f"{BASE_DIR}/config/tools/bandit/config.yaml",
+            "BANDIT_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/bandit/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.bandit_scanner.BanditScanner"
         }
     ))
@@ -351,7 +351,7 @@ def _register_all_scanners():
         priority=30,
         requires_condition="CLAIR_IMAGE",
         env_vars={
-            "CLAIR_CONFIG_PATH": f"{BASE_DIR}/config/tools/clair/config.yaml",
+            "CLAIR_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/clair/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.clair_scanner.ClairScanner"
         }
     ))
@@ -363,7 +363,7 @@ def _register_all_scanners():
         priority=31,
         requires_condition="ANCHORE_IMAGE",
         env_vars={
-            "ANCHORE_CONFIG_PATH": f"{BASE_DIR}/config/tools/anchore/config.yaml",
+            "ANCHORE_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/anchore/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.anchore_scanner.AnchoreScanner"
         }
     ))
@@ -399,7 +399,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=1,
         env_vars={
-            "ZAP_CONFIG_PATH": f"{BASE_DIR}/config/tools/zap/baseline.conf",
+            "ZAP_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/zap/baseline.conf",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.zap_scanner.ZAPScanner"
         }
     ))
@@ -452,7 +452,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=1,
         env_vars={
-            "KUBE_HUNTER_CONFIG_PATH": f"{BASE_DIR}/config/tools/kube-hunter/config.yaml",
+            "KUBE_HUNTER_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/kube-hunter/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.kube_hunter_scanner.KubeHunterScanner"
         }
     ))
@@ -463,7 +463,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=2,
         env_vars={
-            "KUBE_BENCH_CONFIG_PATH": f"{BASE_DIR}/config/tools/kube-bench/config.yaml",
+            "KUBE_BENCH_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/kube-bench/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.kube_bench_scanner.KubeBenchScanner"
         }
     ))
@@ -474,7 +474,7 @@ def _register_all_scanners():
         script_path="",  # Python-only orchestrator
         priority=3,
         env_vars={
-            "DOCKER_BENCH_CONFIG_PATH": f"{BASE_DIR}/config/tools/docker-bench/config.yaml",
+            "DOCKER_BENCH_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/docker-bench/config.yaml",
             "PYTHON_SCANNER_CLASS": "scanner.scanners.docker_bench_scanner.DockerBenchScanner"
         }
     ))
