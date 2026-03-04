@@ -188,6 +188,26 @@ class DatabaseAdapter(ABC):
         """Get aggregated statistics"""
         pass
 
+    # Step Tracking (Scan Steps)
+    @abstractmethod
+    async def upsert_scan_step(
+        self,
+        scan_id: str,
+        step_number: int,
+        step_name: str,
+        status: str,
+        message: Optional[str] = None,
+        started_at: Optional[datetime] = None,
+        completed_at: Optional[datetime] = None,
+    ) -> bool:
+        """Insert or update a scan step"""
+        pass
+
+    @abstractmethod
+    async def get_scan_steps(self, scan_id: str) -> List[Dict[str, Any]]:
+        """Get steps for a scan (ordered by step_number)"""
+        pass
+
 
 def get_database() -> DatabaseAdapter:
     """

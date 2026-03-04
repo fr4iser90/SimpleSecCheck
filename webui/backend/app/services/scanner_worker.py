@@ -499,14 +499,15 @@ class ScannerWorker:
                 try:
                     import asyncio
                     from app.services.websocket_manager import get_websocket_manager
-                    from app.services.step_service import read_steps_from_log
+                    from app.services.step_service import read_steps_from_db, upsert_steps_from_log
                     
                     async def send_websocket_update():
                         try:
                             ws_manager = get_websocket_manager()
                             
-                            # Read steps from steps.log (written by Step Registry)
-                            steps = read_steps_from_log(results_dir_path_obj)
+                            # Hydrate DB from steps.log, then read from DB
+                            await upsert_steps_from_log(scan_id, results_dir_path_obj)
+                            steps = await read_steps_from_db(scan_id)
                             
                             if steps:
                                 # Calculate total_steps and progress_percentage

@@ -21,6 +21,7 @@ from app.services.ai_prompt_service import collect_findings_from_results, genera
 from app.services.queue_service import get_queue_service
 from app.services.session_service import get_session_service
 from app.services.websocket_manager import get_websocket_manager
+from app.services.step_service import read_steps_from_db, upsert_steps_from_log
 
 router = APIRouter()
 
@@ -389,56 +390,19 @@ async def websocket_scan_updates(websocket: WebSocket, scan_id: str = None):
         # Connect to WebSocket manager
         await ws_manager.connect(websocket, actual_scan_id)
         
-        # Send initial steps from log file (Recovery: if user reconnects)
+        # Send initial steps from DB (Recovery: if user reconnects)
         steps_log_file = None
         if RESULTS_DIR and RESULTS_DIR.exists():
             for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
                 if scan_dir.is_dir() and actual_scan_id in scan_dir.name:
                     steps_log_file = scan_dir / "logs" / "steps.log"
                     break
-        
         if steps_log_file and steps_log_file.exists():
-            steps = []
-            step_map = {}  # {step_number: step_dict} - keep latest status per step
-            
-            # Read JSON Lines format (structured - no regex parsing!)
-            import json
-            with open(steps_log_file, "r", encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    
-                    try:
-                        # Parse JSON line (structured format - no regex needed!)
-                        step_data = json.loads(line)
-                        
-                        # Skip init line
-                        if "init" in step_data:
-                            continue
-                        
-                        # Extract step data directly from JSON
-                        step_number = step_data.get("number")
-                        step_name = step_data.get("name")
-                        status = step_data.get("status", "pending")
-                        message = step_data.get("message", "")
-                        
-                        if not step_number or not step_name:
-                            continue
-                        
-                        # Use step_number as key (one entry per step, latest status wins)
-                        step_map[step_number] = {
-                            "number": step_number,
-                            "name": step_name,
-                            "status": status,  # Already in correct format: 'pending', 'running', 'completed', 'failed', 'skipped'
-                            "message": message
-                        }
-                    except json.JSONDecodeError:
-                        # Skip invalid JSON lines (e.g., old format lines)
-                        continue
-            
-            steps = sorted(step_map.values(), key=lambda x: x["number"])
-            
+            await upsert_steps_from_log(actual_scan_id, steps_log_file.parent.parent)
+
+        steps = await read_steps_from_db(actual_scan_id)
+
+        if steps:
             # Calculate total_steps and progress_percentage from steps
             total_steps = max([s["number"] for s in steps], default=0)
             if total_steps == 0:
@@ -449,7 +413,7 @@ async def websocket_scan_updates(websocket: WebSocket, scan_id: str = None):
                 failed = sum(1 for s in steps if s.get("status") == "failed")
                 # Progress = (completed + failed + (running * 0.5)) / total_steps
                 progress_percentage = round(((completed + failed + (running * 0.5)) / total_steps) * 100)
-            
+
             # Send initial steps
             await websocket.send_json({
                 "type": "initial_steps",

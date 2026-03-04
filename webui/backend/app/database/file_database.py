@@ -436,3 +436,31 @@ class FileDatabase(DatabaseAdapter):
             "findings_by_tool": self._statistics["findings_by_tool"],
             "false_positive_rate": false_positive_rate,
         }
+
+    # Step Tracking (dev only - in-memory)
+    async def upsert_scan_step(
+        self,
+        scan_id: str,
+        step_number: int,
+        step_name: str,
+        status: str,
+        message: Optional[str] = None,
+        started_at: Optional[datetime] = None,
+        completed_at: Optional[datetime] = None,
+    ) -> bool:
+        steps = self._statistics.setdefault("scan_steps", {})
+        scan_steps = steps.setdefault(scan_id, {})
+        existing = scan_steps.get(step_number, {})
+        scan_steps[step_number] = {
+            "number": step_number,
+            "name": step_name,
+            "status": status,
+            "message": message,
+            "started_at": existing.get("started_at") or (started_at.isoformat() if started_at else None),
+            "completed_at": existing.get("completed_at") or (completed_at.isoformat() if completed_at else None),
+        }
+        return True
+
+    async def get_scan_steps(self, scan_id: str) -> List[Dict[str, Any]]:
+        steps = self._statistics.get("scan_steps", {}).get(scan_id, {})
+        return [steps[key] for key in sorted(steps.keys())]

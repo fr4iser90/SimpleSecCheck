@@ -80,7 +80,9 @@ def run_update(
 
     with log_file.open("w", encoding="utf-8") as log_f:
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        assert process.stdout is not None
+        if process.stdout is None:
+            log("Failed to capture process output", "ERROR")
+            return 1
         for line in process.stdout:
             print(line.rstrip())
             log_f.write(line)

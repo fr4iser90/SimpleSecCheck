@@ -63,3 +63,29 @@ CREATE TABLE IF NOT EXISTS statistics (
     false_positive_count INTEGER DEFAULT 0,
     UNIQUE(date)
 );
+
+-- Scan access table
+CREATE TABLE IF NOT EXISTS scan_access (
+    scan_id TEXT NOT NULL,
+    session_id UUID REFERENCES sessions(session_id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (scan_id, session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_scan_access_scan ON scan_access(scan_id);
+CREATE INDEX IF NOT EXISTS idx_scan_access_session ON scan_access(session_id);
+
+-- Scan steps table (small structured step tracking)
+CREATE TABLE IF NOT EXISTS scan_steps (
+    scan_id TEXT NOT NULL,
+    step_number INTEGER NOT NULL,
+    step_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    message TEXT,
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (scan_id, step_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_scan_steps_scan ON scan_steps(scan_id);

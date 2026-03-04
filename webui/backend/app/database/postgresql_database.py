@@ -186,6 +186,24 @@ class PostgreSQLDatabase(DatabaseAdapter):
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_scan_access_session ON scan_access(session_id)
             """)
+
+            # Scan steps table (small structured step tracking)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS scan_steps (
+                    scan_id TEXT NOT NULL,
+                    step_number INTEGER NOT NULL,
+                    step_name TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    message TEXT,
+                    started_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (scan_id, step_number)
+                )
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_scan_steps_scan ON scan_steps(scan_id)
+            """)
     
     # Session Management
     async def create_session(self, session_id: str, ip_address: Optional[str] = None) -> Dict[str, Any]:
@@ -749,6 +767,63 @@ class PostgreSQLDatabase(DatabaseAdapter):
                 "findings_by_tool": findings_by_tool,
                 "false_positive_rate": false_positive_rate,
             }
+
+    # Step Tracking
+    async def upsert_scan_step(
+        self,
+        scan_id: str,
+        step_number: int,
+        step_name: str,
+        status: str,
+        message: Optional[str] = None,
+        started_at: Optional[datetime] = None,
+        completed_at: Optional[datetime] = None,
+    ) -> bool:
+        async with self.connection_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO scan_steps (
+                    scan_id, step_number, step_name, status, message, started_at, completed_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                ON CONFLICT (scan_id, step_number)
+                DO UPDATE SET
+                    step_name = EXCLUDED.step_name,
+                    status = EXCLUDED.status,
+                    message = EXCLUDED.message,
+                    started_at = COALESCE(EXCLUDED.started_at, scan_steps.started_at),
+                    completed_at = COALESCE(EXCLUDED.completed_at, scan_steps.completed_at),
+                    updated_at = NOW()
+                """,
+                scan_id,
+                step_number,
+                step_name,
+                status,
+                message,
+                started_at,
+                completed_at,
+            )
+        return True
+
+    async def get_scan_steps(self, scan_id: str) -> List[Dict[str, Any]]:
+        async with self.connection_pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT step_number, step_name, status, message
+                FROM scan_steps
+                WHERE scan_id = $1
+                ORDER BY step_number ASC
+                """,
+                scan_id,
+            )
+            return [
+                {
+                    "number": row["step_number"],
+                    "name": row["step_name"],
+                    "status": row["status"],
+                    "message": row["message"],
+                }
+                for row in rows
+            ]
     
     def _row_to_dict(self, row) -> Dict[str, Any]:
         """Convert database row to dictionary"""

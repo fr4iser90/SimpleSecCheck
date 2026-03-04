@@ -86,6 +86,12 @@
                 "reason": "Path checks for temp clone locations are informational; no insecure temp file handling occurs."
             },
             {
+                "rule_id": "B101",
+                "path_regex": ".*/tests/e2e/test_queue_steps_sessions\\.py$",
+                "message_regex": "Use of assert detected",
+                "reason": "Assertions are expected in test code and do not impact production runtime security."
+            },
+            {
                 "rule_id": "B608",
                 "path_regex": ".*/webui/backend/app/database/postgresql_database\\.py$",
                 "message_regex": "Possible SQL injection vector through string-based query construction",

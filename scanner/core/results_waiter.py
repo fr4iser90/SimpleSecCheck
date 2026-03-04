@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -32,7 +33,8 @@ def main() -> int:
     print(f"Waiting for {results_file} to exist...")
     if wait_for_results(results_file, args.timeout):
         print(f"Found {results_file}, starting web server.")
-        return subprocess.call(args.web_cmd, shell=True)
+        web_cmd = shlex.split(args.web_cmd)
+        return subprocess.call(web_cmd)
 
     print("Timeout waiting for results")
     return 1

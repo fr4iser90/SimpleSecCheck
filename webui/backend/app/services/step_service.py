@@ -7,6 +7,8 @@ import threading
 from pathlib import Path
 from typing import Optional, List, Dict
 
+from app.database import get_database
+
 
 def initialize_step_tracking(current_scan: dict) -> None:
     """Initialize step tracking structures - kept for compatibility"""
@@ -126,7 +128,34 @@ def write_step_to_log(step_number: int, step_name: str, status: str, message: st
     with open(steps_log, "a", encoding="utf-8") as f:
         f.write(json.dumps(step_dict) + "\n")
     
-    # Send WebSocket update (read all steps from log and send update)
+    # Persist step into DB (async fire-and-forget)
+    try:
+        import asyncio
+
+        async def upsert_step():
+            try:
+                db = get_database()
+                await db.upsert_scan_step(
+                    scan_id=scan_id,
+                    step_number=step_number,
+                    step_name=step_name,
+                    status=status,
+                    message=message,
+                    started_at=None,
+                    completed_at=None,
+                )
+            except Exception as e:
+                print(f"[Step Service] Error upserting step to DB: {e}")
+
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(upsert_step())
+        else:
+            loop.run_until_complete(upsert_step())
+    except RuntimeError:
+        pass
+
+    # Send WebSocket update (read all steps from DB and send update)
     try:
         import asyncio
         from app.services.websocket_manager import get_websocket_manager
@@ -135,8 +164,8 @@ def write_step_to_log(step_number: int, step_name: str, status: str, message: st
             try:
                 ws_manager = get_websocket_manager()
                 
-                # Read all steps from log (to get complete picture)
-                steps = read_steps_from_log(Path(results_dir_path))
+                # Read all steps from DB (source of truth)
+                steps = await read_steps_from_db(scan_id)
                 
                 if steps:
                     # Calculate total_steps and progress_percentage
@@ -232,6 +261,38 @@ def read_steps_from_log(results_dir: Path) -> List[Dict[str, any]]:
     except Exception as e:
         print(f"[Step Service] Error reading steps.log: {e}")
     
+    return steps
+
+
+async def read_steps_from_db(scan_id: str) -> List[Dict[str, any]]:
+    """Read steps for a scan from DB (ordered)"""
+    try:
+        db = get_database()
+        return await db.get_scan_steps(scan_id)
+    except Exception as e:
+        print(f"[Step Service] Error reading steps from DB: {e}")
+        return []
+
+
+async def upsert_steps_from_log(scan_id: str, results_dir: Path) -> List[Dict[str, any]]:
+    """Hydrate DB from steps.log and return steps list"""
+    steps = read_steps_from_log(results_dir)
+    if not steps:
+        return []
+    try:
+        db = get_database()
+        for step in steps:
+            await db.upsert_scan_step(
+                scan_id=scan_id,
+                step_number=step.get("number"),
+                step_name=step.get("name"),
+                status=step.get("status"),
+                message=step.get("message"),
+                started_at=None,
+                completed_at=None,
+            )
+    except Exception as e:
+        print(f"[Step Service] Error hydrating steps into DB: {e}")
     return steps
 
 
