@@ -264,6 +264,33 @@ export default function Header() {
           <span>☕</span>
           Buy me a coffee
         </a>
+        <a
+          href="https://paypal.me/supportmysnacks"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.5rem 1rem',
+            background: '#0070BA',
+            color: 'white',
+            borderRadius: '8px',
+            fontWeight: 500,
+            textDecoration: 'none',
+            fontSize: '0.9rem',
+            transition: 'background-color 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#0079C1'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#0070BA'
+          }}
+        >
+          <span>💙</span>
+          PayPal
+        </a>
       </nav>
     </header>
   )

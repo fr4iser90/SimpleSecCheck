@@ -65,6 +65,21 @@ class DatabaseAdapter(ABC):
     ) -> str:
         """Add scan to queue, returns queue_id"""
         pass
+
+    @abstractmethod
+    async def add_queue_item_for_session(
+        self,
+        session_id: str,
+        repository_url: str,
+        repository_name: str,
+        branch: Optional[str] = None,
+        commit_hash: Optional[str] = None,
+        status: str = "completed",
+        scan_id: Optional[str] = None,
+        completed_at: Optional[datetime] = None,
+    ) -> str:
+        """Add a queue item for a session with predefined status/scan_id"""
+        pass
     
     @abstractmethod
     async def get_queue_item(self, queue_id: str) -> Optional[Dict[str, Any]]:
@@ -89,6 +104,7 @@ class DatabaseAdapter(ABC):
         scan_id: Optional[str] = None,
         started_at: Optional[datetime] = None,
         completed_at: Optional[datetime] = None,
+        results_dir: Optional[str] = None,
     ) -> bool:
         """Update queue item status"""
         pass
@@ -118,6 +134,16 @@ class DatabaseAdapter(ABC):
         include_completed: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Find duplicate scan in queue"""
+        pass
+
+    @abstractmethod
+    async def add_scan_access(self, scan_id: str, session_id: str) -> bool:
+        """Grant a session access to a scan"""
+        pass
+
+    @abstractmethod
+    async def has_scan_access(self, scan_id: str, session_id: str) -> bool:
+        """Check if a session has access to a scan"""
         pass
     
     # Metadata Management

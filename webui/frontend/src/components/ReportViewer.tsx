@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
+import { useConfig } from '../hooks/useConfig'
+import { getReportEndpoint } from '../utils/apiEndpoints'
 
 interface ReportViewerProps {
   scanId?: string | null  // Optional: if provided, load report from /api/results/{scanId}/report
 }
 
 export default function ReportViewer({ scanId }: ReportViewerProps = {}) {
+  const { config } = useConfig()
   const [reportUrl, setReportUrl] = useState<string | null>(null)
 
   useEffect(() => {
     // Determine which endpoint to use
-    const reportEndpoint = scanId 
-      ? `/api/results/${scanId}/report`
-      : '/api/scan/report'
+    const reportEndpoint = getReportEndpoint(scanId, config)
     
     // Fetch report URL
     fetch(reportEndpoint)
@@ -36,7 +37,7 @@ export default function ReportViewer({ scanId }: ReportViewerProps = {}) {
         URL.revokeObjectURL(reportUrl)
       }
     }
-  }, [scanId])
+  }, [scanId, config?.is_production, config?.features.session_management])
 
   if (!reportUrl) {
     return (

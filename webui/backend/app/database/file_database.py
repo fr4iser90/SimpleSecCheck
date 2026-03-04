@@ -159,6 +159,38 @@ class FileDatabase(DatabaseAdapter):
         
         self._queue.append(queue_item)
         return queue_id
+
+    async def add_queue_item_for_session(
+        self,
+        session_id: str,
+        repository_url: str,
+        repository_name: str,
+        branch: Optional[str] = None,
+        commit_hash: Optional[str] = None,
+        status: str = "completed",
+        scan_id: Optional[str] = None,
+        completed_at: Optional[datetime] = None,
+    ) -> str:
+        """Add a queue item for a session with predefined status/scan_id"""
+        queue_id = str(uuid.uuid4())
+        queue_item = {
+            "queue_id": queue_id,
+            "session_id": session_id,
+            "repository_url": repository_url,
+            "repository_name": repository_name,
+            "branch": branch,
+            "commit_hash": commit_hash,
+            "selected_scanners": None,
+            "finding_policy": None,
+            "status": status,
+            "position": None,
+            "created_at": datetime.utcnow().isoformat(),
+            "started_at": None,
+            "completed_at": completed_at.isoformat() if completed_at else None,
+            "scan_id": scan_id,
+        }
+        self._queue.append(queue_item)
+        return queue_id
     
     async def get_queue_item(self, queue_id: str) -> Optional[Dict[str, Any]]:
         """Get queue item by ID"""
@@ -195,6 +227,7 @@ class FileDatabase(DatabaseAdapter):
         scan_id: Optional[str] = None,
         started_at: Optional[datetime] = None,
         completed_at: Optional[datetime] = None,
+        results_dir: Optional[str] = None,
     ) -> bool:
         """Update queue item status"""
         for item in self._queue:
@@ -206,6 +239,8 @@ class FileDatabase(DatabaseAdapter):
                     item["started_at"] = started_at.isoformat()
                 if completed_at:
                     item["completed_at"] = completed_at.isoformat()
+                if results_dir:
+                    item["results_dir"] = results_dir
                 return True
         return False
     
@@ -264,6 +299,24 @@ class FileDatabase(DatabaseAdapter):
                 # Found duplicate
                 return item
         return None
+
+    async def add_scan_access(self, scan_id: str, session_id: str) -> bool:
+        """Grant a session access to a scan (dev storage)"""
+        for item in self._queue:
+            if item.get("scan_id") == scan_id:
+                allowed = item.setdefault("allowed_sessions", [])
+                if session_id not in allowed:
+                    allowed.append(session_id)
+                return True
+        return False
+
+    async def has_scan_access(self, scan_id: str, session_id: str) -> bool:
+        """Check if a session has access to a scan (dev storage)"""
+        for item in self._queue:
+            if item.get("scan_id") == scan_id:
+                allowed = item.get("allowed_sessions", [])
+                return session_id in allowed
+        return False
     
     # Metadata Management
     async def save_scan_metadata(

@@ -113,13 +113,20 @@ class SessionService:
     def set_session_cookie(self, response: Response, session_id: str):
         """Set session cookie in response"""
         max_age = self.session_duration
-        
+        secure_cookie = self.cookie_secure
+
+        # Avoid blocking cookies on HTTP in local/dev environments
+        if os.getenv("ENVIRONMENT", "dev").lower() != "prod":
+            secure_cookie = False
+        elif os.getenv("FORCE_INSECURE_COOKIES", "false").lower() == "true":
+            secure_cookie = False
+
         response.set_cookie(
             key=self.cookie_name,
             value=session_id,
             max_age=max_age,
             httponly=self.cookie_httponly,
-            secure=self.cookie_secure,
+            secure=secure_cookie,
             samesite=self.cookie_samesite,
         )
     

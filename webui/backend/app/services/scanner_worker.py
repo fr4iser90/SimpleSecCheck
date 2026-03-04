@@ -283,7 +283,7 @@ class ScannerWorker:
             
             # Execute scan (uses the scan_id we just generated)
             print(f"[Scanner Worker] Starting scan execution for {queue_id} (scan_id={scan_id})")
-            actual_scan_id = await self._execute_scan(
+            scan_result = await self._execute_scan(
                 repository_url=repository_url,
                 branch=branch,
                 commit_hash=commit_hash,
@@ -291,6 +291,8 @@ class ScannerWorker:
                 selected_scanners=selected_scanners,  # Pass selected scanners
                 finding_policy=finding_policy,
             )
+            actual_scan_id = scan_result["scan_id"]
+            results_dir_name = scan_result["results_dir"]
             print(f"[Scanner Worker] Scan execution completed: scan_id={actual_scan_id}")
             
             # Update status to completed (scan_id should already be set, but update just in case)
@@ -299,7 +301,11 @@ class ScannerWorker:
                 status="completed",
                 scan_id=actual_scan_id or scan_id,  # Use actual_scan_id if different
                 completed_at=datetime.utcnow(),
+                results_dir=results_dir_name,
             )
+
+            # Grant access to scan owner
+            await self.db.add_scan_access(actual_scan_id or scan_id, job.get("session_id"))
             
         except Exception as e:
             print(f"[Scanner Worker] Error processing job {queue_id}: {e}")
@@ -319,7 +325,7 @@ class ScannerWorker:
         scan_id: Optional[str] = None,
         selected_scanners: Optional[List[str]] = None,
         finding_policy: Optional[str] = None,
-    ) -> str:
+    ) -> Dict[str, str]:
         """
         Execute scan using docker_runner.py (replaces run-docker.sh)
         Returns scan_id
@@ -605,6 +611,18 @@ class ScannerWorker:
                 print(f"[Scanner Worker] AI prompts saved in {scan_results_dir}")
             except Exception as e:
                 print(f"[Scanner Worker] Failed to persist AI prompts: {e}")
+
+        # Increment global statistics from results
+        if scan_results_dir:
+            try:
+                from app.services.statistics_service import increment_statistics_for_results
+                await increment_statistics_for_results(
+                    results_dir=scan_results_dir,
+                    base_dir=base_dir,
+                )
+                print(f"[Scanner Worker] Statistics updated for scan {scan_id}")
+            except Exception as stats_error:
+                print(f"[Scanner Worker] Failed to update statistics: {stats_error}")
         
         # Save metadata for deduplication
         try:
@@ -645,7 +663,10 @@ class ScannerWorker:
         except Exception as e:
             print(f"[Scanner Worker] Failed to send scan_completed notification: {e}")
         
-        return scan_id
+        return {
+            "scan_id": scan_id,
+            "results_dir": results_dir_path_obj.name,
+        }
 
 
 # Global scanner worker instance

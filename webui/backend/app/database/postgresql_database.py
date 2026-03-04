@@ -98,6 +98,7 @@ class PostgreSQLDatabase(DatabaseAdapter):
                     started_at TIMESTAMP,
                     completed_at TIMESTAMP,
                     scan_id TEXT,
+                    results_dir TEXT,
                     metadata JSONB,
                     CONSTRAINT status_check CHECK (status IN ('pending', 'running', 'completed', 'failed'))
                 )
@@ -112,6 +113,12 @@ class PostgreSQLDatabase(DatabaseAdapter):
                         WHERE table_name = 'queue' AND column_name = 'metadata'
                     ) THEN
                         ALTER TABLE queue ADD COLUMN metadata JSONB;
+                    END IF;
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'queue' AND column_name = 'results_dir'
+                    ) THEN
+                        ALTER TABLE queue ADD COLUMN results_dir TEXT;
                     END IF;
                 END $$;
             """)
@@ -162,6 +169,22 @@ class PostgreSQLDatabase(DatabaseAdapter):
                     false_positive_count INTEGER DEFAULT 0,
                     UNIQUE(date)
                 )
+            """)
+
+            # Scan access table (allows multiple sessions to access same scan)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS scan_access (
+                    scan_id TEXT NOT NULL,
+                    session_id UUID REFERENCES sessions(session_id) ON DELETE CASCADE,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (scan_id, session_id)
+                )
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_scan_access_scan ON scan_access(scan_id)
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_scan_access_session ON scan_access(session_id)
             """)
     
     # Session Management
@@ -316,6 +339,40 @@ class PostgreSQLDatabase(DatabaseAdapter):
                     repository_name, branch, commit_hash, "pending", position)
         
         return queue_id
+
+    async def add_queue_item_for_session(
+        self,
+        session_id: str,
+        repository_url: str,
+        repository_name: str,
+        branch: Optional[str] = None,
+        commit_hash: Optional[str] = None,
+        status: str = "completed",
+        scan_id: Optional[str] = None,
+        completed_at: Optional[datetime] = None,
+    ) -> str:
+        """Add a queue item for a session with predefined status/scan_id"""
+        queue_id = str(uuid.uuid4())
+        async with self.connection_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO queue (
+                    queue_id, session_id, repository_url, repository_name,
+                    branch, commit_hash, status, position, scan_id, completed_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                """,
+                uuid.UUID(queue_id),
+                uuid.UUID(session_id),
+                repository_url,
+                repository_name,
+                branch,
+                commit_hash,
+                status,
+                None,
+                scan_id,
+                completed_at,
+            )
+        return queue_id
     
     async def get_queue_item(self, queue_id: str) -> Optional[Dict[str, Any]]:
         """Get queue item by ID"""
@@ -357,6 +414,7 @@ class PostgreSQLDatabase(DatabaseAdapter):
         scan_id: Optional[str] = None,
         started_at: Optional[datetime] = None,
         completed_at: Optional[datetime] = None,
+        results_dir: Optional[str] = None,
     ) -> bool:
         """Update queue item status"""
         updates = ["status = $1"]
@@ -376,6 +434,11 @@ class PostgreSQLDatabase(DatabaseAdapter):
         if completed_at:
             updates.append(f"completed_at = ${param_num}")
             values.append(completed_at)
+            param_num += 1
+
+        if results_dir:
+            updates.append(f"results_dir = ${param_num}")
+            values.append(results_dir)
             param_num += 1
         
         values.append(uuid.UUID(queue_id))
@@ -468,6 +531,32 @@ class PostgreSQLDatabase(DatabaseAdapter):
                 return None
             
             return self._row_to_dict(row)
+
+    async def add_scan_access(self, scan_id: str, session_id: str) -> bool:
+        """Grant a session access to a scan"""
+        async with self.connection_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO scan_access (scan_id, session_id)
+                VALUES ($1, $2)
+                ON CONFLICT (scan_id, session_id) DO NOTHING
+                """,
+                scan_id,
+                uuid.UUID(session_id),
+            )
+        return True
+
+    async def has_scan_access(self, scan_id: str, session_id: str) -> bool:
+        """Check if a session has access to a scan"""
+        async with self.connection_pool.acquire() as conn:
+            exists = await conn.fetchval(
+                """
+                SELECT 1 FROM scan_access WHERE scan_id = $1 AND session_id = $2
+                """,
+                scan_id,
+                uuid.UUID(session_id),
+            )
+            return bool(exists)
     
     # Metadata Management
     async def save_scan_metadata(

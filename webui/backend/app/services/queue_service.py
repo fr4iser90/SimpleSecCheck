@@ -74,7 +74,7 @@ class QueueService:
                 branch,
                 commit_hash,
                 dedupe_policy,
-                include_completed=self.deduplication_include_completed,
+                include_completed=True,
             )
             
             if duplicate:
@@ -82,15 +82,32 @@ class QueueService:
                 message = "Identical scan already in queue. You will receive the same results."
                 if duplicate_status == "completed":
                     message = "Scan already completed for this repo/commit. Returning existing results."
-                # Return existing queue item
-                return {
-                    "queue_id": duplicate["queue_id"],
-                    "status": duplicate_status,
-                    "message": message,
-                    "duplicate_of": duplicate["queue_id"],
-                    "position": duplicate.get("position"),
-                    "scan_id": duplicate.get("scan_id"),
-                }
+                if duplicate_status == "completed":
+                    # Grant access to completed scan for this session
+                    if duplicate.get("scan_id"):
+                        await self.db.add_scan_access(duplicate["scan_id"], session_id)
+                        # Add a completed queue item for this session so it appears in My Scans
+                        await self.db.add_queue_item_for_session(
+                            session_id=session_id,
+                            repository_url=duplicate.get("repository_url"),
+                            repository_name=duplicate.get("repository_name"),
+                            branch=duplicate.get("branch"),
+                            commit_hash=duplicate.get("commit_hash"),
+                            status="completed",
+                            scan_id=duplicate.get("scan_id"),
+                            completed_at=duplicate.get("completed_at")
+                            if isinstance(duplicate.get("completed_at"), datetime)
+                            else None,
+                        )
+                    return {
+                        "queue_id": duplicate["queue_id"],
+                        "status": duplicate_status,
+                        "message": message,
+                        "duplicate_of": duplicate["queue_id"],
+                        "position": duplicate.get("position"),
+                        "scan_id": duplicate.get("scan_id"),
+                    }
+                # If not completed, do not dedupe to avoid user confusion
         
         # Anonymize repository name
         repository_name = self.anonymize_repository_url(repository_url)

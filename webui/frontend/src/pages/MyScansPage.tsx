@@ -258,8 +258,10 @@ export default function MyScansPage() {
                     <td style={{ padding: '0.75rem' }}>
                       {item.status === 'completed' && item.scan_id && (
                         <a
-                          href={`/results?scan_id=${item.scan_id}`}
+                          href={`/api/my-results/${item.scan_id}/report`}
                           className="action-button action-completed"
+                          target="_blank"
+                          rel="noopener noreferrer"
                         >
                           View Results
                         </a>

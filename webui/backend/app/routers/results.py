@@ -2,10 +2,11 @@
 Results Routes
 """
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 import os
 from app.services import update_activity
+from app.database import get_database
 
 # Environment guard (read directly from runtime ENV)
 ENVIRONMENT = os.getenv("ENVIRONMENT", "dev").lower()
@@ -84,5 +85,48 @@ async def get_result_ai_prompt(
     return FileResponse(
         prompt_file,
         media_type="application/json",
+        headers={"Content-Disposition": "inline"}
+    )
+
+
+@router.get("/api/my-results/{scan_id}/report")
+async def get_my_result_report(scan_id: str, http_request: Request):
+    """Get HTML report for the current session's scan (prod-safe)."""
+    session_id = getattr(http_request.state, "session_id", None)
+    if not session_id:
+        raise HTTPException(status_code=401, detail="Session required")
+
+    db = get_database()
+    has_access = await db.has_scan_access(scan_id, session_id)
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    queue_item = await db.get_queue_item(scan_id)
+    if not queue_item:
+        # Try to find queue item by scan_id
+        try:
+            queue_items = await db.get_queue_by_session(session_id)
+            queue_item = next((item for item in queue_items if item.get("scan_id") == scan_id), None)
+        except Exception:
+            queue_item = None
+
+    results_dir_name = queue_item.get("results_dir") if queue_item else None
+    report_file = RESULTS_DIR / (results_dir_name or scan_id) / "security-summary.html"
+    if not report_file.exists():
+        # Fallback: scan_id is a timestamp, results directory includes project prefix
+        matching_dir = None
+        if RESULTS_DIR and RESULTS_DIR.exists():
+            for scan_dir in RESULTS_DIR.iterdir():
+                if scan_dir.is_dir() and scan_id in scan_dir.name:
+                    matching_dir = scan_dir
+                    break
+        if matching_dir:
+            report_file = matching_dir / "security-summary.html"
+        if not report_file.exists():
+            raise HTTPException(status_code=404, detail="Report not found")
+
+    return FileResponse(
+        report_file,
+        media_type="text/html",
         headers={"Content-Disposition": "inline"}
     )
