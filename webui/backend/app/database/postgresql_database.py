@@ -349,6 +349,7 @@ class PostgreSQLDatabase(DatabaseAdapter):
         commit_hash: Optional[str] = None,
         status: str = "completed",
         scan_id: Optional[str] = None,
+        results_dir: Optional[str] = None,
         completed_at: Optional[datetime] = None,
     ) -> str:
         """Add a queue item for a session with predefined status/scan_id"""
@@ -358,8 +359,8 @@ class PostgreSQLDatabase(DatabaseAdapter):
                 """
                 INSERT INTO queue (
                     queue_id, session_id, repository_url, repository_name,
-                    branch, commit_hash, status, position, scan_id, completed_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    branch, commit_hash, status, position, scan_id, results_dir, completed_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 """,
                 uuid.UUID(queue_id),
                 uuid.UUID(session_id),
@@ -370,6 +371,7 @@ class PostgreSQLDatabase(DatabaseAdapter):
                 status,
                 None,
                 scan_id,
+                results_dir,
                 completed_at,
             )
         return queue_id

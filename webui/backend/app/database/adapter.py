@@ -76,6 +76,7 @@ class DatabaseAdapter(ABC):
         commit_hash: Optional[str] = None,
         status: str = "completed",
         scan_id: Optional[str] = None,
+        results_dir: Optional[str] = None,
         completed_at: Optional[datetime] = None,
     ) -> str:
         """Add a queue item for a session with predefined status/scan_id"""

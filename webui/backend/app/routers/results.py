@@ -111,19 +111,12 @@ async def get_my_result_report(scan_id: str, http_request: Request):
             queue_item = None
 
     results_dir_name = queue_item.get("results_dir") if queue_item else None
-    report_file = RESULTS_DIR / (results_dir_name or scan_id) / "security-summary.html"
+    if not results_dir_name:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    report_file = RESULTS_DIR / results_dir_name / "security-summary.html"
     if not report_file.exists():
-        # Fallback: scan_id is a timestamp, results directory includes project prefix
-        matching_dir = None
-        if RESULTS_DIR and RESULTS_DIR.exists():
-            for scan_dir in RESULTS_DIR.iterdir():
-                if scan_dir.is_dir() and scan_id in scan_dir.name:
-                    matching_dir = scan_dir
-                    break
-        if matching_dir:
-            report_file = matching_dir / "security-summary.html"
-        if not report_file.exists():
-            raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="Report not found")
 
     return FileResponse(
         report_file,

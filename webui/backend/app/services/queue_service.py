@@ -95,6 +95,7 @@ class QueueService:
                             commit_hash=duplicate.get("commit_hash"),
                             status="completed",
                             scan_id=duplicate.get("scan_id"),
+                            results_dir=duplicate.get("results_dir"),
                             completed_at=duplicate.get("completed_at")
                             if isinstance(duplicate.get("completed_at"), datetime)
                             else None,
@@ -106,6 +107,7 @@ class QueueService:
                         "duplicate_of": duplicate["queue_id"],
                         "position": duplicate.get("position"),
                         "scan_id": duplicate.get("scan_id"),
+                        "results_dir": duplicate.get("results_dir"),
                     }
                 # If not completed, do not dedupe to avoid user confusion
         
