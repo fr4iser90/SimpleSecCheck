@@ -175,7 +175,7 @@ RUN mkdir -p /SimpleSecCheck/results /SimpleSecCheck/logs /SimpleSecCheck/owasp-
 RUN useradd -m -u 1000 -s /bin/bash scanner && \
     (groupadd -g 999 docker || true) && \
     usermod -aG docker scanner && \
-    chown -R scanner:scanner /SimpleSecCheck /zap
+    chown -R scanner:scanner /SimpleSecCheck /zap /home/scanner
 
 # Make scripts executable
 RUN chmod +x /SimpleSecCheck/scanner/core/configure.py
@@ -191,21 +191,33 @@ RUN apt-get install -y sudo && \
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Switch to non-root user
-USER scanner
-
 # Ensure writable home/cache locations for CLI tools
 ENV HOME=/home/scanner
 ENV XDG_CACHE_HOME=/home/scanner/.cache
 ENV XDG_CONFIG_HOME=/home/scanner/.config
 ENV SEMGREP_USER_LOG_FILE=/home/scanner/.cache/semgrep/semgrep.log
 ENV TRIVY_CACHE_DIR=/home/scanner/.cache/trivy
+ENV TRIVY_HOME=/home/scanner/.trivy
 ENV SAFETY_CACHE_DIR=/home/scanner/.cache/safety
+ENV SAFETY_CONFIG_DIR=/home/scanner/.safety
 ENV SONAR_USER_HOME=/home/scanner/.sonar
+ENV CHECKOV_HOME=/home/scanner/.checkov
+ENV POLICY_SENTRY_CACHE_PATH=/home/scanner/.policy_sentry
 
 # Pre-create cache directories to avoid permission errors
-RUN mkdir -p /home/scanner/.cache/semgrep /home/scanner/.cache/trivy /home/scanner/.cache/safety /home/scanner/.sonar /home/scanner/.config && \
-    chown -R scanner:scanner /home/scanner/.cache /home/scanner/.sonar /home/scanner/.config
+RUN mkdir -p /home/scanner/.cache/semgrep \
+    /home/scanner/.cache/trivy \
+    /home/scanner/.cache/safety \
+    /home/scanner/.sonar \
+    /home/scanner/.config \
+    /home/scanner/.safety \
+    /home/scanner/.trivy \
+    /home/scanner/.checkov \
+    /home/scanner/.policy_sentry && \
+    chown -R scanner:scanner /home/scanner
+
+# Switch to non-root user
+USER scanner
 
 # Ensure scanner modules are importable regardless of working directory
 ENV PYTHONPATH=/SimpleSecCheck
