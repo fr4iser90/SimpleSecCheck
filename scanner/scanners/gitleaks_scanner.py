@@ -60,9 +60,10 @@ class GitLeaksScanner(BaseScanner):
                "--report-path", str(json_output), "--no-git", *config_args]
         
         result = self.run_command(cmd, capture_output=True)
-        if result.returncode != 0:
+        if result.returncode == 1:
+            self.log("Secrets found during JSON scan (exit code 1)", "WARNING")
+        elif result.returncode != 0:
             self.log("JSON report generation failed", "WARNING")
-            # Exit code 1 might mean secrets were found, which is OK
         
         # Text report
         self.log("Running text report generation...")
@@ -70,16 +71,11 @@ class GitLeaksScanner(BaseScanner):
                "--no-git", "--verbose", *config_args]
         
         result = self.run_command(cmd, capture_output=True)
-        if result.returncode == 0 and result.stdout:
+        if result.returncode in (0, 1) and result.stdout:
             with open(text_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
         elif result.returncode == 1:
-            # Exit code 1 means secrets were found (this is expected)
-            if result.stdout:
-                with open(text_output, "w", encoding="utf-8") as f:
-                    f.write(result.stdout)
-            else:
-                text_output.write_text("No secrets found\n")
+            text_output.write_text("Secrets found but no detailed output returned.\n")
         else:
             self.log("Text report generation failed", "WARNING")
             if not text_output.exists():

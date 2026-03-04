@@ -110,17 +110,24 @@ class SafetyScanner(BaseScanner):
         # Use first dependency file
         dep_file = dependency_files[0]
         
+        def run_safety(output_format: str, output_path: Path, file_arg: bool = True) -> bool:
+            cmd = ["safety", "check", "--output", output_format]
+            if file_arg:
+                cmd.extend(["--file", str(dep_file)])
+            result = self.run_command(cmd, cwd=self.target_path, capture_output=True)
+            if result.returncode not in (0, 1):
+                return False
+            content = (result.stdout or "").strip()
+            if content:
+                output_path.write_text(content, encoding="utf-8")
+                return True
+            return False
+
         # JSON report
         self.log("Running Safety scan with JSON output...")
-        cmd = ["safety", "check", "--json", "--output", str(json_output), "--file", str(dep_file)]
-        
-        result = self.run_command(cmd, cwd=self.target_path, capture_output=True)
-        if result.returncode != 0:
+        if not run_safety("json", json_output, file_arg=True):
             self.log("JSON report generation failed, trying alternative approach...", "WARNING")
-            # Try scanning directory directly
-            cmd = ["safety", "check", "--json", "--output", str(json_output)]
-            result = self.run_command(cmd, cwd=self.target_path, capture_output=True)
-            if result.returncode != 0:
+            if not run_safety("json", json_output, file_arg=False):
                 self.log("Directory scan also failed, creating minimal report...", "WARNING")
                 empty_json = {
                     "vulnerabilities": [],
@@ -130,34 +137,18 @@ class SafetyScanner(BaseScanner):
                 }
                 with open(json_output, "w", encoding="utf-8") as f:
                     json.dump(empty_json, f, indent=2)
-        
+
         # Text report
         self.log("Running Safety scan with text output...")
-        cmd = ["safety", "check", "--output", str(text_output), "--file", str(dep_file)]
-        
-        result = self.run_command(cmd, cwd=self.target_path, capture_output=True)
-        if result.returncode != 0:
+        if not run_safety("text", text_output, file_arg=True):
             self.log("Text report generation failed, trying alternative approach...", "WARNING")
-            # Try scanning directory directly
-            cmd = ["safety", "check", "--output", str(text_output)]
-            result = self.run_command(cmd, cwd=self.target_path, capture_output=True)
-            if result.returncode != 0:
+            if not run_safety("text", text_output, file_arg=False):
                 self.log("Directory text scan also failed, creating minimal report...", "WARNING")
                 with open(text_output, "w", encoding="utf-8") as f:
                     f.write("Safety Scan Results\n")
                     f.write("===================\n")
                     f.write("Safety scan failed or no vulnerabilities found.\n")
                     f.write(f"Scan completed at: {datetime.now().isoformat()}\n")
-        
-        # Additional verbose scan
-        self.log("Running additional verbose scan...")
-        cmd = ["safety", "check", "--verbose", "--file", str(dep_file)]
-        result = self.run_command(cmd, cwd=self.target_path, capture_output=True)
-        if result.returncode == 0 and result.stdout:
-            with open(text_output, "a", encoding="utf-8") as f:
-                f.write("\n\nVerbose Output:\n")
-                f.write("===============\n")
-                f.write(result.stdout)
         
         # Check if reports were generated
         if json_output.exists() or text_output.exists():

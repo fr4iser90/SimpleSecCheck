@@ -78,7 +78,10 @@ class SonarQubeScanner(BaseScanner):
         self.log("Running SonarQube analysis...")
         cmd = ["sonar-scanner", "-X", f"-Dproject.settings={properties_file}"]
         
-        result = self.run_command(cmd, cwd=self.target_path, capture_output=True)
+        env = os.environ.copy()
+        env.setdefault("SONAR_USER_HOME", str(Path.home() / ".sonar"))
+        
+        result = self.run_command(cmd, cwd=self.target_path, env=env, capture_output=True)
         
         if result.returncode != 0:
             self.log("SonarQube scan failed, creating minimal reports...", "WARNING")

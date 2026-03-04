@@ -50,21 +50,25 @@ class CodeQLScanner(BaseScanner):
             return []
         
         # Try CodeQL language detection
-        cmd = ["codeql", "resolve", "languages", "--format=json", str(self.target_path)]
+        cmd = ["codeql", "resolve", "languages", "--format=json"]
         result = self.run_command(cmd, capture_output=True)
         
         if result.returncode == 0 and result.stdout:
             try:
                 languages = json.loads(result.stdout)
                 if languages:
-                    return languages
+                    file_languages = self._detect_languages_by_files()
+                    return file_languages or languages
             except Exception:
                 pass
         
         # Fallback: detect by file extensions
         self.log("Auto-detection failed, trying common languages...", "WARNING")
-        languages = []
-        
+        return self._detect_languages_by_files()
+
+    def _detect_languages_by_files(self) -> List[str]:
+        languages: List[str] = []
+
         if any(self.target_path.rglob("*.py")):
             languages.append("python")
         if any(self.target_path.rglob("*.js")) or any(self.target_path.rglob("*.ts")):
@@ -83,7 +87,7 @@ class CodeQLScanner(BaseScanner):
             languages.append("swift")
         if any(self.target_path.rglob("*.m")) or any(self.target_path.rglob("*.mm")):
             languages.append("objectivec")
-        
+
         return languages
     
     def scan(self) -> bool:
@@ -103,6 +107,7 @@ class CodeQLScanner(BaseScanner):
         self.log(f"Detected languages: {', '.join(detected_languages)}")
         
         db_dir = self.results_dir / "codeql-database"
+        db_dir.mkdir(parents=True, exist_ok=True)
         json_output = self.results_dir / "codeql.json"
         sarif_output = self.results_dir / "codeql.sarif"
         text_output = self.results_dir / "codeql.txt"

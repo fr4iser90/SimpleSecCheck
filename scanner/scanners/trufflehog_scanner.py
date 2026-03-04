@@ -52,7 +52,7 @@ class TruffleHogScanner(BaseScanner):
         
         # JSON report (without --config to avoid protobuf issues)
         self.log("Running secret detection scan...")
-        cmd = ["trufflehog", "filesystem", "--json", str(self.target_path)]
+        cmd = ["trufflehog", "filesystem", "--json", "--no-update", str(self.target_path)]
         
         result = self.run_command(cmd, capture_output=True)
         
@@ -71,7 +71,7 @@ class TruffleHogScanner(BaseScanner):
         
         # Text report
         self.log("Running text report generation...")
-        cmd = ["trufflehog", "filesystem", str(self.target_path)]
+        cmd = ["trufflehog", "filesystem", "--no-update", str(self.target_path)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:

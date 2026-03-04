@@ -98,12 +98,45 @@ class ESLintScanner(BaseScanner):
         
         json_output = self.results_dir / "eslint.json"
         text_output = self.results_dir / "eslint.txt"
+        temp_config = self.results_dir / "eslint.config.cjs"
+
+        temp_config.write_text(
+            """const security = require('eslint-plugin-security');
+const tsParser = require('@typescript-eslint/parser');
+
+module.exports = [
+  {
+    files: ['**/*.{js,jsx,ts,tsx}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      parser: tsParser,
+    },
+    plugins: {
+      security,
+    },
+    rules: {
+      ...security.configs.recommended.rules,
+    },
+  },
+];
+""",
+            encoding="utf-8",
+        )
         
         ignore_args = self.get_ignore_args()
         
         # JSON report
         self.log("Running ESLint scan with JSON output...")
-        cmd = ["eslint", *ignore_args, "--format=json", f"--output-file={json_output}", str(self.target_path)]
+        cmd = [
+            "eslint",
+            "-c",
+            str(temp_config),
+            *ignore_args,
+            "--format=json",
+            f"--output-file={json_output}",
+            str(self.target_path),
+        ]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
@@ -112,12 +145,23 @@ class ESLintScanner(BaseScanner):
         
         # Text report
         self.log("Running ESLint scan with text output...")
-        cmd = ["eslint", *ignore_args, "--format=compact", f"--output-file={text_output}", str(self.target_path)]
+        cmd = [
+            "eslint",
+            "-c",
+            str(temp_config),
+            *ignore_args,
+            "--format=compact",
+            f"--output-file={text_output}",
+            str(self.target_path),
+        ]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
             self.log("Text report generation failed", "WARNING")
         
+        if temp_config.exists():
+            temp_config.unlink()
+
         if json_output.exists():
             self.log("ESLint scan completed successfully", "SUCCESS")
             return True
