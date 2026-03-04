@@ -21,6 +21,8 @@ services:
       start_period: 10s
 
   scanner:
+    profiles:
+      - scan
     # Production Scanner Service - Used for executing scans via docker-compose run
     # NOTE: Scanner Worker runs in WebUI container, not as separate service
     # This service is only used when WebUI calls docker-compose run scanner

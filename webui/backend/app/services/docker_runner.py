@@ -239,8 +239,12 @@ class DockerRunner:
             "docker-compose",
             "-f", docker_compose_file,
             "--project-directory", docker_compose_context,
-            "run", "--rm"
         ]
+
+        if os.getenv("ENVIRONMENT", "dev").lower() == "prod":
+            cmd.extend(["--profile", "scan"])
+
+        cmd.extend(["run", "--rm"])
         
         # Environment variables
         env_vars = [
