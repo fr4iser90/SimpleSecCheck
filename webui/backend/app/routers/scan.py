@@ -348,6 +348,44 @@ async def websocket_scan_updates(websocket: WebSocket, scan_id: str = None):
     ws_manager = get_websocket_manager()
     actual_scan_id = None
     
+    step_stream_task: Optional[asyncio.Task] = None
+    step_stream_running = True
+
+    async def stream_steps_periodically(active_scan_id: str):
+        """Send step updates periodically from DB so UI stays realtime."""
+        last_snapshot = None
+        while step_stream_running:
+            try:
+                if steps_log_file and steps_log_file.exists():
+                    await upsert_steps_from_log(active_scan_id, steps_log_file.parent.parent)
+
+                steps = await read_steps_from_db(active_scan_id)
+                if steps:
+                    total_steps = max([s["number"] for s in steps], default=0)
+                    if total_steps == 0:
+                        progress_percentage = 0
+                    else:
+                        completed = sum(1 for s in steps if s.get("status") == "completed")
+                        running = sum(1 for s in steps if s.get("status") == "running")
+                        failed = sum(1 for s in steps if s.get("status") == "failed")
+                        progress_percentage = round(((completed + failed + (running * 0.5)) / total_steps) * 100)
+
+                    snapshot = (progress_percentage, tuple((s.get("number"), s.get("status")) for s in steps))
+                    if snapshot != last_snapshot:
+                        await websocket.send_json({
+                            "type": "step_update",
+                            "steps": steps,
+                            "total_steps": total_steps,
+                            "progress_percentage": progress_percentage,
+                            "scan_id": active_scan_id,
+                            "timestamp": asyncio.get_event_loop().time()
+                        })
+                        last_snapshot = snapshot
+            except Exception as e:
+                print(f"[WebSocket] Error streaming steps: {e}")
+
+            await asyncio.sleep(0.5)
+
     try:
         # Check if scan_id parameter is a UUID (queue_id) - if so, get scan_id from queue
         is_uuid = False
@@ -424,6 +462,9 @@ async def websocket_scan_updates(websocket: WebSocket, scan_id: str = None):
                 "timestamp": asyncio.get_event_loop().time()
             })
         
+        # Start periodic DB streaming for realtime updates
+        step_stream_task = asyncio.create_task(stream_steps_periodically(actual_scan_id))
+
         # Keep connection alive and wait for updates from WebSocket manager
         # The manager will send updates directly when scanner_worker writes steps
         while True:
@@ -445,6 +486,9 @@ async def websocket_scan_updates(websocket: WebSocket, scan_id: str = None):
     except Exception as e:
         print(f"[WebSocket] Error: {e}")
     finally:
+        step_stream_running = False
+        if step_stream_task:
+            step_stream_task.cancel()
         if actual_scan_id:
             await ws_manager.disconnect(websocket, actual_scan_id)
 

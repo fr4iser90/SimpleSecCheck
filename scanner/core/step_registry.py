@@ -61,6 +61,11 @@ class StepRegistry:
         self.logs_dir = Path(logs_dir_env)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.steps_log = self.logs_dir / "steps.log"
+
+        # Production DB support (optional)
+        self.environment = os.getenv("ENVIRONMENT", "dev").lower()
+        self.database_url = os.getenv("DATABASE_URL")
+        self._db_pool = None
         
         # Initialize steps.log (JSON Lines format - one JSON object per line)
         if not self.steps_log.exists():
@@ -69,6 +74,18 @@ class StepRegistry:
         else:
             # Read existing steps from log (e.g., Git Clone step written before orchestrator starts)
             self._load_existing_steps()
+
+    async def _ensure_db_pool(self):
+        if self.environment != "prod" or not self.database_url:
+            return None
+        if self._db_pool is None:
+            try:
+                import asyncpg
+                self._db_pool = await asyncpg.create_pool(self.database_url, min_size=1, max_size=4)
+            except Exception as e:
+                print(f"[Step Registry] DB pool init failed: {e}")
+                self._db_pool = None
+        return self._db_pool
     
     def start_step(self, step_name: str, message: str = "") -> int:
         """
@@ -318,6 +335,45 @@ class StepRegistry:
                 f.write(json.dumps(step_dict) + "\n")
         except Exception as e:
             print(f"[Step Registry] Error writing to steps.log: {e}")
+
+        # In prod, also write directly to DB (non-blocking)
+        if self.environment == "prod" and self.database_url:
+            try:
+                asyncio.create_task(self._upsert_step_db(step))
+            except RuntimeError:
+                # If no event loop, skip DB write
+                pass
+
+    async def _upsert_step_db(self, step: Step):
+        pool = await self._ensure_db_pool()
+        if not pool:
+            return
+        try:
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO scan_steps (
+                        scan_id, step_number, step_name, status, message, started_at, completed_at, updated_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                    ON CONFLICT (scan_id, step_number)
+                    DO UPDATE SET
+                        step_name = EXCLUDED.step_name,
+                        status = EXCLUDED.status,
+                        message = EXCLUDED.message,
+                        started_at = COALESCE(EXCLUDED.started_at, scan_steps.started_at),
+                        completed_at = COALESCE(EXCLUDED.completed_at, scan_steps.completed_at),
+                        updated_at = NOW()
+                    """,
+                    self.scan_id,
+                    step.number,
+                    step.name,
+                    step.status.value,
+                    step.message,
+                    step.started_at,
+                    step.completed_at,
+                )
+        except Exception as e:
+            print(f"[Step Registry] DB upsert failed: {e}")
     
     async def _send_update(self):
         """Send step update via WebSocket"""

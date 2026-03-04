@@ -36,6 +36,7 @@ RUN pip3 install pyyaml json5  # Added for configuration script
 RUN pip3 install flask
 RUN pip3 install requests  # Added for LLM connector
 RUN pip3 install defusedxml  # Security: Prevent XXE attacks in XML parsing
+RUN pip3 install asyncpg  # PostgreSQL client for prod step persistence
 
 # Copy Trivy binary from official image (Multi-Stage Build)
 COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy

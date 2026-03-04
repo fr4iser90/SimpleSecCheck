@@ -56,6 +56,8 @@ services:
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
       - RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results
       - LOGS_DIR_IN_CONTAINER=/SimpleSecCheck/logs
+      - ENVIRONMENT=prod
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}
       - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/rules
       - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/trivy/config.yaml
       - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/anchore/config.yaml
