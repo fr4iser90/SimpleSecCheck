@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-def html_header(title, embedded_scripts=""):
+def html_header(title, embedded_scripts="", ai_prompt_disabled=False):
     return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>{title}</title>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<link rel="icon" type="image/png" href="assets/transparent.png">\n<style>\n
 /* ============================================
    GLASSMORPHISM MODERN DESIGN
@@ -713,7 +713,8 @@ window.onload = function() {{
     <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">\n
       <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n
       <div id="ai-prompt-container" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; padding: 0.5rem; background: var(--glass-bg); border-radius: 8px; border: 1px solid var(--glass-border);">\n
-        <button id="ai-prompt-btn" class="toggle-btn" onclick="generateAIPrompt()" style="background: linear-gradient(135deg, #6c757d, #495057);">🤖 AI Prompt</button>\n
+        <button id="ai-prompt-btn" class="toggle-btn" onclick="generateAIPrompt()" style="background: linear-gradient(135deg, #6c757d, #495057);" {"disabled" if ai_prompt_disabled else ""} title="{ "No findings available for AI prompt." if ai_prompt_disabled else "" }">🤖 AI Prompt</button>\n
+        {"<span style='opacity: 0.7; font-size: 0.85rem;'>No findings available</span>" if ai_prompt_disabled else ""}\n
       </div>\n
     </div>\n
   </div>\n

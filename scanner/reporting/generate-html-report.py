@@ -657,6 +657,7 @@ def main():
         
         # Normalize findings for AI prompt (for client-side generation when WebUI is not available)
         normalized_findings = normalize_findings_for_ai_prompt(all_findings)
+        ai_prompt_disabled = len(normalized_findings) == 0
         findings_json = json.dumps(normalized_findings, indent=2)
         # Embed as JSON in script tag - no HTML escape needed since it's in a script tag
         # JSON is safe in script tags (no script execution)
@@ -664,7 +665,7 @@ def main():
         debug(f"Embedded {len(normalized_findings)} normalized findings for AI prompt")
         
         with open(OUTPUT_FILE, 'w') as f:
-            f.write(html_header(f'{target} - {now}', embedded_scripts))
+            f.write(html_header(f'{target} - {now}', embedded_scripts, ai_prompt_disabled))
             # WebUI Controls Block
             # WebUI Controls removed - using single-shot scans only
 
