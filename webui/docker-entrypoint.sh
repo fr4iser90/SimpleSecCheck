@@ -43,17 +43,28 @@ fi
 if [ -S /var/run/docker.sock ]; then
     DOCKER_GID=$(stat -c "%g" /var/run/docker.sock)
     echo "[Entrypoint] Docker socket GID: $DOCKER_GID"
-    
-    # Create docker group with the detected GID (if it doesn't exist)
-    if ! getent group docker > /dev/null 2>&1; then
-        echo "[Entrypoint] Creating docker group with GID $DOCKER_GID"
-        groupadd -g "$DOCKER_GID" docker 2>/dev/null || true
+
+    # Resolve or create a group with the Docker socket GID
+    DOCKER_GROUP_NAME=$(getent group "$DOCKER_GID" | cut -d: -f1)
+    if [ -z "$DOCKER_GROUP_NAME" ]; then
+        if getent group docker > /dev/null 2>&1; then
+            DOCKER_GROUP_NAME=docker
+        else
+            echo "[Entrypoint] Creating docker group with GID $DOCKER_GID"
+            if groupadd -g "$DOCKER_GID" docker 2>/dev/null; then
+                DOCKER_GROUP_NAME=docker
+            else
+                echo "[Entrypoint] Warning: Could not create docker group with GID $DOCKER_GID"
+            fi
+        fi
     fi
-    
-    # Add webui user to docker group (if not already a member)
-    if ! id -nG webui | grep -qw docker; then
-        echo "[Entrypoint] Adding webui user to docker group"
-        usermod -aG docker webui
+
+    # Add webui user to the resolved group (if any)
+    if [ -n "$DOCKER_GROUP_NAME" ] && ! id -nG webui | grep -qw "$DOCKER_GROUP_NAME"; then
+        echo "[Entrypoint] Adding webui user to group $DOCKER_GROUP_NAME"
+        usermod -aG "$DOCKER_GROUP_NAME" webui
+    elif [ -z "$DOCKER_GROUP_NAME" ]; then
+        echo "[Entrypoint] Warning: Docker group not available, skipping usermod"
     fi
 else
     echo "[Entrypoint] Warning: Docker socket not found at /var/run/docker.sock"

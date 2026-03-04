@@ -193,6 +193,9 @@ RUN chmod +x /entrypoint.sh
 # Switch to non-root user
 USER scanner
 
+# Ensure scanner modules are importable regardless of working directory
+ENV PYTHONPATH=/SimpleSecCheck
+
 # Set CodeQL environment variables
 ENV CODEQL_HOME=/opt/codeql
 ENV CODEQL_CONFIG_PATH=/SimpleSecCheck/scanner/config/tools/codeql/config.yaml

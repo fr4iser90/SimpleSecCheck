@@ -29,10 +29,9 @@ services:
       dockerfile: ./scanner/Dockerfile
       args:
         VERSION: 1.4.0
-    image: fr4iser/simpleseccheck:latest
+    image: simpleseccheck-scanner:local
+    pull_policy: never
     container_name: SimpleSecCheck_scanner_prod
-    profiles:
-      - scanner  # Only start explicitly, not automatically
     # Resource Limits - Scanner is CPU/Memory intensive (runs multiple security tools)
     deploy:
       resources:

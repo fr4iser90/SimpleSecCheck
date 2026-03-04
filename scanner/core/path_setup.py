@@ -332,6 +332,11 @@ def get_docker_compose_file():
     Returns:
         str: Path to docker-compose file (e.g., "/project/docker-compose.prod.yml" or "/project/docker-compose.yml")
     """
+    # Allow explicit override (for setups that rename compose file to docker-compose.yml)
+    compose_override = os.getenv("DOCKER_COMPOSE_FILE")
+    if compose_override:
+        return compose_override
+
     # Get environment (default to dev)
     environment = os.getenv("ENVIRONMENT", "dev").lower()
     

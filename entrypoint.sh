@@ -2,8 +2,8 @@
 set -e
 
 # Ensure mounted volumes exist and are writable by scanner
-RESULTS_DIR="/SimpleSecCheck/results"
-LOGS_DIR="/SimpleSecCheck/logs"
+RESULTS_DIR="${RESULTS_DIR_IN_CONTAINER:-/SimpleSecCheck/results}"
+LOGS_DIR="${LOGS_DIR_IN_CONTAINER:-/SimpleSecCheck/results/logs}"
 
 mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
 chmod -R u+rwX,g+rwX "$RESULTS_DIR" "$LOGS_DIR" 2>/dev/null || true
