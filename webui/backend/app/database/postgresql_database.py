@@ -77,6 +77,7 @@ class PostgreSQLDatabase(DatabaseAdapter):
                     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                     expires_at TIMESTAMP NOT NULL,
                     scans_requested INTEGER DEFAULT 0,
+                    last_rate_limit_reset TIMESTAMP,
                     rate_limit_scans INTEGER DEFAULT 10,
                     rate_limit_requests INTEGER DEFAULT 100,
                     ip_address TEXT
@@ -113,6 +114,12 @@ class PostgreSQLDatabase(DatabaseAdapter):
                         WHERE table_name = 'queue' AND column_name = 'metadata'
                     ) THEN
                         ALTER TABLE queue ADD COLUMN metadata JSONB;
+                    END IF;
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'sessions' AND column_name = 'last_rate_limit_reset'
+                    ) THEN
+                        ALTER TABLE sessions ADD COLUMN last_rate_limit_reset TIMESTAMP;
                     END IF;
                     IF NOT EXISTS (
                         SELECT 1 FROM information_schema.columns
@@ -223,6 +230,7 @@ class PostgreSQLDatabase(DatabaseAdapter):
             "created_at": now.isoformat(),
             "expires_at": expires_at.isoformat(),
             "scans_requested": 0,
+                "last_rate_limit_reset": None,
             "rate_limit_scans": int(os.getenv("RATE_LIMIT_PER_SESSION_SCANS", "10")),
             "rate_limit_requests": int(os.getenv("RATE_LIMIT_PER_SESSION_REQUESTS", "100")),
             "ip_address": ip_address,
@@ -243,6 +251,7 @@ class PostgreSQLDatabase(DatabaseAdapter):
                 "created_at": row["created_at"].isoformat(),
                 "expires_at": row["expires_at"].isoformat(),
                 "scans_requested": row["scans_requested"],
+                "last_rate_limit_reset": row["last_rate_limit_reset"].isoformat() if row["last_rate_limit_reset"] else None,
                 "rate_limit_scans": row["rate_limit_scans"],
                 "rate_limit_requests": row["rate_limit_requests"],
                 "ip_address": row["ip_address"],
@@ -256,6 +265,7 @@ class PostgreSQLDatabase(DatabaseAdapter):
         # Only allow known session columns to be updated
         allowed_fields = {
             "scans_requested",
+            "last_rate_limit_reset",
             "rate_limit_scans",
             "rate_limit_requests",
             "ip_address",
@@ -272,13 +282,15 @@ class PostgreSQLDatabase(DatabaseAdapter):
                 """
                 UPDATE sessions SET
                     scans_requested = COALESCE($1, scans_requested),
-                    rate_limit_scans = COALESCE($2, rate_limit_scans),
-                    rate_limit_requests = COALESCE($3, rate_limit_requests),
-                    ip_address = COALESCE($4, ip_address),
-                    expires_at = COALESCE($5, expires_at)
-                WHERE session_id = $6
+                    last_rate_limit_reset = COALESCE($2, last_rate_limit_reset),
+                    rate_limit_scans = COALESCE($3, rate_limit_scans),
+                    rate_limit_requests = COALESCE($4, rate_limit_requests),
+                    ip_address = COALESCE($5, ip_address),
+                    expires_at = COALESCE($6, expires_at)
+                WHERE session_id = $7
                 """,
                 sanitized.get("scans_requested"),
+                sanitized.get("last_rate_limit_reset"),
                 sanitized.get("rate_limit_scans"),
                 sanitized.get("rate_limit_requests"),
                 sanitized.get("ip_address"),

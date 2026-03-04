@@ -85,6 +85,7 @@ class FileDatabase(DatabaseAdapter):
             "created_at": now.isoformat(),
             "expires_at": (now + timedelta(seconds=session_duration)).isoformat(),
             "scans_requested": 0,
+            "last_rate_limit_reset": None,
             "rate_limit_scans": int(os.getenv("RATE_LIMIT_PER_SESSION_SCANS", "10")),
             "rate_limit_requests": int(os.getenv("RATE_LIMIT_PER_SESSION_REQUESTS", "100")),
             "ip_address": ip_address,

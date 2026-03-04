@@ -98,6 +98,26 @@ class SessionService:
         if not session:
             return False, "Invalid session"
         
+        now = datetime.utcnow()
+        last_reset = session.get("last_rate_limit_reset")
+        if last_reset:
+            try:
+                last_reset_dt = datetime.fromisoformat(last_reset)
+            except ValueError:
+                last_reset_dt = None
+        else:
+            last_reset_dt = None
+
+        # Initialize/reset window if needed
+        if not last_reset_dt or (now - last_reset_dt).total_seconds() >= 3600:
+            await self.db.update_session(
+                session_id,
+                scans_requested=0,
+                last_rate_limit_reset=now,
+            )
+            session["scans_requested"] = 0
+            session["last_rate_limit_reset"] = now.isoformat()
+
         # Check session rate limits
         scans_requested = session.get("scans_requested", 0)
         rate_limit_scans = session.get("rate_limit_scans", 10)

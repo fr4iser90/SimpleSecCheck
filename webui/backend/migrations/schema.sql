@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMP NOT NULL,
     scans_requested INTEGER DEFAULT 0,
+    last_rate_limit_reset TIMESTAMP,
     rate_limit_scans INTEGER DEFAULT 10,
     rate_limit_requests INTEGER DEFAULT 100,
     ip_address TEXT
