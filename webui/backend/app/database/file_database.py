@@ -138,7 +138,8 @@ class FileDatabase(DatabaseAdapter):
     ) -> str:
         """Add scan to queue"""
         queue_id = str(uuid.uuid4())
-        position = len([q for q in self._queue if q["status"] == "pending"]) + 1
+        pending_positions = [q.get("position") for q in self._queue if q.get("status") == "pending" and q.get("position")]
+        position = (max(pending_positions) if pending_positions else 0) + 1
         
         queue_item = {
             "queue_id": queue_id,

@@ -306,37 +306,37 @@ class PostgreSQLDatabase(DatabaseAdapter):
         
         # Calculate position (count of pending items)
         async with self.connection_pool.acquire() as conn:
-            position_result = await conn.fetchval("""
-                SELECT COUNT(*) FROM queue WHERE status = 'pending'
-            """)
-            position = (position_result or 0) + 1
-            
-            # Store selected_scanners as JSON string in metadata column (if exists) or as text
-            selected_scanners_json = json.dumps(selected_scanners) if selected_scanners else None
-            
-            # Try to insert with selected_scanners in metadata field (if column exists)
-            # If column doesn't exist, we'll store it in a text field or skip it
-            try:
-                await conn.execute("""
-                    INSERT INTO queue (
-                        queue_id, session_id, repository_url, repository_name,
-                        branch, commit_hash, status, position, metadata
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                """, uuid.UUID(queue_id), uuid.UUID(session_id), repository_url,
-                    repository_name, branch, commit_hash, "pending", position,
-                    json.dumps({
-                        "selected_scanners": selected_scanners,
-                        "finding_policy": finding_policy,
-                    }) if selected_scanners or finding_policy else None)
-            except Exception:
-                # Fallback: if metadata column doesn't exist, try without it
-                await conn.execute("""
-                    INSERT INTO queue (
-                        queue_id, session_id, repository_url, repository_name,
-                        branch, commit_hash, status, position
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                """, uuid.UUID(queue_id), uuid.UUID(session_id), repository_url,
-                    repository_name, branch, commit_hash, "pending", position)
+            # Use a transaction + table lock to ensure unique, monotonic positions
+            async with conn.transaction():
+                await conn.execute("LOCK TABLE queue IN SHARE ROW EXCLUSIVE MODE")
+                position_result = await conn.fetchval("""
+                    SELECT COALESCE(MAX(position), 0) FROM queue WHERE status = 'pending'
+                """)
+                position = (position_result or 0) + 1
+
+                # Try to insert with selected_scanners in metadata field (if column exists)
+                # If column doesn't exist, we'll store it in a text field or skip it
+                try:
+                    await conn.execute("""
+                        INSERT INTO queue (
+                            queue_id, session_id, repository_url, repository_name,
+                            branch, commit_hash, status, position, metadata
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    """, uuid.UUID(queue_id), uuid.UUID(session_id), repository_url,
+                        repository_name, branch, commit_hash, "pending", position,
+                        json.dumps({
+                            "selected_scanners": selected_scanners,
+                            "finding_policy": finding_policy,
+                        }) if selected_scanners or finding_policy else None)
+                except Exception:
+                    # Fallback: if metadata column doesn't exist, try without it
+                    await conn.execute("""
+                        INSERT INTO queue (
+                            queue_id, session_id, repository_url, repository_name,
+                            branch, commit_hash, status, position
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    """, uuid.UUID(queue_id), uuid.UUID(session_id), repository_url,
+                        repository_name, branch, commit_hash, "pending", position)
         
         return queue_id
 
