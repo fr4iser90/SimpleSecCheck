@@ -18,7 +18,7 @@ def configure_SimpleSecCheck():
     
     config = {
         "SCAN_TARGET": get_input("Scan Target (URL or path)"),
-        "ZAP_WEBUI_PORT": get_input("ZAP WebUI Port", "8080"),
+        "ZAP_WEBUI_PORT": get_input("ZAP Frontend Port", "8080"),
         "TARGET_PORT": get_input("Target Port"),
         "ZAP_SCAN_LEVEL": get_input("ZAP Scan Level (1=Low, 2=Medium, 3=High)", "1"),
         "SEMGREP_SEVERITY": get_input("Semgrep Severity (INFO, WARNING, ERROR)", "WARNING"),

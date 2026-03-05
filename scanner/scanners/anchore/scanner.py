@@ -43,7 +43,7 @@ class AnchoreScanner(BaseScanner):
             config_path: Path to Anchore config file
             anchore_image: Container image to scan
         """
-        default_config = "/SimpleSecCheck/scanner/scanners/anchore/config/config.yaml"
+        default_config = "/app/scanner/scanners/anchore/config/config.yaml"
         resolved_config = config_path or os.getenv("ANCHORE_CONFIG_PATH", default_config)
         super().__init__("Anchore", target_path, results_dir, log_file, resolved_config)
         self.target_type = (os.getenv("TARGET_TYPE", "")).lower()
@@ -106,9 +106,9 @@ if __name__ == "__main__":
     import sys
     
     target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/SimpleSecCheck/results")
-    log_file = os.getenv("LOG_FILE", "SimpleSecCheck/results/logs/scan.log")
-    config_path = os.getenv("ANCHORE_CONFIG_PATH", "/SimpleSecCheck/scanner/scanners/anchore/config/config.yaml")
+    results_dir = os.getenv("RESULTS_DIR", "/app/results")
+    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    config_path = os.getenv("ANCHORE_CONFIG_PATH", "/app/scanner/scanners/anchore/config/config.yaml")
     anchore_image = os.getenv("SCAN_TARGET", "")
     scanner = AnchoreScanner(
         target_path=target_path,

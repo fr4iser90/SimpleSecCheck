@@ -6,4 +6,4 @@ assets:
     description: Clair config
     mount:
       host_subpath: scanner/scanners/clair/config/config.yaml
-      container_path: /SimpleSecCheck/scanner/scanners/clair/config/config.yaml
+      container_path: /app/scanner/scanners/clair/config/config.yaml

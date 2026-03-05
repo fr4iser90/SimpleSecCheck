@@ -2,7 +2,7 @@
 # Purpose: Configure Nuclei for web application security scanning
 
 # Template settings
-templates-directory: /SimpleSecCheck/scanner/scanners/nuclei/config/templates
+templates-directory: /app/scanner/scanners/nuclei/config/templates
 update-templates: true
 
 # Output settings

@@ -12,10 +12,10 @@ from typing import Optional, Dict, Any
 import ipaddress
 
 # Add scanner to path for imports
-if "/SimpleSecCheck" not in sys.path:
-    sys.path.insert(0, "/SimpleSecCheck")
-if "/SimpleSecCheck/scanner" not in sys.path:
-    sys.path.insert(0, "/SimpleSecCheck/scanner")
+if "/app" not in sys.path:
+    sys.path.insert(0, "/app")
+if "/app/scanner" not in sys.path:
+    sys.path.insert(0, "/app/scanner")
 
 # Ensure scanner auto-discovery runs before registry usage
 try:
@@ -43,10 +43,10 @@ class ScanOrchestrator:
             step_registry: Step registry for step tracking
         """
         self.step_registry = step_registry
-        self.base_dir = Path("/SimpleSecCheck")
+        self.base_dir = Path("/app")
         self.tools_dir = self.base_dir / "scripts" / "tools"
         self.target_path = Path(os.getenv("TARGET_PATH_IN_CONTAINER", "/target"))
-        self.results_dir = Path(os.getenv("RESULTS_DIR_IN_CONTAINER", "/SimpleSecCheck/results"))
+        self.results_dir = Path(os.getenv("RESULTS_DIR_IN_CONTAINER", "/app/results"))
         self.logs_dir = self.results_dir / "logs"
         self.log_file = self.logs_dir / "scan.log"
         
@@ -568,7 +568,7 @@ async def main():
         scan_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # Get results directory
-    results_dir = Path(os.getenv("RESULTS_DIR_IN_CONTAINER", "/SimpleSecCheck/results"))
+    results_dir = Path(os.getenv("RESULTS_DIR_IN_CONTAINER", "/app/results"))
     
     # Create step registry (without WebSocket manager for now - will be added in integration)
     step_registry = StepRegistry(scan_id, results_dir, websocket_manager=None)

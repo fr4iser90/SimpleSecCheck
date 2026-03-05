@@ -25,7 +25,7 @@ class AndroidScanner(BaseScanner):
     PRIORITY = 40
     REQUIRES_CONDITION = "IS_NATIVE"
     ENV_VARS = {
-        "ANDROID_CONFIG_PATH": "/SimpleSecCheck/scanner/scanners/android_manifest/config/config.yaml"
+        "ANDROID_CONFIG_PATH": "/app/scanner/scanners/android_manifest/config/config.yaml"
     }
     SCANNER_NAME = "android_manifest"
     
@@ -202,9 +202,9 @@ if __name__ == "__main__":
     import sys
     
     target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/SimpleSecCheck/results")
-    log_file = os.getenv("LOG_FILE", "SimpleSecCheck/results/logs/scan.log")
-    config_path = os.getenv("ANDROID_CONFIG_PATH", "/SimpleSecCheck/scanner/scanners/android_manifest/config/config.yaml")
+    results_dir = os.getenv("RESULTS_DIR", "/app/results")
+    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    config_path = os.getenv("ANDROID_CONFIG_PATH", "/app/scanner/scanners/android_manifest/config/config.yaml")
     
     scanner = AndroidScanner(
         target_path=target_path,

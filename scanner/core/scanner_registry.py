@@ -212,7 +212,7 @@ class ScannerRegistry:
 # Auto-register all scanners on import
 def _register_all_scanners():
     """Register all scanners - add new scanners here!"""
-    BASE_DIR = "/SimpleSecCheck"
+    BASE_DIR = "/app"
     TOOLS_DIR = f"{BASE_DIR}/scripts/tools"
     
     # === CODE SCANNERS ===

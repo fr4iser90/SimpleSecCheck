@@ -165,7 +165,7 @@ async def make_github_request(url: str, params: Optional[dict] = None) -> Tuple[
     # Prepare request
     headers = {
         "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "SimpleSecCheck/1.0"
+        "User-Agent": "app/1.0"
     }
     
     token = get_github_token()
@@ -364,7 +364,7 @@ async def validate_github_token(token: str) -> Tuple[bool, dict]:
     """
     headers = {
         "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "SimpleSecCheck/1.0",
+        "User-Agent": "app/1.0",
         "Authorization": f"token {token}"
     }
     

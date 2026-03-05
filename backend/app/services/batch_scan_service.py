@@ -96,7 +96,7 @@ async def start_batch_scan(
     
     Args:
         request: Batch scan request with repository list
-        base_dir: Base directory for the webui
+        base_dir: Base directory for the backend
         results_dir: Results directory
         cli_script: CLI script path (not used, but kept for compatibility)
     

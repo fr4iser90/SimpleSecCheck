@@ -2,7 +2,7 @@
 
 FROM node:20.19.2-bullseye-slim AS reporting-build
 
-WORKDIR /scanner/reporting
+WORKDIR /app/scanner/reporting
 COPY scanner/reporting/package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY scanner/reporting/ ./
@@ -31,32 +31,32 @@ RUN curl -L "https://github.com/docker/compose/releases/latest/download/docker-c
     && docker-compose --version
 
 # Setup backend
-WORKDIR /webui
-COPY scanner/backend/requirements.txt ./
+WORKDIR /app
+COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy scanner code (worker needs discovery/assets)
-COPY scanner/ /scanner/
+COPY scanner/ /app/scanner/
 
 # Copy compiled reporting artifacts
-COPY --from=reporting-build /scanner/reporting /scanner/reporting
+COPY --from=reporting-build /app/scanner/reporting /app/scanner/reporting
 
 # Copy backend
-COPY scanner/backend/app/ ./app/
+COPY backend/app/ ./app/
 
 # Create non-root user (UID 1000, matches scanner user)
-RUN groupadd -g 1000 webui 2>/dev/null || true && \
-    useradd -m -u 1000 -g 1000 -s /bin/bash webui && \
-    chown -R webui:webui /webui /scanner
+RUN groupadd -g 1000 backend 2>/dev/null || true && \
+    useradd -m -u 1000 -g 1000 -s /bin/bash backend && \
+    chown -R backend:backend /app
 
-# Create directory for potential temp files (owned by webui)
-RUN mkdir -p /tmp/webui && chown webui:webui /tmp/webui
+# Create directory for potential temp files (owned by backend)
+RUN mkdir -p /tmp/backend && chown backend:backend /tmp/backend
 
 # Copy entrypoint script
-COPY webui/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY frontend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-WORKDIR /webui
+WORKDIR /app
 
 # Expose port (uvicorn can bind to ports >1024 as non-root)
 EXPOSE 8080
@@ -64,5 +64,9 @@ EXPOSE 8080
 # Use entrypoint to dynamically configure docker group access
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
-# Run application as non-root user (entrypoint will switch to webui)
+# Run application as non-root user (entrypoint will switch to backend)
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONPATH=/app
+ENV SCANNER_ROOT=/app/scanner
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]

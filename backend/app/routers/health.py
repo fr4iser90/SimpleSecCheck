@@ -23,7 +23,7 @@ def init_health_router(environment: str, is_production: bool):
 async def health():
     """Health check endpoint"""
     update_activity()
-    return {"status": "ok", "service": "SimpleSecCheck WebUI"}
+    return {"status": "ok", "service": "SimpleSecCheck Backend"}
 
 
 @router.get("/api/config")

@@ -23,7 +23,7 @@ class TrivyScanner(BaseScanner):
     PRIORITY = 2
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "TRIVY_CONFIG_PATH": "/SimpleSecCheck/scanner/scanners/trivy/config/config.yaml"
+        "TRIVY_CONFIG_PATH": "/app/scanner/scanners/trivy/config/config.yaml"
     }
     
     def __init__(
@@ -150,9 +150,9 @@ if __name__ == "__main__":
     import sys
     
     target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/SimpleSecCheck/results")
-    log_file = os.getenv("LOG_FILE", "SimpleSecCheck/results/logs/scan.log")
-    config_path = os.getenv("TRIVY_CONFIG_PATH", "/SimpleSecCheck/scanner/scanners/trivy/config/config.yaml")
+    results_dir = os.getenv("RESULTS_DIR", "/app/results")
+    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    config_path = os.getenv("TRIVY_CONFIG_PATH", "/app/scanner/scanners/trivy/config/config.yaml")
     scan_type = os.getenv("TRIVY_SCAN_TYPE", "fs")
     exclude_paths = os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     

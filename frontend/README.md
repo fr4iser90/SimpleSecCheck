@@ -29,7 +29,7 @@ The WebUI container is nginx only; the worker container runs the backend+scanner
 
 ```bash
 # Frontend (separate terminal)
-cd webui/frontend
+cd frontend/frontend
 npm install
 npm run dev
 ```

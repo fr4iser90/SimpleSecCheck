@@ -17,31 +17,31 @@ RUN apt-get update && \
 ## Scanner tool installations moved into per-module manifests
 
 # Copy only scanner manifests + asset installer first to improve build cache reuse
-COPY scanner/core/scanner_assets/ /SimpleSecCheck/scanner/core/scanner_assets/
-COPY scanner/scanners/ /SimpleSecCheck/scanner/scanners/
-WORKDIR /SimpleSecCheck
+COPY scanner/core/scanner_assets/ /app/scanner/core/scanner_assets/
+COPY scanner/scanners/ /app/scanner/scanners/
+WORKDIR /app
 
-RUN mkdir -p /SimpleSecCheck/results
+RUN mkdir -p /app/results
 
 # Run module installers declared via manifests (cached unless manifests change)
-ENV SIMPLE_SECCHECK_ROOT=/SimpleSecCheck
+ENV SIMPLE_SECCHECK_ROOT=/app
 RUN python3 -m scanner.core.scanner_assets.install_assets
 
 # Copy full SimpleSecCheck files (scanner code and entrypoint) after assets install
-COPY scanner/ /SimpleSecCheck/scanner/
+COPY scanner/ /app/scanner/
 COPY entrypoint.sh /entrypoint.sh
 
 # Create non-root user (1000:1000 matches typical host user)
 RUN useradd -m -u 1000 -s /bin/bash scanner && \
     (groupadd -g 999 docker || true) && \
     usermod -aG docker scanner && \
-    chown -R scanner:scanner /SimpleSecCheck /home/scanner
+    chown -R scanner:scanner /app /home/scanner
 
 # Make scripts executable
-RUN chmod +x /SimpleSecCheck/scanner/core/configure.py
+RUN chmod +x /app/scanner/core/configure.py
 
 # Compile TypeScript files (uses tsconfig.json automatically)
-RUN cd /SimpleSecCheck/scanner/reporting && tsc
+RUN cd /app/scanner/reporting && tsc
 
 # Install sudo and configure passwordless sudo for scanner user
 RUN apt-get install -y sudo && \
@@ -54,13 +54,16 @@ RUN chmod +x /entrypoint.sh
 ENV HOME=/tmp/scanner
 ENV XDG_CACHE_HOME=/tmp/scanner/.cache
 ENV XDG_CONFIG_HOME=/tmp/scanner/.config
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # Switch to non-root user
 USER scanner
 
 # Ensure scanner modules are importable regardless of working directory
-ENV PYTHONPATH=/SimpleSecCheck
+ENV PYTHONPATH=/app
+ENV SCANNER_ROOT=/app/scanner
 
-WORKDIR /SimpleSecCheck
+WORKDIR /app
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python3", "-m", "scanner.core.orchestrator"]

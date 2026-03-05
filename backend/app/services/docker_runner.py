@@ -191,7 +191,7 @@ class DockerRunner:
                 return finding_policy_arg
             elif finding_policy_arg.startswith("/"):
                 # Absolute host path - convert to container path
-                if os.path.exists("/webui") or os.path.exists("/.dockerenv"):
+                if os.path.exists("/app") or os.path.exists("/.dockerenv"):
                     # Running in container - assume it's inside target
                     return f"/target/{Path(finding_policy_arg).name}"
                 elif finding_policy_arg.startswith(target_mount_path):
@@ -274,10 +274,10 @@ class DockerRunner:
             ("TARGET_TYPE", target_type),
             ("SCAN_TARGET", zap_target),
             ("PROJECT_RESULTS_DIR", results_dir),
-            ("RESULTS_DIR_IN_CONTAINER", "/SimpleSecCheck/results"),  # Container path
+            ("RESULTS_DIR_IN_CONTAINER", "/app/results"),  # Container path
             ("TARGET_PATH_IN_CONTAINER", "/target"),  # Container path
             ("COLLECT_METADATA", "true" if collect_metadata else "false"),
-            ("PYTHONPATH", "/SimpleSecCheck"),  # Set PYTHONPATH so scanner module can be found
+            ("PYTHONPATH", "/app"),  # Set PYTHONPATH so scanner module can be found
         ]
         
         # Add SCAN_ID if provided
@@ -307,7 +307,7 @@ class DockerRunner:
         
         # Volume mounts
         volumes = [
-            (results_dir, "/SimpleSecCheck/results"),
+            (results_dir, "/app/results"),
         ]
         
         if scan_type == "code" and target_mount_path:
@@ -338,7 +338,7 @@ class DockerRunner:
         cmd.extend([
             "scanner",
             "sh", "-c",
-            "cd /SimpleSecCheck && PYTHONPATH=/SimpleSecCheck:$PYTHONPATH python3 -m scanner.core.orchestrator"
+            "cd /app && PYTHONPATH=/app:$PYTHONPATH python3 -m scanner.core.orchestrator"
         ])
         
         return cmd
@@ -401,14 +401,14 @@ class DockerRunner:
                 if project_root:
                     results_dir = os.path.join(project_root, "results", project_dir)
                 else:
-                    # Fallback to /webui/results (container path)
-                    results_dir = f"/webui/results/{project_dir}"
+                    # Fallback to /app/results (container path)
+                    results_dir = f"/app/results/{project_dir}"
         else:
             # If results_dir points to a root (results mount), append project_dir
             normalized = results_dir.rstrip("/")
             if normalized.endswith("/results") or normalized.endswith("/results"):
                 results_dir = os.path.join(results_dir, project_dir)
-            elif normalized in {"/webui/results", "/SimpleSecCheck/results"}:
+            elif normalized in {"/app/results", "/app/results"}:
                 results_dir = os.path.join(results_dir, project_dir)
         
         logs_dir = os.path.join(results_dir, "logs")
@@ -442,10 +442,10 @@ class DockerRunner:
         if scan_type == "code" and target_mount_path:
             target_mount_path_host = get_target_mount_path_host(target_mount_path)
             # Also handle results_dir and logs_dir conversion if needed
-            if results_dir.startswith("/webui/results/"):
+            if results_dir.startswith("/app/results/"):
                 host_project_root = get_host_project_root()
                 if host_project_root:
-                    relative = results_dir[len("/webui/results") :]
+                    relative = results_dir[len("/app/results") :]
                     if relative.startswith("/"):
                         relative = relative[1:]
                     results_dir_host = os.path.join(host_project_root, "results", relative)

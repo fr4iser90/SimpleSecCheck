@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
   - Live progress and logs during scan execution
   - View HTML reports directly in browser
   - Browse local results with file browser
-  - Start with: `docker-compose --profile webui up`
+- Start with: `docker-compose --profile dev up`
   - Follows single-shot principle: no database, no persistent state
   - Auto-shutdown feature for security (configurable idle timeout)
 

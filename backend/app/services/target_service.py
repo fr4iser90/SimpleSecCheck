@@ -1,5 +1,5 @@
 """
-Target classification helpers for WebUI/Runner.
+Target classification helpers for Frontend/Runner.
 Central place for target detection and validation logic.
 """
 from __future__ import annotations

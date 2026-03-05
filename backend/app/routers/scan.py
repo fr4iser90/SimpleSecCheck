@@ -57,7 +57,7 @@ async def get_scanners(scan_type: str = None):
     """
     update_activity()
     if os.getenv("SCANNER_PROXY_MODE", "false").lower() == "true":
-        worker_url = os.getenv("SCANNER_WORKER_API_URL", "http://scanner-worker:8080/api/scanners")
+        worker_url = os.getenv("SCANNER_WORKER_API_URL", "http://backend:8080/api/scanners")
         params = {"scan_type": scan_type} if scan_type else None
 
         try:
@@ -71,8 +71,8 @@ async def get_scanners(scan_type: str = None):
 
     import sys
     scanner_root = os.getenv("SCANNER_ROOT", "/scanner")
-    if "/webui" not in sys.path:
-        sys.path.insert(0, "/webui")
+    if "/app" not in sys.path:
+        sys.path.insert(0, "/app")
     if scanner_root and scanner_root not in sys.path:
         sys.path.insert(0, scanner_root)
     from scanner.core.scanner_registry import ScannerRegistry, ScanType

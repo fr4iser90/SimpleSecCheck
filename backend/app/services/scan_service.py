@@ -141,7 +141,7 @@ async def start_scan(
     # IMPORTANT: This must happen AFTER Git clone (if used), so paths are correct
     scan_results_dir_container = current_scan["results_dir"]
     if not get_scan_results_dir_host:
-        raise HTTPException(status_code=500, detail="Scanner path helpers unavailable in WebUI container")
+        raise HTTPException(status_code=500, detail="Scanner path helpers unavailable in backend container")
     results_dir_host = get_scan_results_dir_host(scan_results_dir_container)
     target_mount_path_host = get_target_mount_path_host(clean_target)
     config_path_host = get_config_path_host()
@@ -156,12 +156,12 @@ async def start_scan(
                 host_path = manager.resolve_host_path(Path(host_project_root), asset)
                 assets_volume.extend(["-v", f"{host_path}:{asset.mount.container_path}"])
     else:
-        print(f"[Scan Service] WARNING: Scanner assets unavailable in WebUI container")
+        print(f"[Scan Service] WARNING: Scanner assets unavailable in backend container")
     
     # Config volume mount
     config_volume = []
     if config_path_host:
-        config_volume = ["-v", f"{config_path_host}:/SimpleSecCheck/scanner/scanners:ro"]
+        config_volume = ["-v", f"{config_path_host}:/app/scanner/scanners:ro"]
         if os.path.exists(config_path_host):
             print(f"[Scan Service] Using config volume: {config_volume[1]} (exists)")
         else:
@@ -171,7 +171,7 @@ async def start_scan(
     
     # Build docker-compose command (use central function from path_setup)
     if not get_scan_results_dir_host:
-        raise HTTPException(status_code=500, detail="Scanner path helpers unavailable in WebUI container")
+        raise HTTPException(status_code=500, detail="Scanner path helpers unavailable in backend container")
     from core.path_setup import get_docker_compose_file, get_docker_compose_context
     docker_compose_file = get_docker_compose_file()
     docker_compose_context = get_docker_compose_context()
@@ -199,7 +199,7 @@ async def start_scan(
     env_vars = [
         "-e", f"TARGET_TYPE={target_type}",
         "-e", f"PROJECT_RESULTS_DIR={results_dir_host}",
-        "-e", f"RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results",
+        "-e", f"RESULTS_DIR_IN_CONTAINER=/app/results",
         "-e", f"COLLECT_METADATA={'true' if request.collect_metadata else 'false'}",
         "-e", f"TARGET_PATH_HOST={original_target_mount_path_host}",
     ]
@@ -207,7 +207,7 @@ async def start_scan(
     if request.type in ["website", "image"]:
         env_vars.extend(["-e", f"SCAN_TARGET={clean_target}"])
     # CI Mode: For local scans, let the scanner container create the tracked snapshot
-    # (The scanner container has access to /target mount, WebUI container does not)
+    # (The scanner container has access to /target mount, backend container does not)
     # For Git clones, CI mode is not needed (clone already contains only tracked files)
     if request.ci_mode and not git_clone_used and request.type == "code":
         # Set SCAN_SCOPE=tracked - scanner container will create snapshot from /target
@@ -216,9 +216,9 @@ async def start_scan(
         print(f"[Scan Service] CI Mode enabled - scanner will create tracked snapshot from /target")
     
     # Finding policy - CLEARLY SEPARATED: Git clones vs local scans
-    # IMPORTANT: Git clones exist in WebUI container, local scans don't!
-    # - Git clones: Can check file existence in WebUI container
-    # - Local scans: Cannot check in WebUI container, scanner will check after mount
+    # IMPORTANT: Git clones exist in backend container, local scans don't!
+    # - Git clones: Can check file existence in backend container
+    # - Local scans: Cannot check in backend container, scanner will check after mount
     finding_policy_file = None
     if clean_finding_policy:
         print(f"[Scan Service] Finding policy resolution:")
@@ -242,7 +242,7 @@ async def start_scan(
         else:
             # Local scan: Use dedicated function for local scans (cannot check in container)
             policy_check_path = get_finding_policy_check_path_for_local_scan(target_mount_path_host, clean_finding_policy)
-            # For local scans, we can't check in WebUI container, but we pass the path
+            # For local scans, we can't check in backend container, but we pass the path
             # Scanner container will verify it exists at /target/{clean_finding_policy}
             finding_policy_file = f"/target/{clean_finding_policy}"
             env_vars.extend(["-e", f"FINDING_POLICY_FILE={finding_policy_file}"])
@@ -258,7 +258,7 @@ async def start_scan(
         if request.ci_mode and not git_clone_used:
             cmd.extend(["-v", f"{original_target_mount_path_host}:/original-target:ro"])
             env_vars.extend(["-e", "ORIGINAL_TARGET_PATH=/original-target"])
-    cmd.extend(["-v", f"{results_dir_host}:/SimpleSecCheck/results"])
+    cmd.extend(["-v", f"{results_dir_host}:/app/results"])
     
     if config_volume:
         cmd.extend(config_volume)

@@ -2,7 +2,7 @@
 set -e
 
 # Ensure mounted volumes exist and are writable by scanner
-RESULTS_DIR="${RESULTS_DIR_IN_CONTAINER:-/SimpleSecCheck/results}"
+RESULTS_DIR="${RESULTS_DIR_IN_CONTAINER:-/app/results}"
 LOGS_DIR="${LOGS_DIR_IN_CONTAINER:-${RESULTS_DIR}/logs}"
 TARGET_DIR="${TARGET_PATH_IN_CONTAINER:-/target}"
 HOME_DIR="${HOME:-/tmp/scanner}"

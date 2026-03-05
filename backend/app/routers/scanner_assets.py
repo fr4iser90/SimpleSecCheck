@@ -15,7 +15,7 @@ router = APIRouter()
 async def get_scanner_assets():
     update_activity()
     if os.getenv("SCANNER_PROXY_MODE", "false").lower() == "true":
-        worker_url = os.getenv("SCANNER_WORKER_API_URL", "http://scanner-worker:8080/api/scanners/assets")
+        worker_url = os.getenv("SCANNER_WORKER_API_URL", "http://backend:8080/api/scanners/assets")
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(worker_url)
@@ -34,7 +34,7 @@ async def update_asset(scanner_name: str, asset_id: str):
     if os.getenv("SCANNER_PROXY_MODE", "false").lower() == "true":
         worker_url = os.getenv(
             "SCANNER_WORKER_ASSET_UPDATE_URL",
-            f"http://scanner-worker:8080/api/scanners/{scanner_name}/assets/{asset_id}/update",
+            f"http://backend:8080/api/scanners/{scanner_name}/assets/{asset_id}/update",
         )
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -46,7 +46,7 @@ async def update_asset(scanner_name: str, asset_id: str):
 
     worker_url = os.getenv(
         "SCANNER_WORKER_ASSET_UPDATE_URL",
-        f"http://scanner-worker:8080/api/scanners/{scanner_name}/assets/{asset_id}/update",
+        f"http://backend:8080/api/scanners/{scanner_name}/assets/{asset_id}/update",
     )
     from app.services.scanner_asset_update_service import start_asset_update
     try:
@@ -61,7 +61,7 @@ async def get_update_status():
     if os.getenv("SCANNER_PROXY_MODE", "false").lower() == "true":
         worker_url = os.getenv(
             "SCANNER_WORKER_ASSET_STATUS_URL",
-            "http://scanner-worker:8080/api/scanners/assets/update/status",
+            "http://backend:8080/api/scanners/assets/update/status",
         )
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:

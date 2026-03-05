@@ -70,7 +70,7 @@ def generate_bandit_html_section(bandit_findings):
 
 # Main processing logic
 if __name__ == "__main__":
-    results_dir = sys.argv[1] if len(sys.argv) > 1 else "/SimpleSecCheck/results"
+    results_dir = sys.argv[1] if len(sys.argv) > 1 else "/app/results"
     bandit_json_file = os.path.join(results_dir, 'bandit.json')
     
     bandit_data = load_bandit_results(bandit_json_file)

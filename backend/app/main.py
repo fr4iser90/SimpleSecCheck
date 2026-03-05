@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SimpleSecCheck WebUI Backend
+SimpleSecCheck Backend
 Minimal FastAPI backend that wraps the Python DockerRunner
 Single-shot principle: No database, no state, just CLI wrapper
 """
@@ -58,36 +58,36 @@ from app.routers import (
 # NO PATH CALCULATIONS HERE!
 try:
     from core.path_setup import (
-        get_webui_base_dir,
-        get_webui_cli_script,
-        get_webui_results_dir,
-        get_webui_logs_dir,
-        get_webui_frontend_paths,
+        get_backend_base_dir,
+        get_backend_cli_script,
+        get_backend_results_dir,
+        get_backend_logs_dir,
+        get_frontend_static_paths,
     )
-    BASE_DIR = get_webui_base_dir()
-    CLI_SCRIPT = get_webui_cli_script()
-    RESULTS_DIR = get_webui_results_dir()
-    LOGS_DIR = get_webui_logs_dir()
+    BASE_DIR = get_backend_base_dir()
+    CLI_SCRIPT = get_backend_cli_script()
+    RESULTS_DIR = get_backend_results_dir()
+    LOGS_DIR = get_backend_logs_dir()
 except Exception:
-    BASE_DIR = Path("/webui")
+    BASE_DIR = Path("/app")
     CLI_SCRIPT = None
     RESULTS_DIR = BASE_DIR / "results"
     LOGS_DIR = BASE_DIR / "logs"
 
-def get_webui_frontend_paths() -> list[Path]:
+def get_frontend_static_paths() -> list[Path]:
     """Fallback frontend paths when scanner core isn't available."""
-    return [BASE_DIR / "static", Path("/webui/static")]
+    return [BASE_DIR / "static", Path("/app/static")]
 
-# CLI script is only needed for direct CLI usage (not for WebUI)
-# WebUI calls docker-compose directly, so this validation is optional
-if CLI_SCRIPT and not CLI_SCRIPT.exists() and os.path.exists("/webui"):
-    # Running in container (WebUI) - script not needed
+# CLI script is only needed for direct CLI usage (not for frontend)
+# Frontend calls docker-compose directly, so this validation is optional
+if CLI_SCRIPT and not CLI_SCRIPT.exists() and os.path.exists("/app"):
+    # Running in container (backend) - script not needed
     pass
 elif CLI_SCRIPT and not CLI_SCRIPT.exists():
-    # Running on host without script - warn but don't fail (WebUI doesn't need it)
-    print(f"[WARNING] CLI script not found: {CLI_SCRIPT} (WebUI will use docker-compose directly)")
+    # Running on host without script - warn but don't fail (frontend doesn't need it)
+    print(f"[WARNING] CLI script not found: {CLI_SCRIPT} (frontend will use docker-compose directly)")
 
-app = FastAPI(title="SimpleSecCheck WebUI", version="1.0.0")
+app = FastAPI(title="SimpleSecCheck Backend", version="1.0.0")
 
 # Environment detection
 ENVIRONMENT = os.getenv("ENVIRONMENT", "dev").lower()
@@ -147,7 +147,7 @@ register_signal_handlers(signal_handler)
 # Queue is ALWAYS enabled (works in both Dev and Prod, uses File-Database in Dev, PostgreSQL in Prod)
 # Session Management is optional (enabled in Prod by default, can be enabled in Dev)
 SESSION_MANAGEMENT = os.getenv("SESSION_MANAGEMENT", "true" if IS_PRODUCTION else "false").lower() == "true"
-# Scanner worker can be disabled for WebUI-only deployments
+# Scanner worker can be disabled for frontend-only deployments
 SCANNER_WORKER_ENABLED = os.getenv("SCANNER_WORKER_ENABLED", "true").lower() == "true"
 
 async def queue_cleanup_task():
@@ -222,7 +222,7 @@ async def startup_event():
         queue_service = await get_queue_service()
         print("[Main] Queue service initialized")
         
-        # Start scanner worker (optional; disable for WebUI-only deployments)
+        # Start scanner worker (optional; disable for frontend-only deployments)
         if SCANNER_WORKER_ENABLED:
             await start_scanner_worker()
             print("[Main] Scanner worker started")
@@ -292,7 +292,7 @@ app.include_router(bulk.router)
 
 # Serve frontend static files (after API routes)
 # ALL PATHS FROM CENTRAL path_setup.py
-frontend_paths = get_webui_frontend_paths()
+frontend_paths = get_frontend_static_paths()
 
 # Find frontend directory
 frontend_dir = None

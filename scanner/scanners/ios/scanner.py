@@ -25,7 +25,7 @@ class iOSScanner(BaseScanner):
     PRIORITY = 41
     REQUIRES_CONDITION = "IS_NATIVE"
     ENV_VARS = {
-        "IOS_CONFIG_PATH": "/SimpleSecCheck/scanner/scanners/ios/config/config.yaml"
+        "IOS_CONFIG_PATH": "/app/scanner/scanners/ios/config/config.yaml"
     }
     SCANNER_NAME = "ios_plist"
     
@@ -212,9 +212,9 @@ if __name__ == "__main__":
     import sys
     
     target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/SimpleSecCheck/results")
-    log_file = os.getenv("LOG_FILE", "SimpleSecCheck/results/logs/scan.log")
-    config_path = os.getenv("IOS_CONFIG_PATH", "/SimpleSecCheck/scanner/scanners/ios/config/config.yaml")
+    results_dir = os.getenv("RESULTS_DIR", "/app/results")
+    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    config_path = os.getenv("IOS_CONFIG_PATH", "/app/scanner/scanners/ios/config/config.yaml")
     
     scanner = iOSScanner(
         target_path=target_path,

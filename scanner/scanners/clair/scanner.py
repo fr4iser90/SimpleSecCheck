@@ -44,7 +44,7 @@ class ClairScanner(BaseScanner):
             config_path: Path to Clair config file (optional)
             clair_image: Container image to scan
         """
-        default_config = "/SimpleSecCheck/scanner/scanners/clair/config/config.yaml"
+        default_config = "/app/scanner/scanners/clair/config/config.yaml"
         resolved_config = config_path or os.getenv("CLAIR_CONFIG_PATH", default_config)
         super().__init__("Clair", target_path, results_dir, log_file, resolved_config)
         self.target_type = (os.getenv("TARGET_TYPE", "")).lower()
@@ -93,9 +93,9 @@ if __name__ == "__main__":
     import sys
     
     target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/SimpleSecCheck/results")
-    log_file = os.getenv("LOG_FILE", "SimpleSecCheck/results/logs/scan.log")
-    config_path = os.getenv("CLAIR_CONFIG_PATH", "/SimpleSecCheck/scanner/scanners/clair/config/config.yaml")
+    results_dir = os.getenv("RESULTS_DIR", "/app/results")
+    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    config_path = os.getenv("CLAIR_CONFIG_PATH", "/app/scanner/scanners/clair/config/config.yaml")
     clair_image = os.getenv("SCAN_TARGET", "")
     scanner = ClairScanner(
         target_path=target_path,

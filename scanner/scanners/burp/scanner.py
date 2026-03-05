@@ -104,9 +104,9 @@ if __name__ == "__main__":
     import sys
     
     target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/SimpleSecCheck/results")
-    log_file = os.getenv("LOG_FILE", "SimpleSecCheck/results/logs/scan.log")
-    config_path = os.getenv("BURP_CONFIG_PATH", "/SimpleSecCheck/scanner/scanners/burp/config/config.yaml")
+    results_dir = os.getenv("RESULTS_DIR", "/app/results")
+    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    config_path = os.getenv("BURP_CONFIG_PATH", "/app/scanner/scanners/burp/config/config.yaml")
     zap_target = os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
     
     scanner = BurpScanner(

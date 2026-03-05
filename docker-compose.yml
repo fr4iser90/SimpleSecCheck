@@ -23,8 +23,7 @@ services:
 
   scanner:
     profiles:
-      - dev
-      - prod
+      - scan
     # LOKALES BUILDING AKTIVIERT
     build:
       context: .
@@ -42,15 +41,15 @@ services:
           cpus: '${SCANNER_CPU_RESERVATION:-1.0}'
           memory: '${SCANNER_MEMORY_RESERVATION:-2G}'
     volumes:
-      - ./results:/SimpleSecCheck/results
+      - ./results:/app/results
       # Config ist bereits im Image (über COPY scanner/ im Dockerfile) - kein Volume-Mount nötig
       # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
-      - ./scanner/scanners/owasp/data:/SimpleSecCheck/scanner/scanners/owasp/data
+      - ./scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data
       - /var/run/docker.sock:/var/run/docker.sock # For Docker Bench
     environment:
       - SCAN_TARGET=${SCAN_TARGET:-}
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
-      - RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results
+      - RESULTS_DIR_IN_CONTAINER=/app/results
       - ENVIRONMENT=${ENVIRONMENT:-dev}
       - DATABASE_URL=${DATABASE_URL:-}
       # Optional API Tokens (loaded from .env file if present)
@@ -62,7 +61,7 @@ services:
     stdin_open: true
     tty: true
 
-  webui:
+  frontend:
     profiles:
       - dev
       - prod
@@ -70,12 +69,12 @@ services:
     # ⚠️ WARNING: NEVER expose publicly! Only use on localhost!
     build:
       context: .
-      dockerfile: ./webui/Dockerfile.nginx
-    container_name: SimpleSecCheck_webui
+      dockerfile: ./frontend/Dockerfile.nginx
+    container_name: SimpleSecCheck_frontend
     ports:
       - "${WEBUI_BIND_HOST:-127.0.0.1}:8080:8080"
     volumes:
-      - ./results:/webui/results
+      - ./results:/app/results
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-dev}
     networks:
@@ -88,21 +87,21 @@ services:
 
 
 
-  scanner-worker:
+  backend:
     profiles:
       - dev
       - prod
     build:
       context: .
-      dockerfile: ./scanner/Dockerfile.worker
-    container_name: SimpleSecCheck_scanner_worker
+      dockerfile: ./backend/Dockerfile
+    container_name: SimpleSecCheck_backend
     volumes:
-      - ./results:/webui/results
+      - ./results:/app/results
       - .:/project:ro
-      - ./scanner/scanners/owasp/data:/scanner/scanners/owasp/data
+      - ./scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - SIMPLESECCHECK_ROOT=/webui
+      - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1
       - HOST_PROJECT_ROOT=${PWD}
       - SCANNER_WORKER_ENABLED=true

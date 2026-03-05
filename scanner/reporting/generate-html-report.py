@@ -283,7 +283,7 @@ def main():
     # For code scans, use better target description
     if target_type in ('local_code', 'git_repo', '') and scan_type == 'code':
         # Try to get the actual project name from the results directory path
-        # e.g., /SimpleSecCheck/results/NoServerConvert_20251026_170126 -> NoServerConvert
+        # e.g., /app/results/NoServerConvert_20251026_170126 -> NoServerConvert
         results_path = RESULTS_DIR
         project_name = os.path.basename(results_path)
         if project_name and project_name != 'results':
@@ -363,7 +363,7 @@ def main():
         
         # Try multiple possible locations for JS files (in order of preference)
         possible_dirs = [
-            Path("/SimpleSecCheck/scanner/reporting"),  # Container absolute path (PRIMARY)
+            Path("/app/scanner/reporting"),  # Container absolute path (PRIMARY)
             SCRIPT_DIR,  # scanner/reporting/ (relative to script)
             Path(RESULTS_DIR),  # results/ (fallback - files copied after report generation)
         ]
@@ -391,7 +391,7 @@ def main():
                 # Don't exit - continue without JS, but log error
                 sys.stderr.write(f"[ERROR] Failed to embed {js_file} - AI Prompt feature will not work!\n")
         
-        # Normalize findings for AI prompt (for client-side generation when WebUI is not available)
+        # Normalize findings for AI prompt (for client-side generation when frontend is not available)
         normalized_findings = normalize_findings_for_ai_prompt(processors, all_findings)
         ai_prompt_disabled = len(normalized_findings) == 0
         findings_json = json.dumps(normalized_findings, indent=2)
@@ -402,8 +402,8 @@ def main():
         
         with open(OUTPUT_FILE, 'w') as f:
             f.write(html_header(f'{target} - {now}', embedded_scripts, ai_prompt_disabled))
-            # WebUI Controls Block
-            # WebUI Controls removed - using single-shot scans only
+            # Frontend Controls Block
+            # Frontend Controls removed - using single-shot scans only
 
             # Scan Metadata Section (only if metadata was collected)
             if scan_metadata:

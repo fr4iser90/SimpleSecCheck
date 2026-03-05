@@ -8,7 +8,7 @@ import json
 # Setup paths using central path_setup module
 # NO PATH CALCULATIONS HERE - everything is handled by path_setup.py
 sys.path.insert(0, "/project/src")
-sys.path.insert(0, "/SimpleSecCheck")  # For import
+sys.path.insert(0, "/app")  # For import
 from core.path_setup import setup_paths
 setup_paths()
 

@@ -5,18 +5,18 @@ install:
   - ["unzip", "dependency-check.zip", "-d", "/opt"]
   - ["rm", "dependency-check.zip"]
   - ["ln", "-s", "/opt/dependency-check/bin/dependency-check.sh", "/usr/local/bin/dependency-check"]
-  - ["mkdir", "-p", "/SimpleSecCheck/owasp-dependency-check-data"]
+  - ["mkdir", "-p", "/app/owasp-dependency-check-data"]
 assets:
   - id: data
     type: data
     description: OWASP Dependency Check data cache
     mount:
       host_subpath: scanner/scanners/owasp/data
-      container_path: /SimpleSecCheck/scanner/scanners/owasp/data
+      container_path: /app/scanner/scanners/owasp/data
     update:
       enabled: true
       command:
         - dependency-check
         - --updateonly
         - --data
-        - /SimpleSecCheck/scanner/scanners/owasp/data
+        - /app/scanner/scanners/owasp/data

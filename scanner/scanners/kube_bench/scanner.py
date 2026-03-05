@@ -87,9 +87,9 @@ if __name__ == "__main__":
     import sys
     
     target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/SimpleSecCheck/results")
-    log_file = os.getenv("LOG_FILE", "SimpleSecCheck/results/logs/scan.log")
-    config_path = os.getenv("KUBE_BENCH_CONFIG_PATH", "/SimpleSecCheck/scanner/scanners/kube_bench/config/config.yaml")
+    results_dir = os.getenv("RESULTS_DIR", "/app/results")
+    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    config_path = os.getenv("KUBE_BENCH_CONFIG_PATH", "/app/scanner/scanners/kube_bench/config/config.yaml")
     
     scanner = KubeBenchScanner(
         target_path=target_path,

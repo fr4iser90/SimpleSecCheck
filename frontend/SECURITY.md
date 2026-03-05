@@ -1,9 +1,9 @@
-# WebUI Security Considerations
+# Frontend Security Considerations
 
 ## Security Features
 
 ### Non-Root Execution
-- WebUI runs as user `webui` (UID 1000), not root
+- Frontend runs as user `frontend` (UID 1000), not root
 - Matches scanner user for consistency
 - No sudo privileges needed
 
@@ -38,10 +38,10 @@
 
 ## ⚠️ CRITICAL WARNING: NEVER EXPOSE PUBLICLY
 
-**The WebUI should NEVER be exposed to the internet or public networks!**
+**The Frontend should NEVER be exposed to the internet or public networks!**
 
 ### Why?
-- WebUI can trigger security scans that deeply interact with your system
+- Frontend can trigger security scans that deeply interact with your system
 - No authentication by default
 - Can execute Docker commands via `docker-compose`
 - Access to scan results and logs
@@ -74,11 +74,11 @@ ports:
   - OAuth
   - API Keys
 - **CORS**: Currently allows all origins. Restrict in production.
-- **Auto-Shutdown**: WebUI includes auto-shutdown feature to prevent long-running instances (see below).
+- Frontend includes auto-shutdown feature to prevent long-running instances (see below).
 
 ## Auto-Shutdown Feature
 
-WebUI includes automatic shutdown to prevent long-running instances:
+Frontend includes automatic shutdown to prevent long-running instances:
 
 ### Configuration (Environment Variables)
 
@@ -199,11 +199,11 @@ This reduces attack surface significantly.
 
 ### 1. Start Only When Needed
 ```bash
-# Start WebUI only when you need it
-docker-compose --profile webui up
+# Start Frontend only when you need it
+docker-compose --profile dev up
 
 # Stop after use
-docker-compose --profile webui down
+docker-compose --profile dev down
 ```
 
 ### 2. Use Localhost Binding
@@ -232,11 +232,11 @@ sudo iptables -A INPUT -p tcp --dport 8080 ! -s 127.0.0.1 -j DROP
 
 ### 5. Monitor Running Instances
 ```bash
-# Check if WebUI is running
-docker ps | grep webui
+# Check if Frontend is running
+docker ps | grep frontend
 
 # Stop if forgotten
-docker-compose --profile webui down
+docker-compose --profile dev down
 ```
 
 ### 6. Never in Production Without:

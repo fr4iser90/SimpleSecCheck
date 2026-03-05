@@ -23,7 +23,7 @@ class DetectSecretsScanner(BaseScanner):
     PRIORITY = 18
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "DETECT_SECRETS_CONFIG_PATH": "/SimpleSecCheck/scanner/scanners/detect_secrets/config/config.yaml"
+        "DETECT_SECRETS_CONFIG_PATH": "/app/scanner/scanners/detect_secrets/config/config.yaml"
     }
     
     def __init__(
@@ -106,9 +106,9 @@ if __name__ == "__main__":
     import sys
     
     target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/SimpleSecCheck/results")
-    log_file = os.getenv("LOG_FILE", "SimpleSecCheck/results/logs/scan.log")
-    config_path = os.getenv("DETECT_SECRETS_CONFIG_PATH", "/SimpleSecCheck/scanner/scanners/detect_secrets/config/config.yaml")
+    results_dir = os.getenv("RESULTS_DIR", "/app/results")
+    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    config_path = os.getenv("DETECT_SECRETS_CONFIG_PATH", "/app/scanner/scanners/detect_secrets/config/config.yaml")
     exclude_paths = os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     scanner = DetectSecretsScanner(

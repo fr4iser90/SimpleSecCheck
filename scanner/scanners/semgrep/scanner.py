@@ -24,7 +24,7 @@ class SemgrepScanner(BaseScanner):
     PRIORITY = 1
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "SEMGREP_RULES_PATH": "/SimpleSecCheck/scanner/scanners/semgrep/rules"
+        "SEMGREP_RULES_PATH": "/app/scanner/scanners/semgrep/rules"
     }
     
     def __init__(
@@ -46,7 +46,7 @@ class SemgrepScanner(BaseScanner):
             exclude_paths: Comma-separated paths to exclude
         """
         super().__init__("Semgrep", target_path, results_dir, log_file)
-        self.rules_path = Path(rules_path) if rules_path else Path("/SimpleSecCheck/scanner/scanners/semgrep/rules")
+        self.rules_path = Path(rules_path) if rules_path else Path("/app/scanner/scanners/semgrep/rules")
         self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     def get_exclude_args(self) -> List[str]:
@@ -177,9 +177,9 @@ if __name__ == "__main__":
     
     # Get environment variables
     target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/SimpleSecCheck/results")
-    log_file = os.getenv("LOG_FILE", "SimpleSecCheck/results/logs/scan.log")
-    rules_path = os.getenv("SEMGREP_RULES_PATH", "/SimpleSecCheck/scanner/scanners/semgrep/rules")
+    results_dir = os.getenv("RESULTS_DIR", "/app/results")
+    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    rules_path = os.getenv("SEMGREP_RULES_PATH", "/app/scanner/scanners/semgrep/rules")
     exclude_paths = os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     # Create scanner and run

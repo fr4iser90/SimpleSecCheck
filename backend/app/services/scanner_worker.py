@@ -335,15 +335,15 @@ class ScannerWorker:
             import sys
             sys.path.insert(0, scanner_root)
         from core.path_setup import (
-            get_webui_base_dir, 
-            get_webui_results_dir, 
+            get_backend_base_dir,
+            get_backend_results_dir,
             get_results_dir_for_scan,
         )
         from app.services.git_service import clone_repository, is_git_url
         
         # Get paths - ALL FROM CENTRAL path_setup.py
-        base_dir = get_webui_base_dir()
-        results_dir = get_webui_results_dir()
+        base_dir = get_backend_base_dir()
+        results_dir = get_backend_results_dir()
         
         # Use provided scan_id or generate new one
         if not scan_id:
@@ -595,7 +595,7 @@ class ScannerWorker:
                 scan_id=scan_id,
                 project_name=project_name,
                 results_dir=results_dir_path,
-                ci_mode=False,  # WebUI always does full scans
+                ci_mode=False,  # Frontend always does full scans
                 finding_policy=finding_policy,
                 collect_metadata=True,
                 output_callback=output_callback,

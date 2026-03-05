@@ -31,13 +31,13 @@ git clone https://github.com/fr4iser90/SimpleSecCheck.git
 cd SimpleSecCheck
 ```
 
-### 1) Start the WebUI (nginx) + Worker in dev
+### 1) Start the Frontend (nginx) + Backend in dev
 
 ```bash
 docker compose --profile dev up --build
 ```
 
-Open **http://localhost:8080** and start a scan. The WebUI is now **frontend-only** (nginx), and `/api/*` is proxied to the internal worker (backend+scanner).
+Open **http://localhost:8080** and start a scan. The Frontend is now **frontend-only** (nginx), and `/api/*` is proxied to the internal backend (worker+scanner).
 
 > **Dev note:** Auto-shutdown is **disabled** in dev for convenience.
 
@@ -87,7 +87,7 @@ FORCE_INSECURE_COOKIES=true
 ## Documentation
 
 - [CLI & Docker examples](docs/CLI_DOCKER.md)
-- [WebUI docs](webui/README.md)
+- [Frontend docs](frontend/README.md)
 - [Development](docs/DEVELOPMENT.md)
 - [Tool list](docs/TOOLS.md)
 - [Legal considerations](docs/LEGAL_CONSIDERATIONS.md)

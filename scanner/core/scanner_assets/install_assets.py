@@ -32,7 +32,7 @@ def install_from_manifests(scanners_root: Path) -> None:
 
 
 def main() -> None:
-    base_dir = Path(os.getenv("SIMPLE_SECCHECK_ROOT", "/SimpleSecCheck"))
+    base_dir = Path(os.getenv("SIMPLE_SECCHECK_ROOT", "/app"))
     scanners_root = base_dir / "scanner" / "scanners"
     install_from_manifests(scanners_root)
 

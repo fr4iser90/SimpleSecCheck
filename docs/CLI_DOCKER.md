@@ -78,8 +78,8 @@ Use the published image without Compose.
 ```bash
 docker run --rm \
   -v /path/to/project:/target:ro \
-  -v $(pwd)/results:/SimpleSecCheck/results \
-  -v $(pwd)/scanner/scanners/owasp/data:/SimpleSecCheck/scanner/scanners/owasp/data \
+  -v $(pwd)/results:/app/results \
+  -v $(pwd)/scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data \
   fr4iser/simpleseccheck:latest \
   python3 -m scanner.core.orchestrator
 ```
@@ -90,7 +90,7 @@ docker run --rm \
 docker run --rm \
   -e TARGET_TYPE=website \
   -e SCAN_TARGET=https://example.com \
-  -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/results:/app/results \
   fr4iser/simpleseccheck:latest \
   python3 -m scanner.core.orchestrator
 ```
@@ -101,7 +101,7 @@ docker run --rm \
 docker run --rm \
   -e TARGET_TYPE=docker_image \
   -e SCAN_TARGET=nginx:latest \
-  -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/results:/app/results \
   -v /var/run/docker.sock:/var/run/docker.sock \
   fr4iser/simpleseccheck:latest \
   python3 -m scanner.core.orchestrator
@@ -112,7 +112,7 @@ docker run --rm \
 ```bash
 docker run --rm \
   -e TARGET_TYPE=network_host \
-  -v $(pwd)/results:/SimpleSecCheck/results \
+  -v $(pwd)/results:/app/results \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   fr4iser/simpleseccheck:latest \
   python3 -m scanner.core.orchestrator
