@@ -34,7 +34,8 @@ except Exception:
     get_docker_compose_context = None
     get_target_mount_path_host = None
     ScannerAssetsManager = None
-from app.services.target_service import classify_target_from_target, is_dockerhub_image_ref
+from app.services.target_service import classify_target_from_target
+from app.services.policy_service import validate_scan_request
 
 
 class DockerRunner:
@@ -372,10 +373,12 @@ class DockerRunner:
         """
         # Determine scan type
         scan_type, target_path, zap_target, detected_project_name = self.determine_scan_type(target)
-        if classify_target_from_target(target).is_image and os.getenv("ENVIRONMENT", "dev").lower() == "prod":
-            if not is_dockerhub_image_ref(target):
-                self.log_message("Production Mode: Only Docker Hub images are allowed (use docker.io/... or unqualified image names).", "ERROR")
-                return False
+        policy_target = os.environ.get("GIT_URL", target) if scan_type == "code" else target
+        try:
+            validate_scan_request(scan_type, policy_target)
+        except ValueError as exc:
+            self.log_message(str(exc), "ERROR")
+            return False
         
         if not project_name:
             project_name = detected_project_name

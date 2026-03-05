@@ -331,7 +331,7 @@ def get_docker_compose_file():
     Central function - all services should use this!
     
     Returns:
-        str: Path to docker-compose file (e.g., "/project/docker-compose.prod.yml" or "/project/docker-compose.yml")
+        str: Path to docker-compose file (e.g., "/project/docker-compose.yml" or "/project/docker-compose.yml")
     """
     # Allow explicit override (for setups that rename compose file to docker-compose.yml)
     compose_override = os.getenv("DOCKER_COMPOSE_FILE")
@@ -343,12 +343,19 @@ def get_docker_compose_file():
     
     # Determine docker-compose filename based on environment
     if environment == "prod":
-        compose_filename = "docker-compose.prod.yml"
+        # Prefer base compose, optionally allow traefik variant
+        candidates = ["docker-compose.yml", "docker-compose.prod.traefik.yml"]
     else:
-        compose_filename = "docker-compose.yml"
-    
+        candidates = ["docker-compose.yml", "docker-compose.prod.traefik.yml"]
+
     # In containers: /project is always mounted (.:/project:ro)
-    return f"/project/{compose_filename}"
+    for filename in candidates:
+        candidate_path = f"/project/{filename}"
+        if os.path.exists(candidate_path):
+            return candidate_path
+
+    # Fallback to default
+    return "/project/docker-compose.yml"
 
 
 def get_docker_compose_context():

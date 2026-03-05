@@ -21,6 +21,7 @@ from app.services import (
 from app.services.ai_prompt_service import collect_findings_from_results, generate_ai_prompt
 from app.services.queue_service import get_queue_service
 from app.services.session_service import get_session_service
+from app.services.policy_service import validate_scan_request, is_session_required
 from app.services.websocket_manager import get_websocket_manager
 from app.services.step_service import read_steps_from_db, upsert_steps_from_log
 
@@ -75,16 +76,26 @@ async def get_scanners(scan_type: str = None):
         sys.path.insert(0, "/app")
     if scanner_root and scanner_root not in sys.path:
         sys.path.insert(0, scanner_root)
-    from scanner.core.scanner_registry import ScannerRegistry, ScanType
+    from scanner.core.scanner_registry import ScannerRegistry, ScanType, TargetType
     
     # Get all scanners or filter by type
     if scan_type:
         try:
             scan_type_enum = ScanType(scan_type)
-            scanners = ScannerRegistry.get_scanners_for_type(scan_type_enum)
         except ValueError:
             # Invalid scan type, return empty list
             return {"scanners": []}
+
+        # For code scans, return all scanners that can run on codebases
+        # (code + dependency + secrets + config + mobile) without hardcoding names
+        if scan_type_enum == ScanType.CODE:
+            scanners = ScannerRegistry.get_scanners_for_target(
+                target_type=TargetType.LOCAL_CODE,
+                scan_types=None,
+                conditions=None,
+            )
+        else:
+            scanners = ScannerRegistry.get_scanners_for_type(scan_type_enum)
     else:
         scanners = ScannerRegistry.get_all_scanners()
     
@@ -118,43 +129,23 @@ async def start_scan(request: ScanRequest, http_request: Request):
     print(f"[Scan Start] Request received: type={request.type}, target={request.target}")
     update_activity()
     
-    # Check if only Git scans are allowed (only in Production)
-    if IS_PRODUCTION:
-        only_git_scans = os.getenv("ONLY_GIT_SCANS", "true").lower() == "true"
-        if only_git_scans and request.type not in {"code", "image"}:
-            print(f"[Scan Start] Error: Only Git scans allowed, got type={request.type}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Only Git scans (code type) or image scans are allowed in production mode. Requested type: {request.type}"
-            )
-        
-        # Validate Git URL (image targets are allowed, validated in scan service)
-        from app.services.git_service import is_git_url
-        from app.services.target_service import is_docker_image_ref
-        if request.type == "code" and not is_git_url(request.target) and not is_docker_image_ref(request.target):
-            print(f"[Scan Start] Error: Not a Git URL or image: {request.target}")
-            raise HTTPException(
-                status_code=400,
-                detail="Only Git repository URLs or Docker images are allowed in production mode"
-            )
-        if request.type == "image" and not is_docker_image_ref(request.target):
-            print(f"[Scan Start] Error: Not a Docker image: {request.target}")
-            raise HTTPException(
-                status_code=400,
-                detail="Only Docker images are allowed for image scans"
-            )
+    # Centralized production policy validation
+    try:
+        validate_scan_request(request.type, request.target)
+    except ValueError as exc:
+        print(f"[Scan Start] Error: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc))
     
     # Get session ID from request state (set by middleware) or create one if not available
     session_id = getattr(http_request.state, "session_id", None)
     print(f"[Scan Start] Session ID: {session_id}, SESSION_MANAGEMENT={SESSION_MANAGEMENT}")
     if not session_id:
-        if SESSION_MANAGEMENT:
+        if is_session_required():
             print(f"[Scan Start] Error: No session ID, SESSION_MANAGEMENT={SESSION_MANAGEMENT}")
             raise HTTPException(status_code=401, detail="Session required")
-        else:
-            # In Dev without session management, create a temporary session ID
-            session_id = str(uuid.uuid4())
-            print(f"[Scan Start] Created temporary session ID: {session_id}")
+        # In Dev without session management, create a temporary session ID
+        session_id = str(uuid.uuid4())
+        print(f"[Scan Start] Created temporary session ID: {session_id}")
     
     # Check rate limits (only if session management is enabled)
     if SESSION_MANAGEMENT:

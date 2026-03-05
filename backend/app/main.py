@@ -29,6 +29,7 @@ from app.services.session_service import (
     session_middleware,
     get_session_service,
 )
+from app.services.policy_service import get_policy_config, is_session_required
 from app.services.queue_service import (
     get_queue_service,
 )
@@ -90,8 +91,9 @@ elif CLI_SCRIPT and not CLI_SCRIPT.exists():
 app = FastAPI(title="SimpleSecCheck Backend", version="1.0.0")
 
 # Environment detection
-ENVIRONMENT = os.getenv("ENVIRONMENT", "dev").lower()
-IS_PRODUCTION = ENVIRONMENT == "prod"
+policy = get_policy_config()
+ENVIRONMENT = policy.environment
+IS_PRODUCTION = policy.is_production
 
 # CORS configuration
 cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if os.getenv("CORS_ALLOWED_ORIGINS") else []
@@ -113,11 +115,11 @@ app.add_middleware(
 )
 
 # Session middleware (only in production)
-if IS_PRODUCTION:
+if is_session_required():
     app.middleware("http")(session_middleware)
-    print("[Main] Production mode: Session management enabled")
+    print("[Main] Session management enabled")
 else:
-    print("[Main] Development mode: Session management disabled")
+    print("[Main] Session management disabled")
 
 # Global state for current scan (minimal, no DB)
 current_scan = {
@@ -146,7 +148,7 @@ register_signal_handlers(signal_handler)
 # Initialize services based on configuration
 # Queue is ALWAYS enabled (works in both Dev and Prod, uses File-Database in Dev, PostgreSQL in Prod)
 # Session Management is optional (enabled in Prod by default, can be enabled in Dev)
-SESSION_MANAGEMENT = os.getenv("SESSION_MANAGEMENT", "true" if IS_PRODUCTION else "false").lower() == "true"
+SESSION_MANAGEMENT = is_session_required()
 # Scanner worker can be disabled for frontend-only deployments
 SCANNER_WORKER_ENABLED = os.getenv("SCANNER_WORKER_ENABLED", "true").lower() == "true"
 

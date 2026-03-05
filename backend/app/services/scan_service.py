@@ -19,7 +19,8 @@ from .container_service import stop_running_containers
 from .shutdown_service import schedule_shutdown, cancel_shutdown, SHUTDOWN_AFTER_SCAN, AUTO_SHUTDOWN_ENABLED, SHUTDOWN_DELAY
 from .step_service import initialize_step_tracking, reset_step_tracking, initialize_steps_log
 from .git_service import is_git_url, clone_repository, cleanup_temp_repository
-from .target_service import classify_target, is_dockerhub_image_ref
+from .target_service import classify_target
+from .policy_service import validate_scan_request
 
 # Central path management - ALL paths come from path_setup.py
 import sys
@@ -133,9 +134,11 @@ async def start_scan(
             raise HTTPException(status_code=400, detail="Target URL is required")
         if not clean_target.startswith(("http://", "https://")):
             raise HTTPException(status_code=400, detail="Target must be a valid URL (http:// or https://)")
-    elif is_image_target and os.getenv("ENVIRONMENT", "dev").lower() == "prod":
-        if not is_dockerhub_image_ref(clean_target):
-            raise HTTPException(status_code=400, detail="Production Mode: Only Docker Hub images are allowed (use docker.io/... or unqualified image names).")
+    # Centralized production policy validation
+    try:
+        validate_scan_request(request.type, clean_target)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     
     # STEP 6: Get all paths from central path_setup (NO PATH CALCULATIONS HERE!)
     # IMPORTANT: This must happen AFTER Git clone (if used), so paths are correct

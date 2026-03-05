@@ -4,6 +4,7 @@ Health and Configuration Routes
 import os
 from fastapi import APIRouter, HTTPException
 from app.services import update_activity
+from app.services.policy_service import get_ui_features, get_policy_config
 
 router = APIRouter()
 
@@ -29,37 +30,21 @@ async def health():
 @router.get("/api/config")
 async def get_config():
     """Get frontend configuration based on environment (backend-driven UI)"""
-    zip_upload_enabled = os.getenv("ZIP_UPLOAD_ENABLED", "false").lower() == "true" if IS_PRODUCTION else True
-    owasp_auto_update_enabled = os.getenv("OWASP_AUTO_UPDATE_ENABLED", "true" if IS_PRODUCTION else "false").lower() == "true"
-    
+    policy = get_policy_config()
+    features = get_ui_features()
+
     return {
         "environment": ENVIRONMENT,
         "is_production": IS_PRODUCTION,
-        "features": {
-            "scan_types": {
-                "code": True,
-                "image": True,
-                "website": not IS_PRODUCTION,
-                "network": not IS_PRODUCTION,
-            },
-            "bulk_scan": not IS_PRODUCTION,
-            "local_paths": not IS_PRODUCTION,
-            "git_only": IS_PRODUCTION,
-            "queue_enabled": IS_PRODUCTION,
-            "session_management": IS_PRODUCTION,
-            "metadata_collection": "always" if IS_PRODUCTION else "optional",
-            "auto_shutdown": not IS_PRODUCTION,
-            "zip_upload": zip_upload_enabled,
-            "owasp_auto_update_enabled": owasp_auto_update_enabled,
-        },
+        "features": features,
         "queue": {
             "max_length": int(os.getenv("MAX_QUEUE_LENGTH", "1000")),
-            "public_view": IS_PRODUCTION,
-        } if IS_PRODUCTION else None,
+            "public_view": policy.is_production,
+        } if policy.is_production else None,
         "rate_limits": {
             "scans_per_session": int(os.getenv("RATE_LIMIT_PER_SESSION_SCANS", "10")),
             "requests_per_session": int(os.getenv("RATE_LIMIT_PER_SESSION_REQUESTS", "100")),
-        } if IS_PRODUCTION else None,
+        } if policy.is_production else None,
     }
 
 
