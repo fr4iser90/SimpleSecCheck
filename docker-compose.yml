@@ -44,7 +44,7 @@ services:
       - ./results:/app/results
       # Config ist bereits im Image (über COPY scanner/ im Dockerfile) - kein Volume-Mount nötig
       # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
-      - ./scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data
+      - ${HOST_PROJECT_ROOT:-.}/scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data
       - /var/run/docker.sock:/var/run/docker.sock # For Docker Bench
     environment:
       - SCAN_TARGET=${SCAN_TARGET:-}
@@ -98,7 +98,7 @@ services:
     volumes:
       - ./results:/app/results
       - .:/project:ro
-      - ./scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data
+      - ${HOST_PROJECT_ROOT:-.}/scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - SIMPLESECCHECK_ROOT=/app
