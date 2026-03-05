@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import ReportViewer from '../components/ReportViewer'
 import StepsSidebar from '../components/StepsSidebar'
 import AIPromptModal from '../components/AIPromptModal'
+import { useWebSocket } from '../services/websocketService'
 
 // Backend is the source of truth!
 // Backend uses TWO status systems:
@@ -48,8 +49,8 @@ export default function ScanView() {
   )
 
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null)
-  const [steps, setSteps] = useState<Step[]>([])
-  const [progress, setProgress] = useState<number>(0)
+  const [steps] = useState<Step[]>([])
+  const [progress] = useState<number>(0)
   const [isStepsSidebarOpen, setIsStepsSidebarOpen] = useState(false)
   const [isLogsSidebarOpen, setIsLogsSidebarOpen] = useState(false)
   const [isAIPromptModalOpen, setIsAIPromptModalOpen] = useState(false)
@@ -129,117 +130,11 @@ export default function ScanView() {
     }
   }, [status.status, status.scan_id])
 
-  // WebSocket: Real-time scan updates (steps and logs)
-  useEffect(() => {
-    if (status.status === 'running' && status.scan_id) {
-      let ws: WebSocket | null = null
-      let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
-      let heartbeatInterval: ReturnType<typeof setInterval> | null = null
-      let reconnectAttempts = 0
-      const maxReconnectAttempts = 10
-      const reconnectDelay = 3000 // 3 seconds
-      
-      const connect = () => {
-        try {
-          // Convert HTTP to WebSocket URL
-          const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/scan/stream?scan_id=${status.scan_id}`
-          ws = new WebSocket(wsUrl)
-          
-          ws.onopen = () => {
-            console.log('[ScanView] WebSocket connected')
-            reconnectAttempts = 0
-            
-            // Send ping every 25 seconds to keep connection alive
-            heartbeatInterval = setInterval(() => {
-              if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send('ping')
-              }
-            }, 25000)
-          }
-          
-          ws.onmessage = (e) => {
-            try {
-              const data = JSON.parse(e.data)
-              
-              if (data.error) {
-                console.error('[ScanView] WebSocket error:', data.error)
-                return
-              }
-              
-              // Handle different message types
-              if (data.type === 'initial_steps' || data.type === 'step_update') {
-                // Update steps from WebSocket data
-                if (data.steps && Array.isArray(data.steps)) {
-                  setSteps(data.steps)
-                }
-                // Update progress from backend (calculated in step_registry.py)
-                if (data.progress_percentage !== undefined) {
-                  setProgress(data.progress_percentage)
-                }
-              } else if (data.type === 'scan_completed') {
-                // Scan is completed - update status and show summary
-                console.log('[ScanView] Scan completed via WebSocket:', data)
-                setStatus(prev => ({
-                  ...prev,
-                  status: data.status || 'done',
-                  scan_id: data.scan_id || prev.scan_id,
-                  results_dir: data.results_dir || prev.results_dir
-                }))
-              } else if (data.type === 'pong' || data.type === 'heartbeat') {
-                // Heartbeat response, do nothing
-                return
-              }
-            } catch (error) {
-              console.error('[ScanView] Failed to parse WebSocket data:', error)
-            }
-          }
-          
-          ws.onerror = (error) => {
-            console.error('[ScanView] WebSocket error:', error)
-          }
-          
-          ws.onclose = () => {
-            console.log('[ScanView] WebSocket closed')
-            
-            // Clear heartbeat
-            if (heartbeatInterval) {
-              clearInterval(heartbeatInterval)
-              heartbeatInterval = null
-            }
-            
-            // Reconnect if not manually closed and within max attempts
-            if (reconnectAttempts < maxReconnectAttempts && status.status === 'running') {
-              reconnectAttempts++
-              console.log(`[ScanView] Reconnecting in ${reconnectDelay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`)
-              reconnectTimeout = setTimeout(() => {
-                connect()
-              }, reconnectDelay)
-            } else if (reconnectAttempts >= maxReconnectAttempts) {
-              console.error('[ScanView] Max reconnection attempts reached')
-            }
-          }
-        } catch (error) {
-          console.error('[ScanView] WebSocket connection error:', error)
-        }
-      }
-      
-      // Initial connection
-      connect()
-      
-      return () => {
-        // Cleanup
-        if (reconnectTimeout) {
-          clearTimeout(reconnectTimeout)
-        }
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval)
-        }
-        if (ws) {
-          ws.close()
-        }
-      }
-    }
-  }, [status.status, status.scan_id])
+  // WebSocket: Real-time scan updates using new service
+  useWebSocket(
+    status.status === 'running' && status.scan_id ? status.scan_id : null
+  )
+
 
   // Listen for messages from iframe (HTML Report)
   useEffect(() => {
