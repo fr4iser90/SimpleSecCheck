@@ -1,14 +1,19 @@
 { pkgs ? import <nixpkgs> {} }:
 
 pkgs.mkShell {
-  buildInputs = with pkgs; [
-    python311
-    python311Packages.pytest
-    python311Packages.pytest-asyncio
-    python311Packages.httpx
-    python311Packages.docker
-    python311Packages.pytest-xdist
+  buildInputs = [
+    python
+    python.pkgs.pytest
+    python.pkgs.pytest-asyncio
+    python.pkgs.httpx
+    python.pkgs.docker
+    python.pkgs.pytest-xdist
+    python.pkgs.defusedxml
+    pkgs.ripgrep
+    pkgs.curl
+    pkgs.jq
   ];
+}
   
   shellHook = ''
     echo "🧪 SimpleSecCheck Test Environment"

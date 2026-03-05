@@ -732,34 +732,52 @@ def generate_executive_summary(all_findings):
     total_issues = 0
     tools_executed = 0
     tools_passed = 0
-    
+
     for tool, findings in all_findings.items():
-        if findings is None or len(findings) == 0:
+        if findings is None:
+            # Skipped tool (e.g., missing token). Count as executed+passed for score.
             tools_executed += 1
             tools_passed += 1
-        elif len(findings) > 0:
-            tools_executed += 1
-            total_issues += len(findings)
-            
-            # Count by severity
-            for finding in findings:
-                # Handle ZAP's structure (uses 'riskdesc')
-                if 'riskdesc' in finding:
-                    sev = str(finding.get('riskdesc', '')).upper()
-                else:
-                    # Standard structure - check both Severity and severity fields
-                    sev = str(finding.get('Severity', finding.get('severity', ''))).upper()
-                
-                # Map to severity levels
-                if 'CRITICAL' in sev or 'CRIT' in sev:
-                    critical_count += 1
-                elif 'HIGH' in sev:
-                    high_count += 1
-                elif 'MEDIUM' in sev or 'MED' in sev or 'WARN' in sev or 'MODERATE' in sev:
-                    medium_count += 1
-                # LOW/INFO are intentionally not counted as MEDIUM to keep
-                # the dashboard focused on higher-priority risk.
-    
+            continue
+
+        if not isinstance(findings, list):
+            raise ValueError(f"Unexpected findings type for {tool}: {type(findings).__name__}")
+
+        tools_executed += 1
+        if len(findings) == 0:
+            tools_passed += 1
+            continue
+
+        total_issues += len(findings)
+
+        # Count by severity
+        for finding in findings:
+            if isinstance(finding, str):
+                # Handle string findings by treating them as medium severity
+                medium_count += 1
+                continue
+
+            if not isinstance(finding, dict):
+                # Defensive: skip invalid entries but log them for debugging
+                print(
+                    f"[html_utils] Skipping non-dict finding from {tool}: {type(finding).__name__} -> {finding}",
+                    flush=True,
+                )
+                continue
+
+            # Standard structure - check both Severity and severity fields
+            sev = str(finding.get('Severity', finding.get('severity', ''))).upper()
+
+            # Map to severity levels
+            if 'CRITICAL' in sev or 'CRIT' in sev:
+                critical_count += 1
+            elif 'HIGH' in sev:
+                high_count += 1
+            elif 'MEDIUM' in sev or 'MED' in sev or 'WARN' in sev or 'MODERATE' in sev:
+                medium_count += 1
+            # LOW/INFO are intentionally not counted as MEDIUM to keep
+            # the dashboard focused on higher-priority risk.
+
     # Calculate security score (0-100)
     if tools_executed > 0:
         pass_rate = (tools_passed / tools_executed) * 100
@@ -767,10 +785,10 @@ def generate_executive_summary(all_findings):
         security_score = max(int(pass_rate - issue_penalty), 0)
     else:
         security_score = 0
-    
+
     score_color = '#28a745' if security_score >= 70 else '#ffc107' if security_score >= 40 else '#dc3545'
     score_label = 'Excellent' if security_score >= 70 else 'Good' if security_score >= 40 else 'Needs Attention'
-    
+
     return f'''
     <div class="executive-summary">
       <div class="summary-card critical">
@@ -828,145 +846,4 @@ def generate_tool_status_section(executed_tools):
       </p>
     </div>
     '''
-
-# Legacy function for backward compatibility
-def generate_visual_summary_section(zap_alerts, semgrep_findings, trivy_vulns, codeql_findings, nuclei_findings, owasp_dc_vulns, safety_findings, snyk_findings, sonarqube_findings, checkov_findings, trufflehog_findings, gitleaks_findings, detect_secrets_findings, npm_audit_findings, wapiti_findings, nikto_findings, burp_findings, kube_hunter_findings, kube_bench_findings, docker_bench_findings, eslint_findings, clair_findings, anchore_vulns, brakeman_findings, bandit_findings, android_findings=None, ios_findings=None):
-    """Generate modern grid-based visual summary section with categorization"""
     
-    # Categorize tools
-    tool_categories = {
-        'Static Code Analysis': [
-            ('Semgrep', semgrep_findings if semgrep_findings else []),
-            ('CodeQL', codeql_findings if codeql_findings else []),
-            ('ESLint', eslint_findings if eslint_findings else []),
-            ('Bandit', bandit_findings if bandit_findings else []),
-            ('SonarQube', sonarqube_findings if sonarqube_findings else []),
-            ('Brakeman', brakeman_findings if brakeman_findings else []),
-        ],
-        'Dependency & Package Security': [
-            ('OWASP DC', owasp_dc_vulns if owasp_dc_vulns else []),
-            ('npm audit', npm_audit_findings if npm_audit_findings else []),
-            ('Safety', safety_findings if safety_findings else []),
-            ('Snyk', snyk_findings if snyk_findings else []),
-            ('Trivy', trivy_vulns if trivy_vulns else []),
-        ],
-        'Infrastructure as Code': [
-            ('Checkov', checkov_findings if checkov_findings else []),
-        ],
-        'Secret Detection': [
-            ('TruffleHog', trufflehog_findings if trufflehog_findings else []),
-            ('GitLeaks', gitleaks_findings if gitleaks_findings else []),
-            ('Detect-secrets', detect_secrets_findings if detect_secrets_findings else []),
-        ],
-        'Web Application Security': [
-            ('ZAP', zap_alerts),
-            ('Nuclei', nuclei_findings if nuclei_findings else []),
-            ('Burp Suite', burp_findings if burp_findings else []),
-            ('Wapiti', wapiti_findings if wapiti_findings else []),
-            ('Nikto', nikto_findings if nikto_findings else []),
-        ],
-        'Container Security': [
-            ('Clair', clair_findings if clair_findings else []),
-            ('Anchore', anchore_vulns if anchore_vulns else []),
-        ],
-        'Kubernetes & Docker': [
-            ('Kube-hunter', kube_hunter_findings if kube_hunter_findings else []),
-            ('Kube-bench', kube_bench_findings if kube_bench_findings else []),
-            ('Docker Bench', docker_bench_findings if docker_bench_findings else []),
-        ],
-    }
-    
-    html = '<div class="tools-grid-container">'
-    
-    seen_tools = set()
-    for category, tools in tool_categories.items():
-        category_html = []
-        category_has_issues = False
-        
-        for tool_name, tool_findings in tools:
-            # Defensive dedupe: avoid showing the same tool card twice
-            # even if categories/config are accidentally duplicated.
-            if tool_name in seen_tools:
-                continue
-            seen_tools.add(tool_name)
-
-            # Handle ZAP's dict structure
-            if tool_name == 'ZAP':
-                count = sum(zap_alerts.values()) if isinstance(zap_alerts, dict) else 0
-                # ZAP is considered executed if it exists
-                is_skipped = not isinstance(zap_alerts, dict)
-            else:
-                count = len(tool_findings) if isinstance(tool_findings, list) else 0
-                is_skipped = tool_findings is None
-            
-            # Check if tool was actually executed (not skipped)
-            if is_skipped:
-                status = 'skipped'
-                status_class = 'status-skipped'
-                status_text = 'Skipped'
-                badge_color = '#6c757d'
-                badge_icon = '⏭️'
-            elif count == 0:
-                status = 'clean'
-                status_class = 'status-clean'
-                status_text = 'Clean'
-                badge_color = '#28a745'
-                badge_icon = '✓'
-                category_has_issues = False
-            else:
-                status = 'issues'
-                status_class = 'status-issues'
-                status_text = f'{count} issues'
-                badge_color = '#ffc107'
-                badge_icon = '⚠'
-                category_has_issues = True
-            
-            category_html.append(f'''
-            <div class="tool-card {status_class}" data-tool="{tool_name}">
-              <div class="tool-card-header">
-                <span class="tool-name">{tool_name}</span>
-                <span class="tool-badge" style="background: {badge_color}20; color: {badge_color}; border: 1px solid {badge_color}40;">
-                  {badge_icon} {status_text}
-                </span>
-              </div>
-              <div class="tool-count">{count if count > 0 else 0} findings</div>
-            </div>
-            ''')
-        
-        # Only show category if it has at least one executed tool
-        if category_html:
-            category_id = category.lower().replace(' ', '-').replace('&', 'and')
-            
-            # Count total tools and tools with issues in this category
-            tools_with_issues = sum(1 for item in category_html if 'status-issues' in item)
-            total_tools = len(category_html)
-            summary_text = f'({tools_with_issues}/{total_tools} with issues)' if tools_with_issues > 0 else f'({total_tools}/{total_tools} clean)'
-            
-            # Only set open attribute if category has issues
-            open_attr = ' open' if category_has_issues else ''
-            
-            html += f'''
-            <details class="tool-category" data-category-has-issues="{str(category_has_issues).lower()}"{open_attr} id="category-{category_id}">
-              <summary class="category-header">
-                <span class="category-icon">📦</span>
-                {category}
-                <span class="category-status-badge" data-summary="{summary_text}"></span>
-              </summary>
-              <div class="tools-grid">
-                {''.join(category_html)}
-              </div>
-            </details>
-            '''
-    
-    html += '</div>'
-    return html
-
-def generate_overall_summary_and_links_section(zap_alerts, semgrep_findings, trivy_vulns, codeql_findings, nuclei_findings, owasp_dc_vulns, safety_findings, snyk_findings, sonarqube_findings, checkov_findings, trufflehog_findings, gitleaks_findings, detect_secrets_findings, npm_audit_findings, wapiti_findings, nikto_findings, burp_findings, kube_hunter_findings, kube_bench_findings, docker_bench_findings, eslint_findings, clair_findings, anchore_vulns, brakeman_findings, bandit_findings, results_dir, path_module, os_module, android_findings=None, ios_findings=None):
-    """Generate overall summary section (legacy)"""
-    html_parts = []
-    html_parts.append('<h2>Overall Summary</h2>\n')
-    html_parts.append('<ul>')
-    html_parts.append(f'<li>ZAP Alerts: {zap_alerts["High"]} High, {zap_alerts["Medium"]} Medium, {zap_alerts["Low"]} Low, {zap_alerts["Informational"]} Informational</li>')
-    html_parts.append(f'<li>Semgrep Findings: {len(semgrep_findings) if semgrep_findings else 0}</li>')
-    html_parts.append('</ul>')
-    return "".join(html_parts) 

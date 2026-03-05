@@ -13,23 +13,32 @@ export default function ReportViewer({ scanId }: ReportViewerProps = {}) {
   useEffect(() => {
     // Determine which endpoint to use
     const reportEndpoint = getReportEndpoint(scanId, config)
-    
-    // Fetch report URL
-    fetch(reportEndpoint)
-      .then((response) => {
+
+    const fetchReport = async (endpoint: string, fallbackEndpoint?: string) => {
+      try {
+        const response = await fetch(endpoint)
         if (response.ok) {
-          // Create blob URL for iframe
-          response.blob().then((blob) => {
-            const url = URL.createObjectURL(blob)
-            setReportUrl(url)
-          })
-        } else {
-          console.error('Failed to load report:', response.status, response.statusText)
+          const blob = await response.blob()
+          const url = URL.createObjectURL(blob)
+          setReportUrl(url)
+          return
         }
-      })
-      .catch((err) => {
+
+        // If production endpoint denies access, fall back to session-safe route
+        if (response.status === 403 && fallbackEndpoint) {
+          console.warn('Report endpoint denied, retrying with session-safe endpoint')
+          await fetchReport(fallbackEndpoint)
+          return
+        }
+
+        console.error('Failed to load report:', response.status, response.statusText)
+      } catch (err) {
         console.error('Failed to load report:', err)
-      })
+      }
+    }
+
+    const sessionFallback = scanId ? `/api/my-results/${scanId}/report` : undefined
+    fetchReport(reportEndpoint, sessionFallback)
     
     // Cleanup blob URL on unmount
     return () => {

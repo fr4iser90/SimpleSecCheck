@@ -274,6 +274,24 @@ def normalize_findings_for_ai_prompt(processors, all_findings):
         normalized.extend(processor.ai_normalizer(findings))
     return normalized
 
+def sanitize_findings(findings_by_tool):
+    """Remove invalid non-dict entries from findings lists to prevent report crashes."""
+    sanitized = {}
+    for tool, findings in findings_by_tool.items():
+        if isinstance(findings, list):
+            cleaned = []
+            for finding in findings:
+                if isinstance(finding, dict):
+                    cleaned.append(finding)
+                else:
+                    debug(
+                        f"Skipping non-dict finding from {tool}: {type(finding).__name__} -> {finding}"
+                    )
+            sanitized[tool] = cleaned
+        else:
+            sanitized[tool] = findings
+    return sanitized
+
 def main():
     debug(f"Starting HTML report generation. Output: {OUTPUT_FILE}")
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -342,7 +360,7 @@ def main():
         accepted_findings.extend(bandit_accepted)
 
     try:
-        all_findings = findings_by_tool
+        all_findings = sanitize_findings(findings_by_tool)
         
         # Determine which tools were executed
         # A tool was executed if it has actual findings or if it was run but found nothing

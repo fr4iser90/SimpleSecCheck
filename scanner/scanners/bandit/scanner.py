@@ -49,12 +49,12 @@ class BanditScanner(BaseScanner):
     def find_python_files(self) -> int:
         """Count Python files"""
         return len(list(self.target_path.rglob("*.py")))
-    
+
     def create_empty_reports(self):
         """Create empty reports when no Python files found"""
         json_output = self.results_dir / "bandit.json"
         text_output = self.results_dir / "bandit.txt"
-        
+
         empty_json = {
             "generated_at": datetime.utcnow().isoformat() + "Z",
             "metrics": {
@@ -67,52 +67,66 @@ class BanditScanner(BaseScanner):
             },
             "results": []
         }
-        
+
         with open(json_output, "w", encoding="utf-8") as f:
             json.dump(empty_json, f, indent=2)
-        
+
         with open(text_output, "w", encoding="utf-8") as f:
             f.write("Bandit Scan Results\n")
             f.write("===================\n")
             f.write("No Python files found.\n")
             f.write(f"Scan completed at: {datetime.now().isoformat()}\n")
-    
+
     def scan(self) -> bool:
         """Run Bandit scan"""
         if not self.check_tool_installed("bandit"):
             self.log("Bandit CLI not found. Skipping Bandit scan.", "WARNING")
             return True
-        
+
         python_files = self.find_python_files()
-        
+
         if python_files == 0:
             self.log("No Python files found", "WARNING")
             self.create_empty_reports()
             return True
-        
+
         self.log(f"Found {python_files} Python file(s) to scan...")
         self.log(f"Running Python security scan on {self.target_path}...")
-        
+
         json_output = self.results_dir / "bandit.json"
         text_output = self.results_dir / "bandit.txt"
-        
+
         # JSON report
         cmd = ["bandit", "-r", str(self.target_path), "-f", "json", "-o", str(json_output)]
-        
+
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
             self.log("JSON report generation encountered issues", "WARNING")
-        
+
         # Text report
         cmd = ["bandit", "-r", str(self.target_path)]
-        
+
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:
             with open(text_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
         else:
             self.log("Text report generation encountered issues", "WARNING")
-        
+
+        # Check if JSON file was created and contains results
+        if json_output.exists():
+            try:
+                with open(json_output, 'r', encoding='utf-8') as f:
+                    bandit_data = json.load(f)
+
+                # If JSON file exists but has no results, create empty results array
+                if 'results' not in bandit_data:
+                    bandit_data['results'] = []
+                    with open(json_output, 'w', encoding='utf-8') as f:
+                        json.dump(bandit_data, f, indent=2)
+            except Exception:
+                pass
+
         if json_output.exists() or text_output.exists():
             self.log("Bandit scan completed successfully", "SUCCESS")
             return True
