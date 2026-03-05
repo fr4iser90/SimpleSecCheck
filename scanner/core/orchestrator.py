@@ -9,16 +9,26 @@ import sys
 import inspect
 from pathlib import Path
 from typing import Optional, Dict, Any
+import ipaddress
 
 # Add scanner to path for imports
-sys.path.insert(0, "/SimpleSecCheck")
+if "/SimpleSecCheck" not in sys.path:
+    sys.path.insert(0, "/SimpleSecCheck")
+if "/SimpleSecCheck/scanner" not in sys.path:
+    sys.path.insert(0, "/SimpleSecCheck/scanner")
+
+# Ensure scanner auto-discovery runs before registry usage
+try:
+    import scanner.scanners  # noqa: F401
+except Exception:
+    pass
 
 try:
-    from scanner.core.scanner_registry import ScannerRegistry, ScanType, Scanner
+    from scanner.core.scanner_registry import ScannerRegistry, ScanType, TargetType, Scanner
     from scanner.core.step_registry import StepRegistry, StepStatus, Step
 except ImportError:
     # Fallback for direct execution
-    from core.scanner_registry import ScannerRegistry, ScanType, Scanner
+    from core.scanner_registry import ScannerRegistry, ScanType, TargetType, Scanner
     from core.step_registry import StepRegistry, StepStatus, Step
 
 
@@ -37,7 +47,7 @@ class ScanOrchestrator:
         self.tools_dir = self.base_dir / "scripts" / "tools"
         self.target_path = Path(os.getenv("TARGET_PATH_IN_CONTAINER", "/target"))
         self.results_dir = Path(os.getenv("RESULTS_DIR_IN_CONTAINER", "/SimpleSecCheck/results"))
-        self.logs_dir = Path(os.getenv("LOGS_DIR_IN_CONTAINER", "/SimpleSecCheck/logs"))
+        self.logs_dir = self.results_dir / "logs"
         self.log_file = self.logs_dir / "scan.log"
         
         # Ensure directories exist
@@ -45,7 +55,9 @@ class ScanOrchestrator:
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         
         # Scan configuration
-        self.scan_type = ScanType(os.getenv("SCAN_TYPE", "code"))
+        scan_type_env = os.getenv("SCAN_TYPE")
+        self.scan_types = [ScanType(scan_type_env)] if scan_type_env else None
+        self.target_type = self._resolve_target_type()
         self.collect_metadata = os.getenv("COLLECT_METADATA", "false").lower() == "true"
         
         # Selected scanners (optional - if empty, run all scanners)
@@ -75,13 +87,48 @@ class ScanOrchestrator:
                 f.write(f"{log_line}\n")
         except Exception as e:
             print(f"[Orchestrator] Error writing to log: {e}")
+
+    def _resolve_target_type(self) -> TargetType:
+        """Resolve target type from environment or auto-detect."""
+        target_type_env = os.getenv("TARGET_TYPE", "").strip().lower()
+        if target_type_env:
+            return TargetType(target_type_env)
+
+        scan_target = os.getenv("SCAN_TARGET", "").strip()
+        if scan_target:
+            if scan_target.startswith(("http://", "https://")):
+                os.environ["TARGET_TYPE"] = TargetType.WEBSITE.value
+                return TargetType.WEBSITE
+
+            # Detect host:port or IP for network scans
+            host_candidate = scan_target
+            port = None
+            if ":" in scan_target and scan_target.count(":") == 1:
+                host_candidate, port_part = scan_target.split(":", 1)
+                if port_part.isdigit():
+                    port = int(port_part)
+            try:
+                ipaddress.ip_address(host_candidate)
+                os.environ["TARGET_TYPE"] = TargetType.NETWORK_HOST.value
+                return TargetType.NETWORK_HOST
+            except ValueError:
+                if port is not None:
+                    os.environ["TARGET_TYPE"] = TargetType.NETWORK_HOST.value
+                    return TargetType.NETWORK_HOST
+
+            # Default non-URL target: assume docker image
+            os.environ["TARGET_TYPE"] = TargetType.DOCKER_IMAGE.value
+            return TargetType.DOCKER_IMAGE
+
+        os.environ["TARGET_TYPE"] = TargetType.LOCAL_CODE.value
+        return TargetType.LOCAL_CODE
     
     def _get_conditions(self) -> Dict[str, Any]:
         """Get conditions for conditional scanners"""
         conditions = {}
         
         # Check for native mobile apps (only for code scans)
-        if self.scan_type == ScanType.CODE:
+        if self.target_type in {TargetType.LOCAL_CODE, TargetType.GIT_REPO}:
             try:
                 from scanner.core.project_detector import detect_native_app
                 result = detect_native_app(str(self.target_path))
@@ -89,10 +136,6 @@ class ScanOrchestrator:
             except Exception as e:
                 self.log_message(f"[WARNING] Could not detect native apps: {e}")
                 conditions["IS_NATIVE"] = False
-        
-        # Check for container image scanners
-        conditions["CLAIR_IMAGE"] = os.getenv("CLAIR_IMAGE", "")
-        conditions["ANCHORE_IMAGE"] = os.getenv("ANCHORE_IMAGE", "")
         
         return conditions
     
@@ -116,19 +159,8 @@ class ScanOrchestrator:
         env["RESULTS_DIR"] = str(self.results_dir)
         env["LOG_FILE"] = str(self.log_file)
         
-        # Add scanner-specific environment variables
-        if scanner.env_vars:
-            for key, value in scanner.env_vars.items():
-                env[key] = value
-        
-        # Handle conditional environment variables
-        if scanner.requires_condition == "CLAIR_IMAGE":
-            env["CLAIR_IMAGE"] = os.getenv("CLAIR_IMAGE", "")
-        elif scanner.requires_condition == "ANCHORE_IMAGE":
-            env["ANCHORE_IMAGE"] = os.getenv("ANCHORE_IMAGE", "")
-        
         # Check if Python scanner class exists (new approach)
-        python_scanner_class = scanner.env_vars.get("PYTHON_SCANNER_CLASS") if scanner.env_vars else None
+        python_scanner_class = scanner.python_class
         
         if python_scanner_class:
             # Use Python scanner class
@@ -153,57 +185,11 @@ class ScanOrchestrator:
                 # Remove 'self' from parameter names
                 param_names.discard('self')
                 
-                # Intelligentes Parameter-Mapping: Für jeden Parameter suche passende env_vars
-                # KEINE hardcodierten Listen - alles dynamisch!
-                def find_env_var_for_param(param_name: str, env_vars: Dict[str, str]) -> Optional[str]:
-                    """
-                    Finde env_var für einen Parameter basierend auf intelligenten Regeln
-                    Keine hardcodierten Prefix-Listen!
-                    """
-                    if not env_vars:
-                        return None
-                    
-                    # Konvertiere parameter_name zu möglichen env_var Namen
-                    # z.B. rules_path -> RULES_PATH, *_RULES_PATH, etc.
-                    param_upper = param_name.upper()
-                    
-                    # 1. Exakter Match (case-insensitive)
-                    for env_key in env_vars.keys():
-                        if env_key.upper() == param_upper:
-                            return env_key
-                    
-                    # 2. Pattern: *_PARAM_NAME (z.B. SEMGREP_RULES_PATH für rules_path)
-                    for env_key in env_vars.keys():
-                        if env_key.upper().endswith(f"_{param_upper}"):
-                            return env_key
-                    
-                    # 3. Pattern: PARAM_NAME enthalten (z.B. RULES_PATH in SEMGREP_RULES_PATH)
-                    for env_key in env_vars.keys():
-                        if param_upper in env_key.upper():
-                            return env_key
-                    
-                    return None
-                
                 # Für jeden Parameter in der Signatur: Suche passende env_var
                 for param_name in param_names:
                     # Skip bereits gesetzte Parameter
                     if param_name in scanner_kwargs:
                         continue
-                    
-                    # 1) Explicit param -> env mapping from registry (preferred)
-                    if getattr(scanner, "param_env_map", None):
-                        env_key = scanner.param_env_map.get(param_name)
-                        if env_key and env_key != "PYTHON_SCANNER_CLASS":
-                            env_value = os.getenv(env_key) or (scanner.env_vars or {}).get(env_key)
-                            if env_value is not None:
-                                scanner_kwargs[param_name] = env_value
-
-                    # 2) Fallback: search only within scanner.env_vars (no global overrides)
-                    if param_name not in scanner_kwargs and scanner.env_vars:
-                        env_key = find_env_var_for_param(param_name, scanner.env_vars)
-                        if env_key and env_key != "PYTHON_SCANNER_CLASS":
-                            env_value = os.getenv(env_key) or scanner.env_vars[env_key]
-                            scanner_kwargs[param_name] = env_value
                     
                     # Default values (nur wenn Parameter optional ist und nicht gefunden wurde)
                     if param_name not in scanner_kwargs:
@@ -340,10 +326,11 @@ class ScanOrchestrator:
                 metadata_target_path_host = None
             
             # Collect metadata
+            scan_type_value = self.scan_types[0].value if self.scan_types else "all"
             metadata = collect_scan_metadata(
                 target_path=str(self.target_path),
                 target_path_host=metadata_target_path_host,
-                scan_type=self.scan_type.value,
+                scan_type=scan_type_value,
                 results_dir=str(self.results_dir),
                 finding_policy=finding_policy,
                 ci_mode=ci_mode
@@ -377,7 +364,7 @@ class ScanOrchestrator:
         
         # Get conditions and scanners
         conditions = self._get_conditions()
-        scanners = ScannerRegistry.get_scanners_for_type(self.scan_type, conditions)
+        scanners = ScannerRegistry.get_scanners_for_target(self.target_type, self.scan_types, conditions)
         
         # Filter by selected scanners if specified
         if self.selected_scanners:
@@ -385,14 +372,15 @@ class ScanOrchestrator:
         
         # Calculate total steps (with filtered scanners)
         total_steps = ScannerRegistry.get_total_steps(
-            scan_type=self.scan_type,
+            target_type=self.target_type,
+            scan_types=self.scan_types,
             has_git_clone=has_git_clone,
             collect_metadata=self.collect_metadata,
             conditions=conditions
         )
         # Adjust total_steps if scanners are filtered
         if self.selected_scanners:
-            all_scanners = ScannerRegistry.get_scanners_for_type(self.scan_type, conditions)
+            all_scanners = ScannerRegistry.get_scanners_for_target(self.target_type, self.scan_types, conditions)
             total_steps = total_steps - (len(all_scanners) - len(scanners))
         
         self.log_message(f"Pre-registering {total_steps} steps (Git Clone: {has_git_clone}, Scanners: {len(scanners)}, Metadata: {self.collect_metadata})")
@@ -471,7 +459,9 @@ class ScanOrchestrator:
             Exit code (0 for success, non-zero for failure)
         """
         self.log_message("SimpleSecCheck Scan Started")
-        self.log_message(f"Scan Type: {self.scan_type.value}")
+        scan_type_display = ",".join([s.value for s in self.scan_types]) if self.scan_types else "all"
+        self.log_message(f"Scan Type(s): {scan_type_display}")
+        self.log_message(f"Target Type: {self.target_type.value}")
         self.log_message(f"Target Path: {self.target_path}")
         self.log_message(f"Results Dir: {self.results_dir}")
         
@@ -487,14 +477,14 @@ class ScanOrchestrator:
         
         # Get scanners for this scan type
         conditions = self._get_conditions()
-        scanners = ScannerRegistry.get_scanners_for_type(self.scan_type, conditions)
+        scanners = ScannerRegistry.get_scanners_for_target(self.target_type, self.scan_types, conditions)
         
         # Filter by selected scanners if specified
         if self.selected_scanners:
             scanners = [s for s in scanners if s.name in self.selected_scanners]
             self.log_message(f"Filtered to {len(scanners)} selected scanners: {', '.join([s.name for s in scanners])}")
         else:
-            self.log_message(f"Running all {len(scanners)} scanners for {self.scan_type.value} scan")
+            self.log_message(f"Running all {len(scanners)} scanners for target {self.target_type.value}")
         
         # Run all scanners (or selected ones)
         for scanner in scanners:
@@ -536,7 +526,9 @@ class ScanOrchestrator:
         env = os.environ.copy()
         env["OUTPUT_FILE"] = str(html_report_output)
         env["RESULTS_DIR"] = str(self.results_dir)
-        env["SCAN_TYPE"] = self.scan_type.value
+        if self.scan_types:
+            env["SCAN_TYPE"] = self.scan_types[0].value
+        env["TARGET_TYPE"] = self.target_type.value
         env["PYTHONUNBUFFERED"] = "1"
         
         try:

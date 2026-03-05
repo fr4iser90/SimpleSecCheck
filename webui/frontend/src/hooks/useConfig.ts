@@ -6,6 +6,7 @@ export interface FrontendConfig {
   features: {
     scan_types: {
       code: boolean
+      image?: boolean
       website: boolean
       network: boolean
     }
@@ -52,7 +53,7 @@ export function useConfig() {
           environment: 'dev',
           is_production: false,
           features: {
-            scan_types: { code: true, website: true, network: true },
+            scan_types: { code: true, image: true, website: true, network: true },
             bulk_scan: true,
             local_paths: true,
             git_only: false,

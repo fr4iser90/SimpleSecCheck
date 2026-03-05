@@ -1,0 +1,3 @@
+name: kube_hunter
+install:
+  - ["pip3", "install", "kube-hunter"]

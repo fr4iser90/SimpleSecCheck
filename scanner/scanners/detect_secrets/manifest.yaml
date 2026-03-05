@@ -1,0 +1,3 @@
+name: detect_secrets
+install:
+  - ["pip3", "install", "detect-secrets"]

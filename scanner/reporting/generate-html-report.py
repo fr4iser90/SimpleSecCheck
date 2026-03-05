@@ -24,36 +24,8 @@ sys.path.insert(0, str(SRC_DIR))
 from core.path_setup import setup_paths, get_results_dir, get_output_file
 setup_paths()
 
-from html_utils import html_header, html_footer, generate_visual_summary_section, generate_overall_summary_and_links_section, generate_executive_summary, generate_tool_status_section
-from zap_processor import zap_summary, generate_zap_html_section
-from zap_xml_parser import parse_zap_xml, generate_html_report
-from semgrep_processor import semgrep_summary, generate_semgrep_html_section
-from trivy_processor import trivy_summary, generate_trivy_html_section
-from codeql_processor import codeql_summary, generate_codeql_html_section
-from nuclei_processor import nuclei_summary, generate_nuclei_html_section
-from owasp_dependency_check_processor import owasp_dependency_check_summary, generate_owasp_dependency_check_html_section
-from safety_processor import safety_summary, generate_safety_html_section
-from snyk_processor import snyk_summary, generate_snyk_html_section
-from sonarqube_processor import sonarqube_summary, generate_sonarqube_html_section
-from terraform_security_processor import checkov_summary as terraform_checkov_summary, generate_checkov_html_section as generate_terraform_checkov_html_section
-from checkov_processor import checkov_summary, generate_checkov_html_section
-from trufflehog_processor import trufflehog_summary, generate_trufflehog_html_section
-from gitleaks_processor import gitleaks_summary, generate_gitleaks_html_section
-from detect_secrets_processor import detect_secrets_summary, generate_detect_secrets_html_section
-from npm_audit_processor import npm_audit_summary, generate_npm_audit_html_section
-from wapiti_processor import wapiti_summary, generate_wapiti_html_section
-from nikto_processor import nikto_summary, generate_nikto_html_section
-from kube_hunter_processor import kube_hunter_summary, generate_kube_hunter_html_section
-from kube_bench_processor import kube_bench_summary, generate_kube_bench_html_section
-from docker_bench_processor import docker_bench_summary, generate_docker_bench_html_section
-from eslint_processor import eslint_summary, generate_eslint_html_section
-from clair_processor import clair_summary, generate_clair_html_section
-from anchore_processor import anchore_summary, generate_anchore_html_section
-from burp_processor import burp_summary, generate_burp_html_section
-from brakeman_processor import brakeman_summary, generate_brakeman_html_section
-from bandit_processor import bandit_summary, generate_bandit_html_section
-from android_manifest_processor import android_manifest_summary, generate_android_manifest_html
-from ios_plist_processor import ios_plist_summary, generate_ios_plist_html
+from html_utils import html_header, html_footer, generate_executive_summary, generate_tool_status_section
+from processor_registry import ProcessorRegistry, register_default_processors
 from finding_policy import load_policy, apply_semgrep_policy, apply_gitleaks_policy, apply_bandit_policy
 try:
     from scan_metadata import load_metadata
@@ -290,165 +262,26 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
     
     return "".join(html_parts)
 
-def normalize_findings_for_ai_prompt(all_findings):
-    """
-    Normalize findings from all tools to unified format for AI prompt generation.
-    Returns list of normalized findings with tool, severity, path, line, message, rule_id.
-    """
+def normalize_findings_for_ai_prompt(processors, all_findings):
+    """Normalize findings via processor registry for AI prompt generation."""
     normalized = []
-    
-    # Normalize each tool's findings
-    for tool_name, findings in all_findings.items():
+    for processor in processors:
+        if not processor.ai_normalizer:
+            continue
+        findings = all_findings.get(processor.name)
         if findings is None:
             continue
-        
-        # Handle different tool structures
-        if tool_name == 'ZAP' and isinstance(findings, dict):
-            # ZAP returns a dict with risk levels
-            for risk_level, alerts in findings.items():
-                if isinstance(alerts, list):
-                    for alert in alerts:
-                        normalized.append({
-                            "tool": "ZAP",
-                            "severity": risk_level.upper(),
-                            "rule_id": str(alert.get("pluginid", "")),
-                            "path": alert.get("uri", ""),
-                            "line": "",
-                            "message": alert.get("name", alert.get("alert", "")),
-                        })
-        elif isinstance(findings, list):
-            # Standard list of findings
-            for finding in findings:
-                # Normalize based on tool
-                if tool_name == "Semgrep":
-                    normalized.append({
-                        "tool": "Semgrep",
-                        "severity": str(finding.get("severity", "UNKNOWN")).upper(),
-                        "rule_id": str(finding.get("rule_id", "")),
-                        "path": str(finding.get("path", "")),
-                        "line": str(finding.get("start", finding.get("line", ""))),
-                        "message": str(finding.get("message", "")),
-                    })
-                elif tool_name == "Trivy":
-                    normalized.append({
-                        "tool": "Trivy",
-                        "severity": str(finding.get("Severity", "UNKNOWN")).upper(),
-                        "rule_id": str(finding.get("VulnerabilityID", "")),
-                        "path": str(finding.get("PkgName", "")),
-                        "line": "",
-                        "message": str(finding.get("Title", finding.get("Description", ""))),
-                    })
-                elif tool_name == "CodeQL":
-                    normalized.append({
-                        "tool": "CodeQL",
-                        "severity": str(finding.get("severity", finding.get("level", "note"))).upper(),
-                        "rule_id": str(finding.get("rule_id", finding.get("ruleId", ""))),
-                        "path": str(finding.get("path", "")),
-                        "line": str(finding.get("start", "")),
-                        "message": str(finding.get("message", "")),
-                    })
-                elif tool_name == "GitLeaks":
-                    normalized.append({
-                        "tool": "GitLeaks",
-                        "severity": "HIGH",
-                        "rule_id": str(finding.get("rule_id", "")),
-                        "path": str(finding.get("file", "")),
-                        "line": str(finding.get("line", "")),
-                        "message": str(finding.get("description", "")),
-                    })
-                elif tool_name == "TruffleHog":
-                    normalized.append({
-                        "tool": "TruffleHog",
-                        "severity": "HIGH",
-                        "rule_id": str(finding.get("detector", "")),
-                        "path": str(finding.get("redacted", "")),
-                        "line": "",
-                        "message": str(finding.get("raw", ""))[:100] if finding.get("raw") else "",
-                    })
-                elif tool_name == "Detect-secrets":
-                    normalized.append({
-                        "tool": "Detect-secrets",
-                        "severity": "HIGH" if finding.get("is_secret") else "MEDIUM",
-                        "rule_id": str(finding.get("type", "")),
-                        "path": str(finding.get("filename", "")),
-                        "line": str(finding.get("line_number", "")),
-                        "message": f"Secret type: {finding.get('type', '')}",
-                    })
-                elif tool_name == "OWASP Dependency Check":
-                    normalized.append({
-                        "tool": "OWASP Dependency Check",
-                        "severity": str(finding.get("severity", "UNKNOWN")).upper(),
-                        "rule_id": str(finding.get("name", "")),
-                        "path": str(finding.get("fileName", "")),
-                        "line": "",
-                        "message": str(finding.get("description", "")),
-                    })
-                elif tool_name == "Safety":
-                    normalized.append({
-                        "tool": "Safety",
-                        "severity": "HIGH",
-                        "rule_id": str(finding.get("vulnerability", "")),
-                        "path": str(finding.get("package", "")),
-                        "line": "",
-                        "message": str(finding.get("advisory", "")),
-                    })
-                elif tool_name == "Snyk":
-                    normalized.append({
-                        "tool": "Snyk",
-                        "severity": str(finding.get("severity", "MEDIUM")).upper(),
-                        "rule_id": str(finding.get("vulnerability_id", finding.get("id", ""))),
-                        "path": str(finding.get("package", "")),
-                        "line": "",
-                        "message": str(finding.get("title", finding.get("description", ""))),
-                    })
-                elif tool_name == "ESLint":
-                    severity_map = {1: "LOW", 2: "MEDIUM", 3: "HIGH"}
-                    normalized.append({
-                        "tool": "ESLint",
-                        "severity": severity_map.get(finding.get("severity", 1), "LOW"),
-                        "rule_id": str(finding.get("rule_id", "")),
-                        "path": str(finding.get("file_path", "")),
-                        "line": str(finding.get("line", "")),
-                        "message": str(finding.get("message", "")),
-                    })
-                elif tool_name == "Brakeman":
-                    normalized.append({
-                        "tool": "Brakeman",
-                        "severity": str(finding.get("severity", "MEDIUM")).upper(),
-                        "rule_id": str(finding.get("warning_type", "")),
-                        "path": str(finding.get("file", "")),
-                        "line": str(finding.get("line", "")),
-                        "message": str(finding.get("message", "")),
-                    })
-                elif tool_name == "Bandit":
-                    normalized.append({
-                        "tool": "Bandit",
-                        "severity": str(finding.get("severity", "MEDIUM")).upper(),
-                        "rule_id": str(finding.get("rule_id", "")),
-                        "path": str(finding.get("filename", "")),
-                        "line": str(finding.get("line_number", "")),
-                        "message": str(finding.get("issue_text", "")),
-                    })
-                else:
-                    # Generic normalization for other tools
-                    normalized.append({
-                        "tool": tool_name,
-                        "severity": str(finding.get("severity", finding.get("Severity", "UNKNOWN"))).upper(),
-                        "rule_id": str(finding.get("rule_id", finding.get("id", finding.get("rule_id", "")))),
-                        "path": str(finding.get("path", finding.get("file", finding.get("filename", "")))),
-                        "line": str(finding.get("line", finding.get("line_number", finding.get("start", "")))),
-                        "message": str(finding.get("message", finding.get("description", finding.get("title", "")))),
-                    })
-    
+        normalized.extend(processor.ai_normalizer(findings))
     return normalized
 
 def main():
     debug(f"Starting HTML report generation. Output: {OUTPUT_FILE}")
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     scan_type = os.environ.get('SCAN_TYPE', 'code')
+    target_type = os.environ.get('TARGET_TYPE', '')
     
     # For code scans, use better target description
-    if scan_type == 'code':
+    if target_type in ('local_code', 'git_repo', '') and scan_type == 'code':
         # Try to get the actual project name from the results directory path
         # e.g., /SimpleSecCheck/results/NoServerConvert_20251026_170126 -> NoServerConvert
         results_path = RESULTS_DIR
@@ -458,90 +291,25 @@ def main():
         else:
             target = 'Code scan'
     else:
-        target = os.environ.get('ZAP_TARGET', os.environ.get('TARGET_URL', 'Unknown'))
-    zap_html_path = os.path.join(RESULTS_DIR, 'zap-report.xml.html')
-    zap_xml_path = os.path.join(RESULTS_DIR, 'zap-report.xml')
-    semgrep_json_path = os.path.join(RESULTS_DIR, 'semgrep.json')
-    trivy_json_path = os.path.join(RESULTS_DIR, 'trivy.json')
-    codeql_json_path = os.path.join(RESULTS_DIR, 'codeql.json')
-    nuclei_json_path = os.path.join(RESULTS_DIR, 'nuclei.json')
-    owasp_dc_json_path = os.path.join(RESULTS_DIR, 'owasp-dependency-check.json')
-    safety_json_path = os.path.join(RESULTS_DIR, 'safety.json')
-    snyk_json_path = os.path.join(RESULTS_DIR, 'snyk.json')
-    sonarqube_json_path = os.path.join(RESULTS_DIR, 'sonarqube.json')
-    checkov_json_path = os.path.join(RESULTS_DIR, 'checkov.json')
-    checkov_comprehensive_json_path = os.path.join(RESULTS_DIR, 'checkov-comprehensive.json')
-    trufflehog_json_path = os.path.join(RESULTS_DIR, 'trufflehog.json')
-    gitleaks_json_path = os.path.join(RESULTS_DIR, 'gitleaks.json')
-    detect_secrets_json_path = os.path.join(RESULTS_DIR, 'detect-secrets.json')
-    npm_audit_json_path = os.path.join(RESULTS_DIR, 'npm-audit.json')
-    wapiti_json_path = os.path.join(RESULTS_DIR, 'wapiti.json')
-    nikto_json_path = os.path.join(RESULTS_DIR, 'nikto.json')
-    burp_json_path = os.path.join(RESULTS_DIR, 'burp.json')
-    kube_hunter_json_path = os.path.join(RESULTS_DIR, 'kube-hunter.json')
-    kube_bench_json_path = os.path.join(RESULTS_DIR, 'kube-bench.json')
-    docker_bench_json_path = os.path.join(RESULTS_DIR, 'docker-bench.json')
-    eslint_json_path = os.path.join(RESULTS_DIR, 'eslint.json')
-    clair_json_path = os.path.join(RESULTS_DIR, 'clair.json')
-    anchore_json_path = os.path.join(RESULTS_DIR, 'anchore.json')
-    brakeman_json_path = os.path.join(RESULTS_DIR, 'brakeman.json')
-    bandit_json_path = os.path.join(RESULTS_DIR, 'bandit.json')
-    android_manifest_json_path = os.path.join(RESULTS_DIR, 'android-manifest.json')
-    ios_plist_json_path = os.path.join(RESULTS_DIR, 'ios-plist.json')
+        target = os.environ.get('SCAN_TARGET', 'Unknown')
+    register_default_processors()
+    processors = ProcessorRegistry.all()
+    findings_by_tool = {}
 
-    semgrep_json = read_json(semgrep_json_path)
-    trivy_json = read_json(trivy_json_path)
-    codeql_json = read_json(codeql_json_path)
-    nuclei_json = read_json(nuclei_json_path)
-    owasp_dc_json = read_json(owasp_dc_json_path)
-    safety_json = read_json(safety_json_path)
-    snyk_json = read_json(snyk_json_path)
-    sonarqube_json = read_json(sonarqube_json_path)
-    checkov_json = read_json(checkov_json_path)
-    checkov_comprehensive_json = read_json(checkov_comprehensive_json_path)
-    trufflehog_json = read_json(trufflehog_json_path)
-    gitleaks_json = read_json(gitleaks_json_path)
-    detect_secrets_json = read_json(detect_secrets_json_path)
-    npm_audit_json = read_json(npm_audit_json_path)
-    wapiti_json = read_json(wapiti_json_path)
-    nikto_json = read_json(nikto_json_path)
-    burp_json = read_json(burp_json_path)
-    kube_hunter_json = read_json(kube_hunter_json_path)
-    kube_bench_json = read_json(kube_bench_json_path)
-    docker_bench_json = read_json(docker_bench_json_path)
-    eslint_json = read_json(eslint_json_path)
-    clair_json = read_json(clair_json_path)
-    anchore_json = read_json(anchore_json_path)
-    brakeman_json = read_json(brakeman_json_path)
-    zap_alerts = zap_summary(zap_html_path, zap_xml_path)
-    semgrep_findings = semgrep_summary(semgrep_json)
-    trivy_vulns = trivy_summary(trivy_json)
-    codeql_findings = codeql_summary(codeql_json)
-    nuclei_findings = nuclei_summary(nuclei_json)
-    owasp_dc_vulns = owasp_dependency_check_summary(owasp_dc_json)
-    safety_findings = safety_summary(safety_json)
-    snyk_findings = snyk_summary(snyk_json)
-    sonarqube_findings = sonarqube_summary(sonarqube_json)
-    checkov_findings = terraform_checkov_summary(checkov_json)
-    checkov_comprehensive_findings = checkov_summary(checkov_comprehensive_json)
-    trufflehog_findings = trufflehog_summary(trufflehog_json)
-    gitleaks_findings = gitleaks_summary(gitleaks_json)
-    detect_secrets_findings = detect_secrets_summary(detect_secrets_json)
-    npm_audit_findings = npm_audit_summary(npm_audit_json)
-    wapiti_findings = wapiti_summary(wapiti_json)
-    nikto_findings = nikto_summary(nikto_json)
-    burp_findings = burp_summary(burp_json)
-    kube_hunter_findings = kube_hunter_summary(kube_hunter_json)
-    kube_bench_findings = kube_bench_summary(kube_bench_json)
-    docker_bench_findings = docker_bench_summary(docker_bench_json)
-    eslint_findings = eslint_summary(eslint_json)
-    clair_vulns = clair_summary(clair_json)
-    anchore_vulns = anchore_summary(anchore_json)
-    brakeman_findings = brakeman_summary(brakeman_json)
-    bandit_findings = bandit_summary(read_json(bandit_json_path))
-    android_findings_summary = android_manifest_summary(android_manifest_json_path)
-    ios_findings_summary = ios_plist_summary(ios_plist_json_path)
+    for processor in processors:
+        if processor.html_file:
+            html_path = os.path.join(RESULTS_DIR, processor.html_file)
+            json_path = os.path.join(RESULTS_DIR, processor.json_file) if processor.json_file else None
+            findings_by_tool[processor.name] = processor.summary_func(html_path, json_path)
+        elif processor.json_file:
+            json_path = os.path.join(RESULTS_DIR, processor.json_file)
+            findings_by_tool[processor.name] = processor.summary_func(read_json(json_path))
+        else:
+            findings_by_tool[processor.name] = None
     accepted_findings = []
+    semgrep_findings = findings_by_tool.get("Semgrep")
+    gitleaks_findings = findings_by_tool.get("GitLeaks")
+    bandit_findings = findings_by_tool.get("Bandit")
 
     # Load scan metadata (only if user enabled metadata collection)
     scan_metadata = load_metadata(RESULTS_DIR)
@@ -560,47 +328,21 @@ def main():
         # Policy was explicitly provided - try to load it
         finding_policy = load_policy(policy_path)
     
-    semgrep_findings, semgrep_accepted = apply_semgrep_policy(semgrep_findings, finding_policy.get("semgrep", {}))
-    gitleaks_findings, gitleaks_accepted = apply_gitleaks_policy(gitleaks_findings, finding_policy.get("gitleaks", {}))
-    bandit_findings, bandit_accepted = apply_bandit_policy(bandit_findings, finding_policy.get("bandit", {}))
-    accepted_findings.extend(semgrep_accepted)
-    accepted_findings.extend(gitleaks_accepted)
-    accepted_findings.extend(bandit_accepted)
+    if semgrep_findings is not None:
+        semgrep_findings, semgrep_accepted = apply_semgrep_policy(semgrep_findings, finding_policy.get("semgrep", {}))
+        findings_by_tool["Semgrep"] = semgrep_findings
+        accepted_findings.extend(semgrep_accepted)
+    if gitleaks_findings is not None:
+        gitleaks_findings, gitleaks_accepted = apply_gitleaks_policy(gitleaks_findings, finding_policy.get("gitleaks", {}))
+        findings_by_tool["GitLeaks"] = gitleaks_findings
+        accepted_findings.extend(gitleaks_accepted)
+    if bandit_findings is not None:
+        bandit_findings, bandit_accepted = apply_bandit_policy(bandit_findings, finding_policy.get("bandit", {}))
+        findings_by_tool["Bandit"] = bandit_findings
+        accepted_findings.extend(bandit_accepted)
 
     try:
-        # Extract ZAP alerts list if available, otherwise use empty list
-        zap_findings_list = zap_alerts.get('alerts', []) if isinstance(zap_alerts, dict) else []
-        
-        # Collect all findings for executive summary
-        all_findings = {
-            'ZAP': zap_findings_list,
-            'Semgrep': semgrep_findings,
-            'Trivy': trivy_vulns,
-            'CodeQL': codeql_findings,
-            'Nuclei': nuclei_findings,
-            'OWASP DC': owasp_dc_vulns,
-            'Safety': safety_findings,
-            'Snyk': snyk_findings,
-            'SonarQube': sonarqube_findings,
-            'Checkov': checkov_comprehensive_findings,
-            'TruffleHog': trufflehog_findings,
-            'GitLeaks': gitleaks_findings,
-            'Detect-secrets': detect_secrets_findings,
-            'npm audit': npm_audit_findings,
-            'Wapiti': wapiti_findings,
-            'Nikto': nikto_findings,
-            'Burp Suite': burp_findings,
-            'Kube-hunter': kube_hunter_findings,
-            'Kube-bench': kube_bench_findings,
-            'Docker Bench': docker_bench_findings,
-            'ESLint': eslint_findings,
-            'Clair': clair_vulns,
-            'Anchore': anchore_vulns,
-            'Brakeman': brakeman_findings,
-            'Bandit': bandit_findings,
-            'Android': android_findings_summary,
-            'iOS': ios_findings_summary,
-        }
+        all_findings = findings_by_tool
         
         # Determine which tools were executed
         # A tool was executed if it has actual findings or if it was run but found nothing
@@ -611,8 +353,7 @@ def main():
             # Tools that have findings (even if empty list) or ZAP with alerts should show as executed
             if findings is not None:
                 executed_tools[tool] = {'status': 'complete'}
-            elif tool == 'ZAP' and isinstance(zap_alerts, dict):
-                # ZAP returns a dict, not a list
+            elif tool == 'ZAP' and isinstance(findings, dict):
                 executed_tools[tool] = {'status': 'complete'}
         
         # Read and embed JavaScript files inline (required for both Blob URLs and file://)
@@ -651,7 +392,7 @@ def main():
                 sys.stderr.write(f"[ERROR] Failed to embed {js_file} - AI Prompt feature will not work!\n")
         
         # Normalize findings for AI prompt (for client-side generation when WebUI is not available)
-        normalized_findings = normalize_findings_for_ai_prompt(all_findings)
+        normalized_findings = normalize_findings_for_ai_prompt(processors, all_findings)
         ai_prompt_disabled = len(normalized_findings) == 0
         findings_json = json.dumps(normalized_findings, indent=2)
         # Embed as JSON in script tag - no HTML escape needed since it's in a script tag
@@ -671,60 +412,38 @@ def main():
             # Executive Summary Dashboard
             f.write(generate_executive_summary(all_findings))
 
-            # --- Visual summary with icons/colors for each tool ---
-            f.write(generate_visual_summary_section(zap_alerts.get('summary', zap_alerts), semgrep_findings, trivy_vulns, codeql_findings, nuclei_findings, owasp_dc_vulns, safety_findings, snyk_findings, sonarqube_findings, checkov_comprehensive_findings, trufflehog_findings, gitleaks_findings, detect_secrets_findings, npm_audit_findings, wapiti_findings, nikto_findings, burp_findings, kube_hunter_findings, kube_bench_findings, docker_bench_findings, eslint_findings, clair_vulns, anchore_vulns, brakeman_findings, bandit_findings, android_findings_summary, ios_findings_summary))
+            # Tool execution status
+            f.write(generate_tool_status_section(executed_tools))
 
-            # ZAP Section (only if findings exist)
-            if sum(zap_alerts.get('summary', zap_alerts).values()) > 0:
-                f.write(generate_zap_html_section(zap_alerts, zap_html_path, Path, os))
+            # Simple tool summary grid
+            tool_cards = []
+            for tool, findings in all_findings.items():
+                if findings is None:
+                    continue
+                if tool == "ZAP" and isinstance(findings, dict):
+                    count = sum(findings.get('summary', findings).values()) if isinstance(findings, dict) else 0
+                elif isinstance(findings, list):
+                    count = len(findings)
+                else:
+                    count = 0
+                tool_cards.append(f"<div class='tool-summary'><strong>{tool}</strong>: {count} findings</div>")
+            if tool_cards:
+                f.write("<div class='summary-box'><h2>Tool Summary</h2>" + "".join(tool_cards) + "</div>")
 
-            # Semgrep Section (only if findings exist)
-            if len(semgrep_findings) > 0:
-                f.write(generate_semgrep_html_section(semgrep_findings))
-
-            # Trivy Section (only if findings exist)
-            if len(trivy_vulns) > 0:
-                f.write(generate_trivy_html_section(trivy_vulns))
-
-            # CodeQL Section (only if findings exist)
-            if len(codeql_findings) > 0:
-                f.write(generate_codeql_html_section(codeql_findings))
-
-            # Nuclei Section (only if findings exist)
-            if len(nuclei_findings) > 0:
-                f.write(generate_nuclei_html_section(nuclei_findings))
-
-            # OWASP Dependency Check Section (only if findings exist)
-            if len(owasp_dc_vulns) > 0:
-                f.write(generate_owasp_dependency_check_html_section(owasp_dc_vulns))
-
-            # Safety Section (only if findings exist)
-            if len(safety_findings) > 0:
-                f.write(generate_safety_html_section(safety_findings))
-
-            # Snyk Section - show if skipped (None) or if there are findings
-            if snyk_findings is None or len(snyk_findings) > 0:
-                f.write(generate_snyk_html_section(snyk_findings))
-
-            # SonarQube Section (only if findings exist)
-            if len(sonarqube_findings) > 0:
-                f.write(generate_sonarqube_html_section(sonarqube_findings))
-
-            # Terraform Security (Checkov) Section (only if findings exist)
-            if len(checkov_findings) > 0:
-                f.write(generate_terraform_checkov_html_section(checkov_findings))
-
-            # Checkov Comprehensive Infrastructure Security Section (only if findings exist)
-            if len(checkov_comprehensive_findings) > 0:
-                f.write(generate_checkov_html_section(checkov_comprehensive_findings))
-
-            # TruffleHog Section (only if findings exist)
-            if len(trufflehog_findings) > 0:
-                f.write(generate_trufflehog_html_section(trufflehog_findings))
-
-            # GitLeaks Section (only if findings exist)
-            if len(gitleaks_findings) > 0:
-                f.write(generate_gitleaks_html_section(gitleaks_findings))
+            # Tool-specific sections
+            for processor in processors:
+                findings = all_findings.get(processor.name)
+                if processor.html_func:
+                    if processor.name == "ZAP" and isinstance(findings, dict):
+                        if sum(findings.get('summary', findings).values()) > 0:
+                            html_path = os.path.join(RESULTS_DIR, processor.html_file)
+                            f.write(processor.html_func(findings, html_path, Path, os))
+                    elif findings is None:
+                        continue
+                    elif isinstance(findings, list) and len(findings) == 0:
+                        continue
+                    else:
+                        f.write(processor.html_func(findings))
 
             # Accepted Findings Section (only if policy accepted any findings)
             if len(accepted_findings) > 0:
@@ -732,68 +451,6 @@ def main():
 
             # Finding Policy Section (always shown - shows status or instructions)
             f.write(generate_finding_policy_section(finding_policy, policy_path, accepted_findings))
-
-            # Detect-secrets Section (only if findings exist)
-            if len(detect_secrets_findings) > 0:
-                f.write(generate_detect_secrets_html_section(detect_secrets_findings))
-
-            # npm audit Section (only if findings exist)
-            if len(npm_audit_findings) > 0:
-                f.write(generate_npm_audit_html_section(npm_audit_findings))
-
-            # Wapiti Section (only if findings exist)
-            if len(wapiti_findings) > 0:
-                f.write(generate_wapiti_html_section(wapiti_findings))
-
-            # Nikto Section (only if findings exist)
-            if len(nikto_findings) > 0:
-                f.write(generate_nikto_html_section(nikto_findings))
-
-            # Burp Suite Section (only if findings exist)
-            if len(burp_findings) > 0:
-                f.write(generate_burp_html_section(burp_findings))
-
-            # Kube-hunter Section (only if findings exist)
-            if len(kube_hunter_findings) > 0:
-                f.write(generate_kube_hunter_html_section(kube_hunter_findings))
-
-            # Kube-bench Section (only if findings exist)
-            if len(kube_bench_findings) > 0:
-                f.write(generate_kube_bench_html_section(kube_bench_findings))
-
-            # Docker Bench Section (only if findings exist)
-            if len(docker_bench_findings) > 0:
-                f.write(generate_docker_bench_html_section(docker_bench_findings))
-
-            # ESLint Section (only if findings exist)
-            if len(eslint_findings) > 0:
-                f.write(generate_eslint_html_section(eslint_findings))
-
-            # Clair Section (only if findings exist)
-            if len(clair_vulns) > 0:
-                f.write(generate_clair_html_section(clair_vulns))
-
-            # Anchore Section (only if findings exist)
-            if len(anchore_vulns) > 0:
-                f.write(generate_anchore_html_section(anchore_vulns))
-
-            # Brakeman Section (only if findings exist)
-            if len(brakeman_findings) > 0:
-                f.write(generate_brakeman_html_section(brakeman_findings))
-
-            # Bandit Section (only if findings exist)
-            if len(bandit_findings) > 0:
-                f.write(generate_bandit_html_section(bandit_findings))
-
-            # Android Manifest Section (only if findings exist)
-            android_html = generate_android_manifest_html(android_manifest_json_path)
-            if android_html:
-                f.write(android_html)
-
-            # iOS Plist Section (only if findings exist)
-            ios_html = generate_ios_plist_html(ios_plist_json_path)
-            if ios_html:
-                f.write(ios_html)
 
             f.write(html_footer())
         debug(f"HTML report successfully written to {OUTPUT_FILE}")

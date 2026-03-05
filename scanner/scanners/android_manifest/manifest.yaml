@@ -1,0 +1,3 @@
+name: android_manifest
+install:
+  - ["pip3", "install", "defusedxml"]

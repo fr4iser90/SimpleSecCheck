@@ -116,6 +116,11 @@ def detect_native_projects(target_path):
     return results
 
 
+def detect_native_app(target_path):
+    """Backward-compatible wrapper for native app detection."""
+    return detect_native_projects(target_path)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Detect native mobile app projects")
     parser.add_argument("--target", required=True, help="Target directory to scan")

@@ -1,0 +1,6 @@
+name: gitleaks
+install:
+  - ["/bin/sh", "-c", "GITLEAKS_URL=$(wget -qO- https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.assets[] | select(.name | test(\"gitleaks.*linux_x64.tar.gz\")) | .browser_download_url') && wget -O /tmp/gitleaks.tar.gz $GITLEAKS_URL"]
+  - ["tar", "-xvzf", "/tmp/gitleaks.tar.gz", "-C", "/opt"]
+  - ["rm", "/tmp/gitleaks.tar.gz"]
+  - ["ln", "-s", "/opt/gitleaks", "/usr/local/bin/gitleaks"]

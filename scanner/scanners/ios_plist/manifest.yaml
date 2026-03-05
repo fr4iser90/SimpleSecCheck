@@ -1,0 +1,3 @@
+name: ios_plist
+install:
+  - ["pip3", "install", "defusedxml"]

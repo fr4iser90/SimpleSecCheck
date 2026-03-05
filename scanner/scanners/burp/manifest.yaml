@@ -1,0 +1,6 @@
+name: burp
+install:
+  - ["wget", "-q", "https://portswigger.net/burp/releases/download?product=community&version=2024.2.5", "-O", "/tmp/burp-suite.jar"]
+  - ["mkdir", "-p", "/opt/burp"]
+  - ["mv", "/tmp/burp-suite.jar", "/opt/burp/burp-suite.jar"]
+  - ["chmod", "+x", "/opt/burp/burp-suite.jar"]

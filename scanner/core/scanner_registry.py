@@ -12,21 +12,56 @@ import inspect
 class ScanType(Enum):
     """Scan type enumeration"""
     CODE = "code"
+    DEPENDENCY = "dependency"
+    SECRETS = "secrets"
+    CONFIG = "config"
+    CONTAINER = "container"
     WEBSITE = "website"
     NETWORK = "network"
+    IMAGE = "image"
+    MOBILE = "mobile"
+
+
+class TargetType(Enum):
+    """Target type enumeration"""
+    LOCAL_CODE = "local_code"
+    GIT_REPO = "git_repo"
+    DOCKER_IMAGE = "docker_image"
+    WEBSITE = "website"
+    NETWORK_HOST = "network_host"
+    APK = "apk"
+    IPA = "ipa"
+    FILE_SYSTEM = "file_system"
+
+
+class ArtifactType(Enum):
+    """Artifact type enumeration"""
+    PACKAGE_JSON = "package.json"
+    REQUIREMENTS = "requirements.txt"
+    DOCKERFILE = "Dockerfile"
+    ANDROID_MANIFEST = "AndroidManifest.xml"
+    APK = "apk"
+    IPA = "ipa"
+
+
+@dataclass
+class ScannerCapability:
+    """Scanner capability definition"""
+    scan_type: ScanType
+    supported_targets: List[TargetType]
+    supported_artifacts: List[ArtifactType]
 
 
 @dataclass
 class Scanner:
     """Scanner definition"""
     name: str
-    scan_types: List[ScanType]  # Which scan types this scanner supports
+    capabilities: List[ScannerCapability]
     script_path: str  # Path to scanner script (inside container)
     enabled: bool = True
     priority: int = 0  # Execution order (lower = earlier)
-    requires_condition: Optional[str] = None  # Optional condition (e.g., "IS_NATIVE", "CLAIR_IMAGE")
-    env_vars: Optional[Dict[str, str]] = None  # Additional environment variables
-    param_env_map: Optional[Dict[str, str]] = None  # Explicit param -> env var mapping
+    requires_condition: Optional[str] = None  # Optional condition (e.g., "IS_NATIVE")
+    python_class: Optional[str] = None  # Fully-qualified Python scanner class
 
 
 class ScannerRegistry:
@@ -36,83 +71,65 @@ class ScannerRegistry:
     @classmethod
     def register(cls, scanner: Scanner):
         """Register a scanner"""
-        # Auto-build param_env_map from Python scanner class if not provided
-        if scanner.param_env_map is None and scanner.env_vars:
-            python_scanner_class = scanner.env_vars.get("PYTHON_SCANNER_CLASS")
-            if python_scanner_class:
-                try:
-                    module_path, class_name = python_scanner_class.rsplit(".", 1)
-                    module = __import__(module_path, fromlist=[class_name])
-                    scanner_class = getattr(module, class_name)
-                    scanner.param_env_map = cls._build_param_env_map(scanner_class, scanner.env_vars)
-                except Exception:
-                    scanner.param_env_map = None
         cls._scanners[scanner.name] = scanner
 
-    @staticmethod
-    def _build_param_env_map(scanner_class, env_vars: Dict[str, str]) -> Dict[str, str]:
-        """Build explicit param->env var mapping using scanner class signature and its env vars."""
-        param_env_map: Dict[str, str] = {}
-        try:
-            sig = inspect.signature(scanner_class.__init__)
-        except (TypeError, ValueError):
-            return param_env_map
-
-        param_names = set(sig.parameters.keys())
-        param_names.discard("self")
-
-        for param_name in param_names:
-            param_upper = param_name.upper()
-            # Exact match first
-            for env_key in env_vars.keys():
-                if env_key.upper() == param_upper:
-                    param_env_map[param_name] = env_key
-                    break
-            else:
-                # Suffix match: *_PARAM_NAME
-                for env_key in env_vars.keys():
-                    if env_key.upper().endswith(f"_{param_upper}"):
-                        param_env_map[param_name] = env_key
-                        break
-                else:
-                    # Containment match within the scanner's own env vars only
-                    for env_key in env_vars.keys():
-                        if param_upper in env_key.upper():
-                            param_env_map[param_name] = env_key
-                            break
-
-        return param_env_map
-    
     @classmethod
-    def get_scanners_for_type(cls, scan_type: ScanType, conditions: Optional[Dict[str, any]] = None) -> List[Scanner]:
+    def get_scanners_for_target(
+        cls,
+        target_type: TargetType,
+        scan_types: Optional[List[ScanType]] = None,
+        conditions: Optional[Dict[str, any]] = None,
+    ) -> List[Scanner]:
         """
-        Get all enabled scanners for a scan type, filtered by conditions
-        
-        Args:
-            scan_type: The scan type to filter by
-            conditions: Optional dict of conditions (e.g., {"IS_NATIVE": True, "CLAIR_IMAGE": "image:tag"})
+        Get all enabled scanners for a target type and optional scan types.
         """
         scanners = []
         for scanner in cls._scanners.values():
             if not scanner.enabled:
                 continue
-            if scan_type not in scanner.scan_types:
-                continue
-            
             # Check condition if required
             if scanner.requires_condition:
                 if not conditions or not conditions.get(scanner.requires_condition):
                     continue
-            
-            scanners.append(scanner)
-        
-        # Sort by priority
+            # Capability match
+            matches = False
+            for capability in scanner.capabilities:
+                if target_type not in capability.supported_targets:
+                    continue
+                if scan_types and capability.scan_type not in scan_types:
+                    continue
+                matches = True
+                break
+            if matches:
+                scanners.append(scanner)
+        return sorted(scanners, key=lambda s: s.priority)
+
+    @classmethod
+    def get_scanners_for_type(cls, scan_type: ScanType) -> List[Scanner]:
+        """
+        Get all enabled scanners that support the given scan type.
+
+        Args:
+            scan_type: Scan type to filter scanners by.
+
+        Returns:
+            List of scanners that advertise the scan type.
+        """
+        scanners = []
+        for scanner in cls._scanners.values():
+            if not scanner.enabled:
+                continue
+            for capability in scanner.capabilities:
+                if capability.scan_type == scan_type:
+                    scanners.append(scanner)
+                    break
         return sorted(scanners, key=lambda s: s.priority)
     
     @classmethod
     def get_total_steps(
         cls, 
-        scan_type: ScanType, 
+        target_type: TargetType,
+        scan_types: Optional[List[ScanType]],
         has_git_clone: bool, 
         collect_metadata: bool,
         conditions: Optional[Dict[str, any]] = None
@@ -133,8 +150,8 @@ class ScannerRegistry:
         
         steps += 1  # Initialization
         
-        # Count scanners for this scan type
-        scanners = cls.get_scanners_for_type(scan_type, conditions)
+        # Count scanners for this scan type/target
+        scanners = cls.get_scanners_for_target(target_type, scan_types, conditions)
         steps += len(scanners)
         
         if collect_metadata:
@@ -163,39 +180,30 @@ class ScannerRegistry:
             scanner_class: Scanner class that inherits from BaseScanner
         """
         # Get scanner name from class name (e.g., SemgrepScanner -> Semgrep)
+        # Allow explicit override via SCANNER_NAME/NAME for registry-safe IDs
         class_name = scanner_class.__name__
-        scanner_name = class_name.replace("Scanner", "").replace("OWASP", "OWASP Dependency Check")
+        scanner_name = (
+            getattr(scanner_class, "SCANNER_NAME", None)
+            or getattr(scanner_class, "NAME", None)
+            or class_name.replace("Scanner", "").replace("OWASP", "OWASP Dependency Check")
+        )
         
         # Get metadata from class attributes
-        scan_types = getattr(scanner_class, "SCAN_TYPES", [])
+        capabilities = getattr(scanner_class, "CAPABILITIES", [])
         priority = getattr(scanner_class, "PRIORITY", 0)
         requires_condition = getattr(scanner_class, "REQUIRES_CONDITION", None)
         script_path = getattr(scanner_class, "SCRIPT_PATH", None)
-        env_vars = getattr(scanner_class, "ENV_VARS", {}).copy()
-        
-        # Add PYTHON_SCANNER_CLASS to env_vars
         module = scanner_class.__module__
-        env_vars["PYTHON_SCANNER_CLASS"] = f"{module}.{class_name}"
-        
-        # Build script path if not provided
-        if not script_path:
-            BASE_DIR = "/SimpleSecCheck"
-            TOOLS_DIR = f"{BASE_DIR}/scripts/tools"
-            # Convert class name to script name (e.g., SemgrepScanner -> run_semgrep.sh)
-            script_name = class_name.lower().replace("scanner", "").replace("owasp", "owasp_dependency_check")
-            script_name = script_name.replace("codeql", "codeql").replace("npm", "npm_audit")
-            script_name = script_name.replace("terraform", "terraform_security")
-            script_path = f"{TOOLS_DIR}/run_{script_name}.sh"
-        
+        python_class = f"{module}.{class_name}"
+                
         # Create and register Scanner
         scanner = Scanner(
             name=scanner_name,
-            scan_types=scan_types,
+            capabilities=capabilities,
             script_path=script_path,
             priority=priority,
             requires_condition=requires_condition,
-            env_vars=env_vars,
-            param_env_map=getattr(scanner_class, "PARAM_ENV_MAP", None)
+            python_class=python_class
         )
         
         cls.register(scanner)
@@ -208,326 +216,17 @@ def _register_all_scanners():
     TOOLS_DIR = f"{BASE_DIR}/scripts/tools"
     
     # === CODE SCANNERS ===
-    
-    # Priority 1-10: Core static analysis
-    ScannerRegistry.register(Scanner(
-        name="Semgrep",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=1,
-        env_vars={
-            "SEMGREP_RULES_PATH": f"{BASE_DIR}/scanner/config/rules",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.semgrep_scanner.SemgrepScanner"  # Use Python scanner
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Trivy",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=2,
-        env_vars={
-            "TRIVY_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/trivy/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.trivy_scanner.TrivyScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="CodeQL",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=3,
-        env_vars={
-            "CODEQL_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/codeql/config.yaml",
-            "CODEQL_QUERIES_PATH": f"{BASE_DIR}/scanner/config/tools/codeql/queries",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.codeql_scanner.CodeQLScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="OWASP Dependency Check",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=4,
-        env_vars={
-            "OWASP_DC_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/owasp-dependency-check/config.yaml",
-            "OWASP_DC_DATA_DIR": f"{BASE_DIR}/owasp-dependency-check-data",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.owasp_scanner.OWASPScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Safety",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=5,
-        env_vars={
-            "SAFETY_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/safety/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.safety_scanner.SafetyScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Snyk",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=6,
-        env_vars={
-            "SNYK_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/snyk/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.snyk_scanner.SnykScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="SonarQube",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=7,
-        env_vars={
-            "SONARQUBE_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/sonarqube/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.sonarqube_scanner.SonarQubeScanner"
-        }
-    ))
-    
-    # Priority 11-15: Infrastructure as Code
-    ScannerRegistry.register(Scanner(
-        name="Terraform Security",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=11,
-        env_vars={
-            "TERRAFORM_SECURITY_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/terraform-security/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.terraform_scanner.TerraformSecurityScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Checkov",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=12,
-        env_vars={
-            "CHECKOV_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/checkov/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.checkov_scanner.CheckovScanner"
-        }
-    ))
-    
-    # Priority 16-20: Secret scanning
-    ScannerRegistry.register(Scanner(
-        name="TruffleHog",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=16,
-        env_vars={
-            "TRUFFLEHOG_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/trufflehog/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.trufflehog_scanner.TruffleHogScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="GitLeaks",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=17,
-        env_vars={
-            "GITLEAKS_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/gitleaks/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.gitleaks_scanner.GitLeaksScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Detect-secrets",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=18,
-        env_vars={
-            "DETECT_SECRETS_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/detect-secrets/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.detect_secrets_scanner.DetectSecretsScanner"
-        }
-    ))
-    
-    # Priority 21-25: Language-specific
-    ScannerRegistry.register(Scanner(
-        name="npm audit",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=21,
-        env_vars={
-            "NPM_AUDIT_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/npm-audit/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.npm_audit_scanner.NpmAuditScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="ESLint",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=22,
-        env_vars={
-            "ESLINT_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/eslint/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.eslint_scanner.ESLintScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Brakeman",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=23,
-        env_vars={
-            "BRAKEMAN_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/brakeman/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.brakeman_scanner.BrakemanScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Bandit",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=24,
-        env_vars={
-            "BANDIT_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/bandit/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.bandit_scanner.BanditScanner"
-        }
-    ))
-    
-    # Priority 30-35: Container image scanners (conditional)
-    ScannerRegistry.register(Scanner(
-        name="Clair",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=30,
-        requires_condition="CLAIR_IMAGE",
-        env_vars={
-            "CLAIR_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/clair/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.clair_scanner.ClairScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Anchore",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=31,
-        requires_condition="ANCHORE_IMAGE",
-        env_vars={
-            "ANCHORE_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/anchore/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.anchore_scanner.AnchoreScanner"
-        }
-    ))
-    
-    # Priority 40-45: Native mobile app scanners (conditional)
-    ScannerRegistry.register(Scanner(
-        name="Android",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=40,
-        requires_condition="IS_NATIVE",
-        env_vars={
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.android_scanner.AndroidScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="iOS",
-        scan_types=[ScanType.CODE],
-        script_path="",  # Python-only orchestrator
-        priority=41,
-        requires_condition="IS_NATIVE",
-        env_vars={
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.ios_scanner.iOSScanner"
-        }
-    ))
-    
-    # === WEBSITE SCANNERS ===
-    
-    ScannerRegistry.register(Scanner(
-        name="ZAP",
-        scan_types=[ScanType.WEBSITE],
-        script_path="",  # Python-only orchestrator
-        priority=1,
-        env_vars={
-            "ZAP_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/zap/baseline.conf",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.zap_scanner.ZAPScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Nuclei",
-        scan_types=[ScanType.WEBSITE],
-        script_path="",  # Python-only orchestrator
-        priority=2,
-        env_vars={
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.nuclei_scanner.NucleiScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Wapiti",
-        scan_types=[ScanType.WEBSITE],
-        script_path="",  # Python-only orchestrator
-        priority=3,
-        env_vars={
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.wapiti_scanner.WapitiScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Nikto",
-        scan_types=[ScanType.WEBSITE],
-        script_path="",  # Python-only orchestrator
-        priority=4,
-        env_vars={
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.nikto_scanner.NiktoScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Burp",
-        scan_types=[ScanType.WEBSITE],
-        script_path="",  # Python-only orchestrator
-        priority=5,
-        env_vars={
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.burp_scanner.BurpScanner"
-        }
-    ))
-    
-    # === NETWORK SCANNERS ===
-    
-    ScannerRegistry.register(Scanner(
-        name="Kube-hunter",
-        scan_types=[ScanType.NETWORK],
-        script_path="",  # Python-only orchestrator
-        priority=1,
-        env_vars={
-            "KUBE_HUNTER_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/kube-hunter/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.kube_hunter_scanner.KubeHunterScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Kube-bench",
-        scan_types=[ScanType.NETWORK],
-        script_path="",  # Python-only orchestrator
-        priority=2,
-        env_vars={
-            "KUBE_BENCH_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/kube-bench/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.kube_bench_scanner.KubeBenchScanner"
-        }
-    ))
-    
-    ScannerRegistry.register(Scanner(
-        name="Docker Bench",
-        scan_types=[ScanType.NETWORK],
-        script_path="",  # Python-only orchestrator
-        priority=3,
-        env_vars={
-            "DOCKER_BENCH_CONFIG_PATH": f"{BASE_DIR}/scanner/config/tools/docker-bench/config.yaml",
-            "PYTHON_SCANNER_CLASS": "scanner.scanners.docker_bench_scanner.DockerBenchScanner"
-        }
-    ))
-
+  
 
 # Auto-register on import (legacy manual registration - will be replaced by auto-registration)
 # This is kept as fallback for scanners that don't have metadata yet
 _register_all_scanners()
+
+# Auto-discover Python scanner classes (dynamic registration)
+try:
+    import scanner.scanners  # noqa: F401
+except Exception:
+    try:
+        import scanners  # type: ignore # noqa: F401
+    except Exception:
+        pass

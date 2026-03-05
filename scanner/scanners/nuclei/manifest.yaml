@@ -1,0 +1,6 @@
+name: nuclei
+install:
+  - ["/bin/sh", "-c", "NUCLEI_URL=$(wget -qO- https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | jq -r '.assets[] | select(.name | test(\"nuclei.*linux.*amd64.zip\")) | .browser_download_url') && wget -O /tmp/nuclei.zip $NUCLEI_URL"]
+  - ["unzip", "-o", "/tmp/nuclei.zip", "-d", "/opt"]
+  - ["rm", "/tmp/nuclei.zip"]
+  - ["ln", "-s", "/opt/nuclei", "/usr/local/bin/nuclei"]

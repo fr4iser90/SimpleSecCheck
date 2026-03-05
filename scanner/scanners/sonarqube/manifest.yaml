@@ -1,0 +1,10 @@
+name: sonarqube
+install:
+  - ["npm", "install", "-g", "sonar-scanner"]
+assets:
+  - id: config
+    type: config
+    description: SonarQube config
+    mount:
+      host_subpath: scanner/scanners/sonarqube/config/config.yaml
+      container_path: /SimpleSecCheck/scanner/scanners/sonarqube/config/config.yaml

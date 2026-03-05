@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ScanForm from '../components/ScanForm'
 import BulkScanForm from '../components/BulkScanForm'
-import OwaspUpdate from '../components/OwaspUpdate'
+import ScannerDataUpdate from '../components/ScannerDataUpdate'
 import { useConfig } from '../hooks/useConfig'
 
 interface ScanStatusData {
@@ -93,9 +93,9 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* OWASP Update - Only shown in Dev or if DB is old in Production */}
+      {/* Scanner Asset Updates */}
       <div className="card" style={{ marginTop: '2rem' }}>
-        <OwaspUpdate />
+        <ScannerDataUpdate />
       </div>
     </div>
   )

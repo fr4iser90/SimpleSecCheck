@@ -1,0 +1,10 @@
+name: anchore
+install:
+  - ["/bin/sh", "-c", "curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin"]
+assets:
+  - id: config
+    type: config
+    description: Anchore config
+    mount:
+      host_subpath: scanner/scanners/anchore/config/config.yaml
+      container_path: /SimpleSecCheck/scanner/scanners/anchore/config/config.yaml

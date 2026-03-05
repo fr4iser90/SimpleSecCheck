@@ -1,0 +1,3 @@
+name: snyk
+install:
+  - ["/bin/sh", "-c", "curl -s https://static.snyk.io/cli/latest/snyk-linux -o /tmp/snyk && chmod +x /tmp/snyk && mv /tmp/snyk /usr/local/bin/snyk"]

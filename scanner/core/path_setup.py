@@ -18,16 +18,17 @@ def setup_paths():
     sys.path.insert(0, "/project/src")
     sys.path.insert(0, "/SimpleSecCheck")
     sys.path.insert(0, "/SimpleSecCheck/scripts")
+    sys.path.insert(0, "/scanner")
     
     # Get the src/ directory (this file is in src/core/)
     SRC_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     
-    # Add processors and core to path
-    PROCESSORS_DIR = os.path.join(SRC_DIR, "processors")
+    # Add scanners and core to path
+    SCANNERS_DIR = os.path.join(SRC_DIR, "scanners")
     CORE_DIR = os.path.join(SRC_DIR, "core")
     
     sys.path.insert(0, SRC_DIR)
-    sys.path.insert(0, PROCESSORS_DIR)
+    sys.path.insert(0, SCANNERS_DIR)
     sys.path.insert(0, CORE_DIR)
 
 
@@ -62,14 +63,14 @@ def get_scan_results_dir_host(scan_results_dir_container: str) -> str:
     """
     Get host path for scan-specific results directory.
     """
-    if not scan_results_dir_container.startswith("/app/results/"):
+    if not scan_results_dir_container.startswith("/webui/results/"):
         return scan_results_dir_container
     
     host_project_root = get_host_project_root()
     if not host_project_root:
         return scan_results_dir_container
     
-    relative_path = scan_results_dir_container[len("/app/results"):]
+    relative_path = scan_results_dir_container[len("/webui/results"):]
     if relative_path.startswith("/"):
         relative_path = relative_path[1:]
     
@@ -81,7 +82,7 @@ def get_target_mount_path_host(target_path: str) -> str:
     Get host path for target mount.
     
     Handles two cases:
-    1. Git clones: target_path is a container path like /app/results/tmp/.../repo
+    1. Git clones: target_path is a container path like /webui/results/tmp/.../repo
        → Converts to host path in results directory
     2. Local scans: target_path is already a host path like /home/user/project
        → Returns as-is (no conversion needed)
@@ -92,14 +93,14 @@ def get_target_mount_path_host(target_path: str) -> str:
     Returns:
         Absolute host path
     """
-    # If path starts with /app/results/, it's a container path from a Git clone
+    # If path starts with /webui/results/, it's a container path from a Git clone
     # Convert it to the corresponding host path
-    if target_path.startswith("/app/results/"):
+    if target_path.startswith("/webui/results/"):
         host_project_root = get_host_project_root()
         if not host_project_root:
             return target_path
         
-        relative_path = target_path[len("/app/results"):]
+        relative_path = target_path[len("/webui/results"):] 
         if relative_path.startswith("/"):
             relative_path = relative_path[1:]
         
@@ -113,17 +114,17 @@ def get_finding_policy_check_path_for_git_clone(container_path: str, policy_rela
     """
     Get path to check for finding policy file for Git clones.
     
-    Git clones are stored in the WebUI container at /app/results/tmp/.../repo,
+    Git clones are stored in the WebUI container at /webui/results/tmp/.../repo,
     so we CAN check if the file exists in the WebUI container.
     
     Args:
-        container_path: Container path where Git repo was cloned (e.g., /app/results/tmp/.../repo)
+        container_path: Container path where Git repo was cloned (e.g., /webui/results/tmp/.../repo)
         policy_relative_path: Relative path to policy file (e.g., config/finding-policy.json)
     
     Returns:
         Full container path to check if file exists, or None if path is invalid
     """
-    if not container_path or not container_path.startswith("/app/results/"):
+    if not container_path or not container_path.startswith("/webui/results/"):
         return None
     
     policy_path = os.path.join(container_path, policy_relative_path)
@@ -160,7 +161,7 @@ def get_owasp_data_path_host() -> str:
     if not host_project_root:
         return None
     
-    return os.path.join(host_project_root, "scanner", "data", "owasp-dependency-check-data")
+    return os.path.join(host_project_root, "scanner", "scanners", "owasp", "data")
 
 
 def get_config_path_host() -> str:
@@ -172,7 +173,7 @@ def get_config_path_host() -> str:
     if not host_project_root:
         return None
     
-    return os.path.join(host_project_root, "config")
+    return os.path.join(host_project_root, "scanner", "scanners")
 
 
 def get_results_dir():
@@ -213,7 +214,7 @@ def get_webui_base_dir():
         return Path(base_dir_env)
     
     # Try /app (container)
-    app_path = Path("/app")
+    app_path = Path("/webui")
     if app_path.exists():
         return app_path
     
@@ -253,17 +254,17 @@ def get_results_dir_for_scan(project_name: str, scan_id: str) -> str:
     """
     Get results directory path for a specific scan.
     Central function - all services should use this!
-    EINHEITLICH: Dev und Prod verwenden beide /app/results/...
+    EINHEITLICH: Dev und Prod verwenden beide /webui/results/...
     
     Args:
         project_name: Name of the project being scanned
         scan_id: Unique scan identifier (timestamp format)
     
     Returns:
-        str: Full path to results directory (e.g., "/app/results/PROJECT_SCAN_ID")
+        str: Full path to results directory (e.g., "/webui/results/PROJECT_SCAN_ID")
     """
-    # EINHEITLICH: Immer /app/results/... (weil ./results:/app/results in beiden gemountet)
-    return f"/app/results/{project_name}_{scan_id}"
+    # EINHEITLICH: Immer /webui/results/... (weil ./results:/webui/results in beiden gemountet)
+    return f"/webui/results/{project_name}_{scan_id}"
 
 
 def get_logs_dir_for_scan(results_dir: str) -> str:
@@ -275,7 +276,7 @@ def get_logs_dir_for_scan(results_dir: str) -> str:
         results_dir: Results directory path (from get_results_dir_for_scan)
     
     Returns:
-        str: Full path to logs directory (e.g., "/app/results/PROJECT_SCAN_ID/logs")
+        str: Full path to logs directory (e.g., "/webui/results/PROJECT_SCAN_ID/logs")
     """
     return f"{results_dir}/logs"
 
@@ -301,7 +302,7 @@ def get_webui_owasp_data_dir():
     if not base_dir:
         return None
     
-    return base_dir / "scanner" / "data" / "owasp-dependency-check-data"
+    return Path("/scanner/scanners/owasp/data")
 
 
 def get_webui_frontend_paths():
@@ -318,7 +319,7 @@ def get_webui_frontend_paths():
     paths = [
         base_dir / "webui" / "frontend" / "dist",
         base_dir / "static",
-        Path("/app/static"),
+        Path("/webui/static"),
     ]
     
     return paths

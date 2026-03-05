@@ -1,0 +1,6 @@
+name: kube_bench
+install:
+  - ["/bin/sh", "-c", "KUBE_BENCH_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/kube-bench/releases/latest | jq -r '.assets[] | select(.name | test(\"kube-bench.*linux.*amd64.tar.gz\")) | .browser_download_url') && wget -O /tmp/kube-bench.tar.gz $KUBE_BENCH_URL"]
+  - ["tar", "-xvzf", "/tmp/kube-bench.tar.gz", "-C", "/opt"]
+  - ["rm", "/tmp/kube-bench.tar.gz"]
+  - ["ln", "-s", "/opt/kube-bench", "/usr/local/bin/kube-bench"]

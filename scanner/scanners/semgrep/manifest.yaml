@@ -1,0 +1,6 @@
+name: semgrep
+install:
+  - ["pip3", "install", "--upgrade", "pip", "setuptools", "wheel"]
+  - ["/bin/sh", "-c", "pip3 uninstall -y typing_extensions pydantic pydantic_core semgrep || true"]
+  - ["pip3", "install", "--force-reinstall", "--no-cache-dir", "typing_extensions>=4.14.1", "pydantic>=2.0.0", "pydantic-core>=2.0.0"]
+  - ["pip3", "install", "semgrep"]

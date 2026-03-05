@@ -13,8 +13,8 @@
   - CLI scripts (`scripts/`)
   - Results (`results/`)
   - Logs (`logs/`)
-  - Config (`config/`)
-  - Rules (`config/rules/`)
+  - Config (`scanner/config/`)
+  - Rules (`scanner/scanners/semgrep/rules/`)
 
 ### Docker Socket Access
 - Docker socket mounted read-only (`:ro`)

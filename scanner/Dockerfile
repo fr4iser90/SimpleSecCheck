@@ -1,7 +1,4 @@
-# Stage 1: Trivy (only to extract the binary)
-FROM aquasec/trivy:latest AS trivy
-
-# Stage 2: Main scanner image
+# Stage 1: Main scanner image
 FROM ubuntu:22.04
 
 # Version information
@@ -9,173 +6,36 @@ ARG VERSION=1.4.0
 LABEL version=$VERSION
 LABEL maintainer="fr4iser"
 
-# Install dependencies with Node.js v18+
+## Core dependencies are now installed via scanner manifests (Option B modular build).
+## Minimal runtime installs Python + PyYAML to read manifests and Node.js for report build.
 RUN apt-get update && \
-    apt-get install -y python3-pip wget curl jq git openjdk-17-jre unzip docker.io && \
+    apt-get install -y python3 python3-pip curl && \
+    pip3 install pyyaml && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
-    apt-get install -y nodejs && \
-    ln -s /usr/bin/python3 /usr/bin/python
+    apt-get install -y nodejs
 
-# Ensure Python 3 and pip are available for ZAP
-RUN apt-get update && \
-    apt-get install -y python3 python3-pip && \
-    ln -sf /usr/bin/python3 /usr/bin/python
+## Scanner tool installations moved into per-module manifests
 
-# Upgrade pip and install Semgrep with proper dependencies
-RUN pip3 install --upgrade pip setuptools wheel
-# Clean install to avoid conflicts
-RUN pip3 uninstall -y typing_extensions pydantic pydantic_core semgrep || true
-# Install with correct versions - must install pydantic requirements FIRST
-RUN pip3 install --force-reinstall --no-cache-dir "typing_extensions>=4.14.1" && \
-    pip3 install --force-reinstall --no-cache-dir "pydantic>=2.0.0" "pydantic-core>=2.0.0" && \
-    pip3 install semgrep
-RUN pip3 install pyyaml
-RUN pip3 install python-owasp-zap-v2.4
-RUN pip3 install beautifulsoup4
-RUN pip3 install pyyaml json5  # Added for configuration script
-RUN pip3 install flask
-RUN pip3 install requests  # Added for LLM connector
-RUN pip3 install defusedxml  # Security: Prevent XXE attacks in XML parsing
-RUN pip3 install asyncpg  # PostgreSQL client for prod step persistence
-
-# Copy Trivy binary from official image (Multi-Stage Build)
-COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
-
-# Install CodeQL CLI and Query Packs
-RUN export CODEQL_URL=$(wget -qO- https://api.github.com/repos/github/codeql-cli-binaries/releases/latest | jq -r '.assets[] | select(.name | test("codeql-linux64.zip")) | .browser_download_url') && \
-    wget -O codeql.zip $CODEQL_URL && \
-    unzip codeql.zip -d /opt && \
-    rm codeql.zip && \
-    ln -s /opt/codeql/codeql /usr/local/bin/codeql && \
-    codeql pack download codeql/python-queries && \
-    codeql pack download codeql/javascript-queries && \
-    codeql pack download codeql/java-queries && \
-    codeql pack download codeql/cpp-queries && \
-    codeql pack download codeql/csharp-queries && \
-    codeql pack download codeql/go-queries
-
-# Install Nuclei CLI
-RUN export NUCLEI_URL=$(wget -qO- https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | jq -r '.assets[] | select(.name | test("nuclei.*linux.*amd64.zip")) | .browser_download_url') && \
-    wget -O nuclei.zip $NUCLEI_URL && \
-    unzip nuclei.zip -d /opt && \
-    rm nuclei.zip && \
-    ln -s /opt/nuclei /usr/local/bin/nuclei
-
-# Install OWASP Dependency Check
-RUN export OWASP_DC_URL=$(wget -qO- https://api.github.com/repos/jeremylong/DependencyCheck/releases/latest | jq -r '.assets[] | select(.name | test("dependency-check.*release.zip") and (test("ant") | not) and (test("asc") | not)) | .browser_download_url') && \
-    wget -O dependency-check.zip $OWASP_DC_URL && \
-    unzip dependency-check.zip -d /opt && \
-    rm dependency-check.zip && \
-    ln -s /opt/dependency-check/bin/dependency-check.sh /usr/local/bin/dependency-check && \
-    mkdir -p /SimpleSecCheck/owasp-dependency-check-data
-    # Note: Database initialization happens at runtime via volume mount to avoid rebuilding on every code change
-
-# Install Safety (Python security scanner)
-RUN pip3 install safety
-
-# Install Bandit (Python code security scanner)
-RUN pip3 install bandit[toml]
-
-# Install Brakeman (Ruby on Rails security scanner)
-RUN apt-get update && apt-get install -y ruby ruby-dev build-essential && \
-    gem install brakeman --no-document
-
-# Install Detect-secrets (Python secret detection tool)
-RUN pip3 install detect-secrets
-
-# Install Checkov (Terraform security scanner)
-RUN pip3 install checkov  # typing_extensions already upgraded above
-
-# Install Wapiti (Web vulnerability scanner)
-RUN pip3 install wapiti3 && \
-    pip3 install --force-reinstall --no-cache-dir "typing_extensions>=4.14.1"
-
-# Install TruffleHog CLI
-RUN export TRUFFLEHOG_URL=$(wget -qO- https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | jq -r '.assets[] | select(.name | test("trufflehog.*linux.*amd64.tar.gz")) | .browser_download_url') && \
-    wget -O trufflehog.tar.gz $TRUFFLEHOG_URL && \
-    tar -xvzf trufflehog.tar.gz -C /opt && \
-    rm trufflehog.tar.gz && \
-    ln -s /opt/trufflehog /usr/local/bin/trufflehog
-
-# Install GitLeaks CLI
-RUN export GITLEAKS_URL=$(wget -qO- https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.assets[] | select(.name | test("gitleaks.*linux_x64.tar.gz")) | .browser_download_url') && \
-    wget -O gitleaks.tar.gz $GITLEAKS_URL && \
-    tar -xvzf gitleaks.tar.gz -C /opt && \
-    rm gitleaks.tar.gz && \
-    ln -s /opt/gitleaks /usr/local/bin/gitleaks
-
-# Install ESLint and security plugins
-RUN npm install -g eslint eslint-plugin-security @typescript-eslint/parser @typescript-eslint/eslint-plugin
-
-# Install TypeScript for compiling typescript files
-RUN npm install -g typescript
-
-# Install Nikto (Web server scanner)
-RUN apt-get update && apt-get install -y perl libwww-perl liblwp-protocol-https-perl unzip && \
-    wget https://github.com/sullo/nikto/archive/master.zip -O nikto.zip && \
-    unzip nikto.zip && \
-    mv nikto-main /opt/nikto && \
-    ln -s /opt/nikto/program/nikto.pl /usr/local/bin/nikto && \
-    rm nikto.zip
-
-# Install Burp Suite (Web application security scanner)
-# Note: Burp Suite Community Edition can be run in headless mode
-RUN wget -q 'https://portswigger.net/burp/releases/download?product=community&version=2024.2.5' -O burp-suite.jar && \
-    mkdir -p /opt/burp && \
-    mv burp-suite.jar /opt/burp/ && \
-    chmod +x /opt/burp/burp-suite.jar
-
-# Install Snyk CLI
-RUN curl -s https://static.snyk.io/cli/latest/snyk-linux -o snyk && \
-    chmod +x snyk && \
-    mv snyk /usr/local/bin/
-
-# Install SonarQube Scanner CLI via npm
-RUN npm install -g sonar-scanner
-
-# Install ZAP Baseline (ZAP CLI tools)
-RUN wget https://github.com/zaproxy/zaproxy/releases/download/v2.16.1/ZAP_2.16.1_Linux.tar.gz && \
-    tar -xvzf ZAP_2.16.1_Linux.tar.gz -C /opt && \
-    rm ZAP_2.16.1_Linux.tar.gz
-RUN wget https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap-baseline.py -O /usr/local/bin/zap-baseline.py && \
-    chmod +x /usr/local/bin/zap-baseline.py
-RUN wget https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap_common.py -O /usr/local/bin/zap_common.py
-
-# Install Kube-hunter (Kubernetes penetration testing tool)
-RUN pip3 install kube-hunter
-
-# Install Kube-bench (Kubernetes compliance testing tool)
-RUN export KUBE_BENCH_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/kube-bench/releases/latest | jq -r '.assets[] | select(.name | test("kube-bench.*linux.*amd64.tar.gz")) | .browser_download_url') && \
-    wget -O kube-bench.tar.gz $KUBE_BENCH_URL && \
-    tar -xvzf kube-bench.tar.gz -C /opt && \
-    rm kube-bench.tar.gz && \
-    ln -s /opt/kube-bench /usr/local/bin/kube-bench
-
-# Install Docker Bench (Docker daemon compliance testing tool) - needs full repo
-RUN git clone https://github.com/docker/docker-bench-security.git /opt/docker-bench-security && \
-    ln -s /opt/docker-bench-security/docker-bench-security.sh /usr/local/bin/docker-bench-security && \
-    chmod +x /opt/docker-bench-security/docker-bench-security.sh
-
-# Install Anchore Grype (container image vulnerability scanner)
-RUN curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
-
-# Copy SimpleSecCheck files (scanner code and entrypoint)
-COPY scanner/ /SimpleSecCheck/scanner/
-COPY entrypoint.sh /entrypoint.sh
+# Copy only scanner manifests + asset installer first to improve build cache reuse
+COPY scanner/core/scanner_assets/ /SimpleSecCheck/scanner/core/scanner_assets/
+COPY scanner/scanners/ /SimpleSecCheck/scanner/scanners/
 WORKDIR /SimpleSecCheck
 
-# Create required directories and set permissions
-RUN mkdir -p /SimpleSecCheck/results /SimpleSecCheck/logs /SimpleSecCheck/owasp-dependency-check-data /zap/wrk && \
-    mkdir -p /zap/wrk/zap && \
-    cp /SimpleSecCheck/scanner/config/tools/zap/baseline.conf /zap/wrk/zap/baseline.conf && \
-    cp -r /opt/ZAP_2.16.1/* /zap/ && \
-    ln -sf /zap/zap.sh /zap/zap-x.sh
+RUN mkdir -p /SimpleSecCheck/results
+
+# Run module installers declared via manifests (cached unless manifests change)
+ENV SIMPLE_SECCHECK_ROOT=/SimpleSecCheck
+RUN python3 -m scanner.core.scanner_assets.install_assets
+
+# Copy full SimpleSecCheck files (scanner code and entrypoint) after assets install
+COPY scanner/ /SimpleSecCheck/scanner/
+COPY entrypoint.sh /entrypoint.sh
 
 # Create non-root user (1000:1000 matches typical host user)
 RUN useradd -m -u 1000 -s /bin/bash scanner && \
     (groupadd -g 999 docker || true) && \
     usermod -aG docker scanner && \
-    chown -R scanner:scanner /SimpleSecCheck /zap /home/scanner
+    chown -R scanner:scanner /SimpleSecCheck /home/scanner
 
 # Make scripts executable
 RUN chmod +x /SimpleSecCheck/scanner/core/configure.py
@@ -187,8 +47,7 @@ RUN cd /SimpleSecCheck/scanner/reporting && tsc
 RUN apt-get install -y sudo && \
     echo 'scanner ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
 
-# Copy and set up entrypoint script
-COPY entrypoint.sh /entrypoint.sh
+# Set up entrypoint script permissions
 RUN chmod +x /entrypoint.sh
 
 # Ensure writable home/cache locations for CLI tools (generic)
@@ -202,6 +61,6 @@ USER scanner
 # Ensure scanner modules are importable regardless of working directory
 ENV PYTHONPATH=/SimpleSecCheck
 
-WORKDIR /zap/wrk
+WORKDIR /SimpleSecCheck
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python3", "-m", "scanner.core.orchestrator"]

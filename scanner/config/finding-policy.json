@@ -13,13 +13,13 @@
             },
             {
                 "rule_id": "python.lang.security.audit.sqli.asyncpg-sqli.asyncpg-sqli",
-                "path_regex": ".*/webui/backend/app/database/postgresql_database\\.py$",
+                "path_regex": ".*/scanner/backend/app/database/postgresql_database\\.py$",
                 "message_regex": "Detected string concatenation.*asyncpg",
                 "reason": "SQL statements use asyncpg parameter binding. The only dynamic parts are internal column lists assembled from server-side kwargs; user input is never interpolated into SQL literals."
             },
             {
                 "rule_id": "python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query",
-                "path_regex": ".*/webui/backend/app/database/postgresql_database\\.py$",
+                "path_regex": ".*/scanner/backend/app/database/postgresql_database\\.py$",
                 "message_regex": "Avoiding SQL string concatenation",
                 "reason": "postgresql_database.py uses asyncpg, not SQLAlchemy. The rule is a false positive for this adapter."
             }
@@ -29,7 +29,7 @@
         "accepted_findings": [
             {
                 "rule_id": "database-password",
-                "file_regex": ".*/config/tools/clair/config\\.yaml$",
+                "file_regex": ".*/scanner/scanners/clair/config\\.yaml$",
                 "description_regex": ".*",
                 "reason": "Config file contains example database connection strings for Clair tool configuration, not actual secrets"
             }
@@ -63,7 +63,7 @@
             },
             {
                 "rule_id": "B108",
-                "path_regex": ".*/webui/backend/app/services/owasp_update_service\\.py$",
+                "path_regex": ".*/scanner/backend/app/services/scanner_asset_update_service\\.py$",
                 "message_regex": "Probable insecure usage of temp file/directory",
                 "reason": "Uses tempfile.mkstemp() which is secure. File descriptor is immediately closed after creation. The temp file is used for log backup only, with proper permissions and cleanup."
             },
@@ -81,7 +81,7 @@
             },
             {
                 "rule_id": "B108",
-                "path_regex": ".*/webui/backend/app/services/docker_runner\\.py$",
+                "path_regex": ".*/scanner/backend/app/services/docker_runner\\.py$",
                 "message_regex": "Probable insecure usage of temp file/directory",
                 "reason": "Path checks for temp clone locations are informational; no insecure temp file handling occurs."
             },
@@ -93,7 +93,7 @@
             },
             {
                 "rule_id": "B608",
-                "path_regex": ".*/webui/backend/app/database/postgresql_database\\.py$",
+                "path_regex": ".*/scanner/backend/app/database/postgresql_database\\.py$",
                 "message_regex": "Possible SQL injection vector through string-based query construction",
                 "reason": "Dynamic column lists are built from server-side kwargs, and values remain parameterized. No user-controlled SQL fragments are interpolated."
             }

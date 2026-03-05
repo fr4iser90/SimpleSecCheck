@@ -9,7 +9,7 @@ interface Scanner {
 }
 
 interface ScannerSelectorProps {
-  scanType: 'code' | 'website' | 'network'
+  scanType: 'code' | 'image' | 'website' | 'network'
   selectedScanners: string[]
   onSelectionChange: (scanners: string[]) => void
 }

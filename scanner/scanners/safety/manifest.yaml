@@ -1,0 +1,3 @@
+name: safety
+install:
+  - ["pip3", "install", "safety"]

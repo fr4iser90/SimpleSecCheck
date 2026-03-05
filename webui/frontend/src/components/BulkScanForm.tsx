@@ -9,7 +9,7 @@ interface BulkScanFormProps {
 type InputMethod = 'github' | 'urls'
 
 export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
-  const [scanType, setScanType] = useState<'code' | 'website' | 'network'>('code')
+  const [scanType, setScanType] = useState<'code' | 'image' | 'website' | 'network'>('code')
   const [inputMethod, setInputMethod] = useState<InputMethod>('github')
   const [githubUsername, setGithubUsername] = useState('')
   const [includePrivate, setIncludePrivate] = useState(false)
@@ -134,6 +134,15 @@ export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
               onChange={(e) => setScanType(e.target.value as 'code')}
             />
             Code
+          </label>
+          <label>
+            <input
+              type="radio"
+              value="image"
+              checked={scanType === 'image'}
+              onChange={(e) => setScanType(e.target.value as 'image')}
+            />
+            Image
           </label>
           <label>
             <input

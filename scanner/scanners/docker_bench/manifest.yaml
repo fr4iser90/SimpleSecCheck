@@ -1,0 +1,5 @@
+name: docker_bench
+install:
+  - ["git", "clone", "https://github.com/docker/docker-bench-security.git", "/opt/docker-bench-security"]
+  - ["ln", "-s", "/opt/docker-bench-security/docker-bench-security.sh", "/usr/local/bin/docker-bench-security"]
+  - ["chmod", "+x", "/opt/docker-bench-security/docker-bench-security.sh"]

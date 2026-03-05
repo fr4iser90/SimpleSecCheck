@@ -1,32 +1,58 @@
 services:
+  postgres:
+    profiles:
+      - prod
+    image: postgres:16-alpine
+    container_name: SimpleSecCheck_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-simpleseccheck}
+      POSTGRES_USER: ${POSTGRES_USER:-ssc_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - SimpleSecCheck_network
+      - SimpleSecCheck_internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ssc_user} -d ${POSTGRES_DB:-simpleseccheck}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   scanner:
+    profiles:
+      - dev
+      - prod
     # LOKALES BUILDING AKTIVIERT
     build:
       context: .
       dockerfile: ./scanner/Dockerfile
       args:
         VERSION: 1.4.0
-    image: fr4iser/simpleseccheck:latest
+    image: simpleseccheck-scanner:local
     container_name: SimpleSecCheck_scanner_v1.4.0
+    deploy:
+      resources:
+        limits:
+          cpus: '${SCANNER_CPU_LIMIT:-4.0}'
+          memory: '${SCANNER_MEMORY_LIMIT:-8G}'
+        reservations:
+          cpus: '${SCANNER_CPU_RESERVATION:-1.0}'
+          memory: '${SCANNER_MEMORY_RESERVATION:-2G}'
     volumes:
       - ./results:/SimpleSecCheck/results
-      - ./logs:/SimpleSecCheck/logs
       # Config ist bereits im Image (über COPY scanner/ im Dockerfile) - kein Volume-Mount nötig
       # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
-      - ./scanner/data/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
+      - ./scanner/scanners/owasp/data:/SimpleSecCheck/scanner/scanners/owasp/data
       - /var/run/docker.sock:/var/run/docker.sock # For Docker Bench
     environment:
-      - TARGET_URL=${TARGET_URL:-http://host.docker.internal:8000}
+      - SCAN_TARGET=${SCAN_TARGET:-}
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
       - RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results
-      - LOGS_DIR_IN_CONTAINER=/SimpleSecCheck/logs
-      - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/rules
-      - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/trivy/config.yaml
-      - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/anchore/config.yaml
-      - ANCHORE_IMAGE=${ANCHORE_IMAGE:-}
-      - ZAP_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/zap/baseline.conf
-      - TRIVY_SCAN_TYPE=fs
-      - FP_WHITELIST_FILE=/SimpleSecCheck/scanner/config/policy/fp_whitelist.json
+      - ENVIRONMENT=${ENVIRONMENT:-dev}
+      - DATABASE_URL=${DATABASE_URL:-}
       # Optional API Tokens (loaded from .env file if present)
       - NVD_API_KEY=${NVD_API_KEY:-}
       - SNYK_TOKEN=${SNYK_TOKEN:-}
@@ -37,50 +63,75 @@ services:
     tty: true
 
   webui:
-    # Optional WebUI - Start with: docker-compose --profile webui up
+    profiles:
+      - dev
+      - prod
+    # Optional WebUI - Start with: docker-compose --profile dev up
     # ⚠️ WARNING: NEVER expose publicly! Only use on localhost!
     build:
       context: .
-      dockerfile: ./webui/Dockerfile.compose
+      dockerfile: ./webui/Dockerfile.nginx
     container_name: SimpleSecCheck_webui
-    # Entrypoint script will dynamically configure docker group access at runtime
-    # No need to specify user here - entrypoint handles it
     ports:
-      - "127.0.0.1:8080:8080"  # SAFE: Only localhost, not 0.0.0.0
+      - "${WEBUI_BIND_HOST:-127.0.0.1}:8080:8080"
     volumes:
-      - ./results:/app/results                # Results (read-write: run-docker.sh needs to create subdirs)
-      - .:/project:ro                         # Project root (read-only, needed as build context for scanner and scripts)
-      - ./scanner/data/owasp-dependency-check-data:/app/owasp-dependency-check-data  # OWASP database (read-write: for updates and checks)
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket (read-only, for docker-compose)
+      - ./results:/webui/results
     environment:
-      - SIMPLESECCHECK_ROOT=/app
-      - PYTHONUNBUFFERED=1
-      # Environment mode (dev/prod)
-      - ENVIRONMENT=dev
-      # Host project root for OWASP volume mounting (used by run-docker.sh)
-      - HOST_PROJECT_ROOT=${PWD}
-      # Auto-shutdown configuration (security feature)
-      - WEBUI_AUTO_SHUTDOWN=true             # Enable auto-shutdown
-      - WEBUI_SHUTDOWN_AFTER_SCAN=true       # Shutdown after scan completes
-      - WEBUI_SHUTDOWN_DELAY=300             # Wait 5 min after scan to view report
-      - WEBUI_IDLE_TIMEOUT=1800              # Shutdown after 30 min idle
+      - ENVIRONMENT=${ENVIRONMENT:-dev}
     networks:
       - SimpleSecCheck_network
-    profiles:
-      - webui  # Only start with: docker-compose --profile webui up
-    depends_on:
-      - scanner  # For docker-compose.yml access
-    # Security: no privileged mode, no capabilities
     security_opt:
       - no-new-privileges:true
-    read_only: false  # Allow writes to /tmp only (for uvicorn)
+    read_only: false
     tmpfs:
       - /tmp:noexec,nosuid,size=100m
+
+
+
+  scanner-worker:
+    profiles:
+      - dev
+      - prod
+    build:
+      context: .
+      dockerfile: ./scanner/Dockerfile.worker
+    container_name: SimpleSecCheck_scanner_worker
+    volumes:
+      - ./results:/webui/results
+      - .:/project:ro
+      - ./scanner/scanners/owasp/data:/scanner/scanners/owasp/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - SIMPLESECCHECK_ROOT=/webui
+      - PYTHONUNBUFFERED=1
+      - HOST_PROJECT_ROOT=${PWD}
+      - SCANNER_WORKER_ENABLED=true
+      - ENVIRONMENT=${ENVIRONMENT:-dev}
+      - SCANNER_PROXY_MODE=false
+    networks:
+      - SimpleSecCheck_network
+      - SimpleSecCheck_internal
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
 networks:
   SimpleSecCheck_network:
     driver: bridge
+  SimpleSecCheck_internal:
+    driver: bridge
+    internal: true
 
 volumes:
   results_data:
   logs_data:
+  postgres_data:

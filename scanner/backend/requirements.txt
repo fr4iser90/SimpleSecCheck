@@ -1,0 +1,10 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart>=0.0.22
+aiofiles==23.2.1
+httpx==0.25.2
+# Database support
+asyncpg>=0.29.0  # PostgreSQL async driver
+psycopg2-binary>=2.9.9  # PostgreSQL sync driver (optional, for migrations)
+aiosqlite>=0.20.0  # SQLite async driver (dev)
+

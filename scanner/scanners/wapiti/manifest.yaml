@@ -1,0 +1,4 @@
+name: wapiti
+install:
+  - ["pip3", "install", "wapiti3"]
+  - ["pip3", "install", "--force-reinstall", "--no-cache-dir", "typing_extensions>=4.14.1"]

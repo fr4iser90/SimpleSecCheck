@@ -1,0 +1,6 @@
+name: trufflehog
+install:
+  - ["/bin/sh", "-c", "TRUFFLEHOG_URL=$(wget -qO- https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | jq -r '.assets[] | select(.name | test(\"trufflehog.*linux.*amd64.tar.gz\")) | .browser_download_url') && wget -O /tmp/trufflehog.tar.gz $TRUFFLEHOG_URL"]
+  - ["tar", "-xvzf", "/tmp/trufflehog.tar.gz", "-C", "/opt"]
+  - ["rm", "/tmp/trufflehog.tar.gz"]
+  - ["ln", "-s", "/opt/trufflehog", "/usr/local/bin/trufflehog"]

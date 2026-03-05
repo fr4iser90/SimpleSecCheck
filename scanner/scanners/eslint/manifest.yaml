@@ -1,0 +1,4 @@
+name: eslint
+install:
+  - ["npm", "install", "-g", "eslint", "eslint-plugin-security", "@typescript-eslint/parser", "@typescript-eslint/eslint-plugin"]
+  - ["npm", "install", "-g", "typescript"]

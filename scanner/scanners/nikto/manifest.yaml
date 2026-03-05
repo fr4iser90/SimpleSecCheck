@@ -1,0 +1,9 @@
+name: nikto
+install:
+  - ["apt-get", "update"]
+  - ["apt-get", "install", "-y", "perl", "libwww-perl", "liblwp-protocol-https-perl", "unzip"]
+  - ["wget", "https://github.com/sullo/nikto/archive/master.zip", "-O", "/tmp/nikto.zip"]
+  - ["unzip", "/tmp/nikto.zip"]
+  - ["mv", "nikto-main", "/opt/nikto"]
+  - ["ln", "-s", "/opt/nikto/program/nikto.pl", "/usr/local/bin/nikto"]
+  - ["rm", "/tmp/nikto.zip"]

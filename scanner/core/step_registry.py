@@ -52,13 +52,7 @@ class StepRegistry:
         self.websocket_manager = websocket_manager
         self.steps: Dict[str, Step] = {}  # {step_name: Step}
         self.step_counter = 0
-        self.lock = asyncio.Lock()
-        
-        # Use LOGS_DIR_IN_CONTAINER environment variable (NO FALLBACK!)
-        logs_dir_env = os.getenv("LOGS_DIR_IN_CONTAINER")
-        if not logs_dir_env:
-            raise ValueError("LOGS_DIR_IN_CONTAINER environment variable is required but not set")
-        self.logs_dir = Path(logs_dir_env)
+        self.logs_dir = self.results_dir / "logs"
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.steps_log = self.logs_dir / "steps.log"
 

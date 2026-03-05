@@ -23,6 +23,23 @@ const GIT_URL_PATTERNS = [
   /^git@(github|gitlab)\.com:[\w\-\.]+\/[\w\-\.]+\.git$/,
 ]
 
+const DOCKER_IMAGE_PATTERN = /^(?:[a-zA-Z0-9.-]+(?::\d+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[\w][\w.-]{0,127})?(?:@sha256:[a-f0-9]{64})?$/
+
+const isDockerImage = (value: string): boolean => {
+  if (!value || value.startsWith('/') || value.startsWith('./') || value.startsWith('../')) return false
+  if (value.startsWith('http://') || value.startsWith('https://')) return false
+  return DOCKER_IMAGE_PATTERN.test(value.trim())
+}
+
+const isDockerHubImage = (value: string): boolean => {
+  const trimmed = value.trim()
+  if (!trimmed.includes('/')) return true
+  const first = trimmed.split('/')[0]
+  const hasRegistry = first.includes('.') || first.includes(':')
+  if (!hasRegistry) return true
+  return first === 'docker.io'
+}
+
 function isGitUrl(url: string): boolean {
   if (!url || !url.trim()) return false
   return GIT_URL_PATTERNS.some(pattern => pattern.test(url.trim()))
@@ -30,17 +47,18 @@ function isGitUrl(url: string): boolean {
 
 export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   // Get available scan types from config
-  const availableScanTypes = config?.features.scan_types ?? { code: true, website: true, network: true }
+  const availableScanTypes = config?.features.scan_types ?? { code: true, image: true, website: true, network: true }
   const gitOnly = config?.features.git_only ?? false
   const localPathsAllowed = config?.features.local_paths ?? true
   const metadataCollection = config?.features.metadata_collection ?? 'optional'
   
   // Default to 'code' if available, otherwise first available type
   const defaultScanType = availableScanTypes.code ? 'code' : 
+    availableScanTypes.image ? 'image' :
     availableScanTypes.website ? 'website' : 
     availableScanTypes.network ? 'network' : 'code'
   
-  const [scanType, setScanType] = useState<'code' | 'website' | 'network'>(defaultScanType)
+  const [scanType, setScanType] = useState<'code' | 'image' | 'website' | 'network'>(defaultScanType)
   const [target, setTarget] = useState('')
   const [gitBranch, setGitBranch] = useState('')
   const [availableBranches, setAvailableBranches] = useState<string[]>([])
@@ -59,9 +77,10 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   
   // Detect if target is a Git URL
   const isGitRepo = scanType === 'code' && isGitUrl(target)
+  const isImageTarget = (scanType === 'code' || scanType === 'image') && !isGitRepo && isDockerImage(target)
   
   // In production (git_only), only allow Git URLs
-  const isLocalPath = scanType === 'code' && target.trim() && !isGitUrl(target) && target.trim().startsWith('/')
+  const isLocalPath = scanType === 'code' && target.trim() && !isGitUrl(target) && !isImageTarget && target.trim().startsWith('/')
   
   // Fetch branches when Git URL is detected
   useEffect(() => {
@@ -117,13 +136,17 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
       const cleanFindingPolicy = findingPolicy.trim() || null
       
       // Validate: In production (git_only), only Git URLs are allowed
-      if (gitOnly && scanType === 'code' && !isGitUrl(cleanTarget)) {
-        throw new Error('Production Mode: Only Git repository URLs (GitHub/GitLab) are allowed. Local paths are not permitted.')
+      if (gitOnly && scanType === 'code' && !isGitUrl(cleanTarget) && !isDockerImage(cleanTarget)) {
+        throw new Error('Production Mode: Only Git repository URLs or Docker Hub images are allowed. Local paths are not permitted.')
+      }
+
+      if (gitOnly && (scanType === 'code' || scanType === 'image') && isDockerImage(cleanTarget) && !isDockerHubImage(cleanTarget)) {
+        throw new Error('Production Mode: Only Docker Hub images are allowed (use docker.io/... or unqualified image names).')
       }
       
       // Validate: Local paths not allowed if disabled
       if (!localPathsAllowed && scanType === 'code' && isLocalPath) {
-        throw new Error('Local paths are not allowed. Please use a Git repository URL.')
+        throw new Error('Local paths are not allowed. Please use a Git repository URL or Docker image.')
       }
 
       const response = await fetch('/api/scan/start', {
@@ -181,6 +204,17 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
               Code
             </label>
           )}
+          {availableScanTypes.image && (
+            <label>
+              <input
+                type="radio"
+                value="image"
+                checked={scanType === 'image'}
+                onChange={(e) => setScanType(e.target.value as 'image')}
+              />
+              Image
+            </label>
+          )}
           {availableScanTypes.website && (
             <label>
               <input
@@ -206,12 +240,12 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
         </div>
         {gitOnly && (
           <small style={{ display: 'block', marginTop: '0.5rem', color: '#856404', fontSize: '0.875rem' }}>
-            ⚠️ Production Mode: Only Git repository scans are allowed (GitHub/GitLab URLs)
+            ⚠️ Production Mode: Only Git repositories or Docker Hub images are allowed
           </small>
         )}
       </div>
 
-      {scanType === 'code' && !isGitRepo && isLocalPath && (
+      {scanType === 'code' && !isGitRepo && !isImageTarget && isLocalPath && (
         <div className="form-group">
           <label>
             <input
@@ -230,7 +264,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
       {scanType !== 'network' && (
         <div className="form-group">
           <label htmlFor="target">
-            Target {scanType === 'code' ? (gitOnly ? '(Git URL only)' : '(Path oder Git URL)') : '(URL)'}
+            Target {scanType === 'code' ? (gitOnly ? '(Git URL oder Docker Image)' : '(Path, Git URL oder Docker Image)') : scanType === 'image' ? '(Docker Image)' : '(URL)'}
           </label>
           <input
             id="target"
@@ -238,16 +272,42 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             onBlur={(e) => setTarget(e.target.value.trim())} // Auto-trim on blur
-            placeholder={scanType === 'code' ? (gitOnly ? 'https://github.com/user/repo' : '/path/to/project oder https://github.com/user/repo') : 'https://example.com'}
+            placeholder={scanType === 'code' ? (gitOnly ? 'https://github.com/user/repo oder nginx:latest' : '/path/to/project, https://github.com/user/repo oder nginx:latest') : scanType === 'image' ? 'nginx:latest' : 'https://example.com'}
             required
             style={{
-              borderColor: isGitRepo ? '#28a745' : isLocalPath && !localPathsAllowed ? '#dc3545' : undefined,
+              borderColor: isGitRepo || isImageTarget ? '#28a745' : isLocalPath && !localPathsAllowed ? '#dc3545' : undefined,
             }}
           />
           {isLocalPath && !localPathsAllowed && (
             <small style={{ display: 'block', marginTop: '0.5rem', color: '#dc3545', fontSize: '0.875rem' }}>
-              ❌ Local paths are not allowed in Production Mode. Please use a Git repository URL (GitHub/GitLab).
+              ❌ Local paths are not allowed in Production Mode. Please use a Git repository URL (GitHub/GitLab) or a Docker image.
             </small>
+          )}
+          {isImageTarget && gitOnly && !isDockerHubImage(target) && (
+            <small style={{ display: 'block', marginTop: '0.5rem', color: '#dc3545', fontSize: '0.875rem' }}>
+              ❌ Production Mode: Only Docker Hub images are allowed (docker.io/... or unqualified image names).
+            </small>
+          )}
+          {isImageTarget && (
+            <div style={{
+              marginTop: '0.75rem',
+              padding: '0.75rem',
+              background: 'rgba(0, 123, 255, 0.1)',
+              border: '1px solid #007bff',
+              borderRadius: '6px',
+              fontSize: '0.875rem',
+              color: '#004085'
+            }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span>🐳</span>
+                <span>Docker Image erkannt</span>
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '1.25rem', lineHeight: '1.6' }}>
+                <li>Image wird via Anchore/Clair auf Schwachstellen geprüft</li>
+                <li>Dev: lokale Images erlaubt</li>
+                <li>Prod: nur Docker Hub (docker.io/... oder unqualified)</li>
+              </ul>
+            </div>
           )}
           {isGitRepo && (
             <>

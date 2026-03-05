@@ -1,0 +1,19 @@
+name: zap
+install:
+  - ["wget", "https://github.com/zaproxy/zaproxy/releases/download/v2.16.1/ZAP_2.16.1_Linux.tar.gz"]
+  - ["tar", "-xvzf", "ZAP_2.16.1_Linux.tar.gz", "-C", "/opt"]
+  - ["rm", "ZAP_2.16.1_Linux.tar.gz"]
+  - ["wget", "https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap-baseline.py", "-O", "/usr/local/bin/zap-baseline.py"]
+  - ["chmod", "+x", "/usr/local/bin/zap-baseline.py"]
+  - ["wget", "https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap_common.py", "-O", "/usr/local/bin/zap_common.py"]
+  - ["mkdir", "-p", "/zap/wrk/zap"]
+  - ["cp", "/SimpleSecCheck/scanner/scanners/zap/config/baseline.conf", "/zap/wrk/zap/baseline.conf"]
+  - ["cp", "-r", "/opt/ZAP_2.16.1/", "/zap/"]
+  - ["ln", "-sf", "/zap/zap.sh", "/zap/zap-x.sh"]
+assets:
+  - id: baseline_conf
+    type: config
+    description: ZAP baseline configuration
+    mount:
+      host_subpath: scanner/scanners/zap/config/baseline.conf
+      container_path: /SimpleSecCheck/scanner/scanners/zap/config/baseline.conf

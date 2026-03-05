@@ -63,23 +63,15 @@ services:
       # Scripts sind bereits im Image (über COPY . /SimpleSecCheck im Dockerfile)
       # Kein Volume-Mount nötig für Production - Image funktioniert standalone
       # OWASP Dependency Check data directory - cached to avoid re-downloading 300K+ vulnerabilities on every build
-      - ./scanner/data/owasp-dependency-check-data:/SimpleSecCheck/owasp-dependency-check-data
+      - ./scanner/scanners/owasp/data:/SimpleSecCheck/scanner/scanners/owasp/data
       # ⚠️ PRODUCTION: NO Docker socket - only Git scans allowed, no network scans
       # Git scans don't require Docker socket (only network scans need it for Docker Bench)
     environment:
-      - TARGET_URL=${TARGET_URL:-http://host.docker.internal:8000}
+      - SCAN_TARGET=${SCAN_TARGET:-}
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
       - RESULTS_DIR_IN_CONTAINER=/SimpleSecCheck/results
-      - LOGS_DIR_IN_CONTAINER=/SimpleSecCheck/results/logs
       - ENVIRONMENT=prod
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}
-      - SEMGREP_RULES_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/rules
-      - TRIVY_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/trivy/config.yaml
-      - ANCHORE_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/anchore/config.yaml
-      - ANCHORE_IMAGE=${ANCHORE_IMAGE:-}
-      - ZAP_CONFIG_PATH_IN_CONTAINER=/SimpleSecCheck/scanner/config/tools/zap/baseline.conf
-      - TRIVY_SCAN_TYPE=fs
-      - FP_WHITELIST_FILE=/SimpleSecCheck/scanner/config/policy/fp_whitelist.json
       # Optional API Tokens (loaded from .env file if present)
       - NVD_API_KEY=${NVD_API_KEY:-}
       - SNYK_TOKEN=${SNYK_TOKEN:-}
@@ -94,7 +86,7 @@ services:
     # Traefik Reverse Proxy Configuration
     build:
       context: .
-      dockerfile: ./webui/Dockerfile.compose
+      dockerfile: ./webui/Dockerfile.nginx
     container_name: SimpleSecCheck_webui
     # Entrypoint script will dynamically configure docker group access at runtime
     # No need to specify user here - entrypoint handles it
@@ -102,83 +94,10 @@ services:
     # ports:
     #   - "0.0.0.0:8080:8080"  # Not needed with Traefik
     volumes:
-      # Scripts sind bereits im Image (über COPY . /SimpleSecCheck im Dockerfile)
-      # Kein Volume-Mount nötig für Production - Image funktioniert standalone
-      - ./results:/app/results                # Results (read-write: run-docker.sh needs to create subdirs)
-      #- ./logs:/app/logs:ro                  # Logs (read-only)
-      # Config ist bereits im Image (über COPY scanner/ im Dockerfile) - kein Volume-Mount nötig
-      #- ./Dockerfile:/app/Dockerfile:ro       # Dockerfile (read-only, needed for scanner build)
-      - .:/project:ro                         # Project root (read-only, needed as build context for scanner)
-      - ./scanner/data/owasp-dependency-check-data:/app/owasp-dependency-check-data  # OWASP database (read-write: for updates and checks)
+      - ./results:/webui/results
     environment:
-      - SIMPLESECCHECK_ROOT=/app
-      - PYTHONUNBUFFERED=1
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-      # Host project root for OWASP volume mounting (used by run-docker.sh)
-      - HOST_PROJECT_ROOT=${PWD}
-      # Force compose file path inside container (avoid file mount issues)
-      - DOCKER_COMPOSE_FILE=/project/docker-compose.prod.traefik.yml
-      
-      # Production Mode Configuration
       - ENVIRONMENT=prod
-      - DATABASE_TYPE=postgresql
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}
       
-      # Auto-shutdown: DEAKTIVIERT in Production (Service muss dauerhaft laufen!)
-      - WEBUI_AUTO_SHUTDOWN=false
-      - WEBUI_SHUTDOWN_AFTER_SCAN=false
-      - WEBUI_SHUTDOWN_DELAY=0
-      - WEBUI_IDLE_TIMEOUT=0
-      
-      # Production Features
-      - SESSION_MANAGEMENT=true
-      - QUEUE_ENABLED=true
-      - METADATA_COLLECTION=always
-      - ONLY_GIT_SCANS=true
-      
-      # Session Configuration
-      - SESSION_DURATION=${SESSION_DURATION:-86400}
-      - SESSION_STORAGE=postgresql
-      - SESSION_COOKIE_NAME=${SESSION_COOKIE_NAME:-session_id}
-      - SESSION_HEADER_NAME=${SESSION_HEADER_NAME:-X-Session-ID}
-      - SESSION_COOKIE_HTTPONLY=true
-      - SESSION_COOKIE_SECURE=true
-      - SESSION_COOKIE_SAMESITE=lax
-      # WebUI only: disable scanner worker in this container
-      - SCANNER_WORKER_ENABLED=false
-      
-      # Queue Configuration
-      - MAX_QUEUE_LENGTH=${MAX_QUEUE_LENGTH:-1000}
-      - MAX_CONCURRENT_SCANS=${MAX_CONCURRENT_SCANS:-1}
-      - QUEUE_DEDUPLICATION=true
-      - QUEUE_FAIRNESS_MODE=fifo
-      
-      # Rate Limiting
-      - RATE_LIMIT_PER_SESSION_SCANS=${RATE_LIMIT_PER_SESSION_SCANS:-10}
-      - RATE_LIMIT_PER_SESSION_REQUESTS=${RATE_LIMIT_PER_SESSION_REQUESTS:-100}
-      - RATE_LIMIT_PER_IP_SCANS=${RATE_LIMIT_PER_IP_SCANS:-50}
-      - RATE_LIMIT_PER_IP_REQUESTS=${RATE_LIMIT_PER_IP_REQUESTS:-1000}
-      
-      # Size Limits
-      - MAX_ZIP_UPLOAD_SIZE=${MAX_ZIP_UPLOAD_SIZE:-100M}
-      - MAX_GIT_REPO_SIZE=${MAX_GIT_REPO_SIZE:-500M}
-      - MAX_SCAN_DISK_USAGE=${MAX_SCAN_DISK_USAGE:-2G}
-      
-      # Scan Deduplication
-      - SCAN_DEDUPLICATION_ENABLED=true
-      - SCAN_DEDUPLICATION_AGE_DAYS=${SCAN_DEDUPLICATION_AGE_DAYS:-7}
-      
-      # Optional Features
-      - STATISTICS_ENABLED=${STATISTICS_ENABLED:-true}
-      - ZIP_UPLOAD_ENABLED=${ZIP_UPLOAD_ENABLED:-true}
-      
-      # OWASP Auto-Update Configuration (Production only)
-      - OWASP_AUTO_UPDATE_ENABLED=${OWASP_AUTO_UPDATE_ENABLED:-true}
-      - OWASP_AUTO_UPDATE_INTERVAL_DAYS=${OWASP_AUTO_UPDATE_INTERVAL_DAYS:-7}
-      - OWASP_AUTO_UPDATE_CHECK_INTERVAL_HOURS=${OWASP_AUTO_UPDATE_CHECK_INTERVAL_HOURS:-24}
-      
-      # CORS Configuration
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
     networks:
       - SimpleSecCheck_network
@@ -241,22 +160,21 @@ services:
     # Separate worker for executing scans (isolated from public WebUI)
     build:
       context: .
-      dockerfile: ./webui/Dockerfile.compose
+      dockerfile: ./scanner/Dockerfile.worker
     container_name: SimpleSecCheck_scanner_worker
     # No public ports
     volumes:
-      - ./results:/app/results
-      # - ./logs:/app/logs:ro
-      # - ./Dockerfile:/app/Dockerfile:ro
+      - ./results:/webui/results
       - .:/project:ro
-      - ./scanner/data/owasp-dependency-check-data:/app/owasp-dependency-check-data
+      - ./scanner/scanners/owasp/data:/scanner/scanners/owasp/data
       - /var/run/docker.sock:/var/run/docker.sock  # Docker socket required for scan execution
     environment:
-      - SIMPLESECCHECK_ROOT=/app
+      - SIMPLESECCHECK_ROOT=/webui
       - PYTHONUNBUFFERED=1
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
       - HOST_PROJECT_ROOT=${PWD}
+      - SCANNER_PROXY_MODE=false
       # Compose file is always renamed to docker-compose.yml on the server
       - DOCKER_COMPOSE_FILE=/project/docker-compose.yml
       - ENVIRONMENT=prod
