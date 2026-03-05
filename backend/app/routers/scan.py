@@ -2,6 +2,7 @@
 Scan Routes
 """
 import os
+import logging
 import uuid
 import json
 import asyncio
@@ -24,6 +25,8 @@ from app.services.session_service import get_session_service
 from app.services.policy_service import validate_scan_request, is_session_required
 from app.services.websocket_manager import get_websocket_manager
 from app.services.step_service import read_steps_from_db, upsert_steps_from_log
+
+logger = logging.getLogger("app.routers.scan")
 
 router = APIRouter()
 
@@ -66,8 +69,8 @@ async def get_scanners(scan_type: str = None):
                 response = await client.get(worker_url, params=params)
                 response.raise_for_status()
                 return response.json()
-        except Exception as e:
-            print(f"[Get Scanners] Proxy error: {e}")
+        except Exception:
+            logger.exception("Proxy error while fetching scanners")
             return {"scanners": []}
 
     import sys
@@ -126,38 +129,43 @@ async def start_scan(request: ScanRequest, http_request: Request):
     - Prod: Uses PostgreSQL, requires session/rate limiting
     Scanner worker processes scans from queue sequentially.
     """
-    print(f"[Scan Start] Request received: type={request.type}, target={request.target}")
+    logger.info("Scan start requested: type=%s target=%s", request.type, request.target)
     update_activity()
     
     # Centralized production policy validation
     try:
         validate_scan_request(request.type, request.target)
     except ValueError as exc:
-        print(f"[Scan Start] Error: {exc}")
+        logger.warning("Scan start validation error: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc))
     
     # Get session ID from request state (set by middleware) or create one if not available
     session_id = getattr(http_request.state, "session_id", None)
-    print(f"[Scan Start] Session ID: {session_id}, SESSION_MANAGEMENT={SESSION_MANAGEMENT}")
+    logger.debug("Scan start session_id=%s SESSION_MANAGEMENT=%s", session_id, SESSION_MANAGEMENT)
     if not session_id:
         if is_session_required():
-            print(f"[Scan Start] Error: No session ID, SESSION_MANAGEMENT={SESSION_MANAGEMENT}")
+            logger.warning("Scan start denied: session required")
             raise HTTPException(status_code=401, detail="Session required")
         # In Dev without session management, create a temporary session ID
         session_id = str(uuid.uuid4())
-        print(f"[Scan Start] Created temporary session ID: {session_id}")
+        logger.debug("Scan start created temporary session_id=%s", session_id)
     
     # Check rate limits (only if session management is enabled)
     if SESSION_MANAGEMENT:
         session_service = await get_session_service()
         allowed, error_msg = await session_service.check_rate_limit(session_id)
         if not allowed:
-            print(f"[Scan Start] Error: Rate limit exceeded: {error_msg}")
+            logger.warning("Scan start rate limit exceeded: %s", error_msg)
             raise HTTPException(status_code=429, detail=error_msg)
     
     # Add to queue (always enabled)
     queue_service = await get_queue_service()
-    print(f"[Scan Start] Adding to queue: repository_url={request.target}, branch={request.git_branch}, selected_scanners={request.selected_scanners}")
+    logger.info(
+        "Scan start queueing: repository_url=%s branch=%s scanners=%s",
+        request.target,
+        request.git_branch,
+        request.selected_scanners,
+    )
     
     # Extract branch and commit hash from request if available
     branch = request.git_branch
@@ -176,12 +184,12 @@ async def start_scan(request: ScanRequest, http_request: Request):
             )
             if result.returncode == 0 and result.stdout.strip():
                 commit_hash = result.stdout.split()[0].strip()
-                print(f"[Scan Start] Resolved commit hash for {branch}: {commit_hash}")
+                logger.debug("Resolved commit hash for branch %s: %s", branch, commit_hash)
             else:
                 error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-                print(f"[Scan Start] Commit hash lookup failed: {error_msg}")
+                logger.debug("Commit hash lookup failed: %s", error_msg)
         except Exception as exc:
-            print(f"[Scan Start] Commit hash lookup error: {exc}")
+            logger.exception("Commit hash lookup error")
     
     result = await queue_service.add_scan_to_queue(
         session_id=session_id,
@@ -192,10 +200,10 @@ async def start_scan(request: ScanRequest, http_request: Request):
         finding_policy=request.finding_policy,
     )
     
-    print(f"[Scan Start] Queue result: {result}")
+    logger.debug("Scan start queue result: %s", result)
     
     if "error" in result:
-        print(f"[Scan Start] Error adding to queue: {result.get('message')}")
+        logger.warning("Scan start queue error: %s", result.get("message"))
         raise HTTPException(status_code=400, detail=result.get("message", "Failed to add to queue"))
     
     # Increment scan count (only if session management is enabled)
@@ -205,7 +213,7 @@ async def start_scan(request: ScanRequest, http_request: Request):
     
     # Return queue_id as scan_id for tracking
     # Use "pending" status to match queue status (consistent with frontend expectations)
-    print(f"[Scan Start] Success: queue_id={result.get('queue_id')}")
+    logger.info("Scan start queued successfully: queue_id=%s", result.get("queue_id"))
     return ScanStatus(
         status="pending",
         scan_id=result.get("queue_id"),  # Use queue_id as scan_id for tracking
@@ -278,47 +286,52 @@ async def get_logs(http_request: Request = None):
         session_id = getattr(http_request.state, "session_id", None)
     
     if not session_id:
-        print(f"[Get Logs] Error: No session_id")
+        logger.debug("Get logs skipped: no session_id")
         return {"lines": [], "count": 0}
     
     queue_service = await get_queue_service()
     user_scans = await queue_service.get_user_queue(session_id)
     
     if not user_scans:
-        print(f"[Get Logs] Error: No scans found for session {session_id}")
+        logger.debug("Get logs: no scans found for session %s", session_id)
         return {"lines": [], "count": 0}
     
     latest_scan = sorted(user_scans, key=lambda x: x.get("created_at", ""), reverse=True)[0]
     scan_id = latest_scan.get("scan_id")
     queue_id_from_scan = latest_scan.get("queue_id")
     
-    print(f"[Get Logs] Latest scan: queue_id={queue_id_from_scan}, scan_id={scan_id}, status={latest_scan.get('status')}")
+    logger.debug(
+        "Get logs latest scan: queue_id=%s scan_id=%s status=%s",
+        queue_id_from_scan,
+        scan_id,
+        latest_scan.get("status"),
+    )
     
     if not scan_id:
-        print(f"[Get Logs] Warning: scan_id not set yet for queue_id={queue_id_from_scan}")
+        logger.debug("Get logs: scan_id not set yet for queue_id=%s", queue_id_from_scan)
         return {"lines": [], "count": 0}
     
     log_file = None
     
     if RESULTS_DIR and RESULTS_DIR.exists():
-        print(f"[Get Logs] Searching for scan directory with scan_id={scan_id} in {RESULTS_DIR}")
+        logger.debug("Get logs searching for scan_id=%s in %s", scan_id, RESULTS_DIR)
         for scan_dir in sorted(RESULTS_DIR.iterdir(), reverse=True):
             if scan_dir.is_dir() and scan_id in scan_dir.name:
                 log_file = scan_dir / "logs" / "steps.log"
-                print(f"[Get Logs] Found steps.log: {log_file}")
+                logger.debug("Get logs found steps.log at %s", log_file)
                 break
         if not log_file:
-            print(f"[Get Logs] Warning: No directory found with scan_id={scan_id} in {RESULTS_DIR}")
+            logger.debug("Get logs: no directory found for scan_id=%s", scan_id)
     else:
-        print(f"[Get Logs] Error: RESULTS_DIR not available or doesn't exist: {RESULTS_DIR}")
+        logger.warning("Get logs: RESULTS_DIR not available or doesn't exist: %s", RESULTS_DIR)
     
     if log_file and log_file.exists():
         with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
             lines = [line.strip() for line in f.readlines() if line.strip()]
-        print(f"[Get Logs] Returning {len(lines)} lines from steps.log")
+        logger.debug("Get logs returning %s lines", len(lines))
         return {"lines": lines, "count": len(lines)}
     else:
-        print(f"[Get Logs] Error: steps.log not found at {log_file}")
+        logger.debug("Get logs: steps.log not found at %s", log_file)
         return {"lines": [], "count": 0}
 
 
@@ -390,8 +403,8 @@ async def websocket_scan_updates(websocket: WebSocket, scan_id: str = None):
                             "timestamp": asyncio.get_event_loop().time()
                         })
                         last_snapshot = snapshot
-            except Exception as e:
-                print(f"[WebSocket] Error streaming steps: {e}")
+            except Exception:
+                logger.exception("WebSocket error streaming steps")
 
             await asyncio.sleep(0.5)
 
@@ -404,35 +417,40 @@ async def websocket_scan_updates(websocket: WebSocket, scan_id: str = None):
         
         if is_uuid:
             # scan_id is actually a queue_id (UUID), get scan_id (timestamp) from queue
-            print(f"[WebSocket] Parameter is UUID (queue_id): {scan_id}, getting scan_id from queue")
+            logger.debug("WebSocket queue_id=%s, resolving scan_id", scan_id)
             queue_service = await get_queue_service()
             queue_item = await queue_service.get_queue_status(scan_id)
             
             if not queue_item:
-                print(f"[WebSocket] Error: Queue item not found for queue_id={scan_id}")
+                logger.debug("WebSocket queue item not found for queue_id=%s", scan_id)
                 await websocket.send_json({"error": "Queue item not found"})
                 await websocket.close()
                 return
             
             actual_scan_id = queue_item.get("scan_id")
-            print(f"[WebSocket] Found queue item: queue_id={scan_id}, scan_id={actual_scan_id}, status={queue_item.get('status')}")
+            logger.debug(
+                "WebSocket resolved queue_id=%s scan_id=%s status=%s",
+                scan_id,
+                actual_scan_id,
+                queue_item.get("status"),
+            )
             
             if not actual_scan_id:
-                print(f"[WebSocket] Warning: scan_id not set yet for queue_id={scan_id}, scan not started")
+                logger.debug("WebSocket scan_id not set yet for queue_id=%s", scan_id)
                 await websocket.send_json({"error": "Scan not started yet (scan_id not set)"})
                 await websocket.close()
                 return
         else:
             # scan_id is already a timestamp, use it directly
             actual_scan_id = scan_id
-            print(f"[WebSocket] Using scan_id parameter directly (timestamp): {actual_scan_id}")
+            logger.debug("WebSocket using scan_id=%s", actual_scan_id)
         
         if not actual_scan_id:
             await websocket.send_json({"error": "No scan_id provided or invalid"})
             await websocket.close()
             return
         
-        print(f"[WebSocket] Connecting: scan_id={actual_scan_id}")
+        logger.debug("WebSocket connecting: scan_id=%s", actual_scan_id)
         
         # Connect to WebSocket manager
         await ws_manager.connect(websocket, actual_scan_id)
@@ -491,9 +509,9 @@ async def websocket_scan_updates(websocket: WebSocket, scan_id: str = None):
                 break
             
     except WebSocketDisconnect:
-        print(f"[WebSocket] Client disconnected: scan_id={actual_scan_id}")
-    except Exception as e:
-        print(f"[WebSocket] Error: {e}")
+        logger.debug("WebSocket client disconnected: scan_id=%s", actual_scan_id)
+    except Exception:
+        logger.exception("WebSocket error")
     finally:
         step_stream_running = False
         if step_stream_task:

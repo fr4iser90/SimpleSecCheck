@@ -7,12 +7,12 @@ import os
 import asyncio
 import subprocess
 import time
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from app.database import get_database
-from app.services.queue_service import get_queue_service
 from app.services.step_service import initialize_step_tracking, initialize_steps_log, derive_project_name, write_step_to_log
 
 
@@ -26,6 +26,7 @@ class ScannerWorker:
         self.running_runners: Dict[str, Any] = {}  # {scan_id: DockerRunner} - track runners for cleanup
         self.is_running = False
         self.worker_task: Optional[asyncio.Task] = None
+        self.logger = logging.getLogger("app.services.scanner_worker")
     
     async def initialize(self):
         """Initialize database connection (idempotent - uses shared connection pool)"""
@@ -49,26 +50,26 @@ class ScannerWorker:
         
         self.is_running = True
         self.worker_task = asyncio.create_task(self._worker_loop())
-        print("[Scanner Worker] Worker loop started")
+        self.logger.info("Worker loop started")
     
     async def stop(self):
         """Stop the worker"""
         self.is_running = False
         
         # Stop all running docker-compose processes
-        print(f"[Scanner Worker] Stopping {len(self.running_runners)} running scan(s)...")
+        self.logger.info("Stopping %s running scan(s)...", len(self.running_runners))
         for scan_id, runner in self.running_runners.items():
             if runner and runner.process and runner.process.returncode is None:
-                print(f"[Scanner Worker] Stopping docker-compose process for scan {scan_id}...")
+                self.logger.info("Stopping docker-compose process for scan %s...", scan_id)
                 try:
                     runner.process.terminate()
                     await asyncio.wait_for(runner.process.wait(), timeout=5.0)
                 except asyncio.TimeoutError:
-                    print(f"[Scanner Worker] Force killing docker-compose process for scan {scan_id}...")
+                    self.logger.warning("Force killing docker-compose process for scan %s...", scan_id)
                     runner.process.kill()
                     await runner.process.wait()
                 except Exception as e:
-                    print(f"[Scanner Worker] Error stopping process for scan {scan_id}: {e}")
+                    self.logger.exception("Error stopping process for scan %s", scan_id)
         
         # Stop all Docker containers from running scans
         from app.services.container_service import stop_running_containers
@@ -77,13 +78,13 @@ class ScannerWorker:
             current_scan = {"container_ids": []}
             stopped = stop_running_containers(current_scan)
             if stopped:
-                print(f"[Scanner Worker] Stopped {len(stopped)} container(s) for scan {scan_id}")
+                self.logger.info("Stopped %s container(s) for scan %s", len(stopped), scan_id)
         
         # Cancel all running scan tasks
         if self.running_scans:
             for scan_id, task in self.running_scans.items():
                 if not task.done():
-                    print(f"[Scanner Worker] Cancelling scan task {scan_id}...")
+                    self.logger.debug("Cancelling scan task %s...", scan_id)
                     task.cancel()
             # Wait for tasks to complete (with timeout)
             try:
@@ -92,7 +93,7 @@ class ScannerWorker:
                     timeout=10.0
                 )
             except asyncio.TimeoutError:
-                print("[Scanner Worker] Timeout waiting for scan tasks to complete")
+                self.logger.warning("Timeout waiting for scan tasks to complete")
         
         if self.worker_task:
             self.worker_task.cancel()
@@ -130,7 +131,7 @@ class ScannerWorker:
                             if age_minutes > 2:  # Stuck if older than 2 minutes (reduced from 5 for faster recovery)
                                 stuck_jobs.append(job)
                         except (ValueError, AttributeError) as e:
-                            print(f"[Scanner Worker] Error parsing started_at for job {queue_id}: {e}")
+                            self.logger.debug("Error parsing started_at for job %s: %s", queue_id, e)
                     else:
                         # No started_at means it was set to running but never actually started
                         # Check created_at instead
@@ -147,29 +148,31 @@ class ScannerWorker:
                                 if age_minutes > 2:  # Stuck if older than 2 minutes (reduced from 5 for faster recovery)
                                     stuck_jobs.append(job)
                             except (ValueError, AttributeError) as e:
-                                print(f"[Scanner Worker] Error parsing created_at for job {queue_id}: {e}")
+                                self.logger.debug("Error parsing created_at for job %s: %s", queue_id, e)
             
             # Reset stuck jobs to pending
             if stuck_jobs:
-                print(f"[Scanner Worker] Found {len(stuck_jobs)} stuck job(s), resetting to pending...")
+                self.logger.info("Found %s stuck job(s), resetting to pending...", len(stuck_jobs))
                 for job in stuck_jobs:
                     queue_id = job.get("queue_id")
-                    print(f"[Scanner Worker] Resetting stuck job: queue_id={queue_id}, repository={job.get('repository_url', 'unknown')}")
+                    self.logger.info(
+                        "Resetting stuck job: queue_id=%s repository=%s",
+                        queue_id,
+                        job.get("repository_url", "unknown"),
+                    )
                     await self.db.update_queue_status(
                         queue_id=queue_id,
                         status="pending",
                     )
         except Exception as e:
-            print(f"[Scanner Worker] Error checking stuck jobs: {e}")
-            import traceback
-            traceback.print_exc()
+            self.logger.exception("Error checking stuck jobs")
     
     async def _worker_loop(self):
         """Main worker loop - continuously polls queue for jobs"""
         import time
         last_log_time = 0
         last_stuck_check = 0
-        print("[Scanner Worker] Worker loop started and running")
+        self.logger.info("Worker loop started and running")
         while self.is_running:
             try:
                 # Check for stuck jobs every 15 seconds (more frequent for faster recovery)
@@ -184,15 +187,21 @@ class ScannerWorker:
                     job = await self.db.get_next_queue_item()
                     
                     if job:
-                        print(f"[Scanner Worker] Found job: {job['queue_id']} for {job.get('repository_url', 'unknown')} (status: {job.get('status', 'unknown')})")
+                        self.logger.info(
+                            "Found job: queue_id=%s repository=%s status=%s",
+                            job["queue_id"],
+                            job.get("repository_url", "unknown"),
+                            job.get("status", "unknown"),
+                        )
                         # Start scan task with error handling
                         async def process_with_error_handling(job):
                             try:
                                 await self._process_scan_job(job)
                             except Exception as e:
-                                print(f"[Scanner Worker] CRITICAL: Task failed for {job.get('queue_id', 'unknown')}: {e}")
-                                import traceback
-                                traceback.print_exc()
+                                self.logger.exception(
+                                    "CRITICAL: Task failed for %s",
+                                    job.get("queue_id", "unknown"),
+                                )
                                 # Update status to failed
                                 try:
                                     await self.db.update_queue_status(
@@ -201,7 +210,7 @@ class ScannerWorker:
                                         completed_at=datetime.utcnow(),
                                     )
                                 except Exception as db_error:
-                                    print(f"[Scanner Worker] Failed to update queue status: {db_error}")
+                                    self.logger.exception("Failed to update queue status")
                         
                         task = asyncio.create_task(process_with_error_handling(job))
                         self.running_scans[job["queue_id"]] = task
@@ -212,10 +221,20 @@ class ScannerWorker:
                             queue_length = await self.db.get_queue_length()
                             pending_count = len([s for s in await self.db.get_queue(limit=1000) if s.get("status") == "pending"])
                             running_count = len([s for s in await self.db.get_queue(limit=1000) if s.get("status") == "running"])
-                            print(f"[Scanner Worker] No pending jobs found (queue length: {queue_length}, pending: {pending_count}, running in DB: {running_count}, running tasks: {len(self.running_scans)})")
+                            self.logger.debug(
+                                "No pending jobs (queue length: %s, pending: %s, running in DB: %s, running tasks: %s)",
+                                queue_length,
+                                pending_count,
+                                running_count,
+                                len(self.running_scans),
+                            )
                             if len(self.running_scans) > 0:
                                 for queue_id, task in self.running_scans.items():
-                                    print(f"[Scanner Worker] Active task: queue_id={queue_id}, done={task.done()}")
+                                    self.logger.debug(
+                                        "Active task: queue_id=%s done=%s",
+                                        queue_id,
+                                        task.done(),
+                                    )
                             last_log_time = current_time
                         await asyncio.sleep(1)
                 else:
@@ -228,32 +247,30 @@ class ScannerWorker:
                     if task.done()
                 ]
                 for queue_id in completed:
-                    print(f"[Scanner Worker] Scan {queue_id} completed, cleaning up")
+                    self.logger.debug("Scan %s completed, cleaning up", queue_id)
                     del self.running_scans[queue_id]
                 
-            except Exception as e:
-                print(f"[Scanner Worker] Error in worker loop: {e}")
-                import traceback
-                traceback.print_exc()
+            except Exception:
+                self.logger.exception("Error in worker loop")
                 await asyncio.sleep(5)  # Wait before retrying
     
     async def _process_scan_job(self, job: Dict[str, Any]):
         """Process a single scan job"""
         # Add immediate logging and validation
-        print(f"[Scanner Worker] _process_scan_job called with job: {job}")
+        self.logger.debug("_process_scan_job called with job: %s", job)
         
         if not job:
-            print(f"[Scanner Worker] ERROR: job is None or empty")
+            self.logger.error("Job is None or empty")
             raise ValueError("Job is None or empty")
         
         queue_id = job.get("queue_id")
         if not queue_id:
-            print(f"[Scanner Worker] ERROR: No queue_id in job: {job}")
+            self.logger.error("No queue_id in job: %s", job)
             raise ValueError(f"No queue_id in job: {job}")
         
         repository_url = job.get("repository_url")
         if not repository_url:
-            print(f"[Scanner Worker] ERROR: No repository_url in job: {job}")
+            self.logger.error("No repository_url in job: %s", job)
             raise ValueError(f"No repository_url in job: {job}")
         
         branch = job.get("branch")
@@ -261,11 +278,11 @@ class ScannerWorker:
         selected_scanners = job.get("selected_scanners")  # List of scanner names to run
         finding_policy = job.get("finding_policy")
         
-        print(f"[Scanner Worker] Processing job {queue_id} for {repository_url}")
+        self.logger.info("Processing job %s for %s", queue_id, repository_url)
         if selected_scanners:
-            print(f"[Scanner Worker] Selected scanners: {selected_scanners}")
+            self.logger.debug("Selected scanners: %s", selected_scanners)
         else:
-            print(f"[Scanner Worker] No selected scanners - will run all scanners")
+            self.logger.debug("No selected scanners - will run all scanners")
         
         try:
             # Generate scan_id BEFORE starting scan (so frontend can find logs immediately)
@@ -279,10 +296,10 @@ class ScannerWorker:
                 scan_id=scan_id,  # Set scan_id immediately so frontend can find logs
                 started_at=datetime.utcnow(),
             )
-            print(f"[Scanner Worker] Updated job {queue_id} status to running with scan_id={scan_id}")
+            self.logger.info("Updated job %s status to running with scan_id=%s", queue_id, scan_id)
             
             # Execute scan (uses the scan_id we just generated)
-            print(f"[Scanner Worker] Starting scan execution for {queue_id} (scan_id={scan_id})")
+            self.logger.info("Starting scan execution for %s (scan_id=%s)", queue_id, scan_id)
             scan_result = await self._execute_scan(
                 repository_url=repository_url,
                 branch=branch,
@@ -293,7 +310,7 @@ class ScannerWorker:
             )
             actual_scan_id = scan_result["scan_id"]
             results_dir_name = scan_result["results_dir"]
-            print(f"[Scanner Worker] Scan execution completed: scan_id={actual_scan_id}")
+            self.logger.info("Scan execution completed: scan_id=%s", actual_scan_id)
             
             # Update status to completed (scan_id should already be set, but update just in case)
             await self.db.update_queue_status(
@@ -307,8 +324,8 @@ class ScannerWorker:
             # Grant access to scan owner
             await self.db.add_scan_access(actual_scan_id or scan_id, job.get("session_id"))
             
-        except Exception as e:
-            print(f"[Scanner Worker] Error processing job {queue_id}: {e}")
+        except Exception:
+            self.logger.exception("Error processing job %s", queue_id)
             
             # Update status to failed
             await self.db.update_queue_status(
@@ -394,9 +411,9 @@ class ScannerWorker:
                         stdout, _ = await result.communicate()
                         if result.returncode == 0:
                             actual_commit_hash = stdout.decode().strip()
-                            print(f"[Scanner Worker] Extracted commit hash: {actual_commit_hash}")
+                            self.logger.debug("Extracted commit hash: %s", actual_commit_hash)
                     except Exception as e:
-                        print(f"[Scanner Worker] Failed to extract commit hash: {e}")
+                        self.logger.debug("Failed to extract commit hash: %s", e)
                 
                 # Use cloned path for scan
                 target_path = str(temp_clone_path)
@@ -505,22 +522,22 @@ class ScannerWorker:
                             "total_steps": total_steps,
                             "progress_percentage": progress_percentage,
                         })
-                except Exception as e:
-                    print(f"[Scanner Worker] Error streaming steps: {e}")
+                except Exception:
+                    self.logger.exception("Error streaming steps")
 
                 await asyncio.sleep(0.5)
         
         def output_callback(line_str: str):
             """Callback for each output line from docker-compose"""
             output_lines.append(line_str)
-            print(f"[Scanner Worker] {line_str}")
+            self.logger.debug("%s", line_str)
             
             # Write ALL logs to scan.log (live, not buffered)
             try:
                 with open(scan_log, "a", encoding="utf-8") as f:
                     f.write(f"{line_str}\n")
-            except Exception as e:
-                print(f"[Scanner Worker] Error writing to scan.log: {e}")
+            except Exception:
+                self.logger.exception("Error writing to scan.log")
             
             # Step Registry writes directly to steps.log - read it periodically
             # Use a simple debounce mechanism to avoid reading too frequently
@@ -564,8 +581,8 @@ class ScannerWorker:
                                     "total_steps": total_steps,
                                     "progress_percentage": progress_percentage
                                 })
-                        except Exception as e:
-                            print(f"[Scanner Worker] Error sending to WebSocket: {e}")
+                        except Exception:
+                            self.logger.exception("Error sending to WebSocket")
                     
                     # Schedule async task (runs in background)
                     try:
@@ -577,11 +594,11 @@ class ScannerWorker:
                     except RuntimeError:
                         # No event loop, skip WebSocket update
                         pass
-                except Exception as e:
-                    print(f"[Scanner Worker] Error scheduling WebSocket update: {e}")
+                except Exception:
+                    self.logger.exception("Error scheduling WebSocket update")
         
         # Execute scan using docker_runner
-        print(f"[Scanner Worker] Starting scan: {scan_id} for {repository_url}")
+        self.logger.info("Starting scan: %s for %s", scan_id, repository_url)
         
         # Track runner for cleanup
         self.running_runners[scan_id] = runner
@@ -631,7 +648,7 @@ class ScannerWorker:
                     current_scan=current_scan,
                     results_dir=results_dir_path_obj
                 )
-                print(f"[Scanner Worker] Marked Step {step_num} (Metadata Collection) as completed")
+                self.logger.debug("Marked Step %s (Metadata Collection) as completed", step_num)
         
         # Try to find scan results directory
         # Results are typically in results/PROJECT_NAME_SCAN_ID/
@@ -653,9 +670,9 @@ class ScannerWorker:
                     policy_path="config/finding-policy.json",
                     languages=SUPPORTED_PROMPT_LANGUAGES,
                 )
-                print(f"[Scanner Worker] AI prompts saved in {scan_results_dir}")
+                self.logger.info("AI prompts saved in %s", scan_results_dir)
             except Exception as e:
-                print(f"[Scanner Worker] Failed to persist AI prompts: {e}")
+                self.logger.exception("Failed to persist AI prompts")
 
         # Increment global statistics from results
         if scan_results_dir:
@@ -665,9 +682,9 @@ class ScannerWorker:
                     results_dir=scan_results_dir,
                     base_dir=base_dir,
                 )
-                print(f"[Scanner Worker] Statistics updated for scan {scan_id}")
+                self.logger.info("Statistics updated for scan %s", scan_id)
             except Exception as stats_error:
-                print(f"[Scanner Worker] Failed to update statistics: {stats_error}")
+                self.logger.exception("Failed to update statistics")
         
         # Save metadata for deduplication
         try:
@@ -683,18 +700,18 @@ class ScannerWorker:
                 findings_count=0,  # TODO: Parse from results
                 metadata_file_path=str(scan_results_dir / "scan-metadata.json") if scan_results_dir else None,
             )
-            print(f"[Scanner Worker] Metadata saved for scan {scan_id}")
-        except Exception as e:
-            print(f"[Scanner Worker] Failed to save metadata: {e}")
+            self.logger.info("Metadata saved for scan %s", scan_id)
+        except Exception:
+            self.logger.exception("Failed to save metadata")
         
         # Cleanup temp clone if used
         if temp_clone_path and temp_clone_path.exists():
             try:
                 import shutil
                 shutil.rmtree(temp_clone_path)
-                print(f"[Scanner Worker] Cleaned up temp clone: {temp_clone_path}")
-            except Exception as e:
-                print(f"[Scanner Worker] Failed to cleanup temp clone: {e}")
+                self.logger.debug("Cleaned up temp clone: %s", temp_clone_path)
+            except Exception:
+                self.logger.exception("Failed to cleanup temp clone")
         
         # Send WebSocket notification that scan is completed
         try:
@@ -704,9 +721,13 @@ class ScannerWorker:
             # This is what the frontend expects for results_dir
             results_dir_name = results_dir_path_obj.name
             await ws_manager.send_scan_completed(scan_id, results_dir_name)
-            print(f"[Scanner Worker] Sent scan_completed WebSocket notification for {scan_id} with results_dir={results_dir_name}")
-        except Exception as e:
-            print(f"[Scanner Worker] Failed to send scan_completed notification: {e}")
+            self.logger.info(
+                "Sent scan_completed WebSocket notification for %s with results_dir=%s",
+                scan_id,
+                results_dir_name,
+            )
+        except Exception:
+            self.logger.exception("Failed to send scan_completed notification")
         
         return {
             "scan_id": scan_id,

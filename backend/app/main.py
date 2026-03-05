@@ -8,6 +8,7 @@ Single-shot principle: No database, no state, just CLI wrapper
 import os
 import asyncio
 import threading
+import logging
 from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 # Import services
+from app.logging_config import setup_logging, get_log_level
 from app.services import (
     # Shutdown service
     idle_timeout_checker,
@@ -79,6 +81,10 @@ def get_frontend_static_paths() -> list[Path]:
     """Fallback frontend paths when scanner core isn't available."""
     return [BASE_DIR / "static", Path("/app/static")]
 
+# Configure logging early
+log_level = setup_logging()
+logger = logging.getLogger("app.main")
+
 # CLI script is only needed for direct CLI usage (not for frontend)
 # Frontend calls docker-compose directly, so this validation is optional
 if CLI_SCRIPT and not CLI_SCRIPT.exists() and os.path.exists("/app"):
@@ -86,7 +92,7 @@ if CLI_SCRIPT and not CLI_SCRIPT.exists() and os.path.exists("/app"):
     pass
 elif CLI_SCRIPT and not CLI_SCRIPT.exists():
     # Running on host without script - warn but don't fail (frontend doesn't need it)
-    print(f"[WARNING] CLI script not found: {CLI_SCRIPT} (frontend will use docker-compose directly)")
+    logger.warning("CLI script not found: %s (frontend will use docker-compose directly)", CLI_SCRIPT)
 
 app = FastAPI(title="SimpleSecCheck Backend", version="1.0.0")
 
@@ -117,9 +123,9 @@ app.add_middleware(
 # Session middleware (only in production)
 if is_session_required():
     app.middleware("http")(session_middleware)
-    print("[Main] Session management enabled")
+    logger.info("Session management enabled")
 else:
-    print("[Main] Session management disabled")
+    logger.info("Session management disabled")
 
 # Global state for current scan (minimal, no DB)
 current_scan = {
@@ -159,7 +165,11 @@ async def queue_cleanup_task():
     cleanup_interval_hours = int(os.getenv("QUEUE_CLEANUP_INTERVAL_HOURS", "24"))
     max_age_days = int(os.getenv("QUEUE_CLEANUP_MAX_AGE_DAYS", "7"))
     
-    print(f"[Queue Cleanup] Background task started (check every {cleanup_interval_hours}h, delete items older than {max_age_days} days)")
+    logger.info(
+        "Queue cleanup background task started (check every %sh, delete items older than %s days)",
+        cleanup_interval_hours,
+        max_age_days,
+    )
     
     while True:
         try:
@@ -169,12 +179,12 @@ async def queue_cleanup_task():
             deleted_count = await db.cleanup_old_queue_items(max_age_days=max_age_days)
             
             if deleted_count > 0:
-                print(f"[Queue Cleanup] Deleted {deleted_count} old queue items")
+                logger.info("Queue cleanup deleted %s old queue items", deleted_count)
             else:
-                print("[Queue Cleanup] No old queue items to clean up")
+                logger.debug("Queue cleanup found no old queue items")
                 
         except Exception as e:
-            print(f"[Queue Cleanup] Error in background task: {e}")
+            logger.exception("Queue cleanup error")
             import traceback
             traceback.print_exc()
             # Wait before retrying
@@ -190,22 +200,22 @@ async def scanner_assets_auto_update_task():
         return
 
     check_interval_hours = int(os.getenv("SCANNER_ASSETS_AUTO_UPDATE_CHECK_INTERVAL_HOURS", "24"))
-    print(f"[Assets Auto-Update] Background task started (check every {check_interval_hours}h)")
+    logger.info("Assets auto-update background task started (check every %sh)", check_interval_hours)
 
     while True:
         try:
             await asyncio.sleep(check_interval_hours * 3600)
             status = get_scanner_asset_update_status()
             if status.status == "running":
-                print("[Assets Auto-Update] Update already in progress, skipping check")
+                logger.debug("Assets auto-update already in progress, skipping check")
                 continue
 
             # Example: auto-update OWASP data asset
             await start_scanner_asset_update("owasp", "data")
-            print("[Assets Auto-Update] Triggered update for owasp:data")
+            logger.info("Assets auto-update triggered for owasp:data")
 
         except Exception as e:
-            print(f"[Assets Auto-Update] Error in background task: {e}")
+            logger.exception("Assets auto-update error")
             import traceback
             traceback.print_exc()
             await asyncio.sleep(3600)
@@ -218,31 +228,29 @@ async def startup_event():
         # Initialize session service if enabled (needed by middleware)
         if SESSION_MANAGEMENT:
             session_service = await get_session_service()
-            print("[Main] Session service initialized")
+            logger.info("Session service initialized")
         
         # Initialize queue service (ALWAYS enabled - works in both Dev and Prod)
         queue_service = await get_queue_service()
-        print("[Main] Queue service initialized")
+        logger.info("Queue service initialized")
         
         # Start scanner worker (optional; disable for frontend-only deployments)
         if SCANNER_WORKER_ENABLED:
             await start_scanner_worker()
-            print("[Main] Scanner worker started")
+            logger.info("Scanner worker started")
         else:
-            print("[Main] Scanner worker disabled (SCANNER_WORKER_ENABLED=false)")
+            logger.info("Scanner worker disabled (SCANNER_WORKER_ENABLED=false)")
         
         # Start queue cleanup background task (always enabled)
         asyncio.create_task(queue_cleanup_task())
-        print("[Main] Queue cleanup background task started")
+        logger.info("Queue cleanup background task started")
         
         # Start OWASP auto-update background task (only in production if enabled)
         if IS_PRODUCTION:
             asyncio.create_task(scanner_assets_auto_update_task())
-            print("[Main] Assets auto-update background task started")
+            logger.info("Assets auto-update background task started")
     except Exception as e:
-        print(f"[Main] Failed to initialize services: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Failed to initialize services")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -251,20 +259,20 @@ async def shutdown_event():
         # Stop scanner worker (only if enabled)
         if SCANNER_WORKER_ENABLED:
             await stop_scanner_worker()
-            print("[Main] Scanner worker stopped")
+            logger.info("Scanner worker stopped")
         
         # Close session service if enabled
         if SESSION_MANAGEMENT:
             session_service = await get_session_service()
             await session_service.close()
-            print("[Main] Session service closed")
+            logger.info("Session service closed")
         
         # Close queue service (always enabled)
         queue_service = await get_queue_service()
         await queue_service.close()
-        print("[Main] Queue service closed")
+        logger.info("Queue service closed")
     except Exception as e:
-        print(f"[Main] Error stopping services: {e}")
+        logger.exception("Error stopping services")
 
 
 # Initialize routers with dependencies
@@ -338,4 +346,4 @@ if __name__ == "__main__":
     # In Docker containers, set HOST=0.0.0.0 to allow external access
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", "8080"))
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(app, host=host, port=port, log_level=get_log_level().lower())
