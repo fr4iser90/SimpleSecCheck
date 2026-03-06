@@ -289,6 +289,16 @@ class SQLiteDatabase(DatabaseAdapter):
                 "finding_policy": finding_policy,
             })
 
+        # Ensure the session exists before inserting into queue
+        await self._execute(
+            "INSERT OR IGNORE INTO sessions (session_id, created_at, expires_at) VALUES (?, ?, ?)",
+            (
+                session_id,
+                datetime.utcnow().isoformat(),
+                (datetime.utcnow() + timedelta(seconds=86400)).isoformat(),
+            ),
+        )
+
         await self._execute(
             """
             INSERT INTO queue (
