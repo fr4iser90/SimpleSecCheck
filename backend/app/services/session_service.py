@@ -18,12 +18,8 @@ class SessionService:
     
     def __init__(self):
         self.db = get_database()
-        self.session_duration = int(os.getenv("SESSION_DURATION", "86400"))  # 24 hours
-        self.cookie_name = os.getenv("SESSION_COOKIE_NAME", "session_id")
-        self.header_name = os.getenv("SESSION_HEADER_NAME", "X-Session-ID")
-        self.cookie_httponly = os.getenv("SESSION_COOKIE_HTTPONLY", "true").lower() == "true"
-        self.cookie_secure = os.getenv("SESSION_COOKIE_SECURE", "true").lower() == "true"
-        self.cookie_samesite = os.getenv("SESSION_COOKIE_SAMESITE", "lax")
+        from app.services.policy_service import get_policy_config
+        self.policy_config = get_policy_config()
     
     async def initialize(self):
         """Initialize database connection"""
@@ -39,9 +35,9 @@ class SessionService:
         Supports both Cookie and Header (Hybrid approach)
         """
         # Try to get session from cookie first, then header
-        session_id = request.cookies.get(self.cookie_name)
+        session_id = request.cookies.get(self.policy_config.session_cookie_name)
         if not session_id:
-            session_id = request.headers.get(self.header_name)
+            session_id = request.headers.get(self.policy_config.session_header_name)
         
         # Validate existing session
         if session_id:
@@ -132,27 +128,21 @@ class SessionService:
     
     def set_session_cookie(self, response: Response, session_id: str):
         """Set session cookie in response"""
-        max_age = self.session_duration
-        secure_cookie = self.cookie_secure
-
-        # Avoid blocking cookies on HTTP in local/dev environments
-        if os.getenv("ENVIRONMENT", "dev").lower() != "prod":
-            secure_cookie = False
-        elif os.getenv("FORCE_INSECURE_COOKIES", "false").lower() == "true":
-            secure_cookie = False
+        max_age = self.policy_config.session_duration
+        secure_cookie = self.policy_config.cookie_secure
 
         response.set_cookie(
-            key=self.cookie_name,
+            key=self.policy_config.session_cookie_name,
             value=session_id,
             max_age=max_age,
-            httponly=self.cookie_httponly,
+            httponly=self.policy_config.session_cookie_httponly,
             secure=secure_cookie,
-            samesite=self.cookie_samesite,
+            samesite=self.policy_config.cookie_samesite,
         )
     
     def set_session_header(self, response: Response, session_id: str):
         """Set session header in response"""
-        response.headers[self.header_name] = session_id
+        response.headers[self.policy_config.session_header_name] = session_id
 
 
 # Global session service instance

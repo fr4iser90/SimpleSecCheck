@@ -68,12 +68,6 @@ ENVIRONMENT=prod docker compose --profile prod up --build
 - Docker image scans accept **Docker Hub** images only (`nginx:latest` or `docker.io/...`).
 - Intended for controlled environments. Keep **HTTPS** enabled in real deployments.
 
-If you must run production mode locally over HTTP, set:
-
-```bash
-FORCE_INSECURE_COOKIES=true
-```
-
 ---
 
 ## Usage Notes

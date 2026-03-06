@@ -14,6 +14,8 @@ from app.services.target_service import classify_target, is_dockerhub_image_ref
 class PolicyConfig:
     environment: str
     is_production: bool
+    is_staging: bool
+    is_development: bool
     only_git_scans: bool
     allow_local_paths: bool
     allow_website_scans: bool
@@ -24,24 +26,94 @@ class PolicyConfig:
     require_queue: bool
     metadata_collection: str
     docker_hub_only: bool
+    
+    # Session-Konfiguration
+    session_duration: int
+    session_cookie_name: str
+    session_header_name: str
+    session_cookie_httponly: bool
+    session_cookie_secure: bool
+    session_cookie_samesite: str
+    
+    # Cookie-Konfiguration basierend auf Umgebung
+    cookie_secure: bool
+    cookie_samesite: str
+    
+    # Neue Felder für Development mit Production-Features
+    force_production_policy: bool
+    allow_direct_results_access: bool
 
 
 def get_policy_config() -> PolicyConfig:
     env = os.getenv("ENVIRONMENT", "dev").lower()
+    force_prod_policy = os.getenv("FORCE_PRODUCTION_POLICY", "false").lower() == "true"
+    
     is_prod = env == "prod"
-    only_git_scans = os.getenv("ONLY_GIT_SCANS", "true").lower() == "true" if is_prod else False
-    allow_local_paths = not is_prod
-    allow_website_scans = not is_prod
-    allow_network_scans = not is_prod
-    allow_bulk_scan = not is_prod
-    allow_zip_upload = os.getenv("ZIP_UPLOAD_ENABLED", "false").lower() == "true" if is_prod else True
-    require_sessions = os.getenv("SESSION_MANAGEMENT", "true" if is_prod else "false").lower() == "true"
+    is_staging = env == "staging"
+    is_dev = env == "dev"
+    
+    # UI-Features: Gestützt von FORCE_PRODUCTION_POLICY
+    if force_prod_policy:
+        # UI wie Production, aber ohne Session-Management
+        only_git_scans = True
+        allow_local_paths = False
+        allow_website_scans = False
+        allow_network_scans = False
+        allow_bulk_scan = False
+        allow_zip_upload = False
+        docker_hub_only = True
+        allow_direct_results_access = True  # UI-Zugriff erlauben
+    elif is_prod:
+        # Echte Production-Logik
+        only_git_scans = True
+        allow_local_paths = False
+        allow_website_scans = False
+        allow_network_scans = False
+        allow_bulk_scan = False
+        allow_zip_upload = False
+        docker_hub_only = True
+        allow_direct_results_access = False
+    else:
+        # Development/Staging
+        only_git_scans = False
+        allow_local_paths = True
+        allow_website_scans = True
+        allow_network_scans = True
+        allow_bulk_scan = True
+        allow_zip_upload = True
+        docker_hub_only = False
+        allow_direct_results_access = True
+    
+    # Session-Management: Nur in echtem Production
+    require_sessions = is_prod
     require_queue = is_prod
+    
+    # Cookie-Konfiguration basierend auf Umgebung
+    if is_prod:
+        cookie_secure = True
+        cookie_samesite = "strict"
+    elif is_staging:
+        cookie_secure = True  # Wie Production!
+        cookie_samesite = "strict"
+    else:  # dev
+        cookie_secure = False
+        cookie_samesite = "lax"
+    
     metadata_collection = "always" if is_prod else "optional"
-    docker_hub_only = is_prod
+    
+    # Session-Konfiguration
+    session_duration = int(os.getenv("SESSION_DURATION", "86400"))
+    session_cookie_name = os.getenv("SESSION_COOKIE_NAME", "session_id")
+    session_header_name = os.getenv("SESSION_HEADER_NAME", "X-Session-ID")
+    session_cookie_httponly = os.getenv("SESSION_COOKIE_HTTPONLY", "true").lower() == "true"
+    session_cookie_secure = os.getenv("SESSION_COOKIE_SECURE", "true").lower() == "true"
+    session_cookie_samesite = os.getenv("SESSION_COOKIE_SAMESITE", "lax")
+    
     return PolicyConfig(
         environment=env,
         is_production=is_prod,
+        is_staging=is_staging,
+        is_development=is_dev,
         only_git_scans=only_git_scans,
         allow_local_paths=allow_local_paths,
         allow_website_scans=allow_website_scans,
@@ -52,6 +124,19 @@ def get_policy_config() -> PolicyConfig:
         require_queue=require_queue,
         metadata_collection=metadata_collection,
         docker_hub_only=docker_hub_only,
+        # Session-Konfiguration
+        session_duration=session_duration,
+        session_cookie_name=session_cookie_name,
+        session_header_name=session_header_name,
+        session_cookie_httponly=session_cookie_httponly,
+        session_cookie_secure=session_cookie_secure,
+        session_cookie_samesite=session_cookie_samesite,
+        # Cookie-Konfiguration basierend auf Umgebung
+        cookie_secure=cookie_secure,
+        cookie_samesite=cookie_samesite,
+        # Neue Felder für Development mit Production-Features
+        force_production_policy=force_prod_policy,
+        allow_direct_results_access=allow_direct_results_access,
     )
 
 
