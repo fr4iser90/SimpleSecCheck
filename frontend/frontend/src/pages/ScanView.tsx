@@ -34,6 +34,15 @@ interface Step {
   message?: string
 }
 
+interface WebSocketMessage {
+  type: string
+  steps?: Step[]
+  progress_percentage?: number
+  total_steps?: number
+  scan_id?: string
+  timestamp?: number
+}
+
 export default function ScanView() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -49,8 +58,8 @@ export default function ScanView() {
   )
 
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null)
-  const [steps] = useState<Step[]>([])
-  const [progress] = useState<number>(0)
+  const [steps, setSteps] = useState<Step[]>([])
+  const [progress, setProgress] = useState<number>(0)
   const [isStepsSidebarOpen, setIsStepsSidebarOpen] = useState(false)
   const [isLogsSidebarOpen, setIsLogsSidebarOpen] = useState(false)
   const [isAIPromptModalOpen, setIsAIPromptModalOpen] = useState(false)
@@ -131,9 +140,38 @@ export default function ScanView() {
   }, [status.status, status.scan_id])
 
   // WebSocket: Real-time scan updates using new service
-  useWebSocket(
+  const { service } = useWebSocket(
     status.status === 'running' && status.scan_id ? status.scan_id : null
   )
+
+  // Handle WebSocket messages to update steps and progress
+  useEffect(() => {
+    if (!service) return
+
+    const handleMessage = (data: WebSocketMessage) => {
+      if (data.type === 'step_update' && data.steps) {
+        setSteps(data.steps)
+        if (data.progress_percentage !== undefined) {
+          setProgress(data.progress_percentage)
+        }
+      } else if (data.type === 'initial_steps' && data.steps) {
+        setSteps(data.steps)
+        if (data.progress_percentage !== undefined) {
+          setProgress(data.progress_percentage)
+        }
+      }
+    }
+
+    // Set up message handler
+    service.onMessage(handleMessage)
+
+    return () => {
+      // Clean up message handler
+      if (service) {
+        service.onMessage(() => {}) // Clear handler
+      }
+    }
+  }, [service])
 
 
   // Listen for messages from iframe (HTML Report)
@@ -513,6 +551,7 @@ export default function ScanView() {
         <StepsSidebar
           isOpen={isStepsSidebarOpen}
           onClose={() => setIsStepsSidebarOpen(false)}
+          scanId={status.scan_id}
         />
 
         {/* Logs Sidebar */}

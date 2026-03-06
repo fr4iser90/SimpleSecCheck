@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useWebSocket } from '../services/websocketService'
 
 interface StepsSidebarProps {
   isOpen: boolean
   onClose: () => void
+  scanId?: string | null
 }
 
 interface Step {
@@ -12,109 +14,53 @@ interface Step {
   message?: string
 }
 
-export default function StepsSidebar({ isOpen, onClose }: StepsSidebarProps) {
+interface WebSocketMessage {
+  type: string
+  steps?: Step[]
+  progress_percentage?: number
+  total_steps?: number
+  scan_id?: string
+  timestamp?: number
+}
+
+export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarProps) {
   const [steps, setSteps] = useState<Step[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (!isOpen) return
+  // Use the same WebSocket service as ScanView
+  const { service } = useWebSocket(
+    isOpen && scanId ? scanId : null
+  )
 
-    // Get scan_id from URL or props (for now, we'll need to pass it)
-    // For simplicity, we'll use the same approach as ScanView
-    const urlParams = new URLSearchParams(window.location.search)
-    const scanId = urlParams.get('scan_id') || undefined
-    
-    if (!scanId) {
+  useEffect(() => {
+    if (!isOpen || !scanId) {
       setLoading(false)
       return
     }
 
-    let ws: WebSocket | null = null
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
-    let heartbeatInterval: ReturnType<typeof setInterval> | null = null
-    let reconnectAttempts = 0
-    const maxReconnectAttempts = 10
-    const reconnectDelay = 3000
-    
-    const connect = () => {
-      try {
-        const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/scan/stream?scan_id=${scanId}`
-        ws = new WebSocket(wsUrl)
-        
-        ws.onopen = () => {
-          console.log('[StepsSidebar] WebSocket connected')
-          reconnectAttempts = 0
-          
-          heartbeatInterval = setInterval(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-              ws.send('ping')
-            }
-          }, 25000)
-        }
-        
-        ws.onmessage = (e) => {
-          try {
-            const data = JSON.parse(e.data)
-            
-            if (data.error) {
-              console.error('[StepsSidebar] WebSocket error:', data.error)
-              setLoading(false)
-              return
-            }
-            
-            // Update steps from WebSocket data
-            if (data.steps && Array.isArray(data.steps)) {
-              setSteps(data.steps)
-              setLoading(false)
-            }
-          } catch (error) {
-            console.error('[StepsSidebar] Failed to parse WebSocket data:', error)
-            setLoading(false)
-          }
-        }
-        
-        ws.onerror = (error) => {
-          console.error('[StepsSidebar] WebSocket error:', error)
+    // Handle WebSocket messages to update steps
+    if (service) {
+      const handleMessage = (data: WebSocketMessage) => {
+        if (data.type === 'step_update' && data.steps) {
+          setSteps(data.steps)
+          setLoading(false)
+        } else if (data.type === 'initial_steps' && data.steps) {
+          setSteps(data.steps)
           setLoading(false)
         }
-        
-        ws.onclose = () => {
-          console.log('[StepsSidebar] WebSocket closed')
-          
-          if (heartbeatInterval) {
-            clearInterval(heartbeatInterval)
-            heartbeatInterval = null
-          }
-          
-          if (reconnectAttempts < maxReconnectAttempts && isOpen) {
-            reconnectAttempts++
-            reconnectTimeout = setTimeout(() => {
-              connect()
-            }, reconnectDelay)
-          } else {
-            setLoading(false)
-          }
+      }
+
+      // Set up message handler
+      service.onMessage(handleMessage)
+
+      return () => {
+        // Clean up message handler
+        if (service) {
+          service.onMessage(() => {}) // Clear handler
         }
-      } catch (error) {
-        console.error('[StepsSidebar] WebSocket connection error:', error)
-        setLoading(false)
       }
     }
-    
-    connect()
-    
-    return () => {
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout)
-      }
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval)
-      }
-      if (ws) {
-        ws.close()
-      }
-    }
-  }, [isOpen])
+  }, [service, isOpen, scanId])
 
   if (!isOpen) return null
 

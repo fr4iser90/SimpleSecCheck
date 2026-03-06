@@ -100,6 +100,8 @@ services:
       - .:/project:ro
       - ${HOST_PROJECT_ROOT:-.}/scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data
       - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
     environment:
       - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1
