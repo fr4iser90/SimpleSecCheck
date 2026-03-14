@@ -1,0 +1,216 @@
+"""
+Scan Entity
+
+This module defines the Scan entity which represents a security scan job.
+"""
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Dict, List, Optional, Any
+from uuid import uuid4
+
+
+class ScanStatus(str, Enum):
+    """Scan status enumeration."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ScanType(str, Enum):
+    """Scan type enumeration."""
+    REPOSITORY = "repository"
+    CONTAINER = "container"
+    INFRASTRUCTURE = "infrastructure"
+    WEB_APPLICATION = "web_application"
+    MOBILE_APP = "mobile_app"
+
+
+@dataclass
+class Scan:
+    """Security scan entity."""
+    
+    id: str = field(default_factory=lambda: str(uuid4()))
+    name: str = ""
+    description: str = ""
+    scan_type: ScanType = ScanType.REPOSITORY
+    status: ScanStatus = ScanStatus.PENDING
+    target_url: str = ""
+    target_type: str = ""
+    scanners: List[str] = field(default_factory=list)
+    config: Dict[str, Any] = field(default_factory=dict)
+    
+    # Timestamps
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    updated_at: datetime = field(default_factory=datetime.utcnow)
+    
+    # Results
+    results: List[Dict[str, Any]] = field(default_factory=list)
+    vulnerabilities_count: int = 0
+    duration: Optional[int] = None  # Duration in seconds
+    
+    # Error handling
+    error_message: Optional[str] = None
+    retry_count: int = 0
+    
+    # Metadata
+    user_id: Optional[str] = None
+    project_id: Optional[str] = None
+    tags: List[str] = field(default_factory=list)
+    
+    def start(self):
+        """Start the scan."""
+        if self.status != ScanStatus.PENDING:
+            raise ValueError("Scan can only be started from PENDING status")
+        
+        self.status = ScanStatus.RUNNING
+        self.started_at = datetime.utcnow()
+        self.updated_at = datetime.utcnow()
+    
+    def complete(self, results: List[Dict[str, Any]], duration: int):
+        """Complete the scan successfully."""
+        if self.status != ScanStatus.RUNNING:
+            raise ValueError("Scan can only be completed from RUNNING status")
+        
+        self.status = ScanStatus.COMPLETED
+        self.completed_at = datetime.utcnow()
+        self.updated_at = datetime.utcnow()
+        self.results = results
+        self.duration = duration
+        self.vulnerabilities_count = self._count_vulnerabilities(results)
+    
+    def fail(self, error_message: str):
+        """Mark the scan as failed."""
+        self.status = ScanStatus.FAILED
+        self.completed_at = datetime.utcnow()
+        self.updated_at = datetime.utcnow()
+        self.error_message = error_message
+    
+    def cancel(self):
+        """Cancel the scan."""
+        if self.status not in [ScanStatus.PENDING, ScanStatus.RUNNING]:
+            raise ValueError("Scan can only be cancelled from PENDING or RUNNING status")
+        
+        self.status = ScanStatus.CANCELLED
+        self.completed_at = datetime.utcnow()
+        self.updated_at = datetime.utcnow()
+    
+    def retry(self):
+        """Retry the scan."""
+        if self.status != ScanStatus.FAILED:
+            raise ValueError("Scan can only be retried from FAILED status")
+        
+        self.status = ScanStatus.PENDING
+        self.started_at = None
+        self.completed_at = None
+        self.error_message = None
+        self.retry_count += 1
+        self.updated_at = datetime.utcnow()
+    
+    def add_tag(self, tag: str):
+        """Add a tag to the scan."""
+        if tag not in self.tags:
+            self.tags.append(tag)
+            self.updated_at = datetime.utcnow()
+    
+    def remove_tag(self, tag: str):
+        """Remove a tag from the scan."""
+        if tag in self.tags:
+            self.tags.remove(tag)
+            self.updated_at = datetime.utcnow()
+    
+    def update_config(self, new_config: Dict[str, Any]):
+        """Update scan configuration."""
+        self.config.update(new_config)
+        self.updated_at = datetime.utcnow()
+    
+    def get_duration(self) -> Optional[int]:
+        """Get scan duration in seconds."""
+        if self.duration is not None:
+            return self.duration
+        
+        if self.started_at and self.completed_at:
+            return int((self.completed_at - self.started_at).total_seconds())
+        
+        if self.started_at and self.status == ScanStatus.RUNNING:
+            return int((datetime.utcnow() - self.started_at).total_seconds())
+        
+        return None
+    
+    def is_completed(self) -> bool:
+        """Check if scan is completed."""
+        return self.status in [ScanStatus.COMPLETED, ScanStatus.FAILED, ScanStatus.CANCELLED]
+    
+    def is_successful(self) -> bool:
+        """Check if scan completed successfully."""
+        return self.status == ScanStatus.COMPLETED
+    
+    def has_vulnerabilities(self) -> bool:
+        """Check if scan found vulnerabilities."""
+        return self.vulnerabilities_count > 0
+    
+    def _count_vulnerabilities(self, results: List[Dict[str, Any]]) -> int:
+        """Count vulnerabilities in scan results."""
+        count = 0
+        for result in results:
+            if isinstance(result, dict) and 'vulnerabilities' in result:
+                count += len(result['vulnerabilities'])
+        return count
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert scan to dictionary."""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'scan_type': self.scan_type.value,
+            'status': self.status.value,
+            'target_url': self.target_url,
+            'target_type': self.target_type,
+            'scanners': self.scanners,
+            'config': self.config,
+            'created_at': self.created_at.isoformat(),
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'updated_at': self.updated_at.isoformat(),
+            'results': self.results,
+            'vulnerabilities_count': self.vulnerabilities_count,
+            'duration': self.get_duration(),
+            'error_message': self.error_message,
+            'retry_count': self.retry_count,
+            'user_id': self.user_id,
+            'project_id': self.project_id,
+            'tags': self.tags,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Scan':
+        """Create scan from dictionary."""
+        scan = cls(
+            id=data.get('id', str(uuid4())),
+            name=data.get('name', ''),
+            description=data.get('description', ''),
+            scan_type=ScanType(data.get('scan_type', 'repository')),
+            status=ScanStatus(data.get('status', 'pending')),
+            target_url=data.get('target_url', ''),
+            target_type=data.get('target_type', ''),
+            scanners=data.get('scanners', []),
+            config=data.get('config', {}),
+            created_at=datetime.fromisoformat(data.get('created_at', datetime.utcnow().isoformat())),
+            started_at=datetime.fromisoformat(data['started_at']) if data.get('started_at') else None,
+            completed_at=datetime.fromisoformat(data['completed_at']) if data.get('completed_at') else None,
+            updated_at=datetime.fromisoformat(data.get('updated_at', datetime.utcnow().isoformat())),
+            results=data.get('results', []),
+            vulnerabilities_count=data.get('vulnerabilities_count', 0),
+            duration=data.get('duration'),
+            error_message=data.get('error_message'),
+            retry_count=data.get('retry_count', 0),
+            user_id=data.get('user_id'),
+            project_id=data.get('project_id'),
+            tags=data.get('tags', []),
+        )
+        return scan

@@ -1,0 +1,10 @@
+redis==5.0.3
+aioredis==2.0.1
+docker==7.1.0
+structlog==24.3.0
+pydantic==2.8.2
+pyyaml==6.0.2
+python-dotenv==1.1.1
+sqlalchemy==2.0.35
+fastapi==0.115.0
+uvicorn==0.32.0

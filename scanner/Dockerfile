@@ -9,7 +9,7 @@ LABEL maintainer="fr4iser"
 ## Core dependencies are now installed via scanner manifests (Option B modular build).
 ## Minimal runtime installs Python + PyYAML to read manifests and Node.js for report build.
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip curl && \
+    apt-get install -y python3 python3-pip curl gosu && \
     pip3 install pyyaml && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs
@@ -27,9 +27,12 @@ RUN mkdir -p /app/results
 ENV SIMPLE_SECCHECK_ROOT=/app
 RUN python3 -m scanner.core.scanner_assets.install_assets
 
-# Copy full SimpleSecCheck files (scanner code and entrypoint) after assets install
+# Copy full SimpleSecCheck files after assets install
 COPY scanner/ /app/scanner/
-COPY entrypoint.sh /entrypoint.sh
+
+# Copy entrypoint script
+COPY scanner/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create non-root user (1000:1000 matches typical host user)
 RUN useradd -m -u 1000 -s /bin/bash scanner && \
@@ -40,15 +43,12 @@ RUN useradd -m -u 1000 -s /bin/bash scanner && \
 # Make scripts executable
 RUN chmod +x /app/scanner/core/configure.py
 
-# Compile TypeScript files (uses tsconfig.json automatically)
-RUN cd /app/scanner/reporting && tsc
+# Install TypeScript dependencies and compile TypeScript files
+RUN cd /app/scanner/output && npm install && npx tsc
 
 # Install sudo and configure passwordless sudo for scanner user
 RUN apt-get install -y sudo && \
     echo 'scanner ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
-
-# Set up entrypoint script permissions
-RUN chmod +x /entrypoint.sh
 
 # Ensure writable home/cache locations for CLI tools (generic)
 ENV HOME=/tmp/scanner
@@ -65,5 +65,6 @@ ENV PYTHONPATH=/app
 ENV SCANNER_ROOT=/app/scanner
 
 WORKDIR /app
-ENTRYPOINT ["/entrypoint.sh"]
+# Use entrypoint to dynamically configure docker group access
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["python3", "-m", "scanner.core.orchestrator"]

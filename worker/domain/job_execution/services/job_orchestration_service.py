@@ -1,0 +1,328 @@
+"""
+Job orchestration service for the worker domain.
+
+Handles the orchestration of job execution including queuing, scheduling, and coordination.
+"""
+
+import asyncio
+import logging
+from typing import List, Optional, Dict, Any, AsyncGenerator
+from datetime import datetime, timedelta
+from uuid import UUID
+
+from worker.domain.job_execution.entities.job_execution import JobExecution, JobExecutionStatus, ContainerState
+from worker.infrastructure.docker.docker_job_executor import DockerJobExecutor
+from worker.domain.job_execution.services.result_processing_service import ResultProcessingService
+from worker.infrastructure.queue_adapter import QueueAdapter
+from worker.infrastructure.database_adapter import PostgreSQLAdapter
+
+
+class JobOrchestrationService:
+    """Service for orchestrating job executions."""
+    
+    def __init__(
+        self,
+        docker_job_executor: DockerJobExecutor,
+        result_processing_service: ResultProcessingService,
+        queue_adapter: QueueAdapter,
+        database_adapter: PostgreSQLAdapter,
+        max_concurrent_jobs: int = 3
+    ):
+        """Initialize the job orchestration service.
+        
+        Args:
+            docker_job_executor: Docker job executor for container operations
+            result_processing_service: Service for result processing
+            queue_adapter: Queue adapter for job queuing
+            database_adapter: Database adapter for persistence
+            max_concurrent_jobs: Maximum number of concurrent jobs
+        """
+        self.docker_job_executor = docker_job_executor
+        self.result_processing_service = result_processing_service
+        self.queue_adapter = queue_adapter
+        self.database_adapter = database_adapter
+        self.max_concurrent_jobs = max_concurrent_jobs
+        self.active_jobs: Dict[UUID, JobExecution] = {}
+        self.logger = logging.getLogger(__name__)
+    
+    async def start_worker(self) -> None:
+        """Start the worker loop."""
+        while True:
+            try:
+                # Check for new jobs
+                await self._process_queue()
+                
+                # Check for completed jobs
+                await self._check_completed_jobs()
+                
+                # Wait before next iteration
+                await asyncio.sleep(1)
+                
+            except Exception as e:
+                self.logger.error(f"Error in worker loop: {e}")
+                await asyncio.sleep(5)  # Wait before retrying
+    
+    async def _process_queue(self) -> None:
+        """Process jobs from the queue."""
+        try:
+            # Check if we can start more jobs
+            if len(self.active_jobs) >= self.max_concurrent_jobs:
+                return
+            
+            # Get next job from queue
+            job_data = await self.queue_adapter.pop_job()
+            if not job_data:
+                return
+            
+            # Create job execution
+            job_execution = await self._create_job_execution(job_data)
+            
+            # Start job execution
+            self.active_jobs[job_execution.id] = job_execution
+            asyncio.create_task(self._execute_job_wrapper(job_execution))
+            
+        except Exception as e:
+            self.logger.error(f"Error processing queue: {e}")
+    
+    async def _create_job_execution(self, job_data: Dict[str, Any]) -> JobExecution:
+        """Create a job execution from job data.
+        
+        Args:
+            job_data: Job data from queue
+            
+        Returns:
+            Job execution
+        """
+        try:
+            from worker.domain.job_execution.entities.container_spec import ContainerSpec
+            
+            # Extract job information
+            scan_id = UUID(job_data['scan_id'])
+            job_type = job_data['job_type']
+            target = job_data['target']
+            image = job_data.get('image', 'simpleseccheck/scanner:latest')
+            results_dir = job_data['results_dir']
+            logs_dir = job_data['logs_dir']
+            scan_type = job_data.get('scan_type', 'code')
+            target_mount_path = job_data.get('target_mount_path')
+            finding_policy = job_data.get('finding_policy')
+            collect_metadata = job_data.get('collect_metadata', True)
+            exclude_paths = job_data.get('exclude_paths')
+            
+            # Create container specification
+            container_spec = ContainerSpec.from_scan_config(
+                image=image,
+                target=target,
+                results_dir=results_dir,
+                logs_dir=logs_dir,
+                scan_id=str(scan_id),
+                scan_type=scan_type,
+                target_mount_path=target_mount_path,
+                finding_policy=finding_policy,
+                collect_metadata=collect_metadata,
+                exclude_paths=exclude_paths
+            )
+            
+            # Create job execution
+            job_execution = JobExecution(
+                id=UUID(job_data.get('job_id', str(uuid.uuid4()))),
+                scan_id=scan_id,
+                job_type=job_type,
+                container_spec=container_spec
+            )
+            
+            # Save to database
+            await self._save_job_execution(job_execution)
+            
+            return job_execution
+            
+        except Exception as e:
+            self.logger.error(f"Error creating job execution: {e}")
+            raise
+    
+    async def _execute_job_wrapper(self, job_execution: JobExecution) -> None:
+        """Wrapper for job execution with error handling.
+        
+        Args:
+            job_execution: Job execution to execute
+        """
+        try:
+            # Execute job
+            result = await self.docker_job_executor.execute_job(job_execution)
+            
+            # Process results
+            await self.result_processing_service.process_execution_result(result)
+            
+            # Update job status
+            await self._update_job_status(job_execution.id, JobExecutionStatus.COMPLETED)
+            
+            # Remove from active jobs
+            self.active_jobs.pop(job_execution.id, None)
+            
+            self.logger.info(f"Completed job execution: {job_execution.id}")
+            
+        except Exception as e:
+            self.logger.error(f"Error executing job {job_execution.id}: {e}")
+            
+            # Update job status to failed
+            await self._update_job_status(job_execution.id, JobExecutionStatus.FAILED, str(e))
+            
+            # Remove from active jobs
+            self.active_jobs.pop(job_execution.id, None)
+    
+    async def _check_completed_jobs(self) -> None:
+        """Check for completed jobs and clean up."""
+        try:
+            completed_jobs = []
+            
+            for job_id, job_execution in self.active_jobs.items():
+                if job_execution.is_completed:
+                    completed_jobs.append(job_id)
+            
+            # Remove completed jobs
+            for job_id in completed_jobs:
+                self.active_jobs.pop(job_id, None)
+                
+        except Exception as e:
+            self.logger.error(f"Error checking completed jobs: {e}")
+    
+    async def stop_job_execution(self, job_id: UUID) -> bool:
+        """Stop a running job execution.
+        
+        Args:
+            job_id: Job execution ID
+            
+        Returns:
+            True if stopped successfully, False otherwise
+        """
+        try:
+            job_execution = self.active_jobs.get(job_id)
+            if job_execution and job_execution.is_running:
+                success = await self.docker_job_executor.stop_job_execution(job_execution)
+                if success:
+                    await self._update_job_status(job_id, JobExecutionStatus.CANCELLED)
+                return success
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error stopping job execution {job_id}: {e}")
+            return False
+    
+    async def get_job_status(self, job_id: UUID) -> Optional[Dict[str, Any]]:
+        """Get job execution status.
+        
+        Args:
+            job_id: Job execution ID
+            
+        Returns:
+            Job status information
+        """
+        try:
+            # Check active jobs first
+            job_execution = self.active_jobs.get(job_id)
+            if job_execution:
+                return {
+                    "job_id": str(job_execution.id),
+                    "scan_id": str(job_execution.scan_id),
+                    "job_type": job_execution.job_type,
+                    "status": job_execution.status.value,
+                    "container_state": job_execution.container_state.value,
+                    "started_at": job_execution.started_at.isoformat() if job_execution.started_at else None,
+                    "completed_at": job_execution.completed_at.isoformat() if job_execution.completed_at else None,
+                    "error_message": job_execution.error_message,
+                    "container_id": job_execution.container_id,
+                    "execution_time_seconds": job_execution.execution_time_seconds,
+                    "logs_count": len(job_execution.logs),
+                    "is_running": job_execution.is_running,
+                    "is_completed": job_execution.is_completed
+                }
+            
+            # Check database for completed jobs
+            return await self._get_job_status_from_db(job_id)
+            
+        except Exception as e:
+            self.logger.error(f"Error getting job status for {job_id}: {e}")
+            return None
+    
+    async def get_active_jobs(self) -> List[Dict[str, Any]]:
+        """Get all active job executions.
+        
+        Returns:
+            List of active job statuses
+        """
+        try:
+            return [await self.get_job_status(job_id) for job_id in self.active_jobs.keys()]
+            
+        except Exception as e:
+            self.logger.error(f"Error getting active jobs: {e}")
+            return []
+    
+    async def get_job_history(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get job execution history.
+        
+        Args:
+            limit: Maximum number of jobs to return
+            offset: Number of jobs to skip
+            
+        Returns:
+            List of job execution histories
+        """
+        try:
+            # This would typically query the database
+            # For now, return active jobs
+            return await self.get_active_jobs()
+            
+        except Exception as e:
+            self.logger.error(f"Error getting job history: {e}")
+            return []
+    
+    async def _save_job_execution(self, job_execution: JobExecution) -> None:
+        """Save job execution to database.
+        
+        Args:
+            job_execution: Job execution to save
+        """
+        try:
+            # This would save to the database
+            # Implementation depends on database adapter
+            pass
+            
+        except Exception as e:
+            self.logger.error(f"Error saving job execution: {e}")
+            raise
+    
+    async def _update_job_status(self, job_id: UUID, status: JobExecutionStatus, error_message: Optional[str] = None) -> None:
+        """Update job execution status.
+        
+        Args:
+            job_id: Job execution ID
+            status: New status
+            error_message: Optional error message
+        """
+        try:
+            # This would update the database
+            # Implementation depends on database adapter
+            pass
+            
+        except Exception as e:
+            self.logger.error(f"Error updating job status: {e}")
+            raise
+    
+    async def _get_job_status_from_db(self, job_id: UUID) -> Optional[Dict[str, Any]]:
+        """Get job status from database.
+        
+        Args:
+            job_id: Job execution ID
+            
+        Returns:
+            Job status information
+        """
+        try:
+            # This would query the database
+            # Implementation depends on database adapter
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error getting job status from database: {e}")
+            return None

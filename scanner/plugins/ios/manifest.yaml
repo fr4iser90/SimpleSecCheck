@@ -1,0 +1,3 @@
+name: ios
+install:
+  - ["pip3", "install", "defusedxml"]

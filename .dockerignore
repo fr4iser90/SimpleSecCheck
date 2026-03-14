@@ -34,7 +34,6 @@ Thumbs.db
 # Logs and databases
 *.log
 *.sql
-*.sqlite3
 
 # Media files (if large and not part of the repo)
 # media/

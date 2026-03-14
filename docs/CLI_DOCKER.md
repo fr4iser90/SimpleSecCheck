@@ -21,7 +21,7 @@ docker compose --profile dev run --rm scanner
 ```bash
 docker compose --profile dev run --rm \
   -v /path/to/project:/target:ro \
-  -e TARGET_TYPE=local_code \
+  -e TARGET_TYPE=local_mount \
   scanner
 ```
 
@@ -99,7 +99,7 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  -e TARGET_TYPE=docker_image \
+  -e TARGET_TYPE=container_registry \
   -e SCAN_TARGET=nginx:latest \
   -v $(pwd)/results:/app/results \
   -v /var/run/docker.sock:/var/run/docker.sock \
@@ -122,7 +122,7 @@ docker run --rm \
 
 ## 4) Environment Variables (quick reference)
 
-- `TARGET_TYPE`: `local_code` (default), `website`, `docker_image`, `network_host`
+- `TARGET_TYPE`: `local_mount` (default), `git_repo`, `uploaded_code`, `website`, `container_registry`, `network_host`
 - `SCAN_TARGET`: URL or image name depending on `TARGET_TYPE`
 - `SCAN_SCOPE`: `full` (default) or `tracked` (git-tracked files only)
 - `SIMPLESECCHECK_EXCLUDE_PATHS`: comma-separated exclude list for code scans

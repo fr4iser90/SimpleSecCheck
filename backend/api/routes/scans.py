@@ -1,0 +1,801 @@
+"""
+Scans API Routes
+
+This module defines the FastAPI routes for scan operations.
+Routes support both authenticated and guest users via ActorContext.
+"""
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
+from fastapi import status as fastapi_status
+
+from api.deps.actor_context import get_actor_context, ActorContext
+from api.schemas.scan_schemas import (
+    ScanRequestSchema,
+    ScanResponseSchema,
+    ScanSummarySchema,
+    ScanUpdateSchema,
+    ScanFilterSchema,
+    ScanStatisticsSchema,
+    CancelScanSchema,
+    BatchScanSchema,
+    ScanStatusResponseSchema,
+    AggregatedResultSchema,
+)
+from application.services.scan_service import ScanService
+from application.dtos.scan_dto import ScanDTO
+from application.dtos.request_dto import (
+    ScanRequestDTO,
+    ScanUpdateRequestDTO,
+    ScanFilterDTO,
+    CancelScanRequestDTO,
+)
+from domain.exceptions.scan_exceptions import (
+    ScanException,
+    ScanNotFoundException,
+    ScanValidationException,
+    ScanConcurrencyLimitException,
+)
+from typing import Annotated
+
+
+# Import dependency injection container
+from infrastructure.container import get_scan_service
+
+# Import test container for testing
+import os
+if os.environ.get("ENVIRONMENT") == "test":
+    from tests.unit.test_container import get_test_scan_service
+
+
+def get_scan_service_dependency():
+    """Get the appropriate scan service dependency based on environment."""
+    if os.environ.get("ENVIRONMENT") == "test":
+        return get_test_scan_service()
+    return get_scan_service()
+
+
+router = APIRouter(
+    prefix="/api/v1/scans",
+    tags=["scans"],
+    responses={
+        400: {"description": "Bad Request"},
+        401: {"description": "Unauthorized"},
+        403: {"description": "Forbidden"},
+        404: {"description": "Not Found"},
+        422: {"description": "Unprocessable Entity"},
+        500: {"description": "Internal Server Error"},
+    },
+)
+
+
+@router.post(
+    "/",
+    response_model=ScanResponseSchema,
+    status_code=fastapi_status.HTTP_201_CREATED,
+    summary="Create a new scan",
+    description="Create and start a new security scan. Supports both authenticated and guest users.",
+    response_description="Created scan information",
+)
+async def create_scan(
+    scan_request: ScanRequestSchema,
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> ScanResponseSchema:
+    """
+    Create a new scan.
+    
+    - **scan_request**: Scan creation parameters
+    - **actor_context**: Resolved user/session context (auto-injected)
+    - **scan_service**: Scan orchestration service (auto-injected)
+    """
+    try:
+        # Prepare metadata - add session_id for guest sessions
+        metadata = scan_request.metadata.copy() if scan_request.metadata else {}
+        if not actor_context.is_authenticated and actor_context.session_id:
+            # Store session_id in metadata for guest sessions
+            metadata["session_id"] = actor_context.session_id
+        
+        # Convert request schema to DTO
+        request_dto = ScanRequestDTO(
+            name=scan_request.name,
+            description=scan_request.description,
+            scan_type=scan_request.scan_type,
+            target_url=scan_request.target_url,
+            target_type=scan_request.target_type,
+            user_id=actor_context.user_id if actor_context.is_authenticated else None,
+            project_id=scan_request.project_id,
+            config=scan_request.config.dict() if scan_request.config else None,
+            scanners=scan_request.scanners,
+            scheduled_at=scan_request.scheduled_at,
+            tags=scan_request.tags,
+            metadata=metadata,
+        )
+        
+        # Create scan via service
+        scan_dto = await scan_service.create_scan(request_dto)
+        
+        return ScanResponseSchema(
+            id=scan_dto.id,
+            name=scan_dto.name,
+            description=scan_dto.description,
+            scan_type=scan_dto.scan_type,
+            target_url=scan_dto.target_url,
+            target_type=scan_dto.target_type,
+            user_id=scan_dto.user_id,
+            project_id=scan_dto.project_id,
+            status=scan_dto.status,
+            created_at=scan_dto.created_at,
+            started_at=scan_dto.started_at,
+            completed_at=scan_dto.completed_at,
+            scheduled_at=scan_dto.scheduled_at,
+            tags=scan_dto.tags,
+            total_vulnerabilities=scan_dto.total_vulnerabilities,
+            critical_vulnerabilities=scan_dto.critical_vulnerabilities,
+            high_vulnerabilities=scan_dto.high_vulnerabilities,
+            medium_vulnerabilities=scan_dto.medium_vulnerabilities,
+            low_vulnerabilities=scan_dto.low_vulnerabilities,
+            info_vulnerabilities=scan_dto.info_vulnerabilities,
+            metadata=scan_dto.metadata,
+        )
+        
+    except ScanConcurrencyLimitException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e)
+        )
+    except ScanValidationException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/",
+    response_model=List[ScanSummarySchema],
+    summary="List scans",
+    description="List scans with optional filtering and pagination. Returns scan summaries.",
+    response_description="List of scan summaries",
+)
+async def list_scans(
+    user_id: Optional[str] = Query(None, description="Filter by user ID"),
+    project_id: Optional[str] = Query(None, description="Filter by project ID"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    scan_type: Optional[str] = Query(None, description="Filter by scan type"),
+    tags: Optional[List[str]] = Query(None, description="Filter by tags"),
+    limit: int = Query(100, ge=1, le=1000, description="Limit results"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    sort_by: str = Query("created_at", description="Sort field"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort order"),
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> List[ScanSummarySchema]:
+    """
+    List scans with filtering.
+    
+    - **user_id**: Filter by user ID (defaults to current actor)
+    - **project_id**: Filter by project ID
+    - **status**: Filter by scan status
+    - **scan_type**: Filter by scan type
+    - **tags**: Filter by tags
+    - **limit**: Number of results to return
+    - **offset**: Offset for pagination
+    - **sort_by**: Field to sort by
+    - **sort_order**: Sort direction (asc/desc)
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        # Use actor context to filter scans if not admin
+        filter_user_id = user_id or actor_context.get_identifier()
+        
+        filter_dto = ScanFilterDTO(
+            user_id=filter_user_id,
+            project_id=project_id,
+            status=status,
+            scan_type=scan_type,
+            tags=tags,
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+        
+        scan_summaries = await scan_service.list_scans(filter_dto)
+        
+        return [
+            ScanSummarySchema(
+                id=summary.id,
+                name=summary.name,
+                scan_type=summary.scan_type,
+                target_url=summary.target_url,
+                target_type=summary.target_type,
+                status=summary.status,
+                created_at=summary.created_at,
+                started_at=summary.started_at,
+                completed_at=summary.completed_at,
+                total_vulnerabilities=summary.total_vulnerabilities,
+                critical_vulnerabilities=summary.critical_vulnerabilities,
+                high_vulnerabilities=summary.high_vulnerabilities,
+                user_id=summary.user_id,
+                project_id=summary.project_id,
+                tags=summary.tags,
+            )
+            for summary in scan_summaries
+        ]
+        
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/{scan_id}",
+    response_model=ScanResponseSchema,
+    summary="Get scan by ID",
+    description="Get detailed information about a specific scan.",
+    response_description="Scan details",
+)
+async def get_scan(
+    scan_id: str,
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> ScanResponseSchema:
+    """
+    Get scan by ID.
+    
+    - **scan_id**: ID of the scan to retrieve
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        scan_dto = await scan_service.get_scan_by_id(scan_id)
+        
+        # Check permissions (guests can only access their own scans)
+        if not actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+        
+        return ScanResponseSchema(
+            id=scan_dto.id,
+            name=scan_dto.name,
+            description=scan_dto.description,
+            scan_type=scan_dto.scan_type,
+            target_url=scan_dto.target_url,
+            target_type=scan_dto.target_type,
+            user_id=scan_dto.user_id,
+            project_id=scan_dto.project_id,
+            status=scan_dto.status,
+            created_at=scan_dto.created_at,
+            started_at=scan_dto.started_at,
+            completed_at=scan_dto.completed_at,
+            scheduled_at=scan_dto.scheduled_at,
+            tags=scan_dto.tags,
+            total_vulnerabilities=scan_dto.total_vulnerabilities,
+            critical_vulnerabilities=scan_dto.critical_vulnerabilities,
+            high_vulnerabilities=scan_dto.high_vulnerabilities,
+            medium_vulnerabilities=scan_dto.medium_vulnerabilities,
+            low_vulnerabilities=scan_dto.low_vulnerabilities,
+            info_vulnerabilities=scan_dto.info_vulnerabilities,
+            metadata=scan_dto.metadata,
+        )
+        
+    except ScanNotFoundException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.put(
+    "/{scan_id}",
+    response_model=ScanResponseSchema,
+    summary="Update scan",
+    description="Update scan information (name, description, tags, etc.).",
+    response_description="Updated scan information",
+)
+async def update_scan(
+    scan_id: str,
+    update_request: ScanUpdateSchema,
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> ScanResponseSchema:
+    """
+    Update scan information.
+    
+    - **scan_id**: ID of the scan to update
+    - **update_request**: Update parameters
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        # Convert update schema to DTO
+        update_dto = ScanUpdateRequestDTO(
+            name=update_request.name,
+            description=update_request.description,
+            status=update_request.status.value if update_request.status else None,
+            config=update_request.config.dict() if update_request.config else None,
+            tags=update_request.tags,
+            metadata=update_request.metadata,
+        )
+        
+        scan_dto = await scan_service.update_scan(scan_id, update_dto)
+        
+        return ScanResponseSchema(
+            id=scan_dto.id,
+            name=scan_dto.name,
+            description=scan_dto.description,
+            scan_type=scan_dto.scan_type,
+            target_url=scan_dto.target_url,
+            target_type=scan_dto.target_type,
+            user_id=scan_dto.user_id,
+            project_id=scan_dto.project_id,
+            status=scan_dto.status,
+            created_at=scan_dto.created_at,
+            started_at=scan_dto.started_at,
+            completed_at=scan_dto.completed_at,
+            scheduled_at=scan_dto.scheduled_at,
+            tags=scan_dto.tags,
+            total_vulnerabilities=scan_dto.total_vulnerabilities,
+            critical_vulnerabilities=scan_dto.critical_vulnerabilities,
+            high_vulnerabilities=scan_dto.high_vulnerabilities,
+            medium_vulnerabilities=scan_dto.medium_vulnerabilities,
+            low_vulnerabilities=scan_dto.low_vulnerabilities,
+            info_vulnerabilities=scan_dto.info_vulnerabilities,
+            metadata=scan_dto.metadata,
+        )
+        
+    except ScanNotFoundException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ScanValidationException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.delete(
+    "/{scan_id}",
+    status_code=fastapi_status.HTTP_204_NO_CONTENT,
+    summary="Delete scan",
+    description="Delete a scan and its results.",
+    response_description="Scan deleted successfully",
+)
+async def delete_scan(
+    scan_id: str,
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> None:
+    """
+    Delete a scan.
+    
+    - **scan_id**: ID of the scan to delete
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        # Check permissions
+        scan_dto = await scan_service.get_scan_by_id(scan_id)
+        if not actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+        
+        success = await scan_service.delete_scan(scan_id)
+        if not success:
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_404_NOT_FOUND,
+                detail="Scan not found"
+            )
+        
+    except ScanNotFoundException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/{scan_id}/status",
+    response_model=ScanStatusResponseSchema,
+    summary="Get scan status",
+    description="Get current status and progress of a scan.",
+    response_description="Scan status information",
+)
+async def get_scan_status(
+    scan_id: str,
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> ScanStatusResponseSchema:
+    """
+    Get scan status.
+    
+    - **scan_id**: ID of the scan
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        status_info = await scan_service.get_scan_status(scan_id)
+        
+        return ScanStatusResponseSchema(
+            scan_id=status_info['scan_id'],
+            status=status_info['status'],
+            progress=status_info['progress'],
+            started_at=status_info['started_at'],
+            completed_at=status_info['completed_at'],
+            duration=status_info['duration'],
+            vulnerabilities_found=status_info['vulnerabilities_found'],
+            metadata=status_info['metadata'],
+        )
+        
+    except ScanNotFoundException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post(
+    "/{scan_id}/cancel",
+    response_model=ScanResponseSchema,
+    summary="Cancel scan",
+    description="Cancel a running or pending scan.",
+    response_description="Cancelled scan information",
+)
+async def cancel_scan(
+    scan_id: str,
+    cancel_request: CancelScanSchema,
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> ScanResponseSchema:
+    """
+    Cancel a scan.
+    
+    - **scan_id**: ID of the scan to cancel
+    - **cancel_request**: Cancellation parameters
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        # Check permissions
+        scan_dto = await scan_service.get_scan_by_id(scan_id)
+        if not actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+        
+        # Convert to DTO
+        cancel_dto = CancelScanRequestDTO(
+            scan_id=scan_id,
+            reason=cancel_request.reason,
+            force=cancel_request.force,
+        )
+        
+        scan_dto = await scan_service.cancel_scan(cancel_dto)
+        
+        return ScanResponseSchema(
+            id=scan_dto.id,
+            name=scan_dto.name,
+            description=scan_dto.description,
+            scan_type=scan_dto.scan_type,
+            target_url=scan_dto.target_url,
+            target_type=scan_dto.target_type,
+            user_id=scan_dto.user_id,
+            project_id=scan_dto.project_id,
+            status=scan_dto.status,
+            created_at=scan_dto.created_at,
+            started_at=scan_dto.started_at,
+            completed_at=scan_dto.completed_at,
+            scheduled_at=scan_dto.scheduled_at,
+            tags=scan_dto.tags,
+            total_vulnerabilities=scan_dto.total_vulnerabilities,
+            critical_vulnerabilities=scan_dto.critical_vulnerabilities,
+            high_vulnerabilities=scan_dto.high_vulnerabilities,
+            medium_vulnerabilities=scan_dto.medium_vulnerabilities,
+            low_vulnerabilities=scan_dto.low_vulnerabilities,
+            info_vulnerabilities=scan_dto.info_vulnerabilities,
+            metadata=scan_dto.metadata,
+        )
+        
+    except ScanNotFoundException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post(
+    "/{scan_id}/retry",
+    response_model=ScanResponseSchema,
+    summary="Retry failed scan",
+    description="Retry a failed scan with the same configuration.",
+    response_description="New scan information",
+)
+async def retry_scan(
+    scan_id: str,
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> ScanResponseSchema:
+    """
+    Retry a failed scan.
+    
+    - **scan_id**: ID of the failed scan to retry
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        scan_dto = await scan_service.retry_scan(scan_id)
+        
+        return ScanResponseSchema(
+            id=scan_dto.id,
+            name=scan_dto.name,
+            description=scan_dto.description,
+            scan_type=scan_dto.scan_type,
+            target_url=scan_dto.target_url,
+            target_type=scan_dto.target_type,
+            user_id=scan_dto.user_id,
+            project_id=scan_dto.project_id,
+            status=scan_dto.status,
+            created_at=scan_dto.created_at,
+            started_at=scan_dto.started_at,
+            completed_at=scan_dto.completed_at,
+            scheduled_at=scan_dto.scheduled_at,
+            tags=scan_dto.tags,
+            total_vulnerabilities=scan_dto.total_vulnerabilities,
+            critical_vulnerabilities=scan_dto.critical_vulnerabilities,
+            high_vulnerabilities=scan_dto.high_vulnerabilities,
+            medium_vulnerabilities=scan_dto.medium_vulnerabilities,
+            low_vulnerabilities=scan_dto.low_vulnerabilities,
+            info_vulnerabilities=scan_dto.info_vulnerabilities,
+            metadata=scan_dto.metadata,
+        )
+        
+    except ScanNotFoundException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ScanValidationException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/{scan_id}/results",
+    response_model=AggregatedResultSchema,
+    summary="Get scan results",
+    description="Get aggregated results from all scanners for a scan.",
+    response_description="Aggregated scan results",
+)
+async def get_scan_results(
+    scan_id: str,
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> AggregatedResultSchema:
+    """
+    Get scan results.
+    
+    - **scan_id**: ID of the scan
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        # Check permissions
+        scan_dto = await scan_service.get_scan_by_id(scan_id)
+        if not actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+        
+        # This would typically fetch results from a results service
+        # For now, return a placeholder
+        raise NotImplementedError("Results service not yet implemented")
+        
+    except ScanNotFoundException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/statistics",
+    response_model=ScanStatisticsSchema,
+    summary="Get scan statistics",
+    description="Get statistics about scans for the current user or all users (admin only).",
+    response_description="Scan statistics",
+)
+async def get_scan_statistics(
+    user_id: Optional[str] = Query(None, description="Get stats for specific user (admin only)"),
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> ScanStatisticsSchema:
+    """
+    Get scan statistics.
+    
+    - **user_id**: Optional user ID to get stats for (admin only)
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        # Non-admin users can only get their own stats
+        stats_user_id = None
+        if user_id:
+            if not actor_context.is_authenticated:
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                    detail="Admin access required"
+                )
+            stats_user_id = user_id
+        else:
+            if actor_context.is_authenticated:
+                stats_user_id = actor_context.user_id
+        
+        statistics_dto = await scan_service.get_scan_statistics(stats_user_id)
+        
+        return ScanStatisticsSchema(
+            total_scans=statistics_dto.total_scans,
+            pending_scans=statistics_dto.pending_scans,
+            running_scans=statistics_dto.running_scans,
+            completed_scans=statistics_dto.completed_scans,
+            failed_scans=statistics_dto.failed_scans,
+            cancelled_scans=statistics_dto.cancelled_scans,
+            total_vulnerabilities=statistics_dto.total_vulnerabilities,
+            critical_vulnerabilities=statistics_dto.critical_vulnerabilities,
+            high_vulnerabilities=statistics_dto.high_vulnerabilities,
+            medium_vulnerabilities=statistics_dto.medium_vulnerabilities,
+            low_vulnerabilities=statistics_dto.low_vulnerabilities,
+            info_vulnerabilities=statistics_dto.info_vulnerabilities,
+            repository_scans=statistics_dto.repository_scans,
+            container_scans=statistics_dto.container_scans,
+            infrastructure_scans=statistics_dto.infrastructure_scans,
+            web_application_scans=statistics_dto.web_application_scans,
+            average_scan_duration=statistics_dto.average_scan_duration,
+            longest_scan_duration=statistics_dto.longest_scan_duration,
+            shortest_scan_duration=statistics_dto.shortest_scan_duration,
+        )
+        
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/recent",
+    response_model=List[ScanSummarySchema],
+    summary="Get recent scans",
+    description="Get recently created scans for the current user.",
+    response_description="List of recent scan summaries",
+)
+async def get_recent_scans(
+    limit: int = Query(10, ge=1, le=100, description="Number of scans to return"),
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> List[ScanSummarySchema]:
+    """
+    Get recent scans.
+    
+    - **limit**: Number of recent scans to return
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        scan_summaries = await scan_service.get_recent_scans(limit)
+        
+        return [
+            ScanSummarySchema(
+                id=summary.id,
+                name=summary.name,
+                scan_type=summary.scan_type,
+                target_url=summary.target_url,
+                target_type=summary.target_type,
+                status=summary.status,
+                created_at=summary.created_at,
+                started_at=summary.started_at,
+                completed_at=summary.completed_at,
+                total_vulnerabilities=summary.total_vulnerabilities,
+                critical_vulnerabilities=summary.critical_vulnerabilities,
+                high_vulnerabilities=summary.high_vulnerabilities,
+                user_id=summary.user_id,
+                project_id=summary.project_id,
+                tags=summary.tags,
+            )
+            for summary in scan_summaries
+        ]
+        
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post(
+    "/batch",
+    response_model=List[ScanResponseSchema],
+    summary="Create batch scans",
+    description="Create multiple scans with the same configuration targeting different URLs.",
+    response_description="List of created scan information",
+)
+async def create_batch_scans(
+    batch_request: BatchScanSchema,
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> List[ScanResponseSchema]:
+    """
+    Create batch scans.
+    
+    - **batch_request**: Batch scan parameters
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        # This would typically create multiple scans in a batch
+        # For now, return a placeholder
+        raise NotImplementedError("Batch scan creation not yet implemented")
+        
+    except ScanValidationException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )

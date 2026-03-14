@@ -27,10 +27,28 @@ ENVIRONMENT=dev|prod
 
 ### Target Types
 
-- `LOCAL_CODE`: local filesystem path (dev)
-- `GIT_REPO`: git clone (dev/prod)
-- `DOCKER_IMAGE`: image scan
-- `WEBSITE`, `NETWORK`: disabled in prod
+**Code Targets:**
+- `LOCAL_MOUNT`: local filesystem path mounted into container (dev only)
+- `GIT_REPO`: git clone (dev + prod)
+- `UPLOADED_CODE`: uploaded ZIP file extracted and mounted (dev + prod)
+
+**Container Targets:**
+- `CONTAINER_REGISTRY`: Container registry image (docker.io, ghcr.io, gcr.io, ECR, etc.) (dev + prod, prod: docker.io only)
+
+**Application Targets:**
+- `WEBSITE`: website URL scan (dev only, disabled in prod)
+- `API_ENDPOINT`: REST/GraphQL API endpoint scan (dev only, disabled in prod)
+
+**Infrastructure Targets:**
+- `NETWORK_HOST`: network host/IP scan (dev only, disabled in prod)
+- `KUBERNETES_CLUSTER`: live Kubernetes cluster scan (dev only, disabled in prod)
+
+**Mobile Targets:**
+- `APK`: Android APK file (dev + prod)
+- `IPA`: iOS IPA file (dev + prod)
+
+**Spec Targets:**
+- `OPENAPI_SPEC`: OpenAPI/Swagger spec file for API fuzzing (dev + prod)
 
 ## Dev vs Prod Rules
 

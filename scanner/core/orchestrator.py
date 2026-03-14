@@ -116,19 +116,19 @@ class ScanOrchestrator:
                     os.environ["TARGET_TYPE"] = TargetType.NETWORK_HOST.value
                     return TargetType.NETWORK_HOST
 
-            # Default non-URL target: assume docker image
-            os.environ["TARGET_TYPE"] = TargetType.DOCKER_IMAGE.value
-            return TargetType.DOCKER_IMAGE
+            # Default non-URL target: assume container registry
+            os.environ["TARGET_TYPE"] = TargetType.CONTAINER_REGISTRY.value
+            return TargetType.CONTAINER_REGISTRY
 
-        os.environ["TARGET_TYPE"] = TargetType.LOCAL_CODE.value
-        return TargetType.LOCAL_CODE
+        os.environ["TARGET_TYPE"] = TargetType.LOCAL_MOUNT.value
+        return TargetType.LOCAL_MOUNT
     
     def _get_conditions(self) -> Dict[str, Any]:
         """Get conditions for conditional scanners"""
         conditions = {}
         
         # Check for native mobile apps (only for code scans)
-        if self.target_type in {TargetType.LOCAL_CODE, TargetType.GIT_REPO}:
+        if self.target_type in {TargetType.LOCAL_MOUNT, TargetType.GIT_REPO}:
             try:
                 from scanner.core.project_detector import detect_native_app
                 result = detect_native_app(str(self.target_path))
@@ -512,7 +512,7 @@ class ScanOrchestrator:
     
     def _generate_html_report(self):
         """Generate HTML report after scan completion"""
-        html_report_script = self.base_dir / "scanner" / "reporting" / "generate-html-report.py"
+        html_report_script = self.base_dir / "scanner" / "output" / "generate-html-report.py"
         html_report_output = self.results_dir / "security-summary.html"
         
         if not html_report_script.exists():
@@ -557,12 +557,184 @@ class ScanOrchestrator:
             self.log_message(f"[WARNING] HTML report generation error: {e} (non-critical)")
 
 
+def _get_asset_last_updated(container_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Get last updated timestamp for an asset by checking filesystem.
+    
+    Returns dict with updated_at (ISO string), age_seconds, and age_human,
+    or None if asset path doesn't exist or can't be read.
+    """
+    from datetime import datetime
+    
+    try:
+        asset_path = Path(container_path)
+        if not asset_path.exists():
+            return None
+        
+        # Get mtime of directory or newest file in directory
+        if asset_path.is_file():
+            mtime = asset_path.stat().st_mtime
+        elif asset_path.is_dir():
+            # Find newest file in directory (recursive)
+            newest_mtime = 0
+            try:
+                for file_path in asset_path.rglob("*"):
+                    if file_path.is_file():
+                        file_mtime = file_path.stat().st_mtime
+                        if file_mtime > newest_mtime:
+                            newest_mtime = file_mtime
+                mtime = newest_mtime if newest_mtime > 0 else asset_path.stat().st_mtime
+            except (PermissionError, OSError):
+                # Fallback to directory mtime if we can't read files
+                mtime = asset_path.stat().st_mtime
+        else:
+            return None
+        
+        # Calculate age
+        updated_at = datetime.fromtimestamp(mtime)
+        now = datetime.now()
+        age_delta = now - updated_at
+        age_seconds = int(age_delta.total_seconds())
+        
+        # Format human-readable age
+        if age_seconds < 60:
+            age_human = f"{age_seconds}s ago"
+        elif age_seconds < 3600:
+            age_human = f"{age_seconds // 60}m ago"
+        elif age_seconds < 86400:
+            age_human = f"{age_seconds // 3600}h ago"
+        elif age_seconds < 604800:
+            age_human = f"{age_seconds // 86400}d ago"
+        else:
+            age_human = f"{age_seconds // 604800}w ago"
+        
+        return {
+            "updated_at": updated_at.isoformat(),
+            "age_seconds": age_seconds,
+            "age_human": age_human
+        }
+    except Exception:
+        # If anything fails, return None (asset not found or can't be read)
+        return None
+
+
+async def list_scanners():
+    """List all available scanners with their capabilities and assets."""
+    import json
+    import sys
+    from pathlib import Path
+    
+    try:
+        from scanner.core.scanner_registry import ScannerRegistry, ScanType
+        from scanner.core.scanner_assets.manager import ScannerAssetsManager
+        
+        # Trigger auto-discovery
+        import scanner.plugins  # noqa: F401
+        
+        scanners = ScannerRegistry.get_all_scanners()
+        
+        # Load assets from manifests
+        scanners_root = Path("/app/scanner/plugins")
+        assets_manager = None
+        manifests = {}
+        if scanners_root.exists():
+            try:
+                assets_manager = ScannerAssetsManager(scanners_root)
+                manifests = assets_manager.load_manifests()
+            except Exception as e:
+                # Assets loading is optional - continue without them
+                pass
+        
+        scanner_list = []
+        for scanner_obj in scanners:
+            # Extract scan types from capabilities
+            scan_types = []
+            for cap in scanner_obj.capabilities:
+                scan_type = cap.scan_type.value
+                # Map to frontend scan types
+                if scan_type in ["code", "dependency", "secrets", "config"]:
+                    scan_types.append("code")
+                elif scan_type in ["image", "container"]:
+                    scan_types.append("image")
+                elif scan_type == "website":
+                    scan_types.append("website")
+                elif scan_type == "network":
+                    scan_types.append("network")
+            
+            # Remove duplicates
+            scan_types = list(set(scan_types))
+            
+            scanner_data = {
+                "name": scanner_obj.name,
+                "scan_types": scan_types,
+                "priority": scanner_obj.priority,
+                "requires_condition": scanner_obj.requires_condition,
+                "enabled": scanner_obj.enabled
+            }
+            
+            # Add assets if available
+            if manifests and scanner_obj.name.lower() in manifests:
+                manifest = manifests[scanner_obj.name.lower()]
+                assets = []
+                for asset in manifest.assets:
+                    asset_dict = {
+                        "id": asset.id,
+                        "type": asset.type,
+                        "description": asset.description,
+                        "mount": {
+                            "host_subpath": asset.mount.host_subpath,
+                            "container_path": asset.mount.container_path,
+                        }
+                    }
+                    if asset.update:
+                        asset_dict["update"] = {
+                            "enabled": asset.update.enabled,
+                            "command": asset.update.command,
+                        }
+                    else:
+                        asset_dict["update"] = None
+                    
+                    # Calculate last_updated from filesystem
+                    last_updated = _get_asset_last_updated(asset.mount.container_path)
+                    asset_dict["last_updated"] = last_updated
+                    
+                    assets.append(asset_dict)
+                scanner_data["assets"] = assets
+            
+            scanner_list.append(scanner_data)
+        
+        # Sort by priority
+        scanner_list.sort(key=lambda x: x["priority"])
+        
+        # Output as JSON
+        print(json.dumps({"scanners": scanner_list}, indent=2))
+        sys.exit(0)
+        
+    except Exception as e:
+        print(json.dumps({"error": str(e)}, indent=2), file=sys.stderr)
+        sys.exit(1)
+
+
 async def main():
     """Main entry point for orchestrator"""
     import sys
     
-    # Get scan_id from environment or generate
+    # Check for --list flag
+    if len(sys.argv) > 1 and sys.argv[1] == "--list":
+        await list_scanners()
+        return
+    
+    # Only run scan if explicitly requested via SCAN_ID or SCAN_TARGET
+    # TARGET_PATH_IN_CONTAINER alone is not enough - it's just a mount point
     scan_id = os.getenv("SCAN_ID", "")
+    scan_target = os.getenv("SCAN_TARGET", "")
+    
+    # If no scan parameters are provided, exit without running scan
+    if not scan_id and not scan_target:
+        # Silent exit - container is just running, no scan requested
+        sys.exit(0)
+    
+    # Generate scan_id if not provided but target is set
     if not scan_id:
         from datetime import datetime
         scan_id = datetime.now().strftime("%Y%m%d_%H%M%S")

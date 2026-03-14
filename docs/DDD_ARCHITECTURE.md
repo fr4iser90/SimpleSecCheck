@@ -1,0 +1,117 @@
+# SimpleSecCheck DDD Architecture
+
+## Overview
+
+This document describes the Domain-Driven Design (DDD) architecture for SimpleSecCheck, designed to handle 28+ scanners, GitHub/GitLab integrations, Docker execution, AI analysis, and queue management with clear separation of concerns.
+
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                FRONTEND LAYER                                   │
+│                                                                                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                  │
+│  │   Web UI        │  │   CLI Interface │  │   API Clients   │                  │
+│  │                 │  │                 │  │                 │                  │
+│  │ • Scan Requests │  │ • Scan Commands │  │ • Bulk Scans    │                  │
+│  │ • Results View  │  │ • Queue Status  │  │ • Webhooks      │                  │
+│  │ • Real-time UI  │  │ • Session Mgmt  │  │ • Integrations  │                  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ HTTP/API Calls
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                API LAYER                                        │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐ │
+│  │                    FastAPI Routers & Endpoints                              │ │
+│  │                                                                             │ │
+│  │ • /scan (POST)        → Scanner Domain Service                               │ │
+│  │ • /queue (GET/POST)   → Queue Domain Service                                 │ │
+│  │ • /github (GET)       → GitHub Domain Service                                │ │
+│  │ • /session (POST)     → Session Domain Service                               │ │
+│  │ • /stats (GET)        → Statistics Domain Service                            │ │
+│  │ • /assets (GET/POST)  → Asset Domain Service                                 │ │
+│  │ • /ws (WebSocket)     → WebSocket Manager (Infrastructure)                   │ │
+│  └─────────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ Domain Service Calls
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              DOMAIN LAYER                                       │
+│                                                                                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                  │
+│  │   Scanner       │  │   Queue         │  │   GitHub        │                  │
+│  │   Domain        │  │   Domain        │  │   Domain        │                  │
+│  │                 │  │                 │  │                 │                  │
+│  │ • Scan Entity   │  │ • Job Entity    │  │ • Repo Entity   │                  │
+│  │ • ScanResult    │  │ • JobStatus     │  │ • Branch Entity │                  │
+│  │ • ScannerConfig │  │ • JobMetadata   │  │ • Commit Entity │                  │
+│  │ • Orchestrator  │  │ • QueueService  │  │ • UserService   │                  │
+│  │ • Registry      │  │ • WorkerService │  │ • APIService    │                  │
+│  │ • DockerRunner  │  │ • Processing    │  │ • CloneService  │                  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘                  │
+│                                                                                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                  │
+│  │   Target        │  │   Policy        │  │   Session       │                  │
+│  │   Domain        │  │   Domain        │  │   Domain        │                  │
+│  │                 │  │                 │  │                 │                  │
+│  │ • Target Entity │  │ • Policy Entity │  │ • Session Entity│                  │
+│  │ • TargetType    │  │ • Rule Entity   │  │ • RateLimit     │                  │
+│  │ • Classification│  │ • Validation    │  │ • SessionMgmt   │                  │
+│  │ • Validation    │  │ • Environment   │  │ • RateLimiting  │                  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘                  │
+│                                                                                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                  │
+│  │   Statistics    │  │   Asset         │  │   Infrastructure│                  │
+│  │   Domain        │  │   Domain        │  │                 │                  │
+│  │                 │  │                 │  │ • WebSocket     │                  │
+│  │ • Stats Entity  │  │ • Asset Entity  │  │   Manager       │                  │
+│  │ • Metrics       │  │ • Version       │  │ • Logging       │                  │
+│  │ • Analytics     │  │ • Management    │  │ • Config        │                  │
+│  │ • Collection    │  │ • Updates       │  │ • Utils         │                  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ Repository Interface Calls
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            INFRASTRUCTURE LAYER                                 │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐ │
+│  │                        Database Adapters                                    │ │
+│  │                                                                             │ │
+│  │ • PostgreSQL Adapter    ← All Domain Repositories                           │ │
+│  │ • Redis Adapter         ← Queue/Session Cache                               │ │
+│  │ • File System Adapter   ← Results/Logs Storage                              │ │
+│  └─────────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐ │
+│  │                        External Integrations                                │ │
+│  │                                                                             │ │
+│  │ • GitHub API Client     ← GitHub Domain                                     │ │
+│  │ • GitLab API Client     ← GitHub Domain                                     │ │
+│  │ • Docker API Client     ← Scanner Domain                                    │ │
+│  │ • NVD API Client        ← Asset Domain                                      │ │
+│  │ • AI Provider APIs      ← Scanner Domain                                    │ │
+│  └─────────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ Docker Execution
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              DOCKER LAYER                                       │
+│                                                                                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                  │
+│  │   Scanner       │  │   Worker        │  │   Frontend      │                  │
+│  │   Container     │  │   Container     │  │   Container     │                  │
+│  │                 │  │                 │  │                 │                  │
+│  │ • Scanner       │  │ • Queue         │  │ • Web UI        │                  │
+│  │   Plugins       │  │   Processing    │  │ • API Server    │                  │
+│  │ • DockerRunner  │  │ • Job Execution │  │ • WebSocket     │                  │
+│  │ • Results       │  │ • Scan Orchestration                              │
+│  │   Processing    │  │ • Statistics    │  │ • Session Mgmt  │                  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
