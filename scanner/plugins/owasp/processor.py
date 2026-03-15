@@ -173,5 +173,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="owasp-dependency-check.json",
+    json_file="report.json",  # Changed from owasp-dependency-check.json
 )

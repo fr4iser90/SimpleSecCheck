@@ -33,15 +33,16 @@ class QueueAdapter:
     
     def _init_redis(self) -> None:
         """Initialize Redis connection."""
+        if not self.connection_string:
+            raise ValueError("Redis connection string is required. Set REDIS_URL or QUEUE_CONNECTION environment variable.")
+        
         try:
             import redis.asyncio as redis
-            connection_string = self.connection_string or "redis://localhost:6379"
-            self.logger.info(f"Initializing Redis connection to: {connection_string}")
-            self.redis_client = redis.from_url(connection_string, decode_responses=True)
+            self.logger.info(f"Initializing Redis connection to: {self.connection_string}")
+            self.redis_client = redis.from_url(self.connection_string, decode_responses=True)
             self.logger.info("Redis client created successfully")
         except ImportError:
-            self.logger.error("Redis not available, falling back to memory queue")
-            self._init_memory()
+            raise ImportError("Redis library not available. Install redis package.")
         except Exception as e:
             self.logger.error(f"Failed to initialize Redis: {e}")
             raise

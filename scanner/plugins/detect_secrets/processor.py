@@ -90,5 +90,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="detect-secrets.json",
+    json_file="report.json",  # Changed from detect-secrets.json
 )

@@ -178,8 +178,8 @@ class iOSScanner(BaseScanner):
         
         self.log(f"Found {len(plist_files)} Info.plist file(s), processing...")
         
-        json_output = self.results_dir / "ios-plist.json"
-        text_output = self.results_dir / "ios-plist.txt"
+        json_output = self.results_dir / "report.json"  # Changed from ios-plist.json
+        text_output = self.results_dir / "report.txt"   # Changed from ios-plist.txt
         
         all_findings = []
         for plist_file in plist_files:

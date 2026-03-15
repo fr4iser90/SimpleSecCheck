@@ -7,7 +7,7 @@ install:
   - ["chmod", "+x", "/usr/local/bin/zap-baseline.py"]
   - ["wget", "https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap_common.py", "-O", "/usr/local/bin/zap_common.py"]
   - ["mkdir", "-p", "/zap/wrk/zap"]
-  - ["cp", "/app/scanner/scanners/zap/config/baseline.conf", "/zap/wrk/zap/baseline.conf"]
+  - ["cp", "/app/scanner/plugins/zap/config/baseline.conf", "/zap/wrk/zap/baseline.conf"]
   - ["cp", "-r", "/opt/ZAP_2.16.1/", "/zap/"]
   - ["ln", "-sf", "/zap/zap.sh", "/zap/zap-x.sh"]
 assets:
@@ -15,5 +15,5 @@ assets:
     type: config
     description: ZAP baseline configuration
     mount:
-      host_subpath: scanner/scanners/zap/config/baseline.conf
-      container_path: /app/scanner/scanners/zap/config/baseline.conf
+      host_subpath: scanner/plugins/zap/config/baseline.conf
+      container_path: /app/scanner/plugins/zap/config/baseline.conf

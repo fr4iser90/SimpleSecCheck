@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 from enum import Enum
 
+from domain.entities.target_type import TargetType
+
 
 class ScanMode(str, Enum):
     """Scan mode enumeration."""
@@ -37,7 +39,7 @@ class ScanConfig:
     scanner_configs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     
     # Target configuration
-    target_type: str = "repository"
+    target_type: str = TargetType.GIT_REPO.value
     target_depth: int = 3
     include_paths: List[str] = field(default_factory=list)
     exclude_paths: List[str] = field(default_factory=list)
@@ -136,7 +138,7 @@ class ScanConfig:
             max_concurrent_scanners=data.get('max_concurrent_scanners', 5),
             enabled_scanners=data.get('enabled_scanners', []),
             scanner_configs=data.get('scanner_configs', {}),
-            target_type=data.get('target_type', 'repository'),
+            target_type=data.get('target_type', TargetType.GIT_REPO.value),
             target_depth=data.get('target_depth', 3),
             include_paths=data.get('include_paths', []),
             exclude_paths=data.get('exclude_paths', []),
@@ -166,7 +168,7 @@ class ScanConfig:
             max_concurrent_scanners=_merge_value(self.max_concurrent_scanners, other.max_concurrent_scanners, 5),
             enabled_scanners=other.enabled_scanners if other.enabled_scanners else self.enabled_scanners,
             scanner_configs={**self.scanner_configs, **other.scanner_configs},
-            target_type=_merge_value(self.target_type, other.target_type, "repository"),
+            target_type=_merge_value(self.target_type, other.target_type, TargetType.GIT_REPO.value),
             target_depth=_merge_value(self.target_depth, other.target_depth, 3),
             include_paths=other.include_paths if other.include_paths else self.include_paths,
             exclude_paths=other.exclude_paths if other.exclude_paths else self.exclude_paths,

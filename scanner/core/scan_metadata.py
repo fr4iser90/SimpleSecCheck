@@ -179,11 +179,11 @@ def collect_scan_metadata(
 
 def save_metadata(metadata: Dict[str, Any], results_dir: str) -> bool:
     """
-    Save metadata to scan-metadata.json in results directory.
+    Save metadata to scan.json in metadata directory.
     
     Args:
         metadata: Metadata dictionary
-        results_dir: Results directory path
+        results_dir: Metadata directory path (e.g., /app/results/{scan_id}/metadata)
     
     Returns:
         True if saved successfully, False otherwise
@@ -192,7 +192,7 @@ def save_metadata(metadata: Dict[str, Any], results_dir: str) -> bool:
         results_path = Path(results_dir)
         results_path.mkdir(parents=True, exist_ok=True)
         
-        metadata_file = results_path / "scan-metadata.json"
+        metadata_file = results_path / "scan.json"  # Changed from scan-metadata.json
         
         with open(metadata_file, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
@@ -205,16 +205,16 @@ def save_metadata(metadata: Dict[str, Any], results_dir: str) -> bool:
 
 def load_metadata(results_dir: str) -> Optional[Dict[str, Any]]:
     """
-    Load metadata from scan-metadata.json in results directory.
+    Load metadata from scan.json in metadata directory.
     
     Args:
-        results_dir: Results directory path
+        results_dir: Metadata directory path (e.g., /app/results/{scan_id}/metadata)
     
     Returns:
         Metadata dictionary or None if not found/invalid
     """
     try:
-        metadata_file = Path(results_dir) / "scan-metadata.json"
+        metadata_file = Path(results_dir) / "scan.json"  # Changed from scan-metadata.json
         if not metadata_file.exists():
             return None
         

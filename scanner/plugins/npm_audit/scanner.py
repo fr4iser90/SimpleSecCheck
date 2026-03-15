@@ -87,8 +87,8 @@ class NpmAuditScanner(BaseScanner):
         
         self.log(f"Found {len(package_files)} package.json file(s).")
         
-        json_output = self.results_dir / "npm-audit.json"
-        text_output = self.results_dir / "npm-audit.txt"
+        json_output = self.results_dir / "report.json"  # Changed from npm-audit.json
+        text_output = self.results_dir / "report.txt"   # Changed from npm-audit.txt
         
         # Scan first package.json (npm audit audits all dependencies)
         first_package = package_files[0]

@@ -49,12 +49,45 @@ class StepRegistry:
         """
         self.scan_id = scan_id
         self.results_dir = results_dir
+        
+        # CRITICAL: Validate that results_dir contains scan_id
+        # This ensures we never write to /app/results/logs/ directly
+        # Results directory MUST be /app/results/{scan_id}/
+        if not scan_id or scan_id not in str(results_dir):
+            raise ValueError(
+                f"CRITICAL: results_dir must contain scan_id! "
+                f"scan_id={scan_id}, results_dir={results_dir}. "
+                f"This prevents writing to /app/results/logs/ directly. "
+                f"Results directory structure must be: /app/results/{{scan_id}}/logs/steps.log"
+            )
+        
         self.websocket_manager = websocket_manager
         self.steps: Dict[str, Step] = {}  # {step_name: Step}
         self.step_counter = 0
+        
+        # CRITICAL: Always create logs inside scan-specific directory
+        # Structure: /app/results/{scan_id}/logs/steps.log
+        # This keeps results/ clean - only contains {scan_id}/ folders
         self.logs_dir = self.results_dir / "logs"
+        
+        # DEBUG: Log directory creation
+        print(f"[Step Registry] Initializing StepRegistry:")
+        print(f"[Step Registry]   scan_id: {scan_id}")
+        print(f"[Step Registry]   results_dir: {self.results_dir}")
+        print(f"[Step Registry]   logs_dir: {self.logs_dir}")
+        print(f"[Step Registry]   steps_log: {self.logs_dir / 'steps.log'}")
+        print(f"[Step Registry]   results_dir exists: {self.results_dir.exists()}")
+        
+        # Create directories
+        self.results_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.steps_log = self.logs_dir / "steps.log"
+        
+        # DEBUG: Verify directories were created
+        print(f"[Step Registry] After mkdir:")
+        print(f"[Step Registry]   results_dir exists: {self.results_dir.exists()}")
+        print(f"[Step Registry]   logs_dir exists: {self.logs_dir.exists()}")
+        print(f"[Step Registry]   steps_log path: {self.steps_log}")
 
         # Production DB support (optional)
         self.environment = os.getenv("ENVIRONMENT", "dev").lower()
@@ -316,6 +349,17 @@ class StepRegistry:
         """Write step as JSON line to steps.log file (structured format, no parsing needed!)"""
         try:
             import json
+            import os
+            
+            # DEBUG: Log file path and directory existence
+            print(f"[Step Registry] Writing step to: {self.steps_log}")
+            print(f"[Step Registry] Logs directory exists: {self.logs_dir.exists()}")
+            print(f"[Step Registry] Results directory exists: {self.results_dir.exists()}")
+            print(f"[Step Registry] Steps log file exists: {self.steps_log.exists()}")
+            
+            # Ensure directory exists
+            self.logs_dir.mkdir(parents=True, exist_ok=True)
+            
             step_dict = {
                 "number": step.number,
                 "name": step.name,
@@ -325,10 +369,22 @@ class StepRegistry:
                 "completed_at": step.completed_at.isoformat() if step.completed_at else None,
                 "timestamp": datetime.now().isoformat()
             }
+            
+            # Write to file
             with open(self.steps_log, "a", encoding="utf-8") as f:
                 f.write(json.dumps(step_dict) + "\n")
+            
+            # DEBUG: Verify file was written
+            if self.steps_log.exists():
+                file_size = os.path.getsize(self.steps_log)
+                print(f"[Step Registry] Successfully wrote step to {self.steps_log} (size: {file_size} bytes)")
+            else:
+                print(f"[Step Registry] ERROR: File {self.steps_log} does not exist after write!")
+                
         except Exception as e:
             print(f"[Step Registry] Error writing to steps.log: {e}")
+            import traceback
+            traceback.print_exc()
 
         # In prod, also write directly to DB (non-blocking)
         if self.environment == "prod" and self.database_url:

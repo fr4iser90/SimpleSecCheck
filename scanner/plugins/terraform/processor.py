@@ -88,5 +88,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="checkov.json",
+    json_file="report.json",  # Changed from checkov.json
 )

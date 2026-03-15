@@ -70,12 +70,18 @@ class BrakemanScanner(BaseScanner):
         self.log(f"Found {len(ruby_files)} Ruby/Rails file(s).")
         self.log(f"Running Ruby on Rails security scan on {self.target_path}...")
         
-        json_output = self.results_dir / "brakeman.json"
-        text_output = self.results_dir / "brakeman.txt"
+        json_output = self.results_dir / "report.json"  # Changed from brakeman.json
+        text_output = self.results_dir / "report.txt"   # Changed from brakeman.txt
+        
+        # Get tool command (handles Ruby gems, PATH)
+        tool_cmd = self.get_tool_command("brakeman")
+        if not tool_cmd:
+            self.log("brakeman not found", "ERROR")
+            return False
         
         # JSON report
         self.log("Generating JSON report...")
-        cmd = ["brakeman", "-q", "-f", "json", "-o", str(json_output), "--force", str(self.target_path)]
+        cmd = [*tool_cmd, "-q", "-f", "json", "-o", str(json_output), "--force", str(self.target_path)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:

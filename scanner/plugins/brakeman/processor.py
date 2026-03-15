@@ -81,5 +81,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="brakeman.json",
+    json_file="report.json",  # Changed from brakeman.json
 )

@@ -106,8 +106,8 @@ class ZAPScanner(BaseScanner):
         self.log(f"[ZAP ENV] ZAP_PATH={os.environ['ZAP_PATH']}, JAVA_HOME={os.environ['JAVA_HOME']}")
         self.log(f"[ZAP] Starting DEEP baseline scan on {self.zap_target} with aggressive policies...")
         
-        xml_output = self.results_dir / "zap-report.xml"
-        html_output = self.results_dir / "html-report.html"
+        xml_output = self.results_dir / "report.xml"  # Changed from zap-report.xml
+        html_output = self.results_dir / "report.html"  # Changed from html-report.html
         
         # Remove pre-existing reports
         if xml_output.exists():
@@ -117,7 +117,7 @@ class ZAPScanner(BaseScanner):
         
         # XML report
         self.log("[ZAP CMD XML] Executing DEEP scan...")
-        cmd = ["python3", str(zap_baseline), "-d", "-t", self.zap_target, "-x", "zap-report.xml", "-J", "-a"]
+        cmd = ["python3", str(zap_baseline), "-d", "-t", self.zap_target, "-x", "report.xml", "-J", "-a"]  # Changed from zap-report.xml
         
         result = self.run_command(cmd, cwd=self.results_dir, capture_output=True)
         if result.returncode != 0:
@@ -125,7 +125,7 @@ class ZAPScanner(BaseScanner):
         
         # HTML report
         self.log("[ZAP CMD HTML] Executing DEEP scan...")
-        cmd = ["python3", str(zap_baseline), "-d", "-t", self.zap_target, "-f", "html", "-o", "zap-report.html", "-J", "-a"]
+        cmd = ["python3", str(zap_baseline), "-d", "-t", self.zap_target, "-f", "html", "-o", "report.html", "-J", "-a"]  # Changed from zap-report.html
         
         result = self.run_command(cmd, cwd=self.results_dir, capture_output=True)
         if result.returncode != 0:

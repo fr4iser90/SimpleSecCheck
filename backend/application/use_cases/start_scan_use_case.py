@@ -8,10 +8,12 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from domain.entities.scan import Scan, ScanStatus, ScanType
+from domain.entities.target_type import TargetType
 from domain.value_objects.scan_config import ScanConfig
 from domain.domain_services.scan_validation_service import ScanValidationService
 from domain.exceptions.scan_exceptions import (
     InvalidScanConfigException,
+    InvalidScanTargetException,
     ScanValidationException,
     ScanConcurrencyLimitException,
     ScanAlreadyExistsException
@@ -127,7 +129,7 @@ class StartScanUseCase:
         
         for target in targets:
             target_url = target.get('url')
-            target_type = target.get('type', 'repository')
+            target_type = target.get('type', TargetType.GIT_REPO.value)
             
             if not target_url or not target_url.strip():
                 raise InvalidScanTargetException("Target URL cannot be empty")
@@ -145,7 +147,7 @@ class StartScanUseCase:
         
         # Add time based on scan type
         type_factor = {
-            ScanType.REPOSITORY: 120,
+            ScanType.CODE: 120,
             ScanType.CONTAINER: 180,
             ScanType.INFRASTRUCTURE: 300,
             ScanType.WEB_APPLICATION: 240,

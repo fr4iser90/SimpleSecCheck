@@ -20,12 +20,17 @@ class ScanStatus(str, Enum):
 
 
 class ScanType(str, Enum):
-    """Scan type enumeration."""
-    REPOSITORY = "repository"
+    """Scan type enumeration - matches scanner/core/scanner_registry.py ScanType."""
+    CODE = "code"
     CONTAINER = "container"
-    INFRASTRUCTURE = "infrastructure"
-    WEB_APPLICATION = "web_application"
-    MOBILE_APP = "mobile_app"
+    WEBSITE = "website"
+    NETWORK = "network"
+    MOBILE = "mobile"
+    # Additional scanner scan types
+    DEPENDENCY = "dependency"
+    SECRETS = "secrets"
+    CONFIG = "config"
+    IMAGE = "image"
 
 
 @dataclass
@@ -35,7 +40,7 @@ class Scan:
     id: str = field(default_factory=lambda: str(uuid4()))
     name: str = ""
     description: str = ""
-    scan_type: ScanType = ScanType.REPOSITORY
+    scan_type: ScanType = ScanType.CODE
     status: ScanStatus = ScanStatus.PENDING
     target_url: str = ""
     target_type: str = ""
@@ -208,7 +213,7 @@ class Scan:
             id=data.get('id', str(uuid4())),
             name=data.get('name', ''),
             description=data.get('description', ''),
-            scan_type=ScanType(data.get('scan_type', 'repository')),
+            scan_type=ScanType(data.get('scan_type', 'code')),
             status=ScanStatus(data.get('status', 'pending')),
             target_url=data.get('target_url', ''),
             target_type=data.get('target_type', ''),

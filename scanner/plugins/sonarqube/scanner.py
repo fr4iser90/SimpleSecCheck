@@ -75,14 +75,20 @@ class SonarQubeScanner(BaseScanner):
         
         self.log(f"Running code quality and security scan on {self.target_path}...")
         
-        json_output = self.results_dir / "sonarqube.json"
-        text_output = self.results_dir / "sonarqube.txt"
+        json_output = self.results_dir / "report.json"  # Changed from sonarqube.json
+        text_output = self.results_dir / "report.txt"   # Changed from sonarqube.txt
         
         properties_file = self.create_project_properties()
         
+        # Get tool command (handles npm global packages, npx, PATH)
+        tool_cmd = self.get_tool_command("sonar-scanner")
+        if not tool_cmd:
+            self.log("sonar-scanner not found", "ERROR")
+            return False
+        
         # Run SonarQube scan
         self.log("Running SonarQube analysis...")
-        cmd = ["sonar-scanner", "-X", f"-Dproject.settings={properties_file}"]
+        cmd = [*tool_cmd, "-X", f"-Dproject.settings={properties_file}"]
         
         env = os.environ.copy()
         env.setdefault("SONAR_USER_HOME", str(Path.home() / ".sonar"))

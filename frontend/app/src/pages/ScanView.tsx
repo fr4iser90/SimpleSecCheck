@@ -146,7 +146,38 @@ export default function ScanView() {
     status.status === 'running' && status.scan_id ? status.scan_id : null
   )
 
-  // Handle WebSocket messages to update steps and progress
+  // Load steps from REST API when scan_id is available (initial load)
+  useEffect(() => {
+    if (!status.scan_id) return
+
+    const fetchSteps = async () => {
+      try {
+        const { apiFetch } = await import('../utils/apiClient')
+        const response = await apiFetch(`/api/v1/scans/${status.scan_id}/steps`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.steps && data.steps.length > 0) {
+            const convertedSteps: Step[] = data.steps.map((step: any) => ({
+              number: step.number || 0,
+              name: step.name || 'Unknown',
+              status: (step.status || 'pending') as 'pending' | 'running' | 'completed' | 'failed',
+              message: step.message || ''
+            }))
+            setSteps(convertedSteps)
+            if (data.progress_percentage !== undefined) {
+              setProgress(data.progress_percentage)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch steps:', error)
+      }
+    }
+
+    fetchSteps()
+  }, [status.scan_id])
+
+  // Handle WebSocket messages to update steps and progress (real-time updates)
   useEffect(() => {
     if (!service) return
 
@@ -174,7 +205,6 @@ export default function ScanView() {
       }
     }
   }, [service])
-
 
   // Listen for messages from iframe (HTML Report)
   useEffect(() => {

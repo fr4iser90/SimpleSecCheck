@@ -68,8 +68,8 @@ class SafetyScanner(BaseScanner):
     
     def create_empty_reports(self):
         """Create empty reports when no dependency files found"""
-        json_output = self.results_dir / "safety.json"
-        text_output = self.results_dir / "safety.txt"
+        json_output = self.results_dir / "report.json"  # Changed from safety.json
+        text_output = self.results_dir / "report.txt"   # Changed from safety.txt
         
         # Empty JSON report
         empty_json = {
@@ -110,8 +110,8 @@ class SafetyScanner(BaseScanner):
         for file in dependency_files:
             self.log(f"  - {file}")
         
-        json_output = self.results_dir / "safety.json"
-        text_output = self.results_dir / "safety.txt"
+        json_output = self.results_dir / "report.json"  # Changed from safety.json
+        text_output = self.results_dir / "report.txt"   # Changed from safety.txt
         
         # Use first dependency file
         dep_file = dependency_files[0]

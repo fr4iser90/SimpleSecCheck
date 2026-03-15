@@ -126,17 +126,47 @@ class BaseScanner(ABC):
             self.log(f"Error running command: {e}", "ERROR")
             raise
     
-    def check_tool_installed(self, tool_name: str) -> bool:
-        """Check if a tool is installed"""
+    def get_tool_command(self, tool_name: str) -> Optional[List[str]]:
+        """
+        Determine the command to run a tool.
+        Checks for Python module, npx, and then PATH.
+        """
+        # 1. Check if it's a Python module
+        try:
+            import importlib.util
+            spec = importlib.util.find_spec(tool_name)
+            if spec:
+                return ["python3", "-m", tool_name]
+        except Exception:
+            pass
+
+        # 2. Check if it's an npx command (for Node.js tools)
+        try:
+            result = subprocess.run(
+                ["npx", "--no-install", tool_name, "--version"],
+                capture_output=True, text=True, check=False, timeout=5
+            )
+            if result.returncode == 0:
+                return ["npx", tool_name]
+        except Exception:
+            pass
+
+        # 3. Check if it's in PATH
         try:
             result = subprocess.run(
                 ["which", tool_name],
-                capture_output=True,
-                text=True
+                capture_output=True, text=True, check=False, timeout=5
             )
-            return result.returncode == 0
+            if result.returncode == 0:
+                return [tool_name]
         except Exception:
-            return False
+            pass
+
+        return None
+
+    def check_tool_installed(self, tool_name: str) -> bool:
+        """Check if a tool is installed and executable."""
+        return self.get_tool_command(tool_name) is not None
     
     def get_exclude_args(self, exclude_paths: Optional[str] = None) -> List[str]:
         """

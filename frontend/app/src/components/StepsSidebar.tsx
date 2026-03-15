@@ -32,32 +32,59 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
     isOpen && scanId ? scanId : null
   )
 
+  // Load steps from REST API when sidebar opens
   useEffect(() => {
     if (!isOpen || !scanId) {
       setLoading(false)
       return
     }
 
-    // Handle WebSocket messages to update steps
-    if (service) {
-      const handleMessage = (data: WebSocketMessage) => {
-        if (data.type === 'step_update' && data.steps) {
-          setSteps(data.steps)
-          setLoading(false)
-        } else if (data.type === 'initial_steps' && data.steps) {
-          setSteps(data.steps)
-          setLoading(false)
+    const fetchSteps = async () => {
+      try {
+        setLoading(true)
+        const { apiFetch } = await import('../utils/apiClient')
+        const response = await apiFetch(`/api/v1/scans/${scanId}/steps`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.steps && data.steps.length > 0) {
+            const convertedSteps: Step[] = data.steps.map((step: any) => ({
+              number: step.number || 0,
+              name: step.name || 'Unknown',
+              status: (step.status || 'pending') as 'pending' | 'running' | 'completed' | 'failed',
+              message: step.message || ''
+            }))
+            setSteps(convertedSteps)
+          }
         }
+      } catch (error) {
+        console.error('Failed to fetch steps:', error)
+      } finally {
+        setLoading(false)
       }
+    }
 
-      // Set up message handler
-      service.onMessage(handleMessage)
+    fetchSteps()
+  }, [isOpen, scanId])
 
-      return () => {
-        // Clean up message handler
-        if (service) {
-          service.onMessage(() => {}) // Clear handler
-        }
+  // Handle WebSocket messages to update steps in real-time
+  useEffect(() => {
+    if (!isOpen || !scanId || !service) return
+
+    const handleMessage = (data: WebSocketMessage) => {
+      if (data.type === 'step_update' && data.steps) {
+        setSteps(data.steps)
+      } else if (data.type === 'initial_steps' && data.steps) {
+        setSteps(data.steps)
+      }
+    }
+
+    // Set up message handler
+    service.onMessage(handleMessage)
+
+    return () => {
+      // Clean up message handler
+      if (service) {
+        service.onMessage(() => {}) // Clear handler
       }
     }
   }, [service, isOpen, scanId])

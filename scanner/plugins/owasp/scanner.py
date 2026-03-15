@@ -16,11 +16,18 @@ class OWASPScanner(BaseScanner):
     
     # Metadaten für Auto-Registrierung
     CAPABILITIES = [
+        # Code scanning (can scan source code for vulnerabilities)
+        ScannerCapability(
+            scan_type=ScanType.CODE,
+            supported_targets=[TargetType.LOCAL_MOUNT, TargetType.GIT_REPO, TargetType.UPLOADED_CODE],
+            supported_artifacts=[],
+        ),
+        # Dependency scanning (primary use case)
         ScannerCapability(
             scan_type=ScanType.DEPENDENCY,
             supported_targets=[TargetType.LOCAL_MOUNT, TargetType.GIT_REPO, TargetType.UPLOADED_CODE],
             supported_artifacts=[],
-        )
+        ),
     ]
     PRIORITY = 4
     REQUIRES_CONDITION = None
@@ -114,9 +121,9 @@ class OWASPScanner(BaseScanner):
         temp_scan_dir = Path(tempfile.mkdtemp(prefix="owasp-dc-scan-"))
         
         try:
-            json_output = self.results_dir / "owasp-dependency-check.json"
-            html_output = self.results_dir / "owasp-dependency-check.html"
-            xml_output = self.results_dir / "owasp-dependency-check.xml"
+            json_output = self.results_dir / "report.json"  # Changed from owasp-dependency-check.json
+            html_output = self.results_dir / "report.html"  # Changed from owasp-dependency-check.html
+            xml_output = self.results_dir / "report.xml"   # Changed from owasp-dependency-check.xml
             
             # Check if NVD_API_KEY is provided
             nvd_flag = []

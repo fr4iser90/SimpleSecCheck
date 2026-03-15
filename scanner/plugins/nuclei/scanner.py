@@ -54,9 +54,9 @@ class NucleiScanner(BaseScanner):
         
         self.log(f"Running web application scan on {self.zap_target}...")
         
-        json_output = self.results_dir / "nuclei.json"
-        text_output = self.results_dir / "nuclei.txt"
-        critical_output = self.results_dir / "nuclei-critical.json"
+        json_output = self.results_dir / "report.json"  # Changed from nuclei.json
+        text_output = self.results_dir / "report.txt"   # Changed from nuclei.txt
+        critical_output = self.results_dir / "critical.json"  # Changed from nuclei-critical.json
         
         config_args = []
         if self.config_path and self.config_path.exists():

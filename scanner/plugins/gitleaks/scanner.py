@@ -53,8 +53,8 @@ class GitLeaksScanner(BaseScanner):
         
         self.log(f"Running secret detection scan on {self.target_path}...")
         
-        json_output = self.results_dir / "gitleaks.json"
-        text_output = self.results_dir / "gitleaks.txt"
+        json_output = self.results_dir / "report.json"  # Changed from gitleaks.json
+        text_output = self.results_dir / "report.txt"   # Changed from gitleaks.txt
         
         config_args = []
         if self.config_path and self.config_path.exists():

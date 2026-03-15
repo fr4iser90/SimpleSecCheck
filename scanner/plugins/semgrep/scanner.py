@@ -96,17 +96,23 @@ class SemgrepScanner(BaseScanner):
         
         self.log(f"Running code scan on {self.target_path} using rules from {self.rules_path}...")
         
-        json_output = self.results_dir / "semgrep.json"
-        text_output = self.results_dir / "semgrep.txt"
+        json_output = self.results_dir / "report.json"  # Changed from semgrep.json
+        text_output = self.results_dir / "report.txt"   # Changed from semgrep.txt
         
         # Build command
         config_args = self.get_config_args()
         exclude_args = self.get_exclude_args()
         
+        # Get tool command (handles Python modules, npx, PATH)
+        tool_cmd = self.get_tool_command("semgrep")
+        if not tool_cmd:
+            self.log("semgrep not found", "ERROR")
+            return False
+        
         # JSON report
         self.log("Generating JSON report...")
         cmd = [
-            "semgrep",
+            *tool_cmd,
             "--disable-version-check",
             *config_args,
             str(self.target_path),
@@ -125,7 +131,7 @@ class SemgrepScanner(BaseScanner):
         # Text report
         self.log("Generating text report...")
         cmd = [
-            "semgrep",
+            *tool_cmd,
             "--disable-version-check",
             *config_args,
             str(self.target_path),
@@ -143,7 +149,7 @@ class SemgrepScanner(BaseScanner):
         
         # Additional security-focused deep scan
         self.log("Running additional security-focused deep scan...")
-        security_json = self.results_dir / "semgrep-security-deep.json"
+        security_json = self.results_dir / "security-deep.json"  # Changed from semgrep-security-deep.json
         cmd = [
             "semgrep",
             "--disable-version-check",

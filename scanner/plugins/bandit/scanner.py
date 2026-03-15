@@ -52,8 +52,8 @@ class BanditScanner(BaseScanner):
 
     def create_empty_reports(self):
         """Create empty reports when no Python files found"""
-        json_output = self.results_dir / "bandit.json"
-        text_output = self.results_dir / "bandit.txt"
+        json_output = self.results_dir / "report.json"  # Changed from bandit.json
+        text_output = self.results_dir / "report.txt"   # Changed from bandit.txt
 
         empty_json = {
             "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -93,8 +93,8 @@ class BanditScanner(BaseScanner):
         self.log(f"Found {python_files} Python file(s) to scan...")
         self.log(f"Running Python security scan on {self.target_path}...")
 
-        json_output = self.results_dir / "bandit.json"
-        text_output = self.results_dir / "bandit.txt"
+        json_output = self.results_dir / "report.json"  # Changed from bandit.json
+        text_output = self.results_dir / "report.txt"   # Changed from bandit.txt
 
         # JSON report
         cmd = ["bandit", "-r", str(self.target_path), "-f", "json", "-o", str(json_output)]

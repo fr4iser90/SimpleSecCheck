@@ -158,5 +158,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="ios-plist.json",
+    json_file="report.json",  # Changed from ios-plist.json
 )

@@ -4,10 +4,13 @@ Scans API Routes
 This module defines the FastAPI routes for scan operations.
 Routes support both authenticated and guest users via ActorContext.
 """
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi import status as fastapi_status
+import asyncio
+import json
+from pathlib import Path
 
 from api.deps.actor_context import get_actor_context, ActorContext
 from api.schemas.scan_schemas import (
@@ -73,7 +76,7 @@ def _determine_target_type(scan_type: ScanType, target_url: str) -> str:
     is_local_path = target.startswith(('/', './', '../'))
     
     # Determine based on scan_type - using TargetType enum values
-    if scan_type == ScanType.REPOSITORY:
+    if scan_type == ScanType.CODE:
         if is_git_url:
             return TargetType.GIT_REPO.value
         elif is_container:
@@ -202,6 +205,59 @@ router = APIRouter(
 )
 
 
+
+def _read_deduplicated_steps(scan_id: str) -> tuple[List[Dict[str, Any]], int, int]:
+    """
+    Read and deduplicate steps from steps.log file.
+    Returns: (steps_list, total_steps, completed_steps)
+    """
+    from config.settings import settings
+    
+    results_dir = Path(settings.RESULTS_DIR_HOST if hasattr(settings, 'RESULTS_DIR_HOST') else "/app/results")
+    steps_log_path = results_dir / scan_id / "logs" / "steps.log"
+    
+    if not steps_log_path.exists():
+        return [], 0, 0
+    
+    # Use a dict to track the latest status for each step number
+    steps_dict = {}
+    try:
+        with open(steps_log_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('{"init"'):
+                    continue
+                try:
+                    step_data = json.loads(line)
+                    # Filter out init messages and only include actual step entries
+                    if "step_name" in step_data or "name" in step_data:
+                        step_number = step_data.get("number")
+                        if step_number is not None:
+                            # Get timestamp for comparison
+                            timestamp_str = step_data.get("timestamp", "")
+                            # Keep the entry with the latest timestamp for each step number
+                            if step_number not in steps_dict:
+                                steps_dict[step_number] = step_data
+                            else:
+                                # Compare timestamps to keep the latest
+                                existing_timestamp = steps_dict[step_number].get("timestamp", "")
+                                if timestamp_str > existing_timestamp:
+                                    steps_dict[step_number] = step_data
+                except json.JSONDecodeError:
+                    continue
+    except Exception:
+        return [], 0, 0
+    
+    # Convert dict to sorted list by step number
+    steps = [steps_dict[key] for key in sorted(steps_dict.keys())]
+    
+    # Calculate progress
+    total_steps = len(steps)
+    completed_steps = sum(1 for step in steps if step.get("status") in ["completed", "failed"])
+    
+    return steps, total_steps, completed_steps
+
+
 @router.post(
     "/",
     response_model=ScanResponseSchema,
@@ -231,7 +287,7 @@ async def create_scan(
         
         # Auto-determine target_type if not provided
         target_type = scan_request.target_type
-        if not target_type or target_type == "repository":
+        if not target_type:
             target_type = _determine_target_type(scan_request.scan_type, scan_request.target_url)
         
         # Convert request schema to DTO
@@ -391,10 +447,10 @@ async def detect_target_type(
     try:
         # Convert string to ScanType enum
         try:
-            scan_type_enum = ScanType(scan_type) if hasattr(ScanType, scan_type.upper()) else ScanType.REPOSITORY
+            scan_type_enum = ScanType(scan_type) if hasattr(ScanType, scan_type.upper()) else ScanType.CODE
         except (ValueError, AttributeError):
             # Fallback: try by value
-            scan_type_enum = next((st for st in ScanType if st.value == scan_type), ScanType.REPOSITORY)
+            scan_type_enum = next((st for st in ScanType if st.value == scan_type), ScanType.CODE)
         
         # Determine target type
         target_type = _determine_target_type(scan_type_enum, target_url)
@@ -646,6 +702,84 @@ async def get_scan_status(
         raise HTTPException(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
+        )
+
+
+@router.get(
+    "/{scan_id}/steps",
+    summary="Get scan steps status",
+    description="Get step-by-step progress of a scan from steps.log file.",
+    response_description="Step status information",
+)
+async def get_scan_steps(
+    scan_id: str,
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> Dict[str, Any]:
+    """
+    Get scan steps status.
+    
+    Reads the steps.log file from the scan results directory and returns step information.
+    
+    - **scan_id**: ID of the scan
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        from pathlib import Path
+        import json
+        from config.settings import settings
+        
+        # Check permissions
+        scan_dto = await scan_service.get_scan_by_id(scan_id)
+        # Allow access if:
+        # 1. User is authenticated AND owns the scan, OR
+        # 2. User is not authenticated (public access for viewing steps)
+        # Deny access if user is authenticated but doesn't own the scan
+        if actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+        
+        # Construct path to steps.log file
+        # Results are mounted at /app/results in the backend container
+        results_dir = Path(settings.RESULTS_DIR_HOST if hasattr(settings, 'RESULTS_DIR_HOST') else "/app/results")
+        steps_log_path = results_dir / scan_id / "logs" / "steps.log"
+        
+        if not steps_log_path.exists():
+            return {
+                "scan_id": scan_id,
+                "steps": [],
+                "total_steps": 0,
+                "completed_steps": 0,
+                "progress_percentage": 0,
+                "message": "Steps log file not found (scan may not have started yet)"
+            }
+        
+        # Read and deduplicate steps
+        steps, total_steps, completed_steps = _read_deduplicated_steps(scan_id)
+        progress_percentage = int((completed_steps / total_steps * 100)) if total_steps > 0 else 0
+        
+        return {
+            "scan_id": scan_id,
+            "steps": steps,
+            "total_steps": total_steps,
+            "completed_steps": completed_steps,
+            "progress_percentage": progress_percentage
+        }
+        
+    except ScanNotFoundException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get scan steps: {str(e)}"
         )
 
 
@@ -979,3 +1113,51 @@ async def create_batch_scans(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+@router.websocket("/{scan_id}/stream")
+async def websocket_scan_stream(websocket: WebSocket, scan_id: str):
+    """
+    WebSocket endpoint for real-time scan step updates.
+    
+    - **scan_id**: ID of the scan to stream updates for
+    """
+    await websocket.accept()
+    
+    try:
+        last_steps_hash = None
+        
+        while True:
+            # Read and deduplicate steps
+            steps, total_steps, completed_steps = _read_deduplicated_steps(scan_id)
+            progress_percentage = int((completed_steps / total_steps * 100)) if total_steps > 0 else 0
+            
+            # Create a hash of steps to detect changes
+            steps_hash = hash(json.dumps(steps, sort_keys=True))
+            
+            # Only send update if steps have changed
+            if steps_hash != last_steps_hash:
+                message = {
+                    "type": "step_update",
+                    "scan_id": scan_id,
+                    "steps": steps,
+                    "total_steps": total_steps,
+                    "completed_steps": completed_steps,
+                    "progress_percentage": progress_percentage
+                }
+                await websocket.send_json(message)
+                last_steps_hash = steps_hash
+            
+            # Wait 1 second before next check
+            await asyncio.sleep(1)
+            
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "error": str(e)
+            })
+        except:
+            pass

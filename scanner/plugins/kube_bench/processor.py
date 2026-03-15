@@ -107,5 +107,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="kube-bench.json",
+    json_file="report.json",  # Changed from kube-bench.json
 )

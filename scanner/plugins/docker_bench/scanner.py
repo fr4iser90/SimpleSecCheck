@@ -129,8 +129,8 @@ class DockerBenchScanner(BaseScanner):
         
         self.log("Running Docker daemon compliance scan...")
         
-        json_output = self.results_dir / "docker-bench.json"
-        text_output = self.results_dir / "docker-bench.txt"
+        json_output = self.results_dir / "report.json"  # Changed from docker-bench.json
+        text_output = self.results_dir / "report.txt"   # Changed from docker-bench.txt
         
         bench_script = self.docker_bench_dir / "docker-bench-security.sh"
         if not bench_script.exists():

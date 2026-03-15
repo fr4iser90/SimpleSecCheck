@@ -9,6 +9,7 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 from domain.entities.scan import ScanType
+from domain.entities.target_type import TargetType
 from domain.value_objects.scan_config import ScanConfig
 
 
@@ -23,8 +24,8 @@ class ScanRequestDTO:
     
     # Optional basic information
     description: Optional[str] = None
-    scan_type: ScanType = ScanType.REPOSITORY
-    target_type: str = "repository"
+    scan_type: ScanType = ScanType.CODE
+    target_type: str = TargetType.GIT_REPO.value
     project_id: Optional[str] = None
     
     # Scan configuration
@@ -100,7 +101,7 @@ class ScanRequestDTO:
             description=data.get('description'),
             scan_type=ScanType(data['scan_type']),
             target_url=data['target_url'],
-            target_type=data.get('target_type', 'repository'),
+            target_type=data.get('target_type', TargetType.GIT_REPO.value),
             user_id=data['user_id'],
             project_id=data.get('project_id'),
             config=data.get('config'),

@@ -74,5 +74,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="npm-audit.json",
+    json_file="report.json",  # Changed from npm-audit.json
 )

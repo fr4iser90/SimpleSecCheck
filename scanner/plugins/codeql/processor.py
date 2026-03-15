@@ -114,5 +114,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="codeql.json",
+    json_file="report.json",  # Changed from codeql.json
 )

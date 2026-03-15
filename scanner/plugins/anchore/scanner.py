@@ -66,8 +66,8 @@ class AnchoreScanner(BaseScanner):
         
         self.log(f"Running container image vulnerability scan on {self.anchore_image}...")
         
-        json_output = self.results_dir / "anchore.json"
-        text_output = self.results_dir / "anchore.txt"
+        json_output = self.results_dir / "report.json"  # Changed from anchore.json
+        text_output = self.results_dir / "report.txt"   # Changed from anchore.txt
         
         config_args = []
         if self.config_path and self.config_path.exists():

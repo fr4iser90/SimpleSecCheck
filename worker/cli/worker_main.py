@@ -43,34 +43,34 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--queue-type",
         choices=["redis", "memory"],
-        default="redis",
-        help="Queue type (default: redis)"
+        default=os.environ.get("QUEUE_TYPE"),
+        help="Queue type (from QUEUE_TYPE env var)"
     )
     
     parser.add_argument(
         "--queue-connection",
-        default=os.environ.get("REDIS_URL", "redis://localhost:6379"),
-        help="Queue connection string (default: from REDIS_URL env var or redis://localhost:6379)"
+        default=os.environ.get("REDIS_URL") or os.environ.get("QUEUE_CONNECTION"),
+        help="Queue connection string (from REDIS_URL or QUEUE_CONNECTION env var)"
     )
     
     parser.add_argument(
         "--db-connection",
-        default="postgresql+asyncpg://simpleseccheck:simpleseccheck@localhost/simpleseccheck",
-        help="Database connection string"
+        default=os.environ.get("DATABASE_URL"),
+        help="Database connection string (from DATABASE_URL env var)"
     )
     
     parser.add_argument(
         "--max-concurrent-jobs",
-        type=int,
-        default=3,
-        help="Maximum number of concurrent jobs (default: 3)"
+        type=lambda x: int(x) if x else None,
+        default=os.environ.get("MAX_CONCURRENT_JOBS") or os.environ.get("WORKER_CONCURRENCY"),
+        help="Maximum number of concurrent jobs (from MAX_CONCURRENT_JOBS or WORKER_CONCURRENCY env var)"
     )
     
     parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        default="INFO",
-        help="Logging level (default: INFO)"
+        default=os.environ.get("LOG_LEVEL"),
+        help="Logging level (from LOG_LEVEL env var)"
     )
     
     parser.add_argument(
@@ -112,8 +112,21 @@ async def main():
     """Main entry point for the worker service."""
     args = parse_arguments()
     
-    # Set up logging
-    setup_logging(args.log_level)
+    # Validate required environment variables
+    if not args.queue_type:
+        raise ValueError("QUEUE_TYPE environment variable is required")
+    
+    if not args.queue_connection:
+        raise ValueError("REDIS_URL or QUEUE_CONNECTION environment variable is required")
+    
+    if not args.db_connection:
+        raise ValueError("DATABASE_URL environment variable is required")
+    
+    if not args.max_concurrent_jobs:
+        raise ValueError("MAX_CONCURRENT_JOBS or WORKER_CONCURRENCY environment variable is required")
+    
+    # Set up logging (optional, defaults to INFO if not set)
+    setup_logging(args.log_level or "INFO")
     from worker.infrastructure.logging_config import get_logger
     logger = get_logger(__name__)
     
@@ -126,10 +139,16 @@ async def main():
         docker_adapter = DockerAdapter()
         queue_adapter = QueueAdapter(args.queue_type, args.queue_connection)
         
-        database_adapter = PostgreSQLAdapter(args.db_connection)
+        # Normalize database URL to use asyncpg driver if not already specified
+        db_url = args.db_connection
+        if db_url.startswith("postgresql://") and "+asyncpg" not in db_url:
+            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        
+        database_adapter = PostgreSQLAdapter(db_url)
+        await database_adapter.initialize()  # Initialize database connection
         
         # Initialize services
-        docker_job_executor = DockerJobExecutor(docker_adapter)
+        docker_job_executor = DockerJobExecutor(docker_adapter, database_adapter)
         result_processing_service = ResultProcessingService(database_adapter)
         job_orchestration_service = JobOrchestrationService(
             docker_job_executor,

@@ -13,7 +13,8 @@ from datetime import datetime
 from pathlib import Path
 
 import docker
-from docker.errors import DockerException
+from docker.errors import DockerException, NotFound
+from docker.types import HostConfig
 
 # Use structlog for consistent logging with worker
 try:
@@ -30,21 +31,22 @@ class DockerAdapter:
     
     def __init__(self):
         """Initialize Docker adapter."""
+        self.logger = logger  # Use module-level logger
         try:
             self.client = docker.from_env()
             # Test connection
             try:
                 self.client.ping()
-                logger.info("Docker client initialized successfully")
+                self.logger.info("Docker client initialized successfully")
             except Exception as ping_error:
-                logger.warning(f"Docker client created but ping failed: {ping_error}")
+                self.logger.warning(f"Docker client created but ping failed: {ping_error}")
                 self.client = None
         except Exception as e:
             # Use error() method that works with both structlog and standard logging
-            if hasattr(logger, 'error'):
-                logger.error("Failed to initialize Docker client", error=str(e), exc_info=True)
+            if hasattr(self.logger, 'error'):
+                self.logger.error("Failed to initialize Docker client", error=str(e), exc_info=True)
             else:
-                logger.error(f"Failed to initialize Docker client: {e}", exc_info=True)
+                self.logger.error(f"Failed to initialize Docker client: {e}", exc_info=True)
             
             # Check if docker socket exists
             import os
@@ -75,19 +77,84 @@ class DockerAdapter:
         """Create a container.
         
         Args:
-            config: Container configuration
+            config: Container configuration (may contain host_config)
             
         Returns:
             Container ID
         """
         try:
+            # Check if container with same name exists and remove it
+            container_name = config.get("name")
+            if container_name:
+                try:
+                    existing = await asyncio.to_thread(
+                        self.client.containers.get,
+                        container_name
+                    )
+                    # Container exists - remove it
+                    self.logger.warning(f"Container {container_name} already exists, removing it")
+                    try:
+                        if existing.status == "running":
+                            await asyncio.to_thread(existing.stop)
+                        await asyncio.to_thread(existing.remove)
+                        self.logger.info(f"Removed existing container {container_name}")
+                    except Exception as remove_error:
+                        self.logger.warning(f"Could not remove existing container {container_name}: {remove_error}")
+                except NotFound:
+                    # Container doesn't exist - that's fine
+                    pass
+                except Exception as check_error:
+                    self.logger.warning(f"Error checking for existing container {container_name}: {check_error}")
+            
+            # Extract host_config if present
+            host_config_dict = config.pop("host_config", None)
+            
+            # Docker 7.x API: containers.create() expects parameters directly, not host_config
+            # Extract host_config parameters and merge into main config
+            if host_config_dict:
+                # Extract binds (volumes) and convert to volumes format
+                if "binds" in host_config_dict:
+                    # Convert binds to volumes dict format: {"/host/path": {"bind": "/container/path", "mode": "rw"}}
+                    volumes = {}
+                    for bind_string in host_config_dict["binds"]:
+                        # Format: "/host/path:/container/path:rw"
+                        parts = bind_string.split(":")
+                        if len(parts) >= 2:
+                            host_path = parts[0]
+                            container_path = parts[1]
+                            mode = parts[2] if len(parts) > 2 else "rw"
+                            volumes[host_path] = {"bind": container_path, "mode": mode}
+                    config["volumes"] = volumes
+                
+                # Extract other host_config parameters
+                if "privileged" in host_config_dict:
+                    config["privileged"] = host_config_dict["privileged"]
+                if "read_only" in host_config_dict:
+                    config["read_only"] = host_config_dict["read_only"]
+                if "tmpfs" in host_config_dict:
+                    config["tmpfs"] = host_config_dict["tmpfs"]
+                if "cpu_quota" in host_config_dict:
+                    config["cpu_quota"] = host_config_dict["cpu_quota"]
+                if "cpu_period" in host_config_dict:
+                    config["cpu_period"] = host_config_dict["cpu_period"]
+                if "mem_limit" in host_config_dict:
+                    config["mem_limit"] = host_config_dict["mem_limit"]
+                if "restart_policy" in host_config_dict:
+                    config["restart_policy"] = host_config_dict["restart_policy"]
+                if "port_bindings" in host_config_dict:
+                    config["ports"] = host_config_dict["port_bindings"]
+            
+            # Create container with merged config
             container = await asyncio.to_thread(
                 self.client.containers.create,
                 **config
             )
             return container.id
         except DockerException as e:
-            logger.error(f"Error creating container: {e}")
+            logger.error(f"Error creating container: {e}", exc_info=True)
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error creating container: {e}", exc_info=True)
             raise
     
     async def start_container(self, container_id: str) -> None:

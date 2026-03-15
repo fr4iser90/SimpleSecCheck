@@ -59,8 +59,8 @@ class BurpScanner(BaseScanner):
         
         self.log(f"Running web application security scan on {self.zap_target}...")
         
-        json_output = self.results_dir / "burp.json"
-        text_output = self.results_dir / "burp.txt"
+        json_output = self.results_dir / "report.json"  # Changed from burp.json
+        text_output = self.results_dir / "report.txt"   # Changed from burp.txt
         
         config_args = []
         if self.config_path and self.config_path.exists():

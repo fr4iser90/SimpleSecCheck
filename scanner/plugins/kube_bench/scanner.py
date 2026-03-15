@@ -50,8 +50,8 @@ class KubeBenchScanner(BaseScanner):
         
         self.log("Running Kubernetes compliance scan...")
         
-        json_output = self.results_dir / "kube-bench.json"
-        text_output = self.results_dir / "kube-bench.txt"
+        json_output = self.results_dir / "report.json"  # Changed from kube-bench.json
+        text_output = self.results_dir / "report.txt"   # Changed from kube-bench.txt
         
         # JSON report
         self.log("Running compliance scan...")

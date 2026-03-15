@@ -113,7 +113,7 @@ class ScanValidationService:
         
         target_url = target_url.strip()
         
-        if target_type == 'repository':
+        if target_type == TargetType.GIT_REPO.value:
             self._validate_repository_url(target_url)
         elif target_type == 'container':
             self._validate_container_url(target_url)
@@ -227,7 +227,7 @@ class ScanValidationService:
         if not user_id:
             raise ScanValidationException("User ID is required for scan permissions")
         
-        if target_type == 'repository':
+        if target_type == TargetType.GIT_REPO.value:
             # Would check if user has access to the repository
             pass
         elif target_type == 'web_application':

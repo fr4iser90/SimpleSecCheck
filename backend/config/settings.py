@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     DOCKER_SOCKET: str = Field(default="/var/run/docker.sock", description="Docker socket path")
     DOCKER_NETWORK: str = Field(default="simpleseccheck", description="Docker network name")
     
+    # Results Directory Configuration (for Worker)
+    # These are set in docker-compose and passed to Worker container
+    # NOTE: Logs are part of Results - Scanner creates results/{scan_id}/logs/ automatically
+    RESULTS_DIR_HOST: str = Field(default="/app/results", description="Host path for results directory (from Worker's perspective)")
+    RESULTS_DIR_CONTAINER: str = Field(default="/app/results", description="Container path for results (what Scanner container sees)")
+    
     # SMTP / Email
     SMTP_ENABLED: bool = Field(default=False, description="Enable SMTP email sending")
     SMTP_HOST: str = Field(default="smtp.gmail.com", description="SMTP server host")

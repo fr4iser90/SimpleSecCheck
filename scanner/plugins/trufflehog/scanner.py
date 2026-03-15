@@ -53,8 +53,8 @@ class TruffleHogScanner(BaseScanner):
         
         self.log(f"Running secret detection scan on {self.target_path}...")
         
-        json_output = self.results_dir / "trufflehog.json"
-        text_output = self.results_dir / "trufflehog.txt"
+        json_output = self.results_dir / "report.json"  # Changed from trufflehog.json
+        text_output = self.results_dir / "report.txt"   # Changed from trufflehog.txt
         
         # JSON report (without --config to avoid protobuf issues)
         self.log("Running secret detection scan...")

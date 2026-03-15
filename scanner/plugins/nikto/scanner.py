@@ -53,8 +53,8 @@ class NiktoScanner(BaseScanner):
         
         self.log(f"Running web server scan on {self.zap_target}...")
         
-        json_output = self.results_dir / "nikto.json"
-        text_output = self.results_dir / "nikto.txt"
+        json_output = self.results_dir / "report.json"  # Changed from nikto.json
+        text_output = self.results_dir / "report.txt"   # Changed from nikto.txt
         
         # JSON report
         self.log("Running web server scan...")

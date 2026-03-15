@@ -14,11 +14,24 @@ class TrivyScanner(BaseScanner):
     
     # Metadaten für Auto-Registrierung
     CAPABILITIES = [
+        # Filesystem scanning (Code + Dependency)
+        ScannerCapability(
+            scan_type=ScanType.CODE,
+            supported_targets=[TargetType.LOCAL_MOUNT, TargetType.GIT_REPO, TargetType.UPLOADED_CODE],
+            supported_artifacts=[],
+        ),
+        # Dependency scanning
         ScannerCapability(
             scan_type=ScanType.DEPENDENCY,
             supported_targets=[TargetType.LOCAL_MOUNT, TargetType.GIT_REPO, TargetType.UPLOADED_CODE],
             supported_artifacts=[],
-        )
+        ),
+        # Container image scanning
+        ScannerCapability(
+            scan_type=ScanType.IMAGE,
+            supported_targets=[TargetType.CONTAINER_REGISTRY],
+            supported_artifacts=[],
+        ),
     ]
     PRIORITY = 2
     REQUIRES_CONDITION = None
@@ -78,9 +91,9 @@ class TrivyScanner(BaseScanner):
         
         self.log(f"Running DEEP {self.scan_type} scan on {self.target_path}...")
         
-        json_output = self.results_dir / "trivy.json"
-        text_output = self.results_dir / "trivy.txt"
-        secrets_output = self.results_dir / "trivy-secrets-config.json"
+        json_output = self.results_dir / "report.json"  # Changed from trivy.json
+        text_output = self.results_dir / "report.txt"   # Changed from trivy.txt
+        secrets_output = self.results_dir / "secrets-config.json"  # Changed from trivy-secrets-config.json
         
         config_args = self.get_config_args()
         skip_args = self.get_skip_args()

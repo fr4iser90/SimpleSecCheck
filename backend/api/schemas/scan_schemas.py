@@ -11,6 +11,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from pydantic import field_validator
 from domain.entities.scan import ScanType, ScanStatus
+from domain.entities.target_type import TargetType
 
 
 class ScanMode(str, Enum):
@@ -48,7 +49,7 @@ class ScanConfigSchema(BaseModel):
     enabled_scanners: List[str] = Field(default_factory=list, description="List of enabled scanners")
     scanner_configs: Dict[str, Dict[str, Any]] = Field(default_factory=dict, description="Scanner-specific configurations")
     
-    target_type: str = Field(default="repository", description="Target type")
+    target_type: str = Field(default=TargetType.GIT_REPO.value, description="Target type")
     target_depth: int = Field(default=3, ge=1, le=10, description="Target depth")
     include_paths: List[str] = Field(default_factory=list, description="Paths to include")
     exclude_paths: List[str] = Field(default_factory=list, description="Paths to exclude")
@@ -146,7 +147,7 @@ class ScanRequestSchema(BaseModel):
     description: Optional[str] = Field(None, max_length=1000, description="Scan description")
     scan_type: ScanType = Field(description="Scan type")
     target_url: str = Field(min_length=1, max_length=2000, description="Target URL")
-    target_type: str = Field(default="repository", description="Target type")
+    target_type: str = Field(default=TargetType.GIT_REPO.value, description="Target type")
     
     config: Optional[ScanConfigSchema] = Field(None, description="Scan configuration")
     scanners: List[str] = Field(min_length=1, max_length=20, description="List of scanners")

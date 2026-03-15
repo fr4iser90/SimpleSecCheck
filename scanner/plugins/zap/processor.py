@@ -178,6 +178,6 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for alert in (data.get("alerts", []) if isinstance(data, dict) else [])
     ],
-    json_file="zap-report.xml",
-    html_file="zap-report.xml.html",
+    json_file="report.xml",  # Changed from zap-report.xml
+    html_file="report.html",  # Changed from zap-report.xml.html
 )

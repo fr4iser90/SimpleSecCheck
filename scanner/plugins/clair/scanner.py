@@ -67,8 +67,8 @@ class ClairScanner(BaseScanner):
         
         self.log(f"Running container image vulnerability scan on {self.clair_image}...")
         
-        json_output = self.results_dir / "clair.json"
-        text_output = self.results_dir / "clair.txt"
+        json_output = self.results_dir / "report.json"  # Changed from clair.json
+        text_output = self.results_dir / "report.txt"   # Changed from clair.txt
         
         # Note: Clair requires external PostgreSQL setup
         self.log("Clair requires external PostgreSQL setup.", "WARNING")

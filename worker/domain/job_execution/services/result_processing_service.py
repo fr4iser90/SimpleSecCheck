@@ -15,6 +15,49 @@ from worker.domain.job_execution.entities.execution_result import ExecutionResul
 from worker.infrastructure.database_adapter import PostgreSQLAdapter
 
 
+async def update_scan_status_to_running(database_adapter: PostgreSQLAdapter, scan_id: str) -> None:
+    """Update scan status to running in database.
+    
+    Args:
+        database_adapter: Database adapter
+        scan_id: Scan ID
+    """
+    try:
+        from sqlalchemy import text
+        from datetime import datetime
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        # Update scan status to running
+        async with database_adapter.get_session() as session:
+            update_query = text("""
+                UPDATE scans 
+                SET status = :status,
+                    started_at = :started_at,
+                    updated_at = :updated_at
+                WHERE id = :scan_id
+            """)
+            
+            await session.execute(
+                update_query,
+                {
+                    "scan_id": scan_id,
+                    "status": "running",
+                    "started_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                }
+            )
+            await session.commit()
+            
+            logger.info(f"Updated scan {scan_id} status to running")
+            
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error updating scan status to running: {e}")
+        # Don't raise - this is not critical for job execution
+
+
 class ResultProcessingService:
     """Service for processing execution results."""
     
@@ -168,9 +211,42 @@ class ResultProcessingService:
             result: Execution result
         """
         try:
-            # This would update the scan status in the database
-            # Implementation depends on database schema
-            pass
+            from sqlalchemy import text
+            from datetime import datetime
+            
+            scan_id = str(result.scan_id)
+            
+            # Determine status based on execution result
+            if result.success:
+                status = "completed"
+            else:
+                status = "failed"
+            
+            # Update scan status in database
+            async with self.database_adapter.get_session() as session:
+                # Update status and completed_at timestamp
+                update_query = text("""
+                    UPDATE scans 
+                    SET status = :status,
+                        completed_at = :completed_at,
+                        updated_at = :updated_at,
+                        error_message = :error_message
+                    WHERE id = :scan_id
+                """)
+                
+                await session.execute(
+                    update_query,
+                    {
+                        "scan_id": scan_id,
+                        "status": status,
+                        "completed_at": datetime.utcnow(),
+                        "updated_at": datetime.utcnow(),
+                        "error_message": result.error_message
+                    }
+                )
+                await session.commit()
+                
+                self.logger.info(f"Updated scan {scan_id} status to {status}")
             
         except Exception as e:
             self.logger.error(f"Error updating scan status: {e}")

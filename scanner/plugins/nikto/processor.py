@@ -61,5 +61,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="nikto.json",
+    json_file="report.json",  # Changed from nikto.json
 )

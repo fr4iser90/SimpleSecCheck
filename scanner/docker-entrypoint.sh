@@ -73,8 +73,10 @@ else
 fi
 
 # Ensure mounted volumes exist and are writable by scanner
+# CRITICAL: Do NOT create /app/results/logs directly!
+# Each scan creates its own /app/results/{scan_id}/logs/ directory
+# The results directory should only contain {scan_id}/ folders, nothing else!
 RESULTS_DIR="${RESULTS_DIR_IN_CONTAINER:-/app/results}"
-LOGS_DIR="${LOGS_DIR_IN_CONTAINER:-${RESULTS_DIR}/logs}"
 TARGET_DIR="${TARGET_PATH_IN_CONTAINER:-/target}"
 HOME_DIR="${HOME:-/tmp/scanner}"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME_DIR/.cache}"
@@ -82,17 +84,15 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME_DIR/.config}"
 
 mkdir -p "$HOME_DIR" "$CACHE_DIR" "$CONFIG_DIR" || true
 
-mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
-chmod -R u+rwX,g+rwX "$RESULTS_DIR" "$LOGS_DIR" 2>/dev/null || true
+# Only create base results directory - scanner will create {scan_id}/logs/ inside
+mkdir -p "$RESULTS_DIR"
+echo "[Entrypoint] Ensuring ownership for $RESULTS_DIR (uid=$CHOWN_UID gid=$CHOWN_GID)"
+chown -R "$CHOWN_UID:$CHOWN_GID" "$RESULTS_DIR" 2>/dev/null || true
+chmod -R u+rwX,g+rwX "$RESULTS_DIR" 2>/dev/null || true
 
 if ! test -w "$RESULTS_DIR"; then
     echo "[Entrypoint] WARNING: $RESULTS_DIR is not writable by current user (uid=$(id -u) gid=$(id -g))"
     ls -ld "$RESULTS_DIR" || true
-fi
-
-if ! test -w "$LOGS_DIR"; then
-    echo "[Entrypoint] WARNING: $LOGS_DIR is not writable by current user (uid=$(id -u) gid=$(id -g))"
-    ls -ld "$LOGS_DIR" || true
 fi
 
 if ! test -w "$HOME_DIR"; then
@@ -108,6 +108,10 @@ else
 fi
 
 
+# =========================
 # Switch to scanner user and execute the command
-# Use exec to replace shell process and preserve exit code
-exec "$@"
+# =========================
+# Entrypoint runs as root to configure permissions and Docker group
+# Now drop privileges to scanner user using gosu (standard pattern)
+# This is the secure way: root setup, then non-root execution
+exec gosu scanner "$@"

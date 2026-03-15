@@ -1,7 +1,13 @@
 FROM python:3.13-slim
 
-# Minimal Dependencies
-RUN apt-get update && apt-get install -y curl git gosu && rm -rf /var/lib/apt/lists/*
+# Minimal Dependencies + Build tools for asyncpg (C extensions)
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    gosu \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Docker CLI 
 RUN curl -L "https://download.docker.com/linux/static/stable/x86_64/docker-26.1.4.tgz" -o /tmp/docker.tgz \

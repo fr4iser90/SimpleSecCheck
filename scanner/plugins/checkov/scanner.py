@@ -100,8 +100,8 @@ class CheckovScanner(BaseScanner):
         self.log(f"Found {len(infra_files)} infrastructure file(s).")
         self.log(f"Running infrastructure security scan on {self.target_path}...")
         
-        json_output = self.results_dir / "checkov-comprehensive.json"
-        text_output = self.results_dir / "checkov-comprehensive.txt"
+        json_output = self.results_dir / "report.json"  # Changed from checkov-comprehensive.json
+        text_output = self.results_dir / "report.txt"   # Changed from checkov-comprehensive.txt
         
         # Remove old directory if it exists
         if json_output.exists() and json_output.is_dir():

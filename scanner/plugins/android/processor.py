@@ -155,5 +155,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="android-manifest.json",
+    json_file="report.json",  # Changed from android-manifest.json
 )

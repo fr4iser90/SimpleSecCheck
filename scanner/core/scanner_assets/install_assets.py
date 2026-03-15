@@ -33,7 +33,8 @@ def install_from_manifests(scanners_root: Path) -> None:
 
 def main() -> None:
     base_dir = Path(os.getenv("SIMPLE_SECCHECK_ROOT", "/app"))
-    scanners_root = base_dir / "scanner" / "scanners"
+    # Manifests are in plugins/, not scanners/
+    scanners_root = base_dir / "scanner" / "plugins"
     install_from_manifests(scanners_root)
 
 

@@ -69,5 +69,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="burp.json",
+    json_file="report.json",  # Changed from burp.json
 )

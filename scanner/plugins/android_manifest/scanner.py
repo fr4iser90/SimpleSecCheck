@@ -18,14 +18,14 @@ class AndroidScanner(BaseScanner):
     CAPABILITIES = [
         ScannerCapability(
             scan_type=ScanType.MOBILE,
-            supported_targets=[TargetType.LOCAL_MOUNT, TargetType.GIT_REPO, TargetType.UPLOADED_CODE],
+            supported_targets=[TargetType.LOCAL_CODE, TargetType.GIT_REPO],
             supported_artifacts=[],
         )
     ]
     PRIORITY = 40
     REQUIRES_CONDITION = "IS_NATIVE"
     ENV_VARS = {
-        "ANDROID_CONFIG_PATH": "/app/scanner/scanners/android/config/config.yaml"
+        "ANDROID_CONFIG_PATH": "/app/scanner/scanners/android_manifest/config/config.yaml"
     }
     # SCANNER_NAME wird automatisch aus manifest.yaml geladen
     
@@ -168,8 +168,8 @@ class AndroidScanner(BaseScanner):
         
         self.log(f"Found {len(manifest_files)} AndroidManifest.xml file(s), processing...")
         
-        json_output = self.results_dir / "report.json"  # Changed from android-manifest.json
-        text_output = self.results_dir / "report.txt"   # Changed from android-manifest.txt
+        json_output = self.results_dir / "android-manifest.json"
+        text_output = self.results_dir / "android-manifest.txt"
         
         all_findings = []
         for manifest_file in manifest_files:

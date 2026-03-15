@@ -108,5 +108,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="docker-bench.json",
+    json_file="report.json",  # Changed from docker-bench.json
 )

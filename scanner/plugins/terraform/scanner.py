@@ -70,8 +70,8 @@ class TerraformSecurityScanner(BaseScanner):
         self.log(f"Found {len(terraform_files)} Terraform file(s).")
         self.log(f"Running Terraform security scan on {self.target_path}...")
         
-        json_output = self.results_dir / "checkov.json"
-        text_output = self.results_dir / "checkov.txt"
+        json_output = self.results_dir / "report.json"  # Changed from checkov.json
+        text_output = self.results_dir / "report.txt"   # Changed from checkov.txt
         
         # JSON report
         self.log("Generating JSON report...")

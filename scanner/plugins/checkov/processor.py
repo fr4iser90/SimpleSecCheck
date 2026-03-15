@@ -99,5 +99,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="checkov-comprehensive.json",
+    json_file="report.json",  # Changed from checkov-comprehensive.json
 )

@@ -6,6 +6,7 @@ Handles the orchestration of job execution including queuing, scheduling, and co
 
 import asyncio
 import logging
+import os
 import uuid
 from typing import List, Optional, Dict, Any, AsyncGenerator
 from datetime import datetime, timedelta
@@ -78,7 +79,7 @@ class JobOrchestrationService:
                 return
             
             # Get next job from queue
-            self.logger.info("Polling queue for jobs...")
+            self.logger.debug("Polling queue for jobs...")
             try:
                 job_data = await self.queue_adapter.pop_job()
                 if not job_data:
@@ -127,32 +128,94 @@ class JobOrchestrationService:
             scan_id = UUID(job_data['scan_id'])
             job_type = job_data['job_type']
             target = job_data['target']
-            image = job_data.get('image', 'simpleseccheck/scanner:latest')
-            results_dir = job_data['results_dir']
-            logs_dir = job_data['logs_dir']
-            scan_type = job_data.get('scan_type', 'code')
+            
+            image = job_data.get('image')
+            if not image:
+                raise ValueError("image is required in queue message but not provided. Backend must set image.")
+            
+            # ENTERPRISE: Worker determines paths from OWN environment variables (generic, portable)
+            # This allows different deployment scenarios (Docker, K8s, etc.) without code changes
+            # Host paths (from HOST's perspective - used for volume mounting to Scanner containers)
+            # NOTE: Logs are part of Results - Scanner creates results/{scan_id}/logs/ automatically
+            # 
+            # WHY ABSOLUTE PATH?
+            # - Worker creates Scanner containers dynamically via Docker API
+            # - Docker API requires ABSOLUTE paths for volume mounts (Docker limitation)
+            # - This path is on the HOST, not in the Worker container
+            # - Example: /home/user/project/results -> Scanner sees /app/results
+            results_dir_host = os.environ.get("RESULTS_DIR_HOST")
+            if not results_dir_host:
+                raise ValueError("RESULTS_DIR_HOST environment variable is required but not set. Worker must set this.")
+            
+            # Validate that path is absolute (Docker API requirement)
+            if not os.path.isabs(results_dir_host):
+                raise ValueError(
+                    f"RESULTS_DIR_HOST must be an absolute path (Docker API requirement). "
+                    f"Got: {results_dir_host}. Use ${PWD}/results in docker-compose.yml"
+                )
+            
+            # Container paths (what Scanner container sees inside - passed via environment variables)
+            results_dir_container = os.environ.get("RESULTS_DIR_CONTAINER")
+            if not results_dir_container:
+                raise ValueError("RESULTS_DIR_CONTAINER environment variable is required but not set. Worker must set this.")
+            
+            self.logger.debug(f"Using host path - results: {results_dir_host}")
+            self.logger.debug(f"Using container path - results: {results_dir_container}")
+            
+            # Validate path is a string
+            if not isinstance(results_dir_host, str):
+                raise ValueError(f"Environment variable RESULTS_DIR_HOST must be a string")
+            
+            scan_type = job_data.get('scan_type')
+            if not scan_type:
+                raise ValueError("scan_type is required in queue message but not provided. Backend must set scan_type.")
+            
+            target_type = job_data.get('target_type')
+            if not target_type:
+                raise ValueError("target_type is required in queue message but not provided. Backend must determine target_type.")
+            
             target_mount_path = job_data.get('target_mount_path')
+            
+            # Validate target_mount_path is a string if provided
+            if target_mount_path is not None and not isinstance(target_mount_path, str):
+                if isinstance(target_mount_path, dict):
+                    target_mount_path = target_mount_path.get('path')
+                else:
+                    target_mount_path = str(target_mount_path)
+                self.logger.warning(f"target_mount_path was not a string, converted to: {target_mount_path}")
+            
             finding_policy = job_data.get('finding_policy')
-            collect_metadata = job_data.get('collect_metadata', True)
+            collect_metadata = job_data.get('collect_metadata')
+            if collect_metadata is None:
+                raise ValueError("collect_metadata is required in queue message but not provided. Backend must set collect_metadata.")
             exclude_paths = job_data.get('exclude_paths')
+            git_branch = job_data.get('git_branch')
             
             # Create container specification
+            # Pass host paths for volume mounting, container paths for environment variables
+            # NOTE: Logs are part of Results - Scanner creates results/{scan_id}/logs/ automatically
             container_spec = ContainerSpec.from_scan_config(
                 image=image,
                 target=target,
-                results_dir=results_dir,
-                logs_dir=logs_dir,
+                results_dir=results_dir_host,  # Host path for volume mount
                 scan_id=str(scan_id),
                 scan_type=scan_type,
+                target_type=target_type,  # Pass target_type from queue message (git_repo, local_mount, etc.)
                 target_mount_path=target_mount_path,
                 finding_policy=finding_policy,
                 collect_metadata=collect_metadata,
-                exclude_paths=exclude_paths
+                exclude_paths=exclude_paths,
+                git_branch=git_branch,
+                results_dir_container=results_dir_container  # Container path (for Scanner env vars)
             )
             
             # Create job execution
+            job_id_str = job_data.get('job_id')
+            if not job_id_str:
+                raise ValueError("job_id is required in queue message but not provided. Backend must set job_id.")
+            
             job_execution = JobExecution(
-                id=UUID(job_data.get('job_id', str(uuid.uuid4()))),
+                id=UUID(job_id_str),
                 scan_id=scan_id,
                 job_type=job_type,
                 container_spec=container_spec

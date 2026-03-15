@@ -9,7 +9,7 @@ LABEL maintainer="fr4iser"
 ## Core dependencies are now installed via scanner manifests (Option B modular build).
 ## Minimal runtime installs Python + PyYAML to read manifests and Node.js for report build.
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip curl gosu && \
+    apt-get install -y python3 python3-pip curl gosu git && \
     pip3 install pyyaml && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs
@@ -18,7 +18,7 @@ RUN apt-get update && \
 
 # Copy only scanner manifests + asset installer first to improve build cache reuse
 COPY scanner/core/scanner_assets/ /app/scanner/core/scanner_assets/
-COPY scanner/scanners/ /app/scanner/scanners/
+COPY scanner/plugins/ /app/scanner/plugins/
 WORKDIR /app
 
 RUN mkdir -p /app/results
@@ -34,10 +34,8 @@ COPY scanner/ /app/scanner/
 COPY scanner/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Create non-root user (1000:1000 matches typical host user)
-RUN useradd -m -u 1000 -s /bin/bash scanner && \
-    (groupadd -g 999 docker || true) && \
-    usermod -aG docker scanner && \
+# Create non-root user (UID/GID will be set dynamically via PUID/PGID env vars in entrypoint)
+RUN useradd -m -s /bin/bash scanner && \
     chown -R scanner:scanner /app /home/scanner
 
 # Make scripts executable
@@ -57,8 +55,8 @@ ENV XDG_CONFIG_HOME=/tmp/scanner/.config
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Switch to non-root user
-USER scanner
+# Don't set USER here - entrypoint will handle user switching
+# Entrypoint runs as root, then switches to scanner user
 
 # Ensure scanner modules are importable regardless of working directory
 ENV PYTHONPATH=/app
@@ -66,5 +64,6 @@ ENV SCANNER_ROOT=/app/scanner
 
 WORKDIR /app
 # Use entrypoint to dynamically configure docker group access
+# Entrypoint runs as root, then switches to scanner user
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["python3", "-m", "scanner.core.orchestrator"]

@@ -4,6 +4,7 @@ Docker job executor for the worker infrastructure.
 Handles the lifecycle of containers including creation, execution, monitoring, and cleanup.
 """
 
+import asyncio
 import logging
 import subprocess
 import time
@@ -20,13 +21,15 @@ from worker.infrastructure.docker_adapter import DockerAdapter
 class DockerJobExecutor:
     """Service for managing container execution lifecycle."""
     
-    def __init__(self, docker_adapter: DockerAdapter):
+    def __init__(self, docker_adapter: DockerAdapter, database_adapter=None):
         """Initialize the container execution service.
         
         Args:
             docker_adapter: Docker adapter for container operations
+            database_adapter: Optional database adapter for status updates
         """
         self.docker_adapter = docker_adapter
+        self.database_adapter = database_adapter
         self.logger = logging.getLogger(__name__)
     
     async def execute_job(self, job_execution: JobExecution) -> ExecutionResult:
@@ -42,6 +45,17 @@ class DockerJobExecutor:
             # Start execution
             job_execution.start_execution()
             self.logger.info(f"Starting job execution: {job_execution.id}")
+            
+            # Update scan status to running in database
+            try:
+                from worker.domain.job_execution.services.result_processing_service import update_scan_status_to_running
+                # Get database adapter from job_execution or inject it
+                # For now, we'll need to pass it through - check if it's available
+                if hasattr(self, 'database_adapter') and self.database_adapter:
+                    await update_scan_status_to_running(self.database_adapter, str(job_execution.scan_id))
+            except Exception as e:
+                self.logger.warning(f"Failed to update scan status to running: {e}")
+                # Don't fail the job execution if status update fails
             
             # Create container
             container_id = await self._create_container(job_execution.container_spec)
@@ -240,30 +254,72 @@ class DockerJobExecutor:
             raise
     
     async def _collect_structured_results(self, job_execution: JobExecution, container_id: str) -> Dict[str, Any]:
-        """Collect structured results from container.
+        """Collect structured results from mounted volume (host filesystem).
         
         Args:
             job_execution: Job execution
-            container_id: Container ID
+            container_id: Container ID (not used, kept for compatibility)
             
         Returns:
             Structured results
         """
         try:
-            # Look for JSON results in the results directory
-            results_dir = job_execution.container_spec.environment.get("PROJECT_RESULTS_DIR", "/app/results")
-            json_files = await self.docker_adapter.list_files_in_container(container_id, results_dir)
+            import json
+            import os
+            from pathlib import Path
+            
+            # Extract results directory container path from volume mounts (GENERIC)
+            # Find volume mount that contains results - don't hardcode container path!
+            # FIX: Use container_path, not host_path, because Worker runs in a container
+            # Both Worker and Scanner containers mount the same volume to /app/results
+            results_dir = None
+            for volume in job_execution.container_spec.volumes:
+                # Look for volume that mounts to results directory in container
+                # This is generic - works with any container path configuration
+                if "results" in volume.container_path.lower() or volume.container_path.endswith("/results"):
+                    results_dir = volume.container_path  # Use container path, not host path
+                    self.logger.debug(f"Found results volume mount: {volume.host_path} -> {volume.container_path}, using container path: {results_dir}")
+                    break
+            
+            if not results_dir:
+                # Fallback: try to get from environment or use default
+                results_dir = os.environ.get("RESULTS_DIR_CONTAINER", os.environ.get("RESULTS_DIR_HOST", "/app/results"))
+                self.logger.debug(f"Using fallback results_dir from environment: {results_dir}")
+            
+            # Ensure results_dir is a string and exists
+            if not isinstance(results_dir, str):
+                self.logger.warning(f"results_dir is not a string: {type(results_dir)}, skipping file collection")
+                return {}
+            
+            # Get scan_id from job execution
+            scan_id = str(job_execution.scan_id)
+            
+            # Look in scan-specific directory: {results_dir}/{scan_id}/tools/
+            scan_results_path = Path(results_dir) / scan_id / "tools"
+            
+            if not scan_results_path.exists():
+                self.logger.warning(f"Tools directory does not exist: {scan_results_path}")
+                return {}
             
             structured_results = {}
-            for file_path in json_files:
-                if file_path.endswith('.json'):
-                    content = await self.docker_adapter.read_file_from_container(container_id, file_path)
-                    if content:
-                        try:
-                            import json
-                            structured_results[file_path] = json.loads(content)
-                        except json.JSONDecodeError:
-                            self.logger.warning(f"Invalid JSON in file: {file_path}")
+            
+            # Iterate through tool directories
+            for tool_dir in scan_results_path.iterdir():
+                if not tool_dir.is_dir():
+                    continue
+                
+                tool_name = tool_dir.name
+                report_file = tool_dir / "report.json"
+                
+                if report_file.exists():
+                    try:
+                        content = await asyncio.to_thread(report_file.read_text, encoding="utf-8")
+                        if content:
+                            structured_results[tool_name] = json.loads(content)
+                    except json.JSONDecodeError:
+                        self.logger.warning(f"Invalid JSON in file: {report_file}")
+                    except Exception as e:
+                        self.logger.warning(f"Error reading file {report_file}: {e}")
             
             return structured_results
             
@@ -272,26 +328,58 @@ class DockerJobExecutor:
             return {}
     
     async def _collect_file_results(self, job_execution: JobExecution, container_id: str) -> Dict[str, str]:
-        """Collect file results from container.
+        """Collect file results from mounted volume (host filesystem).
         
         Args:
             job_execution: Job execution
-            container_id: Container ID
+            container_id: Container ID (not used, kept for compatibility)
             
         Returns:
             File results
         """
         try:
-            # Look for result files in the results directory
-            results_dir = job_execution.container_spec.environment.get("PROJECT_RESULTS_DIR", "/app/results")
-            files = await self.docker_adapter.list_files_in_container(container_id, results_dir)
+            import os
+            from pathlib import Path
+            
+            # Extract results directory container path from volume mounts (GENERIC)
+            # Find volume mount that contains results - don't hardcode container path!
+            # FIX: Use container_path, not host_path, because Worker runs in a container
+            # Both Worker and Scanner containers mount the same volume to /app/results
+            results_dir = None
+            for volume in job_execution.container_spec.volumes:
+                # Look for volume that mounts to results directory in container
+                # This is generic - works with any container path configuration
+                if "results" in volume.container_path.lower() or volume.container_path.endswith("/results"):
+                    results_dir = volume.container_path  # Use container path, not host path
+                    self.logger.debug(f"Found results volume mount: {volume.host_path} -> {volume.container_path}, using container path: {results_dir}")
+                    break
+            
+            if not results_dir:
+                # Fallback: try to get from environment or use default
+                results_dir = os.environ.get("RESULTS_DIR_CONTAINER", os.environ.get("RESULTS_DIR_HOST", "/app/results"))
+                self.logger.debug(f"Using fallback results_dir from environment: {results_dir}")
+            
+            # Ensure results_dir is a string and exists
+            if not isinstance(results_dir, str):
+                self.logger.warning(f"results_dir is not a string: {type(results_dir)}, skipping file collection")
+                return {}
+            
+            results_path = Path(results_dir)
+            if not results_path.exists():
+                self.logger.warning(f"Results directory does not exist: {results_dir}")
+                return {}
             
             file_results = {}
-            for file_path in files:
-                if not file_path.endswith('.json'):  # Skip JSON files (handled separately)
-                    content = await self.docker_adapter.read_file_from_container(container_id, file_path)
-                    if content:
-                        file_results[file_path] = content
+            
+            # Find all non-JSON files in the results directory
+            for file_path in results_path.rglob("*"):
+                if file_path.is_file() and not file_path.suffix == '.json':
+                    try:
+                        content = await asyncio.to_thread(file_path.read_text, encoding="utf-8", errors='ignore')
+                        if content:
+                            file_results[str(file_path.relative_to(results_path))] = content
+                    except Exception as e:
+                        self.logger.warning(f"Error reading file {file_path}: {e}")
             
             return file_results
             

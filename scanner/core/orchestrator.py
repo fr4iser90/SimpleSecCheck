@@ -10,6 +10,7 @@ import inspect
 from pathlib import Path
 from typing import Optional, Dict, Any
 import ipaddress
+from datetime import datetime
 
 # Add scanner to path for imports
 if "/app" not in sys.path:
@@ -18,18 +19,26 @@ if "/app/scanner" not in sys.path:
     sys.path.insert(0, "/app/scanner")
 
 # Ensure scanner auto-discovery runs before registry usage
+# Import plugins to auto-register all scanners
 try:
-    import scanner.scanners  # noqa: F401
-except Exception:
-    pass
+    import scanner.plugins  # noqa: F401 - This triggers auto-registration via __init__.py
+except Exception as e:
+    print(f"[Orchestrator] Warning: Could not import scanner.plugins: {e}")
+    # Fallback to old scanners import
+    try:
+        import scanner.scanners  # noqa: F401
+    except Exception:
+        pass
 
 try:
     from scanner.core.scanner_registry import ScannerRegistry, ScanType, TargetType, Scanner
     from scanner.core.step_registry import StepRegistry, StepStatus, Step
+    from scanner.core.step_definitions import StepDefinitionsRegistry, StepType
 except ImportError:
     # Fallback for direct execution
     from core.scanner_registry import ScannerRegistry, ScanType, TargetType, Scanner
     from core.step_registry import StepRegistry, StepStatus, Step
+    from core.step_definitions import StepDefinitionsRegistry, StepType
 
 
 class ScanOrchestrator:
@@ -46,19 +55,51 @@ class ScanOrchestrator:
         self.base_dir = Path("/app")
         self.tools_dir = self.base_dir / "scripts" / "tools"
         self.target_path = Path(os.getenv("TARGET_PATH_IN_CONTAINER", "/target"))
-        self.results_dir = Path(os.getenv("RESULTS_DIR_IN_CONTAINER", "/app/results"))
+        
+        # Get scan_id from step_registry (set by main() or worker)
+        # step_registry.scan_id is the source of truth - it's set in main() before creating orchestrator
+        scan_id = step_registry.scan_id
+        
+        # Use results_dir from step_registry (already scan-specific: /app/results/{scan_id})
+        # This ensures consistency - step_registry and orchestrator use the same directory
+        self.results_dir = step_registry.results_dir
+        
+        # Create subdirectories for organized structure
+        self.metadata_dir = self.results_dir / "metadata"
+        self.summary_dir = self.results_dir / "summary"
+        self.tools_dir_results = self.results_dir / "tools"
         self.logs_dir = self.results_dir / "logs"
         self.log_file = self.logs_dir / "scan.log"
         
-        # Ensure directories exist
-        self.results_dir.mkdir(parents=True, exist_ok=True)
-        self.logs_dir.mkdir(parents=True, exist_ok=True)
+        # Ensure all directories exist
+        for dir_path in [self.results_dir, self.metadata_dir, self.summary_dir, self.tools_dir_results, self.logs_dir]:
+            dir_path.mkdir(parents=True, exist_ok=True)
         
         # Scan configuration
         scan_type_env = os.getenv("SCAN_TYPE")
-        self.scan_types = [ScanType(scan_type_env)] if scan_type_env else None
+        if not scan_type_env:
+            raise ValueError(
+                "SCAN_TYPE environment variable is required but not set! "
+                "Backend must set scan_type and Worker must pass it to container via SCAN_TYPE env var."
+            )
+        try:
+            self.scan_types = [ScanType(scan_type_env)]
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid SCAN_TYPE value: '{scan_type_env}'. "
+                f"Valid values: {[s.value for s in ScanType]}. "
+                f"Backend must set a valid scan_type."
+            ) from e
         self.target_type = self._resolve_target_type()
-        self.collect_metadata = os.getenv("COLLECT_METADATA", "false").lower() == "true"
+        
+        # collect_metadata
+        collect_metadata_env = os.getenv("COLLECT_METADATA")
+        if collect_metadata_env is None:
+            raise ValueError(
+                "COLLECT_METADATA environment variable is required but not set! "
+                "Backend must set collect_metadata and Worker must pass it to container via COLLECT_METADATA env var."
+            )
+        self.collect_metadata = collect_metadata_env.lower() == "true"
         
         # Selected scanners (optional - if empty, run all scanners)
         selected_scanners_json = os.getenv("SELECTED_SCANNERS")
@@ -89,39 +130,27 @@ class ScanOrchestrator:
             print(f"[Orchestrator] Error writing to log: {e}")
 
     def _resolve_target_type(self) -> TargetType:
-        """Resolve target type from environment or auto-detect."""
-        target_type_env = os.getenv("TARGET_TYPE", "").strip().lower()
-        if target_type_env:
-            return TargetType(target_type_env)
-
-        scan_target = os.getenv("SCAN_TARGET", "").strip()
-        if scan_target:
-            if scan_target.startswith(("http://", "https://")):
-                os.environ["TARGET_TYPE"] = TargetType.WEBSITE.value
-                return TargetType.WEBSITE
-
-            # Detect host:port or IP for network scans
-            host_candidate = scan_target
-            port = None
-            if ":" in scan_target and scan_target.count(":") == 1:
-                host_candidate, port_part = scan_target.split(":", 1)
-                if port_part.isdigit():
-                    port = int(port_part)
-            try:
-                ipaddress.ip_address(host_candidate)
-                os.environ["TARGET_TYPE"] = TargetType.NETWORK_HOST.value
-                return TargetType.NETWORK_HOST
-            except ValueError:
-                if port is not None:
-                    os.environ["TARGET_TYPE"] = TargetType.NETWORK_HOST.value
-                    return TargetType.NETWORK_HOST
-
-            # Default non-URL target: assume container registry
-            os.environ["TARGET_TYPE"] = TargetType.CONTAINER_REGISTRY.value
-            return TargetType.CONTAINER_REGISTRY
-
-        os.environ["TARGET_TYPE"] = TargetType.LOCAL_MOUNT.value
-        return TargetType.LOCAL_MOUNT
+        """Resolve target type from environment variable.
+        
+        Backend sets TARGET_TYPE environment variable.
+        Worker passes TARGET_TYPE from queue message to container.
+        """
+        target_type_env = os.getenv("TARGET_TYPE", "").strip()
+        if not target_type_env:
+            raise ValueError(
+                "TARGET_TYPE environment variable is required but not set! "
+                "Backend must determine target_type (e.g., git_repo, local_mount, etc.) "
+                "and Worker must pass it to container via TARGET_TYPE env var."
+            )
+        
+        try:
+            return TargetType(target_type_env.lower())
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid TARGET_TYPE value: '{target_type_env}'. "
+                f"Valid values: {[t.value for t in TargetType]}. "
+                f"Backend must set a valid target_type."
+            ) from e
     
     def _get_conditions(self) -> Dict[str, Any]:
         """Get conditions for conditional scanners"""
@@ -139,6 +168,73 @@ class ScanOrchestrator:
         
         return conditions
     
+    async def _run_git_clone(self) -> bool:
+        """Clone Git repository for git_repo target type.
+        
+        No fallbacks - only uses provided data:
+        - SCAN_TARGET: Git repository URL (required)
+        - GIT_BRANCH: Branch name (optional, only used if provided)
+        """
+        scan_target = os.getenv("SCAN_TARGET", "").strip()
+        if not scan_target:
+            error_msg = "SCAN_TARGET environment variable is required for git_repo target type but not set. Backend must set target_url and Worker must pass it to container via SCAN_TARGET env var."
+            self.log_message(f"[ERROR] {error_msg}")
+            self.step_registry.start_step("Git Clone", "Git clone failed")
+            self.step_registry.complete_step("Git Clone", error_msg)
+            raise ValueError(error_msg)
+        
+        # Get branch from environment variable (optional - only use if provided)
+        git_branch = os.getenv("GIT_BRANCH", "").strip()
+        
+        self.step_registry.start_step("Git Clone", f"Cloning {scan_target}...")
+        self.log_message("--- Git Clone ---")
+        self.log_message(f"Repository: {scan_target}")
+        if git_branch:
+            self.log_message(f"Branch: {git_branch}")
+        self.log_message(f"Target Path: {self.target_path}")
+        
+        try:
+            # Ensure target directory exists
+            self.target_path.mkdir(parents=True, exist_ok=True)
+            
+            # Clone repository
+            clone_cmd = ["git", "clone", "--depth", "1"]
+            if git_branch:
+                clone_cmd.extend(["-b", git_branch])
+            clone_cmd.extend([scan_target, str(self.target_path)])
+            
+            self.log_message(f"Executing: {' '.join(clone_cmd)}")
+            
+            result = subprocess.run(
+                clone_cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,
+                check=False
+            )
+            
+            if result.returncode == 0:
+                branch_info = f" (branch: {git_branch})" if git_branch else ""
+                self.log_message(f"Successfully cloned repository to {self.target_path}{branch_info}")
+                self.step_registry.complete_step("Git Clone", f"Repository cloned successfully{branch_info}")
+                return True
+            else:
+                error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+                self.log_message(f"[ERROR] Git clone failed: {error_msg}")
+                self.step_registry.complete_step("Git Clone", f"Git clone failed: {error_msg}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            error_msg = "Git clone timed out after 5 minutes"
+            self.log_message(f"[ERROR] {error_msg}")
+            self.step_registry.complete_step("Git Clone", error_msg)
+            return False
+        except Exception as e:
+            error_msg = f"Git clone error: {e}"
+            self.log_message(f"[ERROR] {error_msg}")
+            self.step_registry.complete_step("Git Clone", error_msg)
+            return False
+    
     async def _run_scanner(self, scanner: Scanner) -> bool:
         """
         Run a scanner script (Bash) or Python scanner class
@@ -153,11 +249,17 @@ class ScanOrchestrator:
         self.step_registry.start_step(scanner.name, f"Running {scanner.name} scan...")
         self.log_message(f"--- Orchestrating {scanner.name} Scan ---")
         
+        # Create scanner-specific directory in tools/
+        scanner_name_lower = scanner.name.lower()
+        scanner_dir = self.tools_dir_results / scanner_name_lower
+        scanner_dir.mkdir(parents=True, exist_ok=True)
+        scanner_log_file = scanner_dir / "log"
+        
         # Prepare environment
         env = os.environ.copy()
         env["TARGET_PATH"] = str(self.target_path)
-        env["RESULTS_DIR"] = str(self.results_dir)
-        env["LOG_FILE"] = str(self.log_file)
+        env["RESULTS_DIR"] = str(scanner_dir)  # Scanner writes to its own directory
+        env["LOG_FILE"] = str(scanner_log_file)  # Scanner has its own log
         
         # Check if Python scanner class exists (new approach)
         python_scanner_class = scanner.python_class
@@ -174,8 +276,8 @@ class ScanOrchestrator:
                 # This allows adding new scanners without modifying the orchestrator!
                 scanner_kwargs = {
                     "target_path": str(self.target_path),
-                    "results_dir": str(self.results_dir),
-                    "log_file": str(self.log_file),
+                    "results_dir": str(scanner_dir),  # Scanner-specific directory
+                    "log_file": str(scanner_log_file),  # Scanner-specific log
                 }
                 
                 # Get the __init__ signature to see what parameters the scanner accepts
@@ -326,18 +428,18 @@ class ScanOrchestrator:
                 metadata_target_path_host = None
             
             # Collect metadata
-            scan_type_value = self.scan_types[0].value if self.scan_types else "all"
+            scan_type_value = self.scan_types[0].value
             metadata = collect_scan_metadata(
                 target_path=str(self.target_path),
                 target_path_host=metadata_target_path_host,
                 scan_type=scan_type_value,
-                results_dir=str(self.results_dir),
+                results_dir=str(self.metadata_dir),  # Save to metadata/ subdirectory
                 finding_policy=finding_policy,
                 ci_mode=ci_mode
             )
             
-            # Save metadata
-            if save_metadata(metadata, str(self.results_dir)):
+            # Save metadata to metadata/scan.json
+            if save_metadata(metadata, str(self.metadata_dir)):
                 self.log_message("Metadata collected and saved successfully")
                 self.step_registry.complete_step("Metadata Collection", "Metadata collection completed")
             else:
@@ -351,17 +453,8 @@ class ScanOrchestrator:
     def _pre_register_all_steps(self):
         """
         Pre-register all steps as 'pending' BEFORE scan starts.
-        This ensures frontend knows total_steps immediately.
+        Uses StepDefinitionsRegistry - NO HARDCODED STEPS!
         """
-        # Check if Git Clone step already exists (written before orchestrator starts)
-        git_clone_step = self.step_registry.get_step("Git Clone")
-        has_git_clone = git_clone_step is not None
-        
-        if has_git_clone:
-            self.log_message(f"Git Clone step already registered as Step {git_clone_step.number}")
-        else:
-            self.log_message("No Git Clone step found")
-        
         # Get conditions and scanners
         conditions = self._get_conditions()
         scanners = ScannerRegistry.get_scanners_for_target(self.target_type, self.scan_types, conditions)
@@ -370,38 +463,30 @@ class ScanOrchestrator:
         if self.selected_scanners:
             scanners = [s for s in scanners if s.name in self.selected_scanners]
         
-        # Calculate total steps (with filtered scanners)
-        total_steps = ScannerRegistry.get_total_steps(
-            target_type=self.target_type,
-            scan_types=self.scan_types,
-            has_git_clone=has_git_clone,
+        # Get step definitions from registry (NO HARDCODING!)
+        step_definitions = StepDefinitionsRegistry.get_steps_for_scan(
+            target_type=self.target_type.value,
             collect_metadata=self.collect_metadata,
-            conditions=conditions
+            scanner_count=len(scanners)
         )
-        # Adjust total_steps if scanners are filtered
-        if self.selected_scanners:
-            all_scanners = ScannerRegistry.get_scanners_for_target(self.target_type, self.scan_types, conditions)
-            total_steps = total_steps - (len(all_scanners) - len(scanners))
         
-        self.log_message(f"Pre-registering {total_steps} steps (Git Clone: {has_git_clone}, Scanners: {len(scanners)}, Metadata: {self.collect_metadata})")
+        total_steps = len(step_definitions) + len(scanners)
+        self.log_message(f"Pre-registering {total_steps} steps from registry (Step Definitions: {len(step_definitions)}, Scanners: {len(scanners)})")
         
-        # Pre-register all steps as 'pending' (except Git Clone which is already registered)
-        # If Git Clone exists, step_counter is already set to 1, so Initialization will be Step 2
-        # If no Git Clone, step_counter is 0, so Initialization will be Step 1
-        
-        # Register Initialization
-        if "Initialization" not in self.step_registry.steps:
-            self.step_registry.step_counter += 1
-            init_step = Step(
-                number=self.step_registry.step_counter,
-                name="Initialization",
-                status=StepStatus.PENDING,
-                message="Initializing scan...",
-                started_at=None,
-                completed_at=None
-            )
-            self.step_registry.steps["Initialization"] = init_step
-            self.step_registry._write_to_log(init_step)
+        # Register all step definitions from registry
+        for step_def in step_definitions:
+            if step_def.name not in self.step_registry.steps:
+                self.step_registry.step_counter += 1
+                step = Step(
+                    number=self.step_registry.step_counter,
+                    name=step_def.name,
+                    status=StepStatus.PENDING,
+                    message=f"{step_def.name}... (pending)",
+                    started_at=None,
+                    completed_at=None
+                )
+                self.step_registry.steps[step_def.name] = step
+                self.step_registry._write_to_log(step)
         
         # Register all scanner steps (or selected ones)
         for scanner in scanners:
@@ -418,34 +503,6 @@ class ScanOrchestrator:
                 self.step_registry.steps[scanner.name] = scanner_step
                 self.step_registry._write_to_log(scanner_step)
         
-        # Register Metadata Collection (if enabled)
-        if self.collect_metadata and "Metadata Collection" not in self.step_registry.steps:
-            self.step_registry.step_counter += 1
-            metadata_step = Step(
-                number=self.step_registry.step_counter,
-                name="Metadata Collection",
-                status=StepStatus.PENDING,
-                message="Collecting metadata... (pending)",
-                started_at=None,
-                completed_at=None
-            )
-            self.step_registry.steps["Metadata Collection"] = metadata_step
-            self.step_registry._write_to_log(metadata_step)
-        
-        # Register Completion
-        if "Completion" not in self.step_registry.steps:
-            self.step_registry.step_counter += 1
-            completion_step = Step(
-                number=self.step_registry.step_counter,
-                name="Completion",
-                status=StepStatus.PENDING,
-                message="Finalizing scan... (pending)",
-                started_at=None,
-                completed_at=None
-            )
-            self.step_registry.steps["Completion"] = completion_step
-            self.step_registry._write_to_log(completion_step)
-        
         # Send initial update to frontend with all steps
         asyncio.create_task(self.step_registry._send_update())
         
@@ -459,7 +516,7 @@ class ScanOrchestrator:
             Exit code (0 for success, non-zero for failure)
         """
         self.log_message("SimpleSecCheck Scan Started")
-        scan_type_display = ",".join([s.value for s in self.scan_types]) if self.scan_types else "all"
+        scan_type_display = ",".join([s.value for s in self.scan_types])
         self.log_message(f"Scan Type(s): {scan_type_display}")
         self.log_message(f"Target Type: {self.target_type.value}")
         self.log_message(f"Target Path: {self.target_path}")
@@ -469,51 +526,55 @@ class ScanOrchestrator:
         # This ensures frontend knows total_steps immediately
         self._pre_register_all_steps()
         
-        # Step: Initialization
-        self.step_registry.start_step("Initialization", "Initializing scan...")
-        self.log_message("--- Initialization ---")
-        # Initialization logic here (if needed)
-        self.step_registry.complete_step("Initialization", "Scan initialized")
-        
-        # Get scanners for this scan type
+        # Get step definitions from registry (NO HARDCODING!)
         conditions = self._get_conditions()
         scanners = ScannerRegistry.get_scanners_for_target(self.target_type, self.scan_types, conditions)
-        
-        # Filter by selected scanners if specified
         if self.selected_scanners:
             scanners = [s for s in scanners if s.name in self.selected_scanners]
+        
+        step_definitions = StepDefinitionsRegistry.get_steps_for_scan(
+            target_type=self.target_type.value,
+            collect_metadata=self.collect_metadata,
+            scanner_count=len(scanners)
+        )
+        
+        # Execute steps in order from registry
+        for step_def in step_definitions:
+            if step_def.step_type == StepType.GIT_CLONE:
+                await self._run_git_clone()
+            elif step_def.step_type == StepType.INITIALIZATION:
+                self.step_registry.start_step("Initialization", "Initializing scan...")
+                self.log_message("--- Initialization ---")
+                self.step_registry.complete_step("Initialization", "Scan initialized")
+            elif step_def.step_type == StepType.METADATA_COLLECTION:
+                await self._collect_metadata()
+            elif step_def.step_type == StepType.COMPLETION:
+                self.step_registry.start_step("Completion", "Finalizing scan...")
+                self._generate_html_report()
+                self.log_message("SimpleSecCheck Scan Completed")
+                if self.overall_success:
+                    self.step_registry.complete_step("Completion", "Scan completed successfully")
+                else:
+                    self.step_registry.complete_step("Completion", "Scan completed with some errors")
+        
+        # Run scanners (they are registered as steps but executed separately)
+        if self.selected_scanners:
             self.log_message(f"Filtered to {len(scanners)} selected scanners: {', '.join([s.name for s in scanners])}")
         else:
             self.log_message(f"Running all {len(scanners)} scanners for target {self.target_type.value}")
+            if len(scanners) == 0:
+                self.log_message(f"[WARNING] No scanners found! Check scanner registration and capabilities.")
         
-        # Run all scanners (or selected ones)
         for scanner in scanners:
             await self._run_scanner(scanner)
         
-        # Collect metadata (if enabled)
-        if self.collect_metadata:
-            await self._collect_metadata()
-        
-        # Completion
-        self.step_registry.start_step("Completion", "Finalizing scan...")
-        
-        # Generate HTML report
-        self._generate_html_report()
-        
-        # Always complete successfully if at least some scanners ran
-        # (even if some failed, we still want a summary)
-        self.log_message("SimpleSecCheck Scan Completed")
-        if self.overall_success:
-            self.step_registry.complete_step("Completion", "Scan completed successfully")
-        else:
-            self.step_registry.complete_step("Completion", "Scan completed with some errors")
         # Always return 0 to allow summary generation
         return 0
     
     def _generate_html_report(self):
         """Generate HTML report after scan completion"""
         html_report_script = self.base_dir / "scanner" / "output" / "generate-html-report.py"
-        html_report_output = self.results_dir / "security-summary.html"
+        html_report_output = self.summary_dir / "summary.html"  # Save to summary/ subdirectory
         
         if not html_report_script.exists():
             self.log_message(f"[WARNING] HTML report script not found: {html_report_script}")
@@ -525,7 +586,7 @@ class ScanOrchestrator:
         import os
         env = os.environ.copy()
         env["OUTPUT_FILE"] = str(html_report_output)
-        env["RESULTS_DIR"] = str(self.results_dir)
+        env["RESULTS_DIR"] = str(self.results_dir)  # Pass base results_dir for script to find tools/
         if self.scan_types:
             env["SCAN_TYPE"] = self.scan_types[0].value
         env["TARGET_TYPE"] = self.target_type.value
@@ -734,16 +795,27 @@ async def main():
         # Silent exit - container is just running, no scan requested
         sys.exit(0)
     
-    # Generate scan_id if not provided but target is set
+    # CRITICAL: SCAN_ID is REQUIRED - do not generate fallback!
+    # Worker MUST provide SCAN_ID via environment variable
+    # Without SCAN_ID, we cannot create scan-specific directories
     if not scan_id:
-        from datetime import datetime
-        scan_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        print("[Orchestrator] ERROR: SCAN_ID environment variable is required but not set!")
+        print("[Orchestrator] Worker must provide SCAN_ID when starting scanner container.")
+        print("[Orchestrator] Cannot create scan-specific results directory without SCAN_ID.")
+        sys.exit(1)
     
-    # Get results directory
-    results_dir = Path(os.getenv("RESULTS_DIR_IN_CONTAINER", "/app/results"))
+    # Get base results directory (orchestrator will append scan_id)
+    base_results_dir = Path(os.getenv("RESULTS_DIR_IN_CONTAINER", "/app/results"))
+    
+    # Build scan-specific results directory
+    # CRITICAL: Always use scan_id to create isolated directory structure
+    # Results directory structure: /app/results/{scan_id}/logs/steps.log
+    # This keeps results/ clean - only contains {scan_id}/ folders, nothing else!
+    scan_results_dir = base_results_dir / scan_id
     
     # Create step registry (without WebSocket manager for now - will be added in integration)
-    step_registry = StepRegistry(scan_id, results_dir, websocket_manager=None)
+    # Pass scan-specific directory to StepRegistry
+    step_registry = StepRegistry(scan_id, scan_results_dir, websocket_manager=None)
     
     # Create orchestrator
     orchestrator = ScanOrchestrator(step_registry)

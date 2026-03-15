@@ -85,16 +85,18 @@ class ESLintScanner(BaseScanner):
     
     def scan(self) -> bool:
         """Run ESLint scan"""
-        if not self.check_tool_installed("eslint"):
-            self.log("eslint not found in PATH", "ERROR")
+        # Get tool command (handles npm global packages, npx, PATH)
+        tool_cmd = self.get_tool_command("eslint")
+        if not tool_cmd:
+            self.log("eslint not found", "ERROR")
             return False
         
         js_files = self.find_js_files()
         
         if not js_files:
             self.log("No JavaScript/TypeScript files found, skipping scan.", "WARNING")
-            json_output = self.results_dir / "eslint.json"
-            text_output = self.results_dir / "eslint.txt"
+            json_output = self.results_dir / "report.json"  # Changed from eslint.json
+            text_output = self.results_dir / "report.txt"   # Changed from eslint.txt
             json_output.write_text("[]")
             text_output.write_text("ESLint: No JavaScript/TypeScript files found\n")
             return True
@@ -102,8 +104,8 @@ class ESLintScanner(BaseScanner):
         self.log(f"Found {len(js_files)} JavaScript/TypeScript file(s).")
         self.log(f"Running JavaScript/TypeScript security scan on {self.target_path}...")
         
-        json_output = self.results_dir / "eslint.json"
-        text_output = self.results_dir / "eslint.txt"
+        json_output = self.results_dir / "report.json"  # Changed from eslint.json
+        text_output = self.results_dir / "report.txt"   # Changed from eslint.txt
         temp_config = self.results_dir / "eslint.config.cjs"
 
         temp_config.write_text(
@@ -135,7 +137,7 @@ module.exports = [
         # JSON report
         self.log("Running ESLint scan with JSON output...")
         cmd = [
-            "eslint",
+            *tool_cmd,
             "-c",
             str(temp_config),
             *ignore_args,
@@ -152,7 +154,7 @@ module.exports = [
         # Text report
         self.log("Running ESLint scan with text output...")
         cmd = [
-            "eslint",
+            *tool_cmd,
             "-c",
             str(temp_config),
             *ignore_args,

@@ -87,5 +87,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="gitleaks.json",
+    json_file="report.json",  # Changed from gitleaks.json
 )

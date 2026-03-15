@@ -5,6 +5,7 @@ This module provides Redis-based queue service for scan job management.
 """
 import json
 import logging
+import os
 from typing import Optional
 from datetime import datetime
 
@@ -12,6 +13,9 @@ from domain.entities.scan import Scan
 from infrastructure.redis.client import redis_client
 
 logger = logging.getLogger(__name__)
+
+# Default scanner image name (can be overridden via environment variable)
+DEFAULT_SCANNER_IMAGE = os.getenv("SCANNER_IMAGE", "simpleseccheck-scanner:local")
 
 
 class QueueService:
@@ -26,11 +30,10 @@ class QueueService:
             if not redis_client.is_connected:
                 await redis_client.connect()
             
-            # Create queue message - format must match worker expectations
-            # Worker expects: scan_id, job_type, target, image, results_dir, logs_dir, scan_type, etc.
+            # Create queue message - ENTERPRISE: Only send metadata, NO PATHS!
+            # Worker determines paths from its own environment variables (generic, portable)
+            # This follows separation of concerns: Backend doesn't know about Worker's filesystem layout
             scan_id = scan.id
-            results_dir = f"/app/results/{scan_id}"
-            logs_dir = f"/app/logs/{scan_id}"
             
             queue_message = {
                 "scan_id": scan_id,
@@ -43,12 +46,12 @@ class QueueService:
                 "scan_type": scan.scan_type.value,
                 "scanners": scan.scanners,
                 "config": scan.config,
-                "image": scan.config.get("image", "simpleseccheck/scanner:latest") if scan.config else "simpleseccheck/scanner:latest",
-                "results_dir": results_dir,
-                "logs_dir": logs_dir,
+                "image": scan.config.get("image", DEFAULT_SCANNER_IMAGE) if scan.config else DEFAULT_SCANNER_IMAGE,
+                # NO results_dir, NO logs_dir - Worker reads from own environment variables!
                 "finding_policy": scan.config.get("finding_policy") if scan.config else None,
                 "collect_metadata": scan.config.get("collect_metadata", True) if scan.config else True,
                 "exclude_paths": scan.config.get("exclude_paths") if scan.config else None,
+                "git_branch": scan.config.get("git_branch") if scan.config else None,
                 "user_id": scan.user_id,
                 "project_id": scan.project_id,
                 "scheduled_at": scan.scheduled_at.isoformat() if scan.scheduled_at else None,

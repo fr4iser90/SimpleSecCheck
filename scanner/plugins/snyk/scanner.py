@@ -16,11 +16,18 @@ class SnykScanner(BaseScanner):
     
     # Metadaten für Auto-Registrierung
     CAPABILITIES = [
+        # Code scanning (Snyk Code)
+        ScannerCapability(
+            scan_type=ScanType.CODE,
+            supported_targets=[TargetType.LOCAL_MOUNT, TargetType.GIT_REPO, TargetType.UPLOADED_CODE],
+            supported_artifacts=[],
+        ),
+        # Dependency scanning (Snyk Open Source)
         ScannerCapability(
             scan_type=ScanType.DEPENDENCY,
             supported_targets=[TargetType.LOCAL_MOUNT, TargetType.GIT_REPO, TargetType.UPLOADED_CODE],
             supported_artifacts=[],
-        )
+        ),
     ]
     PRIORITY = 6
     REQUIRES_CONDITION = None
@@ -49,8 +56,8 @@ class SnykScanner(BaseScanner):
     
     def create_empty_reports(self, reason: str = "No SNYK_TOKEN provided"):
         """Create empty reports when Snyk is skipped"""
-        json_output = self.results_dir / "snyk.json"
-        text_output = self.results_dir / "snyk.txt"
+        json_output = self.results_dir / "report.json"  # Changed from snyk.json
+        text_output = self.results_dir / "report.txt"   # Changed from snyk.txt
         
         empty_json = {
             "vulnerabilities": [],
@@ -86,8 +93,8 @@ class SnykScanner(BaseScanner):
         self.log("Using provided SNYK_TOKEN for authentication...")
         self.log(f"Running Snyk vulnerability scan on {self.target_path}...")
         
-        json_output = self.results_dir / "snyk.json"
-        text_output = self.results_dir / "snyk.txt"
+        json_output = self.results_dir / "report.json"  # Changed from snyk.json
+        text_output = self.results_dir / "report.txt"   # Changed from snyk.txt
         
         # Change to target directory
         try:

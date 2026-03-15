@@ -60,5 +60,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="wapiti.json",
+    json_file="report.json",  # Changed from wapiti.json
 )

@@ -52,8 +52,8 @@ class KubeHunterScanner(BaseScanner):
         
         self.log("Running Kubernetes cluster security scan...")
         
-        json_output = self.results_dir / "kube-hunter.json"
-        text_output = self.results_dir / "kube-hunter.txt"
+        json_output = self.results_dir / "report.json"  # Changed from kube-hunter.json
+        text_output = self.results_dir / "report.txt"   # Changed from kube-hunter.txt
         
         # JSON report (with timeout to avoid hanging)
         self.log("Running cluster security scan...")

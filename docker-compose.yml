@@ -69,7 +69,7 @@ services:
       context: .
       dockerfile: ./backend/Dockerfile
     container_name: SimpleSecCheck_backend
-    user: "${UID:-1000}:${GID:-1000}"
+    
     volumes:
       - ./results:/app/results
       - .:/project:ro
@@ -87,6 +87,7 @@ services:
       - DATABASE_TYPE=postgresql
       - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - QUEUE_ENABLED=true
       - SESSION_MANAGEMENT=true
       - METADATA_COLLECTION=always
@@ -148,8 +149,8 @@ services:
       context: .
       dockerfile: ./worker/Dockerfile
     container_name: SimpleSecCheck_worker
-    # Don't set user here - entrypoint will handle it dynamically
-    # This allows entrypoint to run as root and add worker to docker group
+    # No user: - entrypoint runs as root, then drops privileges with gosu
+    # This is the standard pattern for containers that need Docker socket access
     volumes:
       - ./results:/app/results
       - .:/project:ro
@@ -167,6 +168,12 @@ services:
       - SCANNER_WORKER_ENABLED=true
       - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-1}
       - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}
+      # NOTE: Logs are part of Results - Scanner creates results/{scan_id}/logs/ automatically
+      # RESULTS_DIR_HOST: Absolute path on HOST (where docker-compose runs) - needed for Worker to mount volumes to Scanner containers
+      # Docker API requires absolute paths when creating containers dynamically
+      - RESULTS_DIR_HOST=${PWD}/results
+      # Container paths (what Scanner container sees inside)
+      - RESULTS_DIR_CONTAINER=/app/results
     ports:
       - "8081:8081"  # Worker API port for scanner discovery
     networks:
@@ -222,8 +229,8 @@ services:
       args:
         VERSION: 1.4.0
     image: simpleseccheck-scanner:local
-    container_name: SimpleSecCheck_scanner_v1.4.0
-    user: "${UID:-1000}:${GID:-1000}"
+    container_name: SimpleSecCheck_scanner
+    command: ["sleep", "infinity"]
     volumes:
       - ./results:/app/results
       - ${HOST_PROJECT_ROOT:-.}/scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data

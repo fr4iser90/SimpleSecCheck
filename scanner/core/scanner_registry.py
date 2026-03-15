@@ -150,31 +150,30 @@ class ScannerRegistry:
         conditions: Optional[Dict[str, any]] = None
     ) -> int:
         """
-        Dynamically calculate total number of steps for a scan
-        
-        Args:
-            scan_type: The scan type
-            has_git_clone: Whether Git clone step is needed
-            collect_metadata: Whether metadata collection is enabled
-            conditions: Optional conditions for conditional scanners
+        DEPRECATED: Use StepDefinitionsRegistry.get_total_steps() instead!
+        This method is kept for backward compatibility but should not be used.
         """
-        steps = 0
-        
-        if has_git_clone:
-            steps += 1  # Git Clone
-        
-        steps += 1  # Initialization
-        
-        # Count scanners for this scan type/target
-        scanners = cls.get_scanners_for_target(target_type, scan_types, conditions)
-        steps += len(scanners)
-        
-        if collect_metadata:
-            steps += 1  # Metadata Collection
-        
-        steps += 1  # Completion
-        
-        return steps
+        # Import here to avoid circular dependency
+        try:
+            from scanner.core.step_definitions import StepDefinitionsRegistry
+            scanners = cls.get_scanners_for_target(target_type, scan_types, conditions)
+            return StepDefinitionsRegistry.get_total_steps(
+                target_type=target_type.value,
+                collect_metadata=collect_metadata,
+                scanner_count=len(scanners)
+            )
+        except ImportError:
+            # Fallback calculation (old way)
+            steps = 0
+            if has_git_clone:
+                steps += 1
+            steps += 1  # Initialization
+            scanners = cls.get_scanners_for_target(target_type, scan_types, conditions)
+            steps += len(scanners)
+            if collect_metadata:
+                steps += 1
+            steps += 1  # Completion
+            return steps
     
     @classmethod
     def get_all_scanners(cls) -> List[Scanner]:
@@ -266,10 +265,15 @@ def _register_all_scanners():
 _register_all_scanners()
 
 # Auto-discover Python scanner classes (dynamic registration)
+# Import plugins to auto-register all scanners
 try:
-    import scanner.scanners  # noqa: F401
+    import scanner.plugins  # noqa: F401 - This triggers auto-registration via __init__.py
 except Exception:
+    # Fallback to old scanners import
     try:
-        import scanners  # type: ignore # noqa: F401
+        import scanner.scanners  # noqa: F401
     except Exception:
-        pass
+        try:
+            import scanners  # type: ignore # noqa: F401
+        except Exception:
+            pass

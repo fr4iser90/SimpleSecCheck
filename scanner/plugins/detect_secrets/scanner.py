@@ -67,8 +67,8 @@ class DetectSecretsScanner(BaseScanner):
         
         self.log(f"Running secret detection scan on {self.target_path}...")
         
-        json_output = self.results_dir / "detect-secrets.json"
-        text_output = self.results_dir / "detect-secrets.txt"
+        json_output = self.results_dir / "report.json"  # Changed from detect-secrets.json
+        text_output = self.results_dir / "report.txt"   # Changed from detect-secrets.txt
         
         exclude_args = self.get_exclude_args()
         

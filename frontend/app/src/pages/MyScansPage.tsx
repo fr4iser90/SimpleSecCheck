@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useConfig } from '../hooks/useConfig'
 
 interface MyScanItem {
@@ -22,6 +23,7 @@ interface MyScansData {
 
 export default function MyScansPage() {
   const { config } = useConfig()
+  const navigate = useNavigate()
   const [scansData, setScansData] = useState<MyScansData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -279,16 +281,57 @@ export default function MyScansPage() {
                       {new Date(item.created_at).toLocaleString()}
                     </td>
                     <td style={{ padding: '0.75rem' }}>
-                      {item.status === 'completed' && item.scan_id && (
-                        <a
-                          href={`/api/my-results/${item.scan_id}/report`}
-                          className="action-button action-completed"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          View Results
-                        </a>
-                      )}
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {(item.scan_id || item.queue_id) && (
+                          <button
+                            onClick={() => {
+                              navigate('/scan', {
+                                state: {
+                                  status: item.status,
+                                  scan_id: item.scan_id || item.queue_id,
+                                  results_dir: null,
+                                  started_at: item.started_at || null,
+                                }
+                              })
+                            }}
+                            style={{
+                              padding: '0.375rem 0.75rem',
+                              background: '#007bff',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.875rem',
+                              fontWeight: '500',
+                            }}
+                            title="View Steps & Progress"
+                          >
+                            View Steps
+                          </button>
+                        )}
+                        {item.status === 'completed' && item.scan_id && (
+                          <a
+                            href={`/api/my-results/${item.scan_id}/report`}
+                            className="action-button action-completed"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              padding: '0.375rem 0.75rem',
+                              background: '#28a745',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.875rem',
+                              fontWeight: '500',
+                              textDecoration: 'none',
+                              display: 'inline-block',
+                            }}
+                          >
+                            View Results
+                          </a>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

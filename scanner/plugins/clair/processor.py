@@ -72,5 +72,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="clair.json",
+    json_file="report.json",  # Changed from clair.json
 )

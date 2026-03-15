@@ -341,7 +341,7 @@ async def get_frontend_config():
             "code": {
                 "enabled": True,
                 "label": "Code",
-                "backend_value": "repository",
+                "backend_value": "code",
                 "description": "Scan source code for vulnerabilities"
             },
             "image": {

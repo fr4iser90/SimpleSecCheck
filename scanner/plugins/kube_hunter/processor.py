@@ -103,5 +103,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="kube-hunter.json",
+    json_file="report.json",  # Changed from kube-hunter.json
 )

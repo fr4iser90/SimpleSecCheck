@@ -36,7 +36,7 @@ export class WebSocketService {
 
       try {
         // Convert HTTP to WebSocket URL
-        const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/scan/stream?scan_id=${scanId}`
+        const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/scans/${scanId}/stream`
         this.ws = new WebSocket(wsUrl)
 
         this.ws.onopen = () => {

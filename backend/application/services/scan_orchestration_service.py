@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 
 from domain.entities.scan import Scan, ScanStatus, ScanType
+from domain.entities.target_type import TargetType
 from infrastructure.redis.client import redis_client
 from infrastructure.docker_runner import docker_runner
 from config.scanner_config import get_scanner_config
@@ -228,7 +229,7 @@ class ScanOrchestrationService:
         volumes = {}
         
         # Map target directory
-        if scan.target_type == 'repository':
+        if scan.target_type == TargetType.GIT_REPO.value:
             volumes[scan.target_url] = {
                 'bind': '/target',
                 'mode': 'ro'

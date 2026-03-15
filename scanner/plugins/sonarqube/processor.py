@@ -74,5 +74,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="sonarqube.json",
+    json_file="report.json",  # Changed from sonarqube.json
 )

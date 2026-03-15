@@ -53,8 +53,8 @@ class WapitiScanner(BaseScanner):
         
         self.log(f"Running web vulnerability scan on {self.zap_target}...")
         
-        json_output = self.results_dir / "wapiti.json"
-        text_output = self.results_dir / "wapiti.txt"
+        json_output = self.results_dir / "report.json"  # Changed from wapiti.json
+        text_output = self.results_dir / "report.txt"   # Changed from wapiti.txt
         
         # JSON report
         self.log("Running web vulnerability scan...")

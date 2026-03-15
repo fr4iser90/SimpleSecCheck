@@ -56,7 +56,10 @@ class CodeQLScanner(BaseScanner):
             return []
         
         # Try CodeQL language detection
-        cmd = ["codeql", "resolve", "languages", "--format=json"]
+        tool_cmd = self.get_tool_command("codeql")
+        if not tool_cmd:
+            return []
+        cmd = [*tool_cmd, "resolve", "languages", "--format=json"]
         result = self.run_command(cmd, capture_output=True)
         
         if result.returncode == 0 and result.stdout:
@@ -98,8 +101,10 @@ class CodeQLScanner(BaseScanner):
     
     def scan(self) -> bool:
         """Run CodeQL scan"""
-        if not self.check_tool_installed("codeql"):
-            self.log("codeql not found in PATH", "ERROR")
+        # Get tool command (handles symlinks, PATH)
+        tool_cmd = self.get_tool_command("codeql")
+        if not tool_cmd:
+            self.log("codeql not found", "ERROR")
             return False
         
         self.log(f"Running code analysis on {self.target_path}...")
@@ -114,13 +119,15 @@ class CodeQLScanner(BaseScanner):
         
         db_dir = self.results_dir / "codeql-database"
         db_dir.mkdir(parents=True, exist_ok=True)
-        json_output = self.results_dir / "codeql.json"
-        sarif_output = self.results_dir / "codeql.sarif"
-        text_output = self.results_dir / "codeql.txt"
+        # Temporary files per language (will be cleaned up)
+        json_output = self.results_dir / "codeql.json"  # Temporary, will be removed
+        sarif_output = self.results_dir / "codeql.sarif"  # Temporary, will be removed
+        text_output = self.results_dir / "codeql.txt"  # Temporary, will be removed
         
-        combined_json = self.results_dir / "codeql-combined.json"
-        combined_sarif = self.results_dir / "codeql-combined.sarif"
-        combined_text = self.results_dir / "codeql-combined.txt"
+        # Final combined output files (renamed to report.*)
+        combined_json = self.results_dir / "report.json"  # Changed from codeql-combined.json
+        combined_sarif = self.results_dir / "report.sarif"  # Changed from codeql-combined.sarif
+        combined_text = self.results_dir / "report.txt"  # Changed from codeql-combined.txt
         
         # Initialize combined files
         combined_json.write_text('{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[]}')
@@ -142,10 +149,10 @@ class CodeQLScanner(BaseScanner):
                     continue
                 
                 # Create without autobuilder
-                cmd = ["codeql", "database", "create", str(lang_db), "--language=cpp", 
+                cmd = [*tool_cmd, "database", "create", str(lang_db), "--language=cpp", 
                        f"--source-root={self.target_path}", "--command=", "--threads=4"]
             else:
-                cmd = ["codeql", "database", "create", str(lang_db), f"--language={lang}",
+                cmd = [*tool_cmd, "database", "create", str(lang_db), f"--language={lang}",
                        f"--source-root={self.target_path}", "--threads=4"]
             
             result = self.run_command(cmd, capture_output=True)
@@ -158,7 +165,7 @@ class CodeQLScanner(BaseScanner):
             lang_sarif = self.results_dir / f"codeql-{lang}.sarif"
             
             self.log(f"Running security analysis for {lang} with {query_suite}...")
-            cmd = ["codeql", "database", "analyze", str(lang_db), query_suite,
+            cmd = [*tool_cmd, "database", "analyze", str(lang_db), query_suite,
                    "--format=sarif-latest", f"--output={lang_sarif}", "--threads=4"]
             
             result = self.run_command(cmd, capture_output=True)
@@ -175,7 +182,7 @@ class CodeQLScanner(BaseScanner):
             # Generate text report
             lang_text = self.results_dir / f"codeql-{lang}.txt"
             if lang_sarif.exists():
-                cmd = ["codeql", "database", "interpret-results", str(lang_db),
+                cmd = [*tool_cmd, "database", "interpret-results", str(lang_db),
                        "--format=sarif-latest", str(lang_sarif), f"--output={lang_text}"]
                 result = self.run_command(cmd, capture_output=True)
                 if result.returncode != 0:
@@ -207,22 +214,12 @@ class CodeQLScanner(BaseScanner):
             if lang_db.exists():
                 shutil.rmtree(lang_db, ignore_errors=True)
         
-        # Create final output files
-        if combined_json.exists() and combined_json.stat().st_size > 100:
-            shutil.copy2(combined_json, json_output)
+        # Final output files are already in report.* format (combined_json, combined_sarif, combined_text)
+        # Clean up temporary per-language files (already done in loop)
+        # Clean up temporary combined files that were used during processing
+        # Note: combined_json/sarif/text are now report.json/sarif/txt, so they stay
         
-        if combined_sarif.exists() and combined_sarif.stat().st_size > 100:
-            shutil.copy2(combined_sarif, sarif_output)
-        
-        if combined_text.exists() and combined_text.stat().st_size > 100:
-            shutil.copy2(combined_text, text_output)
-        
-        # Clean up combined temp files
-        for f in [combined_json, combined_sarif, combined_text]:
-            if f.exists() and f != json_output and f != sarif_output and f != text_output:
-                f.unlink()
-        
-        if json_output.exists() or sarif_output.exists() or text_output.exists():
+        if combined_json.exists() or combined_sarif.exists() or combined_text.exists():
             self.log("CodeQL scan completed successfully", "SUCCESS")
             return True
         else:

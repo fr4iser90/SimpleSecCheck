@@ -80,5 +80,5 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="eslint.json",
+    json_file="report.json",  # Changed from eslint.json
 )

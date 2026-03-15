@@ -203,6 +203,31 @@ class DatabaseAdapter:
                     )
                     await session.commit()
                     logger.info("Successfully migrated and removed vulnerabilities_count column")
+                
+                # Migrate old scan_type values to new ScanType enum values
+                logger.info("Migrating scan_type values to new enum")
+                scan_type_migrations = [
+                    ("repository", "code"),
+                    ("web_application", "website"),
+                    ("infrastructure", "network"),
+                    ("mobile_app", "mobile"),
+                ]
+                
+                for old_value, new_value in scan_type_migrations:
+                    result = await session.execute(
+                        text("""
+                            UPDATE scans 
+                            SET scan_type = :new_value 
+                            WHERE scan_type = :old_value
+                        """),
+                        {"old_value": old_value, "new_value": new_value}
+                    )
+                    updated_count = result.rowcount
+                    if updated_count > 0:
+                        logger.info(f"Migrated {updated_count} scans from scan_type '{old_value}' to '{new_value}'")
+                
+                await session.commit()
+                logger.info("Successfully migrated scan_type values")
                         
         except Exception as e:
             logger.warning(f"Migration check failed (this is OK if tables don't exist yet): {e}")
