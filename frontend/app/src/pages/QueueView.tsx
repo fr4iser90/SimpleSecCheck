@@ -172,81 +172,100 @@ export default function QueueView() {
           <div style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>
             Loading queue...
           </div>
-        ) : queueData && queueData.items.length === 0 ? (
+        ) : queueData && queueData.queue_length === 0 && queueData.items.length === 0 ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>
             Queue is empty
           </div>
-        ) : queueData ? (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #e9ecef' }}>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Position</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Repository</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Branch</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Scanners</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Status</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {queueData.items.map((item, index) => (
-                  <tr key={item.queue_id} style={{ borderBottom: '1px solid #e9ecef' }}>
-                    <td style={{ padding: '0.75rem' }}>
-                      {item.position !== undefined ? item.position : index + 1}
-                    </td>
-                    <td style={{ padding: '0.75rem', fontFamily: 'monospace', fontSize: '0.9rem' }}>
-                      {item.repository_name}
-                    </td>
-                    <td style={{ padding: '0.75rem', color: '#6c757d' }}>
-                      {item.branch || '-'}
-                    </td>
-                    <td style={{ padding: '0.75rem' }}>
-                      {item.scanners && item.scanners.length > 0 ? (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                          {item.scanners.map((scanner) => (
-                            <span
-                              key={scanner}
-                              style={{
-                                display: 'inline-block',
-                                padding: '0.125rem 0.5rem',
-                                borderRadius: '8px',
-                                fontSize: '0.75rem',
-                                fontWeight: '500',
-                                background: 'rgba(0, 123, 255, 0.1)',
-                                color: '#007bff',
-                                border: '1px solid rgba(0, 123, 255, 0.3)',
-                              }}
-                            >
-                              {scanner}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span style={{ color: '#6c757d', fontSize: '0.875rem' }}>-</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '0.75rem' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '0.25rem 0.75rem',
-                        borderRadius: '12px',
-                        fontSize: '0.875rem',
-                        fontWeight: 'bold',
-                        background: getStatusColor(item.status) + '20',
-                        color: getStatusColor(item.status),
-                        border: `1px solid ${getStatusColor(item.status)}`
-                      }}>
-                        {getStatusLabel(item.status)}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.75rem', color: '#6c757d', fontSize: '0.875rem' }}>
+        ) : queueData && queueData.items.length > 0 ? (
+          <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))' }}>
+            {queueData.items.map((item) => (
+              <div
+                key={item.queue_id}
+                style={{
+                  background: 'var(--glass-bg-dark)',
+                  padding: '1.5rem',
+                  borderRadius: '8px',
+                  border: `1px solid ${getStatusColor(item.status)}40`,
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                {/* Header with Position and Status */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                  <div>
+                    {item.position !== undefined && (
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: getStatusColor(item.status) }}>
+                        #{item.position}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
                       {new Date(item.created_at).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                  <span style={{
+                    display: 'inline-block',
+                    padding: '0.25rem 0.75rem',
+                    borderRadius: '12px',
+                    fontSize: '0.875rem',
+                    fontWeight: 'bold',
+                    background: getStatusColor(item.status) + '20',
+                    color: getStatusColor(item.status),
+                    border: `1px solid ${getStatusColor(item.status)}`
+                  }}>
+                    {getStatusLabel(item.status)}
+                  </span>
+                </div>
+
+                {/* Repository Name */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
+                    Repository
+                  </div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '1rem', fontWeight: 'bold', wordBreak: 'break-all' }}>
+                    {item.repository_name}
+                  </div>
+                </div>
+
+                {/* Branch (if available) */}
+                {item.branch && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
+                      Branch
+                    </div>
+                    <div style={{ fontSize: '0.9rem' }}>
+                      🌿 {item.branch}
+                    </div>
+                  </div>
+                )}
+
+                {/* Scanners */}
+                {item.scanners && item.scanners.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                      Scanners ({item.scanners.length})
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {item.scanners.map((scanner) => (
+                        <span
+                          key={scanner}
+                          style={{
+                            display: 'inline-block',
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '8px',
+                            fontSize: '0.75rem',
+                            fontWeight: '500',
+                            background: 'rgba(102, 126, 234, 0.15)',
+                            color: '#667eea',
+                            border: '1px solid rgba(102, 126, 234, 0.3)',
+                          }}
+                        >
+                          {scanner}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         ) : null}
       </div>

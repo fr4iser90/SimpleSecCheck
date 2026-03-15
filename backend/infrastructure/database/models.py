@@ -475,6 +475,22 @@ class RepoScanHistory(Base):
         return f"<RepoScanHistory(id={self.id}, repo_id={self.repo_id}, score={self.score})>"
 
 
+class ScannerDurationStats(Base):
+    """Scanner duration statistics for estimating scan times."""
+    
+    __tablename__ = "scanner_duration_stats"
+    
+    scanner_name = Column(String(100), primary_key=True, nullable=False)
+    avg_duration_seconds = Column(Integer, nullable=False, default=120)  # Default: 2 minutes
+    min_duration_seconds = Column(Integer, nullable=True)
+    max_duration_seconds = Column(Integer, nullable=True)
+    sample_count = Column(Integer, nullable=False, default=0)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    def __repr__(self):
+        return f"<ScannerDurationStats(scanner_name='{self.scanner_name}', avg_duration={self.avg_duration_seconds}s, samples={self.sample_count})>"
+
+
 class APIKey(Base):
     """API keys database model."""
     
@@ -508,5 +524,6 @@ Index('idx_ip_activity_window', IPActivity.window_start, IPActivity.window_end)
 Index('idx_user_github_repos_user_id', UserGitHubRepo.user_id)
 Index('idx_repo_scan_history_repo_id', RepoScanHistory.repo_id)
 Index('idx_repo_scan_history_created_at', RepoScanHistory.created_at)
+Index('idx_scanner_duration_stats_scanner_name', ScannerDurationStats.scanner_name)
 Index('idx_api_keys_user_id', APIKey.user_id)
 Index('idx_api_keys_key_hash', APIKey.key_hash)

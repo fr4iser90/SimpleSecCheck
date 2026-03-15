@@ -93,7 +93,7 @@ export const getDaysSinceLastScan = (repo: GitHubRepo): number | null => {
   return diffDays
 }
 
-export const getWarnings = (repo: GitHubRepo, scanStatus?: RepoScanStatus): string[] => {
+export const getWarnings = (repo: GitHubRepo, _scanStatus?: RepoScanStatus): string[] => {
   const warnings: string[] = []
   const vulns = repo.vulnerabilities || { critical: 0, high: 0, medium: 0, low: 0 }
   const daysSince = getDaysSinceLastScan(repo)
@@ -106,9 +106,7 @@ export const getWarnings = (repo: GitHubRepo, scanStatus?: RepoScanStatus): stri
     warnings.push(`⏰ Last scan was ${daysSince} days ago - consider running a new scan`)
   }
   
-  if (scanStatus?.has_active_scan && scanStatus.status === 'pending' && scanStatus.queue_position) {
-    warnings.push(`🔄 Scan is currently in queue (position #${scanStatus.queue_position})`)
-  }
+  // Queue status is now shown prominently in RepoCard, so we don't duplicate it here
   
   return warnings
 }

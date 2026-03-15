@@ -26,19 +26,24 @@ export default function EditRepoModal({ isOpen, repo, onClose, onSubmit, formDat
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0, 0, 0, 0.7)',
+      background: 'rgba(0, 0, 0, 0.85)',
+      backdropFilter: 'blur(8px)',
+      WebkitBackdropFilter: 'blur(8px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 1000
     }}>
       <div style={{
-        background: 'var(--glass-bg-dark)',
+        background: 'rgba(20, 20, 30, 0.95)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
         padding: '2rem',
         borderRadius: '8px',
         width: '90%',
         maxWidth: '500px',
-        border: '1px solid var(--glass-border-dark)'
+        border: '1px solid var(--glass-border-dark)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
       }}>
         <h2 style={{ marginTop: 0 }}>Repository Settings</h2>
         <form onSubmit={onSubmit}>

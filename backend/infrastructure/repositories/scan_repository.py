@@ -444,6 +444,15 @@ class DatabaseScanRepository(ScanRepository):
                 
                 model.results = results
                 await session.commit()
+                
+                # Update scanner duration statistics after successful commit
+                try:
+                    from domain.services.scanner_duration_service import ScannerDurationService
+                    await ScannerDurationService.update_stats_from_scan_results(results)
+                except Exception as stats_error:
+                    # Don't fail the update if stats update fails
+                    logger.warning(f"Failed to update scanner duration stats: {stats_error}")
+                
                 return True
             except Exception as e:
                 await session.rollback()

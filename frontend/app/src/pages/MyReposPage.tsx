@@ -284,6 +284,15 @@ export default function MyReposPage() {
     setSelectedRepos(newSelected)
   }
 
+  const selectAllRepos = () => {
+    const allRepoNames = new Set(discoveredRepos.map(repo => repo.full_name))
+    setSelectedRepos(allRepoNames)
+  }
+
+  const deselectAllRepos = () => {
+    setSelectedRepos(new Set())
+  }
+
   const filteredAndSortedRepos = () => {
     let filtered = repos.filter(repo => {
       // Search filter
@@ -338,20 +347,12 @@ export default function MyReposPage() {
 
   return (
     <div className="container" style={{ padding: '2rem' }}>
-      <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ marginBottom: '2rem' }}>
         <div>
           <h1>My GitHub Repos</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
             Manage your GitHub repositories with automatic scanning
           </p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={() => setShowDiscoverModal(true)}>
-            🔍 Discover Repos
-          </button>
-          <button className="primary" onClick={() => setShowAddModal(true)}>
-            + Add Repo
-          </button>
         </div>
       </div>
 
@@ -402,43 +403,54 @@ export default function MyReposPage() {
             gap: '1rem',
             marginBottom: '1.5rem',
             flexWrap: 'wrap',
-            alignItems: 'center'
+            alignItems: 'center',
+            justifyContent: 'space-between'
           }}>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <label style={{ fontSize: '0.9rem' }}>Filter:</label>
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value as FilterType)}
-                style={{ padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-dark)', border: '1px solid var(--glass-border-dark)', color: 'var(--text-dark)' }}
-              >
-                <option value="all">All</option>
-                <option value="healthy">🟢 Healthy</option>
-                <option value="needs_attention">🟡 Needs Attention</option>
-                <option value="critical">🔴 Critical</option>
-                <option value="not_scanned">⚪ Not Scanned</option>
-              </select>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <label style={{ fontSize: '0.9rem' }}>Filter:</label>
+                <select
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value as FilterType)}
+                  style={{ padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-dark)', border: '1px solid var(--glass-border-dark)', color: 'var(--text-dark)' }}
+                >
+                  <option value="all">All</option>
+                  <option value="healthy">🟢 Healthy</option>
+                  <option value="needs_attention">🟡 Needs Attention</option>
+                  <option value="critical">🔴 Critical</option>
+                  <option value="not_scanned">⚪ Not Scanned</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <label style={{ fontSize: '0.9rem' }}>Sort:</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SortType)}
+                  style={{ padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-dark)', border: '1px solid var(--glass-border-dark)', color: 'var(--text-dark)' }}
+                >
+                  <option value="name">Name</option>
+                  <option value="score">Score</option>
+                  <option value="last_scan">Last Scan</option>
+                  <option value="vulnerabilities">Vulnerabilities</option>
+                </select>
+              </div>
+              <div style={{ flex: 1, minWidth: '200px', maxWidth: '400px' }}>
+                <input
+                  type="text"
+                  placeholder="🔍 Search repositories..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-dark)', border: '1px solid var(--glass-border-dark)', color: 'var(--text-dark)' }}
+                />
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <label style={{ fontSize: '0.9rem' }}>Sort:</label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortType)}
-                style={{ padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-dark)', border: '1px solid var(--glass-border-dark)', color: 'var(--text-dark)' }}
-              >
-                <option value="name">Name</option>
-                <option value="score">Score</option>
-                <option value="last_scan">Last Scan</option>
-                <option value="vulnerabilities">Vulnerabilities</option>
-              </select>
-            </div>
-            <div style={{ flex: 1, minWidth: '200px' }}>
-              <input
-                type="text"
-                placeholder="🔍 Search repositories..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-dark)', border: '1px solid var(--glass-border-dark)', color: 'var(--text-dark)' }}
-              />
+            <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+              <button onClick={() => setShowDiscoverModal(true)}>
+                🔍 Discover
+              </button>
+              <button className="primary" onClick={() => setShowAddModal(true)}>
+                + Add Repo
+              </button>
             </div>
           </div>
         </>
@@ -513,6 +525,8 @@ export default function MyReposPage() {
         discoveredRepos={discoveredRepos}
         selectedRepos={selectedRepos}
         onToggleRepoSelection={toggleRepoSelection}
+        onSelectAll={selectAllRepos}
+        onDeselectAll={deselectAllRepos}
         onAddSelected={handleAddSelectedRepos}
         loading={loading}
       />

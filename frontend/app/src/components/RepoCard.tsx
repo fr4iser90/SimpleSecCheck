@@ -98,6 +98,36 @@ export default function RepoCard({ repo, scanStatus, onScanNow, onEdit, onRemove
         </div>
       )}
 
+      {/* Queue Status */}
+      {scanStatus?.has_active_scan && scanStatus.status === 'pending' && scanStatus.queue_position !== null && (
+        <div style={{
+          marginBottom: '1rem',
+          padding: '1rem',
+          background: 'rgba(255, 193, 7, 0.15)',
+          border: '1px solid rgba(255, 193, 7, 0.4)',
+          borderRadius: '8px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.75rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 'bold' }}>
+            <span>⏳</span>
+            <span>Scan is queued</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+            <span style={{ opacity: 0.9 }}>Position in queue:</span>
+            <strong style={{ fontSize: '1.25rem', color: 'var(--color-medium)' }}>
+              #{scanStatus.queue_position}
+            </strong>
+          </div>
+          {scanStatus.queue_position > 1 && (
+            <div style={{ fontSize: '0.8rem', opacity: 0.8, fontStyle: 'italic' }}>
+              Estimated wait: ~{Math.ceil(scanStatus.queue_position * 2)} minutes
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Warnings */}
       {warnings.length > 0 && (
         <div style={{

@@ -8,6 +8,8 @@ interface DiscoverReposModalProps {
   discoveredRepos: any[]
   selectedRepos: Set<string>
   onToggleRepoSelection: (repoFullName: string) => void
+  onSelectAll: () => void
+  onDeselectAll: () => void
   onAddSelected: () => void
   loading: boolean
 }
@@ -22,6 +24,8 @@ export default function DiscoverReposModal({
   discoveredRepos,
   selectedRepos,
   onToggleRepoSelection,
+  onSelectAll,
+  onDeselectAll,
   onAddSelected,
   loading
 }: DiscoverReposModalProps) {
@@ -34,21 +38,26 @@ export default function DiscoverReposModal({
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0, 0, 0, 0.7)',
+      background: 'rgba(0, 0, 0, 0.85)',
+      backdropFilter: 'blur(8px)',
+      WebkitBackdropFilter: 'blur(8px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 1000
     }}>
       <div style={{
-        background: 'var(--glass-bg-dark)',
+        background: 'rgba(20, 20, 30, 0.95)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
         padding: '2rem',
         borderRadius: '8px',
         width: '90%',
         maxWidth: '800px',
         maxHeight: '90vh',
         overflow: 'auto',
-        border: '1px solid var(--glass-border-dark)'
+        border: '1px solid var(--glass-border-dark)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
       }}>
         <h2 style={{ marginTop: 0 }}>🔍 Discover GitHub Repositories</h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
@@ -99,19 +108,9 @@ export default function DiscoverReposModal({
                 <button
                   onClick={() => {
                     if (selectedRepos.size === discoveredRepos.length) {
-                      // Deselect all - toggle each selected repo
-                      discoveredRepos.forEach(r => {
-                        if (selectedRepos.has(r.full_name)) {
-                          onToggleRepoSelection(r.full_name)
-                        }
-                      })
+                      onDeselectAll()
                     } else {
-                      // Select all - toggle each unselected repo
-                      discoveredRepos.forEach(r => {
-                        if (!selectedRepos.has(r.full_name)) {
-                          onToggleRepoSelection(r.full_name)
-                        }
-                      })
+                      onSelectAll()
                     }
                   }}
                   style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}

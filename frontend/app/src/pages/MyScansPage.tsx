@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useConfig } from '../hooks/useConfig'
+import { formatEstimatedTime, formatDuration } from '../utils/timeUtils'
 
 interface MyScanItem {
   queue_id: string
@@ -15,6 +16,8 @@ interface MyScanItem {
   started_at?: string
   completed_at?: string
   scanners?: string[]  // List of scanner names
+  estimated_time_seconds?: number | null
+  duration_seconds?: number | null
 }
 
 interface MyScansData {
@@ -93,17 +96,6 @@ export default function MyScansPage() {
     }
   }
 
-  const formatDuration = (started: string | undefined, completed: string | undefined) => {
-    if (!started) return '-'
-    const start = new Date(started)
-    const end = completed ? new Date(completed) : new Date()
-    const seconds = Math.floor((end.getTime() - start.getTime()) / 1000)
-    
-    if (seconds < 60) return `${seconds}s`
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    return `${minutes}m ${remainingSeconds}s`
-  }
 
   if (!config?.features.queue_enabled) {
     return (
@@ -209,7 +201,7 @@ export default function MyScansPage() {
                   <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Scanners</th>
                   <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Status</th>
                   <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Position</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Duration</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Time</th>
                   <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Created</th>
                   <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Actions</th>
                 </tr>
@@ -275,7 +267,21 @@ export default function MyScansPage() {
                       {item.position !== undefined ? `#${item.position}` : '-'}
                     </td>
                     <td style={{ padding: '0.75rem', color: '#6c757d', fontSize: '0.875rem' }}>
-                      {formatDuration(item.started_at, item.completed_at)}
+                      {item.status === 'pending' || item.status === 'running' ? (
+                        item.estimated_time_seconds ? (
+                          <span title={`Estimated time: ${formatEstimatedTime(item.estimated_time_seconds)}`}>
+                            {formatEstimatedTime(item.estimated_time_seconds)}
+                          </span>
+                        ) : (
+                          <span style={{ opacity: 0.6 }}>-</span>
+                        )
+                      ) : item.duration_seconds ? (
+                        <span title={`Actual duration: ${formatDuration(item.duration_seconds)}`}>
+                          {formatDuration(item.duration_seconds)}
+                        </span>
+                      ) : (
+                        <span style={{ opacity: 0.6 }}>-</span>
+                      )}
                     </td>
                     <td style={{ padding: '0.75rem', color: '#6c757d', fontSize: '0.875rem' }}>
                       {new Date(item.created_at).toLocaleString()}

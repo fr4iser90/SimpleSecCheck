@@ -41,10 +41,37 @@ def init_router(database_adapter: PostgreSQLAdapter) -> APIRouter:
     return router
 
 
+async def _check_scanners_table_exists() -> bool:
+    """Check if the scanners table exists in the database."""
+    if not _database_adapter:
+        return False
+    
+    try:
+        async with _database_adapter.get_session() as session:
+            result = await session.execute(
+                text("SELECT to_regclass(:table_name)"),
+                {"table_name": "public.scanners"}
+            )
+            table_exists = result.scalar() is not None
+            return table_exists
+    except Exception as e:
+        logger.debug(f"Failed to check if scanners table exists: {e}")
+        return False
+
+
 async def _get_scanners_from_database() -> List[Dict[str, Any]]:
     """Get scanner list from database. If database is empty, trigger scanner container to populate it."""
     if not _database_adapter:
         raise HTTPException(status_code=503, detail="Database adapter not initialized")
+    
+    # Check if scanners table exists first
+    table_exists = await _check_scanners_table_exists()
+    if not table_exists:
+        logger.warning("Scanners table does not exist yet, waiting for database initialization...")
+        raise HTTPException(
+            status_code=503,
+            detail="Database tables not initialized yet. Please wait a moment and try again."
+        )
     
     try:
         async with _database_adapter.get_session() as session:
@@ -71,10 +98,18 @@ async def _get_scanners_from_database() -> List[Dict[str, Any]]:
                         break
             
             if needs_refresh:
-                await _refresh_scanners_from_container()
+                await _refresh_scanners_from_container_with_retry()
                 # Retry query after refresh
                 result = await session.execute(text("SELECT * FROM scanners ORDER BY priority"))
                 rows = result.fetchall()
+                
+                # Verify that scanners were actually written
+                if not rows:
+                    logger.error("Scanner refresh completed but no scanners found in database")
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Failed to populate scanners. Please try again or check logs."
+                    )
             
             scanners = []
             for row in rows:
@@ -116,6 +151,52 @@ async def _get_scanners_from_database() -> List[Dict[str, Any]]:
             status_code=500,
             detail=f"Failed to get scanners from database: {str(e)}"
         )
+
+
+async def _refresh_scanners_from_container_with_retry(max_retries: int = 3, initial_delay: float = 2.0) -> None:
+    """Trigger scanner container to update database with latest scanner list, with retry logic."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            # Check if table exists before attempting refresh
+            table_exists = await _check_scanners_table_exists()
+            if not table_exists:
+                if attempt < max_retries:
+                    delay = initial_delay * (2 ** (attempt - 1))  # Exponential backoff
+                    logger.info(f"Scanners table not ready yet, waiting {delay}s before retry {attempt}/{max_retries}")
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Scanners table not initialized after multiple retries. Database may not be ready."
+                    )
+            
+            # Table exists, proceed with refresh
+            await _refresh_scanners_from_container()
+            
+            # Verify refresh succeeded by checking if scanners were written
+            async with _database_adapter.get_session() as session:
+                result = await session.execute(text("SELECT COUNT(*) FROM scanners"))
+                count = result.scalar()
+                if count == 0:
+                    raise Exception("Scanner refresh completed but no scanners found in database")
+            
+            logger.info(f"Scanner refresh succeeded (attempt {attempt}/{max_retries})")
+            return
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            if attempt < max_retries:
+                delay = initial_delay * (2 ** (attempt - 1))
+                logger.warning(f"Scanner refresh failed (attempt {attempt}/{max_retries}): {e}. Retrying in {delay}s...")
+                await asyncio.sleep(delay)
+            else:
+                logger.error(f"Scanner refresh failed after {max_retries} attempts: {e}")
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Failed to refresh scanners after {max_retries} attempts: {str(e)}"
+                )
 
 
 async def _refresh_scanners_from_container() -> None:
@@ -182,13 +263,12 @@ async def _refresh_scanners_from_container() -> None:
         exit_code = exit_code_dict.get('StatusCode', 1) if isinstance(exit_code_dict, dict) else exit_code_dict
         
         # Get logs before removing container (for debugging)
-        if exit_code != 0:
-            try:
-                logs = container.logs(stdout=True, stderr=True, tail=100)
-                log_text = logs.decode('utf-8') if logs else "No logs available"
-                logger.error(f"Scanner container failed with exit code {exit_code}. Logs:\n{log_text}")
-            except Exception as e:
-                logger.warning(f"Failed to read container logs: {e}")
+        logs_text = "No logs available"
+        try:
+            logs = container.logs(stdout=True, stderr=True, tail=100)
+            logs_text = logs.decode('utf-8') if logs else "No logs available"
+        except Exception as e:
+            logger.warning(f"Failed to read container logs: {e}")
         
         # Remove container
         try:
@@ -197,6 +277,7 @@ async def _refresh_scanners_from_container() -> None:
             logger.warning(f"Failed to remove container: {e}")
         
         if exit_code != 0:
+            logger.error(f"Scanner container failed with exit code {exit_code}. Logs:\n{logs_text}")
             raise HTTPException(
                 status_code=503,
                 detail=f"Scanner container failed with exit code {exit_code}. Check worker logs for details."
@@ -288,7 +369,7 @@ async def refresh_scanners() -> Dict[str, str]:
     try:
         async with _cache_lock:
             logger.info("Manually refreshing scanner list - triggering scanner container")
-            await _refresh_scanners_from_container()
+            await _refresh_scanners_from_container_with_retry()
             # Reload from database after refresh
             _scanner_cache = await _get_scanners_from_database()
             _cache_timestamp = time.time()

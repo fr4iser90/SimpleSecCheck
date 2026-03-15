@@ -108,8 +108,9 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0, 0, 0, 0.8)',
-        backdropFilter: 'blur(5px)',
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -123,8 +124,14 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
       }}
     >
       <div
-        className="card"
         style={{
+          background: 'rgba(20, 20, 30, 0.95)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderRadius: '8px',
+          border: '1px solid var(--glass-border-dark)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+          padding: '2rem',
           maxWidth: '900px',
           width: '100%',
           maxHeight: '90vh',

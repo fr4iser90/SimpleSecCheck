@@ -16,6 +16,7 @@ from api.deps.actor_context import get_actor_context, ActorContext
 from infrastructure.database.adapter import db_adapter
 from infrastructure.database.models import Scan
 from infrastructure.logging_config import get_logger
+from domain.services.scanner_duration_service import ScannerDurationService
 
 logger = get_logger("api.queue")
 
@@ -57,10 +58,17 @@ def _extract_branch_from_config(config: Dict[str, Any]) -> Optional[str]:
     return config.get("git_branch") or config.get("branch")
 
 
-def _scan_to_queue_item(scan: Scan, position: Optional[int] = None) -> Dict[str, Any]:
-    """Convert Scan model to queue item format."""
+async def _scan_to_queue_item(scan: Scan, position: Optional[int] = None, show_branch: bool = False) -> Dict[str, Any]:
+    """
+    Convert Scan model to queue item format.
+    
+    Args:
+        scan: Scan model
+        position: Position in queue
+        show_branch: Whether to include branch name (only for authenticated users, not guests)
+    """
     repository_name = _extract_repository_name(scan.target_url)
-    branch = _extract_branch_from_config(scan.config if scan.config else {})
+    branch = _extract_branch_from_config(scan.config if scan.config else {}) if show_branch else None
     
     # Map status to queue status format
     status_map = {
@@ -72,20 +80,47 @@ def _scan_to_queue_item(scan: Scan, position: Optional[int] = None) -> Dict[str,
     }
     queue_status = status_map.get(scan.status.lower(), scan.status.lower())
     
-    return {
+    # Calculate estimated time for pending/running scans
+    estimated_time_seconds = None
+    if queue_status in ["pending", "running"] and scan.scanners:
+        estimated_time_seconds = await ScannerDurationService.get_estimated_time(scan.scanners)
+    
+    # Get actual duration for completed/running scans
+    duration_seconds = None
+    if scan.duration is not None:
+        duration_seconds = scan.duration
+    elif scan.started_at and scan.completed_at:
+        duration_seconds = int((scan.completed_at - scan.started_at).total_seconds())
+    elif scan.started_at and queue_status == "running":
+        # Calculate current duration for running scans
+        from datetime import datetime
+        duration_seconds = int((datetime.utcnow() - scan.started_at).total_seconds())
+    
+    result = {
         "queue_id": str(scan.id),
         "repository_name": repository_name,
         "status": queue_status,
         "scanners": scan.scanners if scan.scanners else [],
         "position": position,
         "created_at": scan.created_at.isoformat() if scan.created_at else None,
-        "branch": branch,
         "scan_id": str(scan.id),  # For compatibility
+        "estimated_time_seconds": estimated_time_seconds,
+        "duration_seconds": duration_seconds,
     }
+    
+    # Only include branch if show_branch is True (for authenticated users)
+    if show_branch and branch:
+        result["branch"] = branch
+    
+    return result
 
 
-def _scan_to_my_scan_item(scan: Scan, position: Optional[int] = None) -> Dict[str, Any]:
-    """Convert Scan model to my-scans item format."""
+async def _scan_to_my_scan_item(scan: Scan, position: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Convert Scan model to my-scans item format.
+    
+    This is for "My Scans" endpoint, so branch is always shown (user's own scans).
+    """
     repository_name = _extract_repository_name(scan.target_url)
     branch = _extract_branch_from_config(scan.config if scan.config else {})
     
@@ -105,6 +140,22 @@ def _scan_to_my_scan_item(scan: Scan, position: Optional[int] = None) -> Dict[st
     }
     queue_status = status_map.get(scan.status.lower(), scan.status.lower())
     
+    # Calculate estimated time for pending/running scans
+    estimated_time_seconds = None
+    if queue_status in ["pending", "running"] and scan.scanners:
+        estimated_time_seconds = await ScannerDurationService.get_estimated_time(scan.scanners)
+    
+    # Get actual duration for completed/running scans
+    duration_seconds = None
+    if scan.duration is not None:
+        duration_seconds = scan.duration
+    elif scan.started_at and scan.completed_at:
+        duration_seconds = int((scan.completed_at - scan.started_at).total_seconds())
+    elif scan.started_at and queue_status == "running":
+        # Calculate current duration for running scans
+        from datetime import datetime
+        duration_seconds = int((datetime.utcnow() - scan.started_at).total_seconds())
+    
     return {
         "queue_id": str(scan.id),
         "repository_url": scan.target_url,
@@ -118,6 +169,8 @@ def _scan_to_my_scan_item(scan: Scan, position: Optional[int] = None) -> Dict[st
         "started_at": scan.started_at.isoformat() if scan.started_at else None,
         "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
         "scanners": scan.scanners if scan.scanners else [],
+        "estimated_time_seconds": estimated_time_seconds,
+        "duration_seconds": duration_seconds,
     }
 
 
@@ -150,7 +203,7 @@ async def _is_admin_user(actor_context: ActorContext) -> bool:
 @router.get(
     "/",
     summary="Get queue status",
-    description="Get all scans in queue view format. Shows scans from database filtered by status (pending, running, completed, failed). Admin users see all scans, regular users see only their own.",
+    description="Get all scans in queue view format (anonymized). Shows all scans from database filtered by status (pending, running, completed, failed). Everyone sees all scans anonymized.",
 )
 async def get_queue(
     limit: int = Query(100, ge=1, le=1000, description="Limit results"),
@@ -158,11 +211,12 @@ async def get_queue(
     actor_context: ActorContext = Depends(get_actor_context),
 ) -> Dict[str, Any]:
     """
-    Get queue status with scans.
+    Get queue status with scans (Public Queue - anonymized).
     
     Returns scans from PostgreSQL database in queue format.
-    - Admin users: See all scans
-    - Regular users: See only their own scans (filtered by user_id or session_id)
+    - Everyone (guests, users, admins): See all scans anonymized
+    - No user filtering - this is the public queue view
+    - User-specific scans are available via /api/queue/my-scans
     """
     try:
         is_admin = await _is_admin_user(actor_context)
@@ -172,24 +226,9 @@ async def get_queue(
             # Build query
             query = select(Scan)
             
-            # Filter by user if not admin
-            if not is_admin:
-                # Regular users: only see their own scans
-                if actor_context.is_authenticated and actor_context.user_id:
-                    try:
-                        from uuid import UUID
-                        user_uuid = UUID(actor_context.user_id)
-                        query = query.where(Scan.user_id == user_uuid)
-                    except (ValueError, TypeError):
-                        return {"items": [], "queue_length": 0, "max_queue_length": 100}
-                elif actor_context.session_id:
-                    # Guest sessions: filter by session_id in metadata
-                    from sqlalchemy import text
-                    query = query.where(
-                        text("scans.scan_metadata->>'session_id' = :session_id")
-                    ).params(session_id=actor_context.session_id)
-                else:
-                    return {"items": [], "queue_length": 0, "max_queue_length": 100}
+            # Public Queue: Show ALL scans (anonymized) for everyone
+            # No user filter - everyone sees all scans in the public queue
+            # User-specific scans are available via /api/queue/my-scans
             
             # Filter by status if provided
             if status_filter:
@@ -217,6 +256,8 @@ async def get_queue(
             queue_length = count_result.scalar() or 0
             
             # Convert to queue items
+            # Public queue: Never show branch (anonymized for all users, including authenticated)
+            # Only "My Scans" shows branch (because those are the user's own scans)
             items = []
             for idx, scan in enumerate(scans):
                 # Calculate position only for pending/running scans
@@ -238,7 +279,8 @@ async def get_queue(
                     pos_result = await session.execute(position_query)
                     position = (pos_result.scalar() or 0) + 1
                 
-                items.append(_scan_to_queue_item(scan, position))
+                # Public queue: never show branch (anonymized)
+                items.append(await _scan_to_queue_item(scan, position, show_branch=False))
             
             return {
                 "items": items,
@@ -333,7 +375,7 @@ async def get_my_scans(
                     pos_result = await session.execute(position_query)
                     position = (pos_result.scalar() or 0) + 1
                 
-                items.append(_scan_to_my_scan_item(scan, position))
+                items.append(await _scan_to_my_scan_item(scan, position))
             
             return {"scans": items}
             
