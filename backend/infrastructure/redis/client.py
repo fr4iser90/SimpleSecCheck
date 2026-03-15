@@ -94,15 +94,22 @@ class RedisClient:
             logger.error(f"Redis EXISTS error for key {key}: {e}")
             return False
     
-    async def lpush(self, key: str, value: str):
-        """Push value to left of list."""
+    async def lpush(self, key: str, value: str) -> int:
+        """Push value to left of list.
+        
+        Returns:
+            Length of list after push, or raises exception on error
+        """
         if not self.is_connected:
             await self.connect()
         
         try:
-            await self.redis.lpush(key, value)
+            result = await self.redis.lpush(key, value)
+            logger.debug(f"Redis LPUSH successful for key {key}, new length: {result}")
+            return result
         except RedisError as e:
-            logger.error(f"Redis LPUSH error for key {key}: {e}")
+            logger.error(f"Redis LPUSH error for key {key}: {e}", exc_info=True)
+            raise
     
     async def rpop(self, key: str) -> Optional[str]:
         """Pop value from right of list."""

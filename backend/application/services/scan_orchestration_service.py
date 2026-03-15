@@ -287,7 +287,7 @@ class ScanOrchestrationService:
             'type': 'scan_completed',
             'scan_id': scan.id,
             'status': scan.status.value,
-            'vulnerabilities_count': scan.vulnerabilities_count,
+            'total_vulnerabilities': scan.total_vulnerabilities,
             'duration': scan.get_duration(),
         })
     

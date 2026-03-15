@@ -11,6 +11,8 @@ from dependency_injector import containers, providers
 
 from domain.domain_services.scan_validation_service import ScanValidationService
 from application.services.scan_service import ScanService
+from infrastructure.repositories.scan_repository import DatabaseScanRepository
+from infrastructure.services.queue_service import QueueService
 
 
 class Container(containers.DeclarativeContainer):
@@ -24,13 +26,22 @@ class Container(containers.DeclarativeContainer):
         ScanValidationService
     )
     
+    # Infrastructure Services
+    scan_repository = providers.Singleton(
+        DatabaseScanRepository
+    )
+    
+    queue_service = providers.Singleton(
+        QueueService
+    )
+    
     # Application Services
     scan_service = providers.Factory(
         ScanService,
         validation_service=scan_validation_service,
-        scan_repository=None,  # Would be injected in real implementation
-        queue_service=None,    # Would be injected in real implementation
-        result_service=None    # Would be injected in real implementation
+        scan_repository=scan_repository,
+        queue_service=queue_service,
+        result_service=None  # Not yet implemented
     )
 
 

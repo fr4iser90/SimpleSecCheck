@@ -132,10 +132,81 @@ class DatabaseAdapter:
             async with self.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
             
+            # Run migrations for existing tables
+            await self._migrate_existing_tables()
+            
             logger.info("Database tables created successfully")
         except Exception as e:
             logger.error(f"Failed to create database tables: {e}")
             raise
+    
+    async def _migrate_existing_tables(self):
+        """Apply migrations to existing tables."""
+        try:
+            async with self.async_session() as session:
+                # List of columns to check and add if missing
+                columns_to_add = [
+                    ("scheduled_at", "TIMESTAMP WITHOUT TIME ZONE"),
+                    ("total_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
+                    ("critical_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
+                    ("high_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
+                    ("medium_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
+                    ("low_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
+                    ("info_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
+                ]
+                
+                for column_name, column_type in columns_to_add:
+                    # Check if column exists
+                    result = await session.execute(
+                        text("""
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_name = 'scans' AND column_name = :column_name
+                        """),
+                        {"column_name": column_name}
+                    )
+                    column_exists = result.scalar() is not None
+                    
+                    if not column_exists:
+                        logger.info(f"Adding {column_name} column to scans table")
+                        await session.execute(
+                            text(f"ALTER TABLE scans ADD COLUMN {column_name} {column_type}")
+                        )
+                        await session.commit()
+                        logger.info(f"Successfully added {column_name} column")
+                    else:
+                        logger.debug(f"Column {column_name} already exists")
+                
+                # Migrate old vulnerabilities_count to total_vulnerabilities if needed
+                result = await session.execute(
+                    text("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'scans' AND column_name = 'vulnerabilities_count'
+                    """)
+                )
+                old_column_exists = result.scalar() is not None
+                
+                if old_column_exists:
+                    logger.info("Migrating vulnerabilities_count to total_vulnerabilities")
+                    # Copy data from old column to new column if total_vulnerabilities is 0
+                    await session.execute(
+                        text("""
+                            UPDATE scans 
+                            SET total_vulnerabilities = vulnerabilities_count 
+                            WHERE total_vulnerabilities = 0 AND vulnerabilities_count IS NOT NULL
+                        """)
+                    )
+                    # Drop the old column
+                    await session.execute(
+                        text("ALTER TABLE scans DROP COLUMN vulnerabilities_count")
+                    )
+                    await session.commit()
+                    logger.info("Successfully migrated and removed vulnerabilities_count column")
+                        
+        except Exception as e:
+            logger.warning(f"Migration check failed (this is OK if tables don't exist yet): {e}")
+            # Don't raise - migrations are optional
     
     async def check_admin_user_exists(self) -> bool:
         """Check if an admin user exists in the database."""

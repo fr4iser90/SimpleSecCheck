@@ -36,11 +36,144 @@ from domain.exceptions.scan_exceptions import (
     ScanValidationException,
     ScanConcurrencyLimitException,
 )
+from domain.entities.scan import ScanType
 from typing import Annotated
+import re
 
 
 # Import dependency injection container
 from infrastructure.container import get_scan_service
+from domain.entities.target_type import TargetType
+
+
+def _determine_target_type(scan_type: ScanType, target_url: str) -> str:
+    """
+    Automatically determine target_type from scan_type and target_url.
+    This function centralizes target type detection logic - NO HARDCODING in frontend!
+    Uses TargetType enum for type safety.
+    """
+    if not target_url or not target_url.strip():
+        return TargetType.LOCAL_MOUNT.value
+    
+    target = target_url.strip()
+    
+    # Git URL patterns
+    git_patterns = [
+        r'^https?://(www\.)?(github|gitlab)\.com/[\w\-\.]+/[\w\-\.]+',
+        r'^git@(github|gitlab)\.com:[\w\-\.]+/[\w\-\.]+\.git$',
+        r'\.git$',
+    ]
+    is_git_url = any(re.match(pattern, target, re.IGNORECASE) for pattern in git_patterns)
+    
+    # Container registry pattern (simplified)
+    container_pattern = r'^(?:[a-zA-Z0-9.-]+(?::\d+)?/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[\w][\w.-]{0,127})?(?:@sha256:[a-f0-9]{64})?$'
+    is_container = not target.startswith(('http://', 'https://', '/', './', '../')) and re.match(container_pattern, target)
+    
+    # Local path
+    is_local_path = target.startswith(('/', './', '../'))
+    
+    # Determine based on scan_type - using TargetType enum values
+    if scan_type == ScanType.REPOSITORY:
+        if is_git_url:
+            return TargetType.GIT_REPO.value
+        elif is_container:
+            return TargetType.CONTAINER_REGISTRY.value
+        elif is_local_path:
+            return TargetType.LOCAL_MOUNT.value
+        else:
+            return TargetType.UPLOADED_CODE.value
+    elif scan_type == ScanType.CONTAINER:
+        return TargetType.CONTAINER_REGISTRY.value
+    elif scan_type == ScanType.WEB_APPLICATION:
+        if target.startswith(('http://', 'https://')):
+            return TargetType.WEBSITE.value
+        else:
+            return TargetType.API_ENDPOINT.value
+    elif scan_type == ScanType.INFRASTRUCTURE:
+        return TargetType.NETWORK_HOST.value
+    else:
+        # Default fallback
+        return TargetType.GIT_REPO.value if is_git_url else TargetType.LOCAL_MOUNT.value
+
+
+def _get_target_type_info(target_type: str) -> dict:
+    """
+    Get display information for a target type.
+    Returns: dict with display_name, icon, action, cleanup (optional)
+    Uses TargetType enum for type safety.
+    """
+    # Validate target_type first
+    if not TargetType.is_valid(target_type):
+        return {
+            "display_name": target_type,
+            "icon": "📋",
+            "action": "Will be scanned"
+        }
+    
+    # Map TargetType enum values to display information
+    info_map = {
+        TargetType.GIT_REPO.value: {
+            "display_name": "Git Repository",
+            "icon": "🔗",
+            "action": "Repository will be automatically cloned",
+            "cleanup": "Temporary project will be deleted after scan"
+        },
+        TargetType.CONTAINER_REGISTRY.value: {
+            "display_name": "Container Registry",
+            "icon": "🐳",
+            "action": "Container image will be scanned"
+        },
+        TargetType.LOCAL_MOUNT.value: {
+            "display_name": "Local Mount",
+            "icon": "📁",
+            "action": "Local path will be scanned directly"
+        },
+        TargetType.UPLOADED_CODE.value: {
+            "display_name": "Uploaded Code",
+            "icon": "📦",
+            "action": "Uploaded code will be scanned"
+        },
+        TargetType.WEBSITE.value: {
+            "display_name": "Website",
+            "icon": "🌐",
+            "action": "Website will be scanned"
+        },
+        TargetType.API_ENDPOINT.value: {
+            "display_name": "API Endpoint",
+            "icon": "🔌",
+            "action": "API endpoint will be scanned"
+        },
+        TargetType.NETWORK_HOST.value: {
+            "display_name": "Network Host",
+            "icon": "🌐",
+            "action": "Network host will be scanned"
+        },
+        TargetType.KUBERNETES_CLUSTER.value: {
+            "display_name": "Kubernetes Cluster",
+            "icon": "☸️",
+            "action": "Kubernetes cluster will be scanned"
+        },
+        TargetType.APK.value: {
+            "display_name": "Android APK",
+            "icon": "📱",
+            "action": "Android APK will be scanned"
+        },
+        TargetType.IPA.value: {
+            "display_name": "iOS IPA",
+            "icon": "📱",
+            "action": "iOS IPA will be scanned"
+        },
+        TargetType.OPENAPI_SPEC.value: {
+            "display_name": "OpenAPI Spec",
+            "icon": "📄",
+            "action": "OpenAPI specification will be scanned"
+        }
+    }
+    return info_map.get(target_type, {
+        "display_name": target_type,
+        "icon": "📋",
+        "action": "Will be scanned"
+    })
 
 # Import test container for testing
 import os
@@ -96,13 +229,18 @@ async def create_scan(
             # Store session_id in metadata for guest sessions
             metadata["session_id"] = actor_context.session_id
         
+        # Auto-determine target_type if not provided
+        target_type = scan_request.target_type
+        if not target_type or target_type == "repository":
+            target_type = _determine_target_type(scan_request.scan_type, scan_request.target_url)
+        
         # Convert request schema to DTO
         request_dto = ScanRequestDTO(
             name=scan_request.name,
             description=scan_request.description,
             scan_type=scan_request.scan_type,
             target_url=scan_request.target_url,
-            target_type=scan_request.target_type,
+            target_type=target_type,
             user_id=actor_context.user_id if actor_context.is_authenticated else None,
             project_id=scan_request.project_id,
             config=scan_request.config.dict() if scan_request.config else None,
@@ -234,6 +372,48 @@ async def list_scans(
         raise HTTPException(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
+        )
+
+
+@router.get(
+    "/detect-target-type",
+    summary="Detect target type",
+    description="Detect target type from scan_type and target_url. Returns display information for frontend.",
+)
+async def detect_target_type(
+    scan_type: str = Query(..., description="Scan type (code, image, website, network)"),
+    target_url: str = Query(..., description="Target URL or path"),
+) -> dict:
+    """
+    Detect target type and return display information.
+    Used by frontend to show appropriate UI based on detected target type.
+    """
+    try:
+        # Convert string to ScanType enum
+        try:
+            scan_type_enum = ScanType(scan_type) if hasattr(ScanType, scan_type.upper()) else ScanType.REPOSITORY
+        except (ValueError, AttributeError):
+            # Fallback: try by value
+            scan_type_enum = next((st for st in ScanType if st.value == scan_type), ScanType.REPOSITORY)
+        
+        # Determine target type
+        target_type = _determine_target_type(scan_type_enum, target_url)
+        
+        # Get display information
+        info = _get_target_type_info(target_type)
+        
+        return {
+            "target_type": target_type,
+            "display_name": info["display_name"],
+            "icon": info["icon"],
+            "action": info["action"],
+            "cleanup": info.get("cleanup"),
+            "target_url": target_url
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to detect target type: {str(e)}"
         )
 
 

@@ -24,7 +24,7 @@ class QueueAdapter:
         self.queue_type = queue_type
         self.connection_string = connection_string
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.WARNING)  # Suppress INFO logs from this module
+        # Don't suppress logs - we need to see queue operations
         
         if queue_type == "redis":
             self._init_redis()
@@ -35,10 +35,16 @@ class QueueAdapter:
         """Initialize Redis connection."""
         try:
             import redis.asyncio as redis
-            self.redis_client = redis.from_url(self.connection_string or "redis://localhost:6379")
+            connection_string = self.connection_string or "redis://localhost:6379"
+            self.logger.info(f"Initializing Redis connection to: {connection_string}")
+            self.redis_client = redis.from_url(connection_string, decode_responses=True)
+            self.logger.info("Redis client created successfully")
         except ImportError:
             self.logger.error("Redis not available, falling back to memory queue")
             self._init_memory()
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Redis: {e}")
+            raise
     
     def _init_memory(self) -> None:
         """Initialize in-memory queue."""
@@ -55,15 +61,25 @@ class QueueAdapter:
         """
         try:
             if self.queue_type == "redis":
-                await self.redis_client.lpush("scan_jobs", json.dumps(job_data))
+                try:
+                    # Serialize job data to JSON
+                    job_json = json.dumps(job_data)
+                    await self.redis_client.lpush("scan_queue", job_json)
+                    self.logger.info(f"Pushed job to queue: {job_data.get('scan_id')}")
+                    return True
+                except json.JSONEncodeError as e:
+                    self.logger.error(f"Failed to serialize job data to JSON: {e}", exc_info=True)
+                    return False
+                except Exception as e:
+                    self.logger.error(f"Error pushing job to Redis queue: {e}", exc_info=True)
+                    return False
             else:
                 self.queue.append(job_data)
-            
-            self.logger.info(f"Pushed job to queue: {job_data.get('scan_id')}")
-            return True
+                self.logger.info(f"Pushed job to memory queue: {job_data.get('scan_id')}")
+                return True
             
         except Exception as e:
-            self.logger.error(f"Error pushing job to queue: {e}")
+            self.logger.error(f"Unexpected error pushing job to queue: {e}", exc_info=True)
             return False
     
     async def pop_job(self) -> Optional[Dict[str, Any]]:
@@ -74,9 +90,48 @@ class QueueAdapter:
         """
         try:
             if self.queue_type == "redis":
-                result = await self.redis_client.brpop("scan_jobs", timeout=1)
-                if result:
-                    return json.loads(result[1])
+                # Check connection first
+                try:
+                    await self.redis_client.ping()
+                except Exception as e:
+                    self.logger.error(f"Redis connection error: {e}", exc_info=True)
+                    return None
+                
+                # Check queue length with error handling
+                queue_length = 0
+                try:
+                    queue_length = await self.redis_client.llen("scan_queue")
+                    if queue_length > 0:
+                        self.logger.info(f"Queue has {queue_length} job(s), attempting to pop...")
+                    else:
+                        self.logger.debug(f"Queue is empty (length: {queue_length})")
+                except Exception as e:
+                    self.logger.error(f"Error getting queue length: {e}", exc_info=True)
+                    return None
+                
+                # Try to pop job from queue
+                try:
+                    result = await self.redis_client.brpop("scan_queue", timeout=1)
+                    if result:
+                        self.logger.info(f"Popped job from queue: key={result[0]}")
+                        try:
+                            # Parse JSON with error handling
+                            job_data = json.loads(result[1])
+                            self.logger.info(f"Parsed job data for scan_id: {job_data.get('scan_id')}")
+                            return job_data
+                        except json.JSONDecodeError as e:
+                            self.logger.error(f"Failed to parse job JSON: {e}. Raw data: {result[1][:200]}", exc_info=True)
+                            return None
+                        except Exception as e:
+                            self.logger.error(f"Unexpected error parsing job data: {e}", exc_info=True)
+                            return None
+                    else:
+                        if queue_length > 0:
+                            self.logger.warning(f"Queue has {queue_length} jobs but brpop returned None - possible connection issue")
+                        # Don't log every timeout, only if queue has items
+                except Exception as e:
+                    self.logger.error(f"Error during brpop operation: {e}", exc_info=True)
+                    return None
             else:
                 if self.queue:
                     return self.queue.pop(0)
@@ -84,7 +139,7 @@ class QueueAdapter:
             return None
             
         except Exception as e:
-            self.logger.error(f"Error popping job from queue: {e}")
+            self.logger.error(f"Unexpected error in pop_job: {e}", exc_info=True)
             return None
     
     async def get_queue_length(self) -> int:
@@ -95,12 +150,18 @@ class QueueAdapter:
         """
         try:
             if self.queue_type == "redis":
-                return await self.redis_client.llen("scan_jobs")
+                try:
+                    length = await self.redis_client.llen("scan_queue")
+                    self.logger.debug(f"Queue length: {length}")
+                    return length
+                except Exception as e:
+                    self.logger.error(f"Error getting queue length from Redis: {e}", exc_info=True)
+                    return 0
             else:
                 return len(self.queue)
             
         except Exception as e:
-            self.logger.error(f"Error getting queue length: {e}")
+            self.logger.error(f"Unexpected error getting queue length: {e}", exc_info=True)
             return 0
     
     async def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
@@ -132,11 +193,22 @@ class QueueAdapter:
                 # Check if job is in queue
                 queue_length = await self.get_queue_length()
                 for i in range(queue_length):
-                    job_data = await self.redis_client.lindex("scan_jobs", i)
-                    if job_data:
-                        job = json.loads(job_data)
-                        if job.get("job_id") == job_id:
-                            return {"status": "queued", "job_id": job_id, "position": i + 1}
+                    try:
+                        job_data = await self.redis_client.lindex("scan_queue", i)
+                        if job_data:
+                            try:
+                                job = json.loads(job_data)
+                                if job.get("job_id") == job_id:
+                                    return {"status": "queued", "job_id": job_id, "position": i + 1}
+                            except json.JSONDecodeError as e:
+                                self.logger.warning(f"Failed to parse job JSON at index {i}: {e}")
+                                continue
+                            except Exception as e:
+                                self.logger.warning(f"Error parsing job at index {i}: {e}")
+                                continue
+                    except Exception as e:
+                        self.logger.warning(f"Error getting job at index {i}: {e}")
+                        continue
                 
             else:
                 # Check memory queue

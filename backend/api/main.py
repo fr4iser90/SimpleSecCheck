@@ -232,6 +232,9 @@ async def startup_event():
             tables_exist = await db_adapter.check_tables_exist()
             if not all(tables_exist.values()):
                 await db_adapter.create_tables()
+            else:
+                # Tables exist, but run migrations for schema updates
+                await db_adapter._migrate_existing_tables()
         except Exception as e:
             # If table creation fails, log but don't fail startup
             logger.error("Failed to create database tables", error=str(e))
@@ -327,6 +330,57 @@ async def startup_event():
         
     except Exception as e:
         logger.error("Failed to generate setup token", error=str(e))
+    
+    # Re-enqueue pending scans that may have been lost from queue
+    try:
+        await _re_enqueue_pending_scans()
+    except Exception as e:
+        logger.error("Failed to re-enqueue pending scans", error=str(e), exc_info=True)
+
+
+async def _re_enqueue_pending_scans():
+    """Re-enqueue all pending scans that may have been lost from the queue."""
+    from infrastructure.logging_config import get_logger
+    logger = get_logger("api.main")
+    
+    try:
+        from infrastructure.repositories.scan_repository import DatabaseScanRepository
+        from infrastructure.services.queue_service import QueueService
+        from domain.entities.scan import ScanStatus
+        
+        # Get repository and queue service
+        scan_repository = DatabaseScanRepository()
+        queue_service = QueueService()
+        
+        # Get all pending scans
+        pending_scans = await scan_repository.get_by_status(ScanStatus.PENDING, limit=1000)
+        
+        if not pending_scans:
+            logger.info("No pending scans to re-enqueue")
+            return
+        
+        logger.info(f"Found {len(pending_scans)} pending scans, re-enqueuing...")
+        
+        # Re-enqueue each scan
+        enqueued_count = 0
+        failed_count = 0
+        
+        for scan in pending_scans:
+            try:
+                await queue_service.enqueue_scan(scan)
+                enqueued_count += 1
+                logger.debug(f"Re-enqueued scan {scan.id}")
+            except Exception as e:
+                failed_count += 1
+                logger.error(f"Failed to re-enqueue scan {scan.id}: {e}", exc_info=True)
+        
+        logger.info(
+            f"Re-enqueue complete: {enqueued_count} successful, {failed_count} failed out of {len(pending_scans)} total"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error during re-enqueue of pending scans: {e}", exc_info=True)
+        # Don't raise - we don't want to fail startup if this fails
 
 
 async def shutdown_event():

@@ -6,6 +6,7 @@ Handles the orchestration of job execution including queuing, scheduling, and co
 
 import asyncio
 import logging
+import uuid
 from typing import List, Optional, Dict, Any, AsyncGenerator
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -47,8 +48,14 @@ class JobOrchestrationService:
     
     async def start_worker(self) -> None:
         """Start the worker loop."""
+        self.logger.info("Worker loop started, polling queue...")
+        iteration = 0
         while True:
             try:
+                iteration += 1
+                if iteration % 10 == 0:  # Log every 10 iterations
+                    self.logger.debug(f"Worker loop iteration {iteration}, active jobs: {len(self.active_jobs)}")
+                
                 # Check for new jobs
                 await self._process_queue()
                 
@@ -59,7 +66,7 @@ class JobOrchestrationService:
                 await asyncio.sleep(1)
                 
             except Exception as e:
-                self.logger.error(f"Error in worker loop: {e}")
+                self.logger.error(f"Error in worker loop: {e}", exc_info=True)
                 await asyncio.sleep(5)  # Wait before retrying
     
     async def _process_queue(self) -> None:
@@ -67,22 +74,42 @@ class JobOrchestrationService:
         try:
             # Check if we can start more jobs
             if len(self.active_jobs) >= self.max_concurrent_jobs:
+                self.logger.debug(f"Max concurrent jobs reached ({len(self.active_jobs)}/{self.max_concurrent_jobs}), skipping queue check")
                 return
             
             # Get next job from queue
-            job_data = await self.queue_adapter.pop_job()
-            if not job_data:
+            self.logger.info("Polling queue for jobs...")
+            try:
+                job_data = await self.queue_adapter.pop_job()
+                if not job_data:
+                    self.logger.debug("No job available in queue")
+                    return
+            except Exception as e:
+                self.logger.error(f"Error calling pop_job: {e}", exc_info=True)
                 return
             
+            self.logger.info(f"Found job in queue: scan_id={job_data.get('scan_id')}")
+            
             # Create job execution
-            job_execution = await self._create_job_execution(job_data)
+            try:
+                job_execution = await self._create_job_execution(job_data)
+                self.logger.info(f"Created job execution: {job_execution.id} for scan {job_execution.scan_id}")
+            except Exception as e:
+                self.logger.error(f"Error creating job execution: {e}", exc_info=True)
+                return
             
             # Start job execution
-            self.active_jobs[job_execution.id] = job_execution
-            asyncio.create_task(self._execute_job_wrapper(job_execution))
+            try:
+                self.active_jobs[job_execution.id] = job_execution
+                asyncio.create_task(self._execute_job_wrapper(job_execution))
+                self.logger.info(f"Started job execution: {job_execution.id}")
+            except Exception as e:
+                self.logger.error(f"Error starting job execution: {e}", exc_info=True)
+                # Remove from active jobs if we failed to start
+                self.active_jobs.pop(job_execution.id, None)
             
         except Exception as e:
-            self.logger.error(f"Error processing queue: {e}")
+            self.logger.error(f"Unexpected error processing queue: {e}", exc_info=True)
     
     async def _create_job_execution(self, job_data: Dict[str, Any]) -> JobExecution:
         """Create a job execution from job data.

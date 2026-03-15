@@ -336,14 +336,37 @@ async def get_frontend_config():
         # Determine environment
         is_production = settings.ENVIRONMENT.lower() in ["production", "prod"]
         
+        # Build scan types with metadata (backend-driven, no hardcoding!)
+        scan_types_config = {
+            "code": {
+                "enabled": True,
+                "label": "Code",
+                "backend_value": "repository",
+                "description": "Scan source code for vulnerabilities"
+            },
+            "image": {
+                "enabled": True,
+                "label": "Image",
+                "backend_value": "container",
+                "description": "Scan container images for vulnerabilities"
+            },
+            "website": {
+                "enabled": True,
+                "label": "Website",
+                "backend_value": "web_application",
+                "description": "Scan websites for security issues"
+            },
+            "network": {
+                "enabled": True,
+                "label": "Network",
+                "backend_value": "infrastructure",
+                "description": "Scan network hosts for vulnerabilities"
+            }
+        }
+        
         # Build features from settings
         features = {
-            "scan_types": {
-                "code": True,  # Always enabled
-                "image": True,  # Always enabled
-                "website": True,  # Always enabled
-                "network": True,  # Always enabled
-            },
+            "scan_types": scan_types_config,
             "bulk_scan": True,  # TODO: Add setting
             "local_paths": not getattr(settings, "ONLY_GIT_SCANS", False),
             "git_only": getattr(settings, "ONLY_GIT_SCANS", False),

@@ -143,10 +143,16 @@ class Scan(Base):
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    scheduled_at = Column(DateTime, nullable=True)  # Scheduled start time (optional)
     
     # Results
     results = Column(JSON, default=list)
-    vulnerabilities_count = Column(Integer, default=0, nullable=False)
+    total_vulnerabilities = Column(Integer, default=0, nullable=False)
+    critical_vulnerabilities = Column(Integer, default=0, nullable=False)
+    high_vulnerabilities = Column(Integer, default=0, nullable=False)
+    medium_vulnerabilities = Column(Integer, default=0, nullable=False)
+    low_vulnerabilities = Column(Integer, default=0, nullable=False)
+    info_vulnerabilities = Column(Integer, default=0, nullable=False)
     duration = Column(Integer, nullable=True)  # Duration in seconds
     
     # Error handling

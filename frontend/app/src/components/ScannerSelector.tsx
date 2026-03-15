@@ -9,7 +9,7 @@ interface Scanner {
 }
 
 interface ScannerSelectorProps {
-  scanType: 'code' | 'image' | 'website' | 'network'
+  scanType: string  // Backend-driven, can be any scan type from config
   selectedScanners: string[]
   onSelectionChange: (scanners: string[]) => void
 }

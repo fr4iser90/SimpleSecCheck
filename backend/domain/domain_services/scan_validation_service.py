@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from domain.entities.scan import Scan, ScanStatus, ScanType
+from domain.entities.target_type import TargetType
 from domain.value_objects.scan_config import ScanConfig
 from domain.exceptions.scan_exceptions import (
     InvalidScanConfigException,
@@ -25,7 +26,8 @@ class ScanValidationService:
         self._max_tags_count = 10
         self._max_tag_length = 50
         self._allowed_scan_types = [scan_type.value for scan_type in ScanType]
-        self._allowed_target_types = ['repository', 'container', 'infrastructure', 'web_application']
+        # Allowed target types - dynamically generated from TargetType enum (single source of truth!)
+        self._allowed_target_types = TargetType.get_all_values()
     
     def validate_scan_creation(
         self,

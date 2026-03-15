@@ -292,7 +292,7 @@ class ScanService:
             medium_vulnerabilities=scan_dto.medium_vulnerabilities,
             low_vulnerabilities=scan_dto.low_vulnerabilities,
             info_vulnerabilities=scan_dto.info_vulnerabilities,
-            metadata=scan_dto.metadata,
+            scan_metadata=scan_dto.metadata,
         )
     
     async def _update_scan_entity(self, scan: Scan, update_request: ScanUpdateRequestDTO) -> Scan:

@@ -74,11 +74,10 @@ class StartScanUseCase:
             target_type=request.target_type,
             user_id=request.user_id,
             project_id=request.project_id,
-            config=config,
+            config=config.to_dict() if config else {},
             scanners=request.scanners,
             tags=request.tags,
-            metadata=request.metadata,
-            scheduled_at=request.scheduled_at
+            scan_metadata=request.metadata or {},
         )
     
     def validate_concurrent_scans(self, user_id: str, max_concurrent: int = 5) -> None:

@@ -7,10 +7,12 @@ export interface FrontendConfig {
   login_required: boolean
   features: {
     scan_types: {
-      code: boolean
-      image?: boolean
-      website: boolean
-      network: boolean
+      [key: string]: {
+        enabled: boolean
+        label: string
+        backend_value: string
+        description?: string
+      }
     }
     bulk_scan: boolean
     local_paths: boolean

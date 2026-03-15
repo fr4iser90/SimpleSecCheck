@@ -151,6 +151,7 @@ class ScanRequestSchema(BaseModel):
     config: Optional[ScanConfigSchema] = Field(None, description="Scan configuration")
     scanners: List[str] = Field(min_length=1, max_length=20, description="List of scanners")
     
+    project_id: Optional[str] = Field(None, description="Project ID")
     scheduled_at: Optional[datetime] = Field(None, description="Scheduled start time")
     tags: List[str] = Field(default_factory=list, max_length=10, description="Scan tags")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
