@@ -435,7 +435,8 @@ class UserGitHubRepo(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     repo_url = Column(String(500), nullable=False)
-    repo_name = Column(String(255), nullable=False)
+    repo_owner = Column(String(255), nullable=True)  # GitHub username/organization (e.g. "fr4iser90")
+    repo_name = Column(String(255), nullable=False)  # Repository name only (e.g. "my-repo"), NOT "owner/repo"
     branch = Column(String(100), default="main", nullable=False)
     auto_scan_enabled = Column(Boolean, default=True, nullable=False)
     scan_on_push = Column(Boolean, default=True, nullable=False)

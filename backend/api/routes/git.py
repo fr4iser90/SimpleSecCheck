@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Query
 from fastapi import status as fastapi_status
 from pydantic import BaseModel
+import httpx
 
 from infrastructure.logging_config import get_logger
 
@@ -188,4 +189,145 @@ async def get_git_branches(
         raise HTTPException(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch branches"
+        )
+
+
+class GitHubRepoInfo(BaseModel):
+    """GitHub repository information."""
+    full_name: str
+    html_url: str
+    description: Optional[str] = None
+    default_branch: str = "main"
+    stargazers_count: int = 0
+    forks_count: int = 0
+    private: bool = False
+
+
+class GitHubReposResponse(BaseModel):
+    """Response model for GitHub repos discovery endpoint."""
+    repos: List[GitHubRepoInfo]
+
+
+@router.get("/repos", response_model=GitHubReposResponse)
+async def discover_github_repos(
+    username: str = Query(..., description="GitHub username or organization name"),
+    include_private: bool = Query(False, description="Include private repositories (requires GitHub token)"),
+    github_token: Optional[str] = Query(None, description="GitHub Personal Access Token (optional, for private repos)"),
+    max_repos: int = Query(100, ge=1, le=1000, description="Maximum number of repositories to return")
+) -> GitHubReposResponse:
+    """
+    Discover all repositories for a GitHub user or organization.
+    
+    Uses GitHub API to fetch repositories without authentication (public repos only).
+    For private repositories, a GitHub token is required.
+    
+    Args:
+        username: GitHub username or organization name
+        include_private: Whether to include private repositories
+        github_token: GitHub Personal Access Token (optional)
+        max_repos: Maximum number of repositories to return
+        
+    Returns:
+        GitHubReposResponse with list of repositories
+    """
+    if not username or not username.strip():
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+            detail="Username parameter is required"
+        )
+    
+    username = username.strip()
+    
+    try:
+        # Build GitHub API URL
+        url = f"https://api.github.com/users/{username}/repos"
+        params = {
+            "per_page": min(max_repos, 100),  # GitHub API max per page is 100
+            "sort": "updated",
+            "direction": "desc"
+        }
+        
+        headers = {
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "SimpleSecCheck"
+        }
+        
+        # Add token if provided (for private repos)
+        if github_token:
+            headers["Authorization"] = f"token {github_token}"
+        
+        repos = []
+        page = 1
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            while len(repos) < max_repos:
+                params["page"] = page
+                response = await client.get(url, params=params, headers=headers)
+                
+                if response.status_code == 404:
+                    raise HTTPException(
+                        status_code=fastapi_status.HTTP_404_NOT_FOUND,
+                        detail=f"User or organization '{username}' not found"
+                    )
+                elif response.status_code == 403:
+                    raise HTTPException(
+                        status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                        detail="GitHub API rate limit exceeded. Please try again later or provide a GitHub token."
+                    )
+                elif response.status_code != 200:
+                    raise HTTPException(
+                        status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"GitHub API error: {response.status_code}"
+                    )
+                
+                data = response.json()
+                if not data or len(data) == 0:
+                    break
+                
+                for repo in data:
+                    # Filter private repos if not including them
+                    if not include_private and repo.get("private", False):
+                        continue
+                    
+                    repos.append(GitHubRepoInfo(
+                        full_name=repo.get("full_name", ""),
+                        html_url=repo.get("html_url", ""),
+                        description=repo.get("description"),
+                        default_branch=repo.get("default_branch", "main"),
+                        stargazers_count=repo.get("stargazers_count", 0),
+                        forks_count=repo.get("forks_count", 0),
+                        private=repo.get("private", False)
+                    ))
+                    
+                    if len(repos) >= max_repos:
+                        break
+                
+                # If we got less than 100 repos, we've reached the end
+                if len(data) < 100:
+                    break
+                
+                page += 1
+        
+        logger.info(f"Found {len(repos)} repositories for user '{username}'")
+        return GitHubReposResponse(repos=repos)
+        
+    except httpx.TimeoutException:
+        logger.error(f"Timeout while fetching GitHub repos for {username}")
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Request to GitHub API timed out"
+        )
+    except httpx.RequestError as e:
+        logger.error(f"Request error while fetching GitHub repos: {e}")
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to connect to GitHub API: {str(e)}"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error fetching GitHub repos: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch repositories: {str(e)}"
         )

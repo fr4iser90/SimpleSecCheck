@@ -466,7 +466,8 @@ class GitHubRepoResponse(BaseModel):
     """Response for GitHub repository information."""
     id: str
     repo_url: str
-    repo_name: str
+    repo_owner: Optional[str] = None  # GitHub username/organization (e.g. "fr4iser90")
+    repo_name: str  # Repository name only (e.g. "my-repo"), NOT "owner/repo"
     branch: str
     auto_scan_enabled: bool
     scan_on_push: bool
@@ -478,13 +479,85 @@ class GitHubRepoResponse(BaseModel):
     vulnerabilities: Optional[Dict[str, int]] = None
 
 
-def extract_repo_name(repo_url: str) -> str:
-    """Extract repository name from URL."""
-    # Handle different URL formats
+def extract_repo_owner(repo_url: str) -> Optional[str]:
+    """
+    Extract repository owner (username/organization) from URL.
+    
+    Examples:
+    - https://github.com/fr4iser90/my-repo -> "fr4iser90"
+    - https://github.com/fr4iser90/my-repo.git -> "fr4iser90"
+    - git@github.com:fr4iser90/my-repo.git -> "fr4iser90"
+    """
+    if not repo_url:
+        return None
+    
+    # Remove .git suffix and trailing slashes
     repo_url = repo_url.replace(".git", "").rstrip("/")
+    
+    # Handle GitHub URLs: https://github.com/owner/repo
+    if "github.com" in repo_url:
+        if "github.com/" in repo_url:
+            parts = repo_url.split("github.com/")[-1]
+            if "/" in parts:
+                return parts.split("/")[0]
+        elif "github.com:" in repo_url:
+            parts = repo_url.split("github.com:")[-1]
+            if "/" in parts:
+                return parts.split("/")[0]
+    
+    # Handle GitLab URLs: https://gitlab.com/owner/repo
+    if "gitlab.com" in repo_url:
+        if "gitlab.com/" in repo_url:
+            parts = repo_url.split("gitlab.com/")[-1]
+            if "/" in parts:
+                return parts.split("/")[0]
+    
+    # Fallback: try to extract from path
     parts = repo_url.split("/")
     if len(parts) >= 2:
+        return parts[-2]
+    
+    return None
+
+
+def extract_repo_name(repo_url: str) -> str:
+    """
+    Extract repository name ONLY (not owner/repo) from URL.
+    
+    Examples:
+    - https://github.com/fr4iser90/my-repo -> "my-repo"
+    - https://github.com/fr4iser90/my-repo.git -> "my-repo"
+    - git@github.com:fr4iser90/my-repo.git -> "my-repo"
+    """
+    if not repo_url:
+        return ""
+    
+    # Remove .git suffix and trailing slashes
+    repo_url = repo_url.replace(".git", "").rstrip("/")
+    
+    # Handle GitHub URLs: https://github.com/owner/repo
+    if "github.com" in repo_url:
+        if "github.com/" in repo_url:
+            parts = repo_url.split("github.com/")[-1]
+            if "/" in parts:
+                return parts.split("/")[-1]
+        elif "github.com:" in repo_url:
+            parts = repo_url.split("github.com:")[-1]
+            if "/" in parts:
+                return parts.split("/")[-1]
+    
+    # Handle GitLab URLs: https://gitlab.com/owner/repo
+    if "gitlab.com" in repo_url:
+        if "gitlab.com/" in repo_url:
+            parts = repo_url.split("gitlab.com/")[-1]
+            if "/" in parts:
+                return parts.split("/")[-1]
+    
+    # Fallback: try to extract from path
+    parts = repo_url.split("/")
+    if len(parts) >= 1:
         return parts[-1]
+    
     return repo_url
 
 
@@ -539,6 +612,7 @@ async def list_github_repos(
                 repo_responses.append(GitHubRepoResponse(
                     id=str(repo.id),
                     repo_url=repo.repo_url,
+                    repo_owner=repo.repo_owner,
                     repo_name=repo.repo_name,
                     branch=repo.branch,
                     auto_scan_enabled=repo.auto_scan_enabled,
@@ -637,6 +711,7 @@ async def add_github_repo(
             return GitHubRepoResponse(
                 id=str(new_repo.id),
                 repo_url=new_repo.repo_url,
+                repo_owner=new_repo.repo_owner,
                 repo_name=new_repo.repo_name,
                 branch=new_repo.branch,
                 auto_scan_enabled=new_repo.auto_scan_enabled,
@@ -717,6 +792,7 @@ async def get_github_repo(
             return GitHubRepoResponse(
                 id=str(repo.id),
                 repo_url=repo.repo_url,
+                repo_owner=repo.repo_owner,
                 repo_name=repo.repo_name,
                 branch=repo.branch,
                 auto_scan_enabled=repo.auto_scan_enabled,
@@ -824,6 +900,7 @@ async def update_github_repo(
             return GitHubRepoResponse(
                 id=str(repo.id),
                 repo_url=repo.repo_url,
+                repo_owner=repo.repo_owner,
                 repo_name=repo.repo_name,
                 branch=repo.branch,
                 auto_scan_enabled=repo.auto_scan_enabled,
@@ -961,6 +1038,108 @@ async def trigger_repo_scan(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to trigger scan: {str(e)}"
+        )
+
+
+@router.get("/github/repos/{repo_id}/scan-status")
+async def get_repo_scan_status(
+    repo_id: str,
+    actor_context: ActorContext = Depends(get_authenticated_user),
+) -> Dict[str, Any]:
+    """
+    Get current scan status for a GitHub repository.
+    
+    Checks if there's an active scan (pending/running) for this repo.
+    Returns scan status and queue position if applicable.
+    
+    Requires authentication.
+    Users can only view status for their own repositories.
+    """
+    try:
+        if not actor_context.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required"
+            )
+        
+        from infrastructure.database.models import UserGitHubRepo, Scan
+        from sqlalchemy import and_, or_, func
+        
+        async with db_adapter.async_session() as session:
+            user_uuid = UUID(actor_context.user_id)
+            repo_uuid = UUID(repo_id)
+            
+            # Get repository
+            repo_result = await session.execute(
+                select(UserGitHubRepo).where(
+                    UserGitHubRepo.id == repo_uuid,
+                    UserGitHubRepo.user_id == user_uuid
+                )
+            )
+            repo = repo_result.scalar_one_or_none()
+            
+            if not repo:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Repository not found"
+                )
+            
+            # Find active scans for this repo (pending or running)
+            # Match by target_url containing the repo URL
+            active_scan_result = await session.execute(
+                select(Scan)
+                .where(
+                    and_(
+                        Scan.user_id == user_uuid,
+                        Scan.status.in_(["pending", "running"]),
+                        Scan.target_url.contains(repo.repo_url)
+                    )
+                )
+                .order_by(Scan.created_at.desc())
+                .limit(1)
+            )
+            active_scan = active_scan_result.scalar_one_or_none()
+            
+            if not active_scan:
+                return {
+                    "has_active_scan": False,
+                    "status": None,
+                    "scan_id": None,
+                    "queue_position": None
+                }
+            
+            # Calculate queue position if pending
+            queue_position = None
+            if active_scan.status.lower() == "pending":
+                position_query = select(func.count(Scan.id)).where(
+                    and_(
+                        Scan.status == "pending",
+                        Scan.user_id == user_uuid,
+                        or_(
+                            Scan.priority > active_scan.priority,
+                            and_(
+                                Scan.priority == active_scan.priority,
+                                Scan.created_at < active_scan.created_at
+                            )
+                        )
+                    )
+                )
+                pos_result = await session.execute(position_query)
+                queue_position = (pos_result.scalar() or 0) + 1
+            
+            return {
+                "has_active_scan": True,
+                "status": active_scan.status.lower(),
+                "scan_id": str(active_scan.id),
+                "queue_position": queue_position,
+                "created_at": active_scan.created_at.isoformat()
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get scan status: {str(e)}"
         )
 
 
