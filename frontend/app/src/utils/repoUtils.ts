@@ -113,6 +113,33 @@ export const getWarnings = (repo: GitHubRepo, scanStatus?: RepoScanStatus): stri
   return warnings
 }
 
+export const getInitialScanCountdown = (repo: GitHubRepo): number | null => {
+  // Check if repo is new and hasn't been scanned yet
+  if (repo.score !== null || repo.last_scan !== null) {
+    return null // Already scanned
+  }
+  
+  if (!repo.auto_scan_enabled) {
+    return null // Auto-scan disabled
+  }
+  
+  // Calculate seconds since repo was created
+  const createdDate = new Date(repo.created_at)
+  const now = new Date()
+  const secondsSinceCreation = Math.floor((now.getTime() - createdDate.getTime()) / 1000)
+  
+  // Initial scan delay is 45 seconds
+  const delaySeconds = 45
+  const remainingSeconds = delaySeconds - secondsSinceCreation
+  
+  // Return countdown if still within delay period
+  if (remainingSeconds > 0 && remainingSeconds <= delaySeconds) {
+    return remainingSeconds
+  }
+  
+  return null
+}
+
 export const calculateStats = (repos: GitHubRepo[], getRepoStatusFn: (repo: GitHubRepo) => RepoStatus) => {
   const total = repos.length
   const scanned = repos.filter(r => r.score !== null || r.last_scan !== null).length

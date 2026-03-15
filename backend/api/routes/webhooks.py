@@ -13,6 +13,7 @@ import logging
 from api.deps.actor_context import get_actor_context, ActorContext
 from domain.services.auto_scan_service import AutoScanService
 from domain.services.audit_log_service import AuditLogService
+from domain.services.repo_scan_helper import create_repo_scan
 from infrastructure.database.adapter import db_adapter
 from infrastructure.database.models import UserGitHubRepo
 from sqlalchemy import select
@@ -127,16 +128,46 @@ async def github_webhook(
                     user_agent=request.headers.get("User-Agent")
                 )
                 
-                # TODO: Trigger actual scan
-                # This would call the scan service to queue a scan
-                logger.info(f"Webhook triggered scan for {repo_url} (branch: {branch})")
+                # Check if branch matches repo's configured branch
+                if branch != repo.branch:
+                    logger.info(f"Webhook branch {branch} does not match repo branch {repo.branch}, skipping scan")
+                    return {
+                        "message": "Branch mismatch, scan skipped",
+                        "repo_id": str(repo.id),
+                        "branch": branch,
+                        "expected_branch": repo.branch
+                    }
                 
-                return {
-                    "message": "Scan triggered successfully",
-                    "repo_id": str(repo.id),
-                    "branch": branch,
-                    "commit": commit_hash
-                }
+                # Create and queue scan
+                scan_id = await create_repo_scan(
+                    repo_url=repo_url,
+                    repo_name=repo.repo_name,
+                    branch=branch,
+                    user_id=str(repo.user_id),
+                    commit_hash=commit_hash,
+                    metadata={
+                        "webhook_event": x_github_event,
+                        "webhook_delivery": x_github_delivery
+                    }
+                )
+                
+                if scan_id:
+                    logger.info(f"Webhook triggered scan {scan_id} for {repo_url} (branch: {branch})")
+                    return {
+                        "message": "Scan triggered successfully",
+                        "repo_id": str(repo.id),
+                        "scan_id": scan_id,
+                        "branch": branch,
+                        "commit": commit_hash,
+                        "status": "queued"
+                    }
+                else:
+                    logger.error(f"Failed to create scan for {repo_url}")
+                    return {
+                        "message": "Failed to create scan",
+                        "repo_id": str(repo.id),
+                        "branch": branch
+                    }
         
         # Unknown event type
         logger.info(f"Unhandled GitHub event: {x_github_event}")
@@ -219,15 +250,46 @@ async def generic_webhook(
                 user_agent=request.headers.get("User-Agent")
             )
             
-            # TODO: Trigger actual scan
-            logger.info(f"Generic webhook triggered scan for {webhook_data.repo_url}")
+            # Check if branch matches repo's configured branch
+            if webhook_data.branch != repo.branch:
+                logger.info(f"Webhook branch {webhook_data.branch} does not match repo branch {repo.branch}, skipping scan")
+                return {
+                    "message": "Branch mismatch, scan skipped",
+                    "repo_id": str(repo.id),
+                    "branch": webhook_data.branch,
+                    "expected_branch": repo.branch
+                }
             
-            return {
-                "message": "Scan triggered successfully",
-                "repo_id": str(repo.id),
-                "branch": webhook_data.branch,
-                "commit": webhook_data.commit
-            }
+            # Create and queue scan
+            scan_id = await create_repo_scan(
+                repo_url=webhook_data.repo_url,
+                repo_name=repo.repo_name,
+                branch=webhook_data.branch,
+                user_id=user_id,
+                commit_hash=webhook_data.commit,
+                metadata={
+                    "webhook_event": webhook_data.event,
+                    "webhook_type": "generic"
+                }
+            )
+            
+            if scan_id:
+                logger.info(f"Generic webhook triggered scan {scan_id} for {webhook_data.repo_url}")
+                return {
+                    "message": "Scan triggered successfully",
+                    "repo_id": str(repo.id),
+                    "scan_id": scan_id,
+                    "branch": webhook_data.branch,
+                    "commit": webhook_data.commit,
+                    "status": "queued"
+                }
+            else:
+                logger.error(f"Failed to create scan for {webhook_data.repo_url}")
+                return {
+                    "message": "Failed to create scan",
+                    "repo_id": str(repo.id),
+                    "branch": webhook_data.branch
+                }
     except HTTPException:
         raise
     except Exception as e:

@@ -1,5 +1,6 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { GitHubRepo, RepoScanStatus, getScoreColor, getVulnCount, getRepoStatus, getDaysSinceLastScan, getWarnings } from '../utils/repoUtils'
+import { GitHubRepo, RepoScanStatus, getScoreColor, getVulnCount, getRepoStatus, getDaysSinceLastScan, getWarnings, getInitialScanCountdown } from '../utils/repoUtils'
 
 interface RepoCardProps {
   repo: GitHubRepo
@@ -16,6 +17,21 @@ export default function RepoCard({ repo, scanStatus, onScanNow, onEdit, onRemove
   const vulns = repo.vulnerabilities || { critical: 0, high: 0, medium: 0, low: 0 }
   const totalVulns = getVulnCount(repo)
   const daysSince = getDaysSinceLastScan(repo)
+  const [countdown, setCountdown] = useState<number | null>(getInitialScanCountdown(repo))
+  
+  // Update countdown every second
+  useEffect(() => {
+    if (countdown === null || countdown <= 0) {
+      return
+    }
+    
+    const interval = setInterval(() => {
+      const newCountdown = getInitialScanCountdown(repo)
+      setCountdown(newCountdown)
+    }, 1000)
+    
+    return () => clearInterval(interval)
+  }, [repo, countdown])
   
   return (
     <div
@@ -61,6 +77,26 @@ export default function RepoCard({ repo, scanStatus, onScanNow, onEdit, onRemove
           </div>
         </div>
       </div>
+
+      {/* Initial Scan Countdown */}
+      {countdown !== null && countdown > 0 && (
+        <div style={{
+          marginBottom: '1rem',
+          padding: '0.75rem',
+          background: 'rgba(102, 126, 234, 0.1)',
+          border: '1px solid rgba(102, 126, 234, 0.3)',
+          borderRadius: '6px',
+          fontSize: '0.85rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem'
+        }}>
+          <span>⏱️</span>
+          <span>
+            Initial scan will start in <strong>{countdown} second{countdown !== 1 ? 's' : ''}</strong>
+          </span>
+        </div>
+      )}
 
       {/* Warnings */}
       {warnings.length > 0 && (

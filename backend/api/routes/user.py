@@ -1024,14 +1024,43 @@ async def trigger_repo_scan(
                     detail="Repository not found"
                 )
             
-            # TODO: Actually trigger scan via scan service
-            # For now, return placeholder
-            return {
-                "message": "Scan triggered successfully",
-                "repo_id": str(repo.id),
-                "scan_id": None,  # TODO: Return actual scan ID
-                "status": "queued"
-            }
+            # Create and queue scan
+            from domain.services.repo_scan_helper import create_repo_scan
+            
+            scan_id = await create_repo_scan(
+                repo_url=repo.repo_url,
+                repo_name=repo.repo_name,
+                branch=repo.branch,
+                user_id=actor_context.user_id,
+                metadata={
+                    "trigger": "manual",
+                    "repo_id": str(repo.id)
+                }
+            )
+            
+            if scan_id:
+                # Log audit event
+                await AuditLogService.log_event(
+                    user_id=actor_context.user_id,
+                    user_email=actor_context.email,
+                    action_type="REPO_SCAN_TRIGGERED",
+                    target=repo.repo_url,
+                    details={"scan_id": scan_id, "branch": repo.branch},
+                    ip_address=request.client.host if request.client else None,
+                    user_agent=request.headers.get("User-Agent")
+                )
+                
+                return {
+                    "message": "Scan triggered successfully",
+                    "repo_id": str(repo.id),
+                    "scan_id": scan_id,
+                    "status": "queued"
+                }
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to create scan"
+                )
     except HTTPException:
         raise
     except Exception as e:

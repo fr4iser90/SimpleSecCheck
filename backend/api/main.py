@@ -39,6 +39,9 @@ setup_logging()
 from infrastructure.logging_config import get_logger
 logger = get_logger("api.main")
 
+# Global variable to store auto-scan scheduler instance
+_auto_scan_scheduler = None
+
 
 def create_app() -> FastAPI:
     """
@@ -352,6 +355,18 @@ async def startup_event():
         await _re_enqueue_pending_scans()
     except Exception as e:
         logger.error("Failed to re-enqueue pending scans", error=str(e), exc_info=True)
+    
+    # Start auto-scan scheduler for new repositories
+    try:
+        from domain.services.auto_scan_scheduler import AutoScanScheduler
+        import api.main as main_module
+        auto_scan_scheduler = AutoScanScheduler(delay_seconds=45, check_interval_seconds=30)
+        await auto_scan_scheduler.start()
+        # Store scheduler instance globally for shutdown
+        main_module._auto_scan_scheduler = auto_scan_scheduler
+        logger.info("Auto-scan scheduler started")
+    except Exception as e:
+        logger.error("Failed to start auto-scan scheduler", error=str(e), exc_info=True)
 
 
 async def _re_enqueue_pending_scans():
@@ -454,6 +469,15 @@ async def shutdown_event():
             "timestamp": time.time(),
         }}
     )
+    
+    # Stop auto-scan scheduler
+    try:
+        import api.main as main_module
+        if hasattr(main_module, '_auto_scan_scheduler') and main_module._auto_scan_scheduler:
+            await main_module._auto_scan_scheduler.stop()
+            logger.info("Auto-scan scheduler stopped")
+    except Exception as e:
+        logger.error("Failed to stop auto-scan scheduler", error=str(e))
     
     # Clean up services here
     # For example: close database connections, Redis connections, etc.
