@@ -35,6 +35,35 @@ class QueueService:
             # This follows separation of concerns: Backend doesn't know about Worker's filesystem layout
             scan_id = scan.id
             
+            # Collect asset volumes from scanner manifests (if available)
+            # Plugins define their required volumes in manifest.yaml
+            asset_volumes = []
+            try:
+                import httpx
+                worker_url = os.getenv("WORKER_API_URL", "http://worker:8081")
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    try:
+                        # Get scanner assets from worker API
+                        response = await client.get(f"{worker_url}/api/scanners/assets")
+                        if response.status_code == 200:
+                            assets_data = response.json().get("assets", [])
+                            # Filter assets for selected scanners and extract mount info
+                            selected_scanners = set(scan.scanners or [])
+                            for asset_item in assets_data:
+                                scanner_name = asset_item.get("scanner", "").lower()
+                                if scanner_name in [s.lower() for s in selected_scanners]:
+                                    asset = asset_item.get("asset", {})
+                                    mount = asset.get("mount", {})
+                                    if mount.get("host_subpath") and mount.get("container_path"):
+                                        asset_volumes.append({
+                                            "host_subpath": mount["host_subpath"],
+                                            "container_path": mount["container_path"]
+                                        })
+                    except Exception as e:
+                        logger.debug(f"Could not fetch scanner assets for volumes: {e}")
+            except Exception as e:
+                logger.debug(f"Failed to collect asset volumes: {e}")
+            
             queue_message = {
                 "scan_id": scan_id,
                 "job_id": scan_id,  # Use scan_id as job_id if not separate
@@ -52,6 +81,7 @@ class QueueService:
                 "collect_metadata": scan.config.get("collect_metadata", True) if scan.config else True,
                 "exclude_paths": scan.config.get("exclude_paths") if scan.config else None,
                 "git_branch": scan.config.get("git_branch") if scan.config else None,
+                "asset_volumes": asset_volumes,  # Asset volumes from scanner manifests
                 "user_id": scan.user_id,
                 "project_id": scan.project_id,
                 "scheduled_at": scan.scheduled_at.isoformat() if scan.scheduled_at else None,

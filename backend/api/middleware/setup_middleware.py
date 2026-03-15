@@ -32,7 +32,7 @@ class SetupMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app,
-        environment: str = "development",
+        environment: str,  # SECURITY_MODE value
     ):
         """
         Initialize setup middleware.

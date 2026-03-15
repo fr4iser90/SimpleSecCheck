@@ -72,7 +72,7 @@ def create_app() -> FastAPI:
         jwt_secret_key=settings.jwt_secret_key,
         jwt_algorithm=settings.jwt_algorithm,
         jwt_expiration_minutes=settings.jwt_expiration_minutes,
-        environment=settings.ENVIRONMENT,
+        environment=settings.SECURITY_MODE,
     )
     
     # Configure middleware stack in correct order
@@ -95,10 +95,10 @@ def create_app() -> FastAPI:
     app.add_middleware(LoggingMiddleware)
     
     # 4. Security Headers (security)
-    app.add_middleware(SecurityHeadersMiddleware, environment=settings.ENVIRONMENT)
+    app.add_middleware(SecurityHeadersMiddleware, environment=settings.SECURITY_MODE)
     
     # 5. Setup (security)
-    app.add_middleware(SetupMiddleware, environment=settings.ENVIRONMENT)
+    app.add_middleware(SetupMiddleware, environment=settings.SECURITY_MODE)
     
     # 6. Auth (security)
     # Configure protected paths based on authentication mode
@@ -135,7 +135,7 @@ def create_app() -> FastAPI:
         admin_paths=[
             "/api/v1/auth/admin",
         ],
-        environment=settings.ENVIRONMENT,
+        environment=settings.SECURITY_MODE,
     )
         
     
@@ -238,6 +238,14 @@ async def startup_event():
         except Exception as e:
             # If table creation fails, log but don't fail startup
             logger.error("Failed to create database tables", error=str(e))
+        
+        # Load settings from database if setup is completed
+        try:
+            from config.settings import load_settings_from_database, settings
+            await load_settings_from_database(settings)
+            logger.info("Settings loaded from database (if setup completed)")
+        except Exception as e:
+            logger.debug("Could not load settings from database (setup may not be completed)", error=str(e))
             
     except Exception as e:
         logger.error("Database connection failed", error=str(e))

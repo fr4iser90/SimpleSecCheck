@@ -31,6 +31,9 @@ class ScannerResponse(BaseModel):
     priority: int
     requires_condition: Optional[str] = None
     enabled: bool
+    description: Optional[str] = None
+    categories: Optional[List[str]] = None
+    icon: Optional[str] = None
 
 
 class ScannerAssetResponse(BaseModel):
@@ -177,26 +180,38 @@ async def get_scanners(
                 logger.warning(f"Failed to refresh scanners from worker, using cached data: {e}")
                 # Continue with existing DB data if refresh fails
         
+        # Get fresh scanner data from worker (includes descriptions, categories, icons)
+        # This ensures we have the latest metadata even if DB is stale
+        worker_scanners_data = {}
+        try:
+            fresh_scanners = await _get_scanners_from_worker(scan_type)
+            for s in fresh_scanners:
+                worker_scanners_data[s.get("name")] = s
+        except Exception as e:
+            logger.warning(f"Could not fetch fresh scanner data from worker: {e}")
+            # Continue with DB data only
+        
         # Filter by scan_type if provided
         scanner_list = []
         for scanner in db_scanners:
+            # Check if scanner matches scan_type filter
             if scan_type:
-                if scan_type.lower() in [st.lower() for st in scanner.scan_types]:
-                    scanner_list.append(ScannerResponse(
-                        name=scanner.name,
-                        scan_types=scanner.scan_types,
-                        priority=scanner.priority,
-                        requires_condition=scanner.requires_condition,
-                        enabled=scanner.enabled
-                    ))
-            else:
-                scanner_list.append(ScannerResponse(
-                    name=scanner.name,
-                    scan_types=scanner.scan_types,
-                    priority=scanner.priority,
-                    requires_condition=scanner.requires_condition,
-                    enabled=scanner.enabled
-                ))
+                if scan_type.lower() not in [st.lower() for st in scanner.scan_types]:
+                    continue
+            
+            # Get metadata from worker data if available, otherwise use defaults
+            worker_data = worker_scanners_data.get(scanner.name, {})
+            
+            scanner_list.append(ScannerResponse(
+                name=scanner.name,
+                scan_types=scanner.scan_types,
+                priority=scanner.priority,
+                requires_condition=scanner.requires_condition,
+                enabled=scanner.enabled,
+                description=worker_data.get("description"),
+                categories=worker_data.get("categories"),
+                icon=worker_data.get("icon")
+            ))
         
         return {"scanners": scanner_list}
         
@@ -334,7 +349,7 @@ async def get_frontend_config():
         settings = get_settings()
         
         # Determine environment
-        is_production = settings.ENVIRONMENT.lower() in ["production", "prod"]
+        is_production = settings.SECURITY_MODE.lower() == "restricted"
         
         # Build scan types with metadata (backend-driven, no hardcoding!)
         scan_types_config = {
@@ -368,11 +383,11 @@ async def get_frontend_config():
         features = {
             "scan_types": scan_types_config,
             "bulk_scan": True,  # TODO: Add setting
-            "local_paths": not getattr(settings, "ONLY_GIT_SCANS", False),
-            "git_only": getattr(settings, "ONLY_GIT_SCANS", False),
-            "queue_enabled": getattr(settings, "QUEUE_ENABLED", True),
-            "session_management": getattr(settings, "SESSION_MANAGEMENT", True),
-            "metadata_collection": getattr(settings, "METADATA_COLLECTION", "optional"),
+            "local_paths": settings.ALLOW_LOCAL_PATHS,
+            "git_only": not settings.ALLOW_LOCAL_PATHS,
+            "queue_enabled": True,  # Always enabled
+            "session_management": True,  # Always enabled
+            "metadata_collection": "optional",  # Always optional
             "auto_shutdown": True,  # TODO: Add setting
             "zip_upload": True,  # TODO: Add setting
             "owasp_auto_update_enabled": False,  # TODO: Add setting
@@ -393,7 +408,7 @@ async def get_frontend_config():
         }
         
         return FrontendConfigResponse(
-            environment=settings.ENVIRONMENT,
+            environment=settings.SECURITY_MODE,
             is_production=is_production,
             auth_mode=settings.AUTH_MODE.lower(),
             login_required=settings.LOGIN_REQUIRED,

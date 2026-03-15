@@ -12,11 +12,8 @@
 # =============================================================================
 
 services:
-  # PostgreSQL Database (Production)
+  # PostgreSQL Database
   postgres:
-    profiles:
-      - dev
-      - prod
     image: postgres:16-alpine
     container_name: SimpleSecCheck_postgres
     command: postgres -c log_min_messages=warning -c log_connections=off -c log_disconnections=off -c log_checkpoints=off -c log_lock_waits=off -c log_statement=none -c log_duration=off -c logging_collector=off
@@ -38,11 +35,8 @@ services:
       retries: 5
       start_period: 10s
 
-  # Redis Queue Service (NEW - Phase 1)
+  # Redis Queue Service
   redis:
-    profiles:
-      - prod
-      - dev
     image: redis:7-alpine
     container_name: SimpleSecCheck_redis
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --loglevel warning --syslog-enabled no
@@ -59,12 +53,9 @@ services:
       retries: 3
       start_period: 10s
 
-  # FastAPI Backend Service (REFACTORED - Phase 1)
+  # FastAPI Backend Service
   # Handles API requests, WebSocket connections, and serves frontend
   backend:
-    profiles:
-      - dev
-      - prod
     build:
       context: .
       dockerfile: ./backend/Dockerfile
@@ -73,7 +64,7 @@ services:
     volumes:
       - ./results:/app/results
       - .:/project:ro
-      - ${HOST_PROJECT_ROOT:-.}/scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data
+      - ${HOST_PROJECT_ROOT:-.}/scanner/plugins/owasp/data:/app/scanner/plugins/owasp/data
       - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - .env
@@ -82,7 +73,6 @@ services:
       - PYTHONUNBUFFERED=1
       - HOST_PROJECT_ROOT=${PWD}
       - SCANNER_WORKER_ENABLED=false  # Worker is now separate service
-      - ENVIRONMENT=${ENVIRONMENT:-dev}
       - SCANNER_PROXY_MODE=false
       - DATABASE_TYPE=postgresql
       - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}}
@@ -142,9 +132,6 @@ services:
   # - Provides API for scanner discovery (worker:8081/api/scanners/)
   # - Does NOT execute scans itself - scanner container does that
   worker:
-    profiles:
-      - dev
-      - prod
     build:
       context: .
       dockerfile: ./worker/Dockerfile
@@ -154,12 +141,11 @@ services:
     volumes:
       - ./results:/app/results
       - .:/project:ro
-      - ${HOST_PROJECT_ROOT:-.}/scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data
+      - ${HOST_PROJECT_ROOT:-.}/scanner/plugins/owasp/data:/app/scanner/plugins/owasp/data
       - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - .env
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-dev}
       - DATABASE_TYPE=postgresql
       - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
@@ -174,6 +160,7 @@ services:
       - RESULTS_DIR_HOST=${PWD}/results
       # Container paths (what Scanner container sees inside)
       - RESULTS_DIR_CONTAINER=/app/results
+      - HOST_PROJECT_ROOT=${PWD}  # For mounting OWASP data volume to scanner containers
     ports:
       - "8081:8081"  # Worker API port for scanner discovery
     networks:
@@ -233,13 +220,12 @@ services:
     command: ["sleep", "infinity"]
     volumes:
       - ./results:/app/results
-      - ${HOST_PROJECT_ROOT:-.}/scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data
+      - ${HOST_PROJECT_ROOT:-.}/scanner/plugins/owasp/data:/app/scanner/plugins/owasp/data
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - SCAN_TARGET=${SCAN_TARGET:-}
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
       - RESULTS_DIR_IN_CONTAINER=/app/results
-      - ENVIRONMENT=${ENVIRONMENT:-dev}
       - DATABASE_TYPE=postgresql
       - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
@@ -281,9 +267,6 @@ services:
 
   # Frontend WebUI Service
   frontend:
-    profiles:
-      - dev
-      - prod
     build:
       context: .
       dockerfile: ./frontend/Dockerfile.nginx
@@ -293,7 +276,6 @@ services:
     ports:
       - "80:80"
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-dev}
       - API_BASE_URL=${API_BASE_URL:-http://backend:8080}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
     networks:

@@ -77,6 +77,7 @@ class Scanner:
     priority: int = 0  # Execution order (lower = earlier)
     requires_condition: Optional[str] = None  # Optional condition (e.g., "IS_NATIVE")
     python_class: Optional[str] = None  # Fully-qualified Python scanner class
+    manifest_name: Optional[str] = None  # Manifest name from manifest.yaml (for asset lookup)
 
 
 class ScannerRegistry:
@@ -199,29 +200,28 @@ class ScannerRegistry:
         class_name = scanner_class.__name__
         module = scanner_class.__module__
         
-        # Try to get name from manifest.yaml automatically (if no SCANNER_NAME set)
+        # Always try to load manifest_name from manifest.yaml (for asset lookup)
+        # Extract plugin name from module path (e.g., "scanner.plugins.owasp.scanner" -> "owasp")
         manifest_name = None
-        if not getattr(scanner_class, "SCANNER_NAME", None) and not getattr(scanner_class, "NAME", None):
-            # Extract plugin name from module path (e.g., "scanner.plugins.owasp.scanner" -> "owasp")
-            if module and "scanner.plugins." in module:
-                parts = module.split(".")
-                if len(parts) >= 3 and parts[0] == "scanner" and parts[1] == "plugins":
-                    plugin_name = parts[2]
-                    # Try to load manifest.yaml for this plugin
-                    try:
-                        from pathlib import Path
-                        from scanner.core.scanner_assets.manager import ScannerAssetsManager
-                        scanners_root = Path("/app/scanner/plugins")
-                        if scanners_root.exists():
-                            manifest_path = scanners_root / plugin_name / "manifest.yaml"
-                            if manifest_path.exists():
-                                assets_manager = ScannerAssetsManager(scanners_root)
-                                manifest = assets_manager.get_manifest(plugin_name)
-                                if manifest:
-                                    manifest_name = manifest.name
-                    except Exception:
-                        # If manifest loading fails, continue with default name generation
-                        pass
+        if module and "scanner.plugins." in module:
+            parts = module.split(".")
+            if len(parts) >= 3 and parts[0] == "scanner" and parts[1] == "plugins":
+                plugin_name = parts[2]
+                # Try to load manifest.yaml for this plugin
+                try:
+                    from pathlib import Path
+                    from scanner.core.scanner_assets.manager import ScannerAssetsManager
+                    scanners_root = Path("/app/scanner/plugins")
+                    if scanners_root.exists():
+                        manifest_path = scanners_root / plugin_name / "manifest.yaml"
+                        if manifest_path.exists():
+                            assets_manager = ScannerAssetsManager(scanners_root)
+                            manifest = assets_manager.get_manifest(plugin_name)
+                            if manifest:
+                                manifest_name = manifest.name
+                except Exception:
+                    # If manifest loading fails, continue without manifest_name
+                    pass
         
         scanner_name = (
             getattr(scanner_class, "SCANNER_NAME", None)
@@ -245,7 +245,8 @@ class ScannerRegistry:
             script_path=script_path,
             priority=priority,
             requires_condition=requires_condition,
-            python_class=python_class
+            python_class=python_class,
+            manifest_name=manifest_name  # Store manifest name for asset lookup
         )
         
         cls.register(scanner)

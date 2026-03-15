@@ -6,25 +6,41 @@ set +e
 # Worker EntryPoint Script
 # =========================
 
-# 1️⃣ UID/GID Mapping
-WORKER_UID=${PUID:-1000}
-WORKER_GID=${PGID:-1000}
+# 1️⃣ UID/GID Mapping - Automatically detect from mounted project root directory
 
-echo "[Entrypoint] Requested UID=$WORKER_UID GID=$WORKER_GID"
+PROJECT_ROOT=${HOST_PROJECT_ROOT:-/project}
+WORKER_UID=""
+WORKER_GID=""
+if [ -d "$PROJECT_ROOT" ]; then
+    DETECTED_UID=$(stat -c "%u" "$PROJECT_ROOT" 2>/dev/null || echo "")
+    DETECTED_GID=$(stat -c "%g" "$PROJECT_ROOT" 2>/dev/null || echo "")
+    if [ -n "$DETECTED_UID" ] && [ -n "$DETECTED_GID" ]; then
+        WORKER_UID=$DETECTED_UID
+        WORKER_GID=$DETECTED_GID
+        echo "[Entrypoint] Auto-detected UID=$WORKER_UID GID=$WORKER_GID from $PROJECT_ROOT"
+    else
+        echo "[Entrypoint] Could not detect UID/GID from $PROJECT_ROOT, skipping user remapping"
+    fi
+else
+    echo "[Entrypoint] Project root $PROJECT_ROOT not found, skipping user remapping"
+fi
 
 CURRENT_UID=$(id -u worker)
 CURRENT_GID=$(id -g worker)
 
-if [ "$WORKER_GID" != "$CURRENT_GID" ]; then
-    if getent group "$WORKER_GID" >/dev/null 2>&1; then
-        usermod -g "$WORKER_GID" worker
-    else
-        groupmod -g "$WORKER_GID" worker
+# Only remap if UID/GID were detected
+if [ -n "$WORKER_UID" ] && [ -n "$WORKER_GID" ]; then
+    if [ "$WORKER_GID" != "$CURRENT_GID" ]; then
+        if getent group "$WORKER_GID" >/dev/null 2>&1; then
+            usermod -g "$WORKER_GID" worker
+        else
+            groupmod -g "$WORKER_GID" worker
+        fi
     fi
-fi
 
-if [ "$WORKER_UID" != "$CURRENT_UID" ]; then
-    usermod -u "$WORKER_UID" worker
+    if [ "$WORKER_UID" != "$CURRENT_UID" ]; then
+        usermod -u "$WORKER_UID" worker
+    fi
 fi
 
 # =========================

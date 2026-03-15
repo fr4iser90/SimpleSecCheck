@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 from fastapi import status as fastapi_status
 import asyncio
 import json
+import ipaddress
+import re
 from pathlib import Path
 
 from api.deps.actor_context import get_actor_context, ActorContext
@@ -75,6 +77,20 @@ def _determine_target_type(scan_type: ScanType, target_url: str) -> str:
     # Local path
     is_local_path = target.startswith(('/', './', '../'))
     
+    # Network host detection (IP address or hostname without protocol)
+    is_network_host = False
+    if not target.startswith(('http://', 'https://', '/', './', '../')):
+        # Check if it's an IP address (IPv4 or IPv6)
+        try:
+            ipaddress.ip_address(target.split(':')[0])  # Remove port if present
+            is_network_host = True
+        except ValueError:
+            # Check if it's a hostname (contains dots, no slashes, not a container image pattern)
+            if '.' in target and '/' not in target and ':' not in target.split('.')[-1]:
+                # Simple heuristic: if it looks like a hostname and not a container image
+                if not re.match(container_pattern, target):
+                    is_network_host = True
+    
     # Determine based on scan_type - using TargetType enum values
     if scan_type == ScanType.CODE:
         if is_git_url:
@@ -94,8 +110,10 @@ def _determine_target_type(scan_type: ScanType, target_url: str) -> str:
             return TargetType.API_ENDPOINT.value
     elif scan_type == ScanType.INFRASTRUCTURE:
         return TargetType.NETWORK_HOST.value
+    elif scan_type == ScanType.NETWORK:
+        return TargetType.NETWORK_HOST.value
     else:
-        # Default fallback
+        # Default: Git repo if URL detected, otherwise local mount
         return TargetType.GIT_REPO.value if is_git_url else TargetType.LOCAL_MOUNT.value
 
 
@@ -431,6 +449,100 @@ async def list_scans(
         )
 
 
+def _detect_scan_type_from_target(target_url: str) -> str:
+    """
+    Automatically detect scan_type from target_url without requiring user selection.
+    Returns: scan_type string (code, image, website, network)
+    """
+    if not target_url or not target_url.strip():
+        return "code"  # Default to code for empty targets
+    
+    target = target_url.strip()
+    
+    # Git URL patterns → Code
+    git_patterns = [
+        r'^https?://(www\.)?(github|gitlab)\.com/[\w\-\.]+/[\w\-\.]+',
+        r'^git@(github|gitlab)\.com:[\w\-\.]+/[\w\-\.]+\.git$',
+        r'\.git$',
+    ]
+    is_git_url = any(re.match(pattern, target, re.IGNORECASE) for pattern in git_patterns)
+    if is_git_url:
+        return "code"
+    
+    # Local path → Code
+    if target.startswith(('/', './', '../')):
+        return "code"
+    
+    # Container registry pattern → Image
+    container_pattern = r'^(?:[a-zA-Z0-9.-]+(?::\d+)?/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[\w][\w.-]{0,127})?(?:@sha256:[a-f0-9]{64})?$'
+    is_container = not target.startswith(('http://', 'https://', '/', './', '../')) and re.match(container_pattern, target)
+    if is_container:
+        return "image"
+    
+    # Network host (IP or hostname without protocol) → Network
+    if not target.startswith(('http://', 'https://', '/', './', '../')):
+        try:
+            ipaddress.ip_address(target.split(':')[0])  # Remove port if present
+            return "network"
+        except ValueError:
+            # Check if it's a hostname (contains dots, no slashes, not a container image)
+            if '.' in target and '/' not in target and ':' not in target.split('.')[-1]:
+                if not re.match(container_pattern, target):
+                    return "network"
+    
+    # http:// or https:// → Website
+    if target.startswith(('http://', 'https://')):
+        return "website"
+    
+    # Default to code
+    return "code"
+
+
+@router.get(
+    "/detect-scan-type",
+    summary="Detect scan type from target",
+    description="Automatically detect scan_type from target_url. Returns suggested scan_type and target_type info.",
+)
+async def detect_scan_type(
+    target_url: str = Query(..., description="Target URL or path"),
+) -> dict:
+    """
+    Automatically detect scan_type from target_url.
+    Returns: suggested scan_type and target_type information.
+    """
+    try:
+        # Detect scan type
+        suggested_scan_type = _detect_scan_type_from_target(target_url)
+        
+        # Convert to ScanType enum for target type detection
+        scan_type_enum = ScanType(suggested_scan_type) if hasattr(ScanType, suggested_scan_type.upper()) else ScanType.CODE
+        try:
+            scan_type_enum = next((st for st in ScanType if st.value == suggested_scan_type), ScanType.CODE)
+        except (ValueError, AttributeError):
+            scan_type_enum = ScanType.CODE
+        
+        # Determine target type
+        target_type = _determine_target_type(scan_type_enum, target_url)
+        
+        # Get display information
+        info = _get_target_type_info(target_type)
+        
+        return {
+            "suggested_scan_type": suggested_scan_type,
+            "target_type": target_type,
+            "display_name": info["display_name"],
+            "icon": info["icon"],
+            "action": info["action"],
+            "cleanup": info.get("cleanup"),
+            "target_url": target_url
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to detect scan type: {str(e)}"
+        )
+
+
 @router.get(
     "/detect-target-type",
     summary="Detect target type",
@@ -449,7 +561,7 @@ async def detect_target_type(
         try:
             scan_type_enum = ScanType(scan_type) if hasattr(ScanType, scan_type.upper()) else ScanType.CODE
         except (ValueError, AttributeError):
-            # Fallback: try by value
+            # Try by value if enum name lookup failed
             scan_type_enum = next((st for st in ScanType if st.value == scan_type), ScanType.CODE)
         
         # Determine target type

@@ -160,7 +160,9 @@ class ContainerSpec:
         collect_metadata: bool = True,
         exclude_paths: Optional[str] = None,
         git_branch: Optional[str] = None,
-        results_dir_container: Optional[str] = None  # Container path (what Scanner sees)
+        results_dir_container: Optional[str] = None,  # Container path (what Scanner sees)
+        asset_volumes: Optional[List[Dict[str, str]]] = None,  # Asset volumes from scanner manifests
+        scanners: Optional[List[str]] = None  # Selected scanners from backend (if None, scanner filters by scan_type)
     ) -> 'ContainerSpec':
         """Create container spec from scan configuration.
         
@@ -208,6 +210,14 @@ class ContainerSpec:
             "COLLECT_METADATA": "true" if collect_metadata else "false",
         }
         
+        # Add selected scanners if provided (from backend/queue message)
+        # This allows backend to control which scanners run, instead of scanner filtering
+        # If scanners is None or empty, scanner will filter by scan_type (fallback)
+        import json
+        scanners_list = scanners if scanners is not None else []
+        if scanners_list:
+            environment["SELECTED_SCANNERS"] = json.dumps(scanners_list)
+        
         # Add exclude paths if provided
         if exclude_paths:
             environment["SIMPLESECCHECK_EXCLUDE_PATHS"] = exclude_paths
@@ -215,6 +225,22 @@ class ContainerSpec:
         # Add git branch if provided
         if git_branch:
             environment["GIT_BRANCH"] = git_branch
+        
+        # Automatically detect PUID/PGID from mounted project root directory
+        # This ensures files are created with correct ownership on host
+        # Same approach as backend/worker - detect from project root ownership
+        try:
+            host_project_root = os.environ.get("HOST_PROJECT_ROOT", os.environ.get("PWD", "."))
+            if not os.path.isabs(host_project_root):
+                host_project_root = os.path.abspath(host_project_root)
+            project_root_stat = os.stat(host_project_root)
+            detected_uid = str(project_root_stat.st_uid)
+            detected_gid = str(project_root_stat.st_gid)
+            environment["PUID"] = detected_uid
+            environment["PGID"] = detected_gid
+        except (OSError, AttributeError):
+            # If stat fails, don't set PUID/PGID - scanner will use defaults
+            pass
         
         # Determine if container should be read-only
         # For git_repo, we need /target to be writable for Git Clone
@@ -246,6 +272,19 @@ class ContainerSpec:
         # Mount host paths to container paths (what Scanner container sees)
         # NOTE: Logs are part of Results - Scanner creates results/{scan_id}/logs/ automatically
         spec.add_volume(results_dir, container_results_dir, read_only=False)
+        
+        # Mount scanner asset volumes (if provided)
+        # Plugins define their required volumes in manifest.yaml, backend sends them via queue
+        if asset_volumes:
+            host_project_root = os.environ.get("HOST_PROJECT_ROOT", os.environ.get("PWD", "."))
+            if not os.path.isabs(host_project_root):
+                host_project_root = os.path.abspath(host_project_root)
+            for asset_volume in asset_volumes:
+                host_subpath = asset_volume.get("host_subpath")
+                container_path = asset_volume.get("container_path")
+                if host_subpath and container_path:
+                    asset_host_path = os.path.join(host_project_root, host_subpath)
+                    spec.add_volume(asset_host_path, container_path, read_only=False)
         
         # For local_mount, mount target from host (read-only)
         # For git_repo, /target is tmpfs (writable for Git Clone)

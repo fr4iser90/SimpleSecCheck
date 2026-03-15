@@ -53,6 +53,7 @@ export default function SetupWizard() {
     password_confirm: ''
   })
   
+  const [useCase, setUseCase] = useState<string>('')
   const [systemConfig, setSystemConfig] = useState<SystemConfig>({
     auth_mode: 'free',
     scanner_timeout: 3600,
@@ -215,8 +216,35 @@ export default function SetupWizard() {
   }
 
   const handleNext = () => {
-    if (step < 3) {
+    if (step < 4) {
       setStep(step + 1)
+    }
+  }
+  
+  const handleUseCaseSelect = (selectedUseCase: string) => {
+    setUseCase(selectedUseCase)
+    // Apply intelligent defaults based on use case
+    const useCaseConfigs: Record<string, Partial<SystemConfig>> = {
+      solo: {
+        auth_mode: 'free',
+      },
+      network_intern: {
+        auth_mode: 'basic',
+      },
+      public_web: {
+        auth_mode: 'free',
+      },
+      enterprise: {
+        auth_mode: 'jwt',
+      },
+    }
+    
+    const config = useCaseConfigs[selectedUseCase]
+    if (config) {
+      setSystemConfig({
+        ...systemConfig,
+        ...config,
+      })
     }
   }
 
@@ -314,7 +342,10 @@ export default function SetupWizard() {
             email: adminUser.email,
             password: adminUser.password
           },
-          system_config: systemConfig
+          system_config: {
+            ...systemConfig,
+            use_case: useCase,
+          }
         })
       })
 
@@ -398,7 +429,96 @@ export default function SetupWizard() {
 
   const renderStep1 = () => (
     <div className="setup-step">
-      <h3>Step 1: System Requirements</h3>
+      <h3>Step 1: Select Deployment Use Case</h3>
+      <p style={{ marginBottom: '24px', color: '#666' }}>
+        Choose the deployment scenario that best matches your setup. This will configure security settings and rate limits automatically.
+      </p>
+      
+      <div style={{ display: 'grid', gap: '16px', marginBottom: '24px' }}>
+        <div
+          onClick={() => handleUseCaseSelect('solo')}
+          style={{
+            padding: '20px',
+            border: `2px solid ${useCase === 'solo' ? '#4CAF50' : '#ddd'}`,
+            borderRadius: '8px',
+            cursor: 'pointer',
+            backgroundColor: useCase === 'solo' ? '#f0f9f0' : '#fff',
+            transition: 'all 0.2s',
+          }}
+        >
+          <h4 style={{ margin: '0 0 8px 0' }}>Solo</h4>
+          <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
+            Single user, self-hosted. All features enabled, no restrictions.
+          </p>
+          <small style={{ color: '#888' }}>Security: Permissive | Auth: Free</small>
+        </div>
+        
+        <div
+          onClick={() => handleUseCaseSelect('network_intern')}
+          style={{
+            padding: '20px',
+            border: `2px solid ${useCase === 'network_intern' ? '#4CAF50' : '#ddd'}`,
+            borderRadius: '8px',
+            cursor: 'pointer',
+            backgroundColor: useCase === 'network_intern' ? '#f0f9f0' : '#fff',
+            transition: 'all 0.2s',
+          }}
+        >
+          <h4 style={{ margin: '0 0 8px 0' }}>Network Intern</h4>
+          <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
+            Multiple users, internal network. User authentication required.
+          </p>
+          <small style={{ color: '#888' }}>Security: Permissive | Auth: Basic/JWT</small>
+        </div>
+        
+        <div
+          onClick={() => handleUseCaseSelect('public_web')}
+          style={{
+            padding: '20px',
+            border: `2px solid ${useCase === 'public_web' ? '#4CAF50' : '#ddd'}`,
+            borderRadius: '8px',
+            cursor: 'pointer',
+            backgroundColor: useCase === 'public_web' ? '#f0f9f0' : '#fff',
+            transition: 'all 0.2s',
+          }}
+        >
+          <h4 style={{ margin: '0 0 8px 0' }}>Public Web</h4>
+          <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
+            Public web access, many users. Restricted security, rate limited.
+          </p>
+          <small style={{ color: '#888' }}>Security: Restricted | Auth: Free</small>
+        </div>
+        
+        <div
+          onClick={() => handleUseCaseSelect('enterprise')}
+          style={{
+            padding: '20px',
+            border: `2px solid ${useCase === 'enterprise' ? '#4CAF50' : '#ddd'}`,
+            borderRadius: '8px',
+            cursor: 'pointer',
+            backgroundColor: useCase === 'enterprise' ? '#f0f9f0' : '#fff',
+            transition: 'all 0.2s',
+          }}
+        >
+          <h4 style={{ margin: '0 0 8px 0' }}>Enterprise</h4>
+          <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
+            Enterprise deployment with SSO. Restricted security, JWT authentication.
+          </p>
+          <small style={{ color: '#888' }}>Security: Restricted | Auth: JWT (SSO)</small>
+        </div>
+      </div>
+      
+      <div className="step-actions">
+        <button onClick={handleNext} disabled={!useCase}>
+          Continue
+        </button>
+      </div>
+    </div>
+  )
+  
+  const renderStep2 = () => (
+    <div className="setup-step">
+      <h3>Step 2: System Requirements</h3>
       <div className="requirements-list">
         <div className="requirement">
           <span className={`status ${setupStatus?.database_connected ? 'success' : 'error'}`}>
@@ -426,6 +546,7 @@ export default function SetupWizard() {
         </div>
       </div>
       <div className="step-actions">
+        <button onClick={handleBack}>Back</button>
         <button onClick={handleNext} disabled={loading || !setupStatus?.database_connected}>
           {loading ? 'Checking...' : 'Continue'}
         </button>
@@ -433,9 +554,9 @@ export default function SetupWizard() {
     </div>
   )
 
-  const renderStep2 = () => (
+  const renderStep3 = () => (
     <div className="setup-step">
-      <h3>Step 2: Create Admin User</h3>
+      <h3>Step 3: Create Admin User</h3>
       <div className="form-group">
         <label>Username</label>
         <input
@@ -494,20 +615,30 @@ export default function SetupWizard() {
     </div>
   )
 
-  const renderStep3 = () => (
+  const renderStep4 = () => (
     <div className="setup-step">
-      <h3>Step 3: System Configuration</h3>
+      <h3>Step 4: System Configuration</h3>
+      <p style={{ marginBottom: '20px', color: '#666', fontSize: '14px' }}>
+        Configuration based on your selected use case: <strong>{useCase}</strong>
+      </p>
+      
       <div className="form-group">
         <label>Authentication Mode</label>
         <select
           name="auth_mode"
           value={systemConfig.auth_mode}
           onChange={handleSystemConfigChange}
+          disabled={useCase === 'solo' || useCase === 'public_web'} // Locked for these use cases
         >
           <option value="free">Free (No Authentication)</option>
           <option value="basic">Basic (Username/Password)</option>
-          <option value="jwt">JWT (Token-based)</option>
+          <option value="jwt">JWT (Token-based / SSO)</option>
         </select>
+        {useCase === 'network_intern' && (
+          <small style={{ color: '#666', display: 'block', marginTop: '4px' }}>
+            Can be changed to JWT for SSO integration
+          </small>
+        )}
       </div>
       <div className="form-group">
         <label>Scanner Timeout (seconds)</label>
@@ -646,6 +777,7 @@ export default function SetupWizard() {
       case 1: return renderStep1()
       case 2: return renderStep2()
       case 3: return renderStep3()
+      case 4: return renderStep4()
       default: return renderStep0()
     }
   }

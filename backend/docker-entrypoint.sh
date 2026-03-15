@@ -2,23 +2,40 @@
 # Backend Refactored Docker Entrypoint
 
 set -e
-# Optionally remap backend user/group to host UID/GID for volume permissions
-PUID=${PUID:-1000}
-PGID=${PGID:-1000}
-echo "[Entrypoint] Requested PUID=$PUID PGID=$PGID"
+# Automatically detect UID/GID from mounted project root directory
+# This ensures files are created with correct ownership on host
+
+PROJECT_ROOT=${HOST_PROJECT_ROOT:-/project}
+if [ -d "$PROJECT_ROOT" ]; then
+    DETECTED_UID=$(stat -c "%u" "$PROJECT_ROOT" 2>/dev/null || echo "")
+    DETECTED_GID=$(stat -c "%g" "$PROJECT_ROOT" 2>/dev/null || echo "")
+    if [ -n "$DETECTED_UID" ] && [ -n "$DETECTED_GID" ]; then
+        PUID=$DETECTED_UID
+        PGID=$DETECTED_GID
+        echo "[Entrypoint] Auto-detected PUID=$PUID PGID=$PGID from $PROJECT_ROOT"
+    else
+        echo "[Entrypoint] Could not detect UID/GID from $PROJECT_ROOT, skipping user remapping"
+    fi
+else
+    echo "[Entrypoint] Project root $PROJECT_ROOT not found, skipping user remapping"
+fi
+
 CURRENT_UID=$(id -u backend)
 CURRENT_GID=$(id -g backend)
 
-if [ "$PGID" != "$CURRENT_GID" ]; then
-    if getent group "$PGID" >/dev/null 2>&1; then
-        usermod -g "$PGID" backend
-    else
-        groupmod -g "$PGID" backend
+# Only remap if PUID/PGID were detected
+if [ -n "$PUID" ] && [ -n "$PGID" ]; then
+    if [ "$PGID" != "$CURRENT_GID" ]; then
+        if getent group "$PGID" >/dev/null 2>&1; then
+            usermod -g "$PGID" backend
+        else
+            groupmod -g "$PGID" backend
+        fi
     fi
-fi
 
-if [ "$PUID" != "$CURRENT_UID" ]; then
-    usermod -u "$PUID" backend
+    if [ "$PUID" != "$CURRENT_UID" ]; then
+        usermod -u "$PUID" backend
+    fi
 fi
 
 CHOWN_UID=$(id -u backend)

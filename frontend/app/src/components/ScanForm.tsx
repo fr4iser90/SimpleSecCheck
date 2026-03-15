@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { FrontendConfig } from '../hooks/useConfig'
-import ScannerSelector from './ScannerSelector'
+import ScanStep from './ScanStep'
+import ScannerCardGrid from './ScannerCardGrid'
 
 interface ScanStatusData {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -52,16 +53,11 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const localPathsAllowed = config?.features.local_paths ?? true
   const metadataCollection = config?.features.metadata_collection ?? 'optional'
   
-  // Get enabled scan types
-  const enabledScanTypes = Object.entries(scanTypesConfig)
-    .filter(([_, config]) => config.enabled)
-    .map(([key, _]) => key)
-  
-  // Default to first available type
-  const defaultScanType = enabledScanTypes[0] || 'code'
-  
-  const [scanType, setScanType] = useState<string>(defaultScanType)
+  // No default scan type - will be auto-detected from target
+  const [scanType, setScanType] = useState<string>('')
   const [target, setTarget] = useState('')
+  const [scanTypeDetected, setScanTypeDetected] = useState(false) // Track if scan type was auto-detected
+  const [showScanTypeSelection, setShowScanTypeSelection] = useState(false) // Only show if detection failed or user wants to override
   const [gitBranch, setGitBranch] = useState('')
   const [availableBranches, setAvailableBranches] = useState<string[]>([])
   const [loadingBranches, setLoadingBranches] = useState(false)
@@ -79,6 +75,9 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const [findingPolicy, setFindingPolicy] = useState('')
   const [collectMetadata, setCollectMetadata] = useState(metadataCollection === 'always')
   const [selectedScanners, setSelectedScanners] = useState<string[]>([])
+  const [scanners, setScanners] = useState<any[]>([])
+  const [loadingScanners, setLoadingScanners] = useState(false)
+  const [scannerError, setScannerError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isScanDisabled = loading || selectedScanners.length === 0
@@ -86,13 +85,67 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
     ? 'Bitte wähle mindestens einen Scanner aus.'
     : undefined
   
-  // Detect target type when target or scanType changes (Backend determines target type)
+  // Auto-detect scan type and target type from target input
   useEffect(() => {
-    if (target.trim() && scanType) {
+    if (target.trim()) {
+      setLoadingTargetType(true)
+      const detectScanAndTargetType = async () => {
+        try {
+          const { apiFetch } = await import('../utils/apiClient')
+          // First, detect scan type from target
+          const scanTypeRes = await apiFetch(`/api/v1/scans/detect-scan-type?target_url=${encodeURIComponent(target.trim())}`)
+          if (scanTypeRes.ok) {
+            const scanTypeData = await scanTypeRes.json()
+            const suggestedScanType = scanTypeData.suggested_scan_type
+            
+            // Auto-set scan type if not already set or if different
+            if (!scanType || scanType !== suggestedScanType) {
+              setScanType(suggestedScanType)
+              setScanTypeDetected(true)
+            }
+            
+            // Use target type info from the response
+            setTargetTypeInfo({
+              target_type: scanTypeData.target_type,
+              display_name: scanTypeData.display_name,
+              icon: scanTypeData.icon,
+              action: scanTypeData.action,
+              cleanup: scanTypeData.cleanup,
+              target_url: scanTypeData.target_url
+            })
+          } else {
+            // If detection fails, show scan type selection
+            setShowScanTypeSelection(true)
+            setTargetTypeInfo(null)
+          }
+        } catch (err) {
+          console.warn('Failed to detect scan/target type:', err)
+          setShowScanTypeSelection(true)
+          setTargetTypeInfo(null)
+        } finally {
+          setLoadingTargetType(false)
+        }
+      }
+      
+      // Debounce: wait 500ms after user stops typing
+      const timeoutId = setTimeout(detectScanAndTargetType, 500)
+      return () => clearTimeout(timeoutId)
+    } else {
+      // Reset when target is empty
+      setTargetTypeInfo(null)
+      setLoadingTargetType(false)
+      setScanType('')
+      setScanTypeDetected(false)
+      setShowScanTypeSelection(false)
+    }
+  }, [target])
+  
+  // Detect target type when scanType changes (if user manually changed it)
+  useEffect(() => {
+    if (target.trim() && scanType && !scanTypeDetected) {
       setLoadingTargetType(true)
       const detectTargetType = async () => {
         try {
-          // Use backend scan_type for detect-target-type endpoint
           const scanTypeConfig = scanTypesConfig[scanType]
           const backendScanType = scanTypeConfig?.backend_value || 'repository'
           const { apiFetch } = await import('../utils/apiClient')
@@ -111,19 +164,54 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
         }
       }
       
-      // Debounce: wait 300ms after user stops typing
       const timeoutId = setTimeout(detectTargetType, 300)
       return () => clearTimeout(timeoutId)
-    } else {
-      setTargetTypeInfo(null)
-      setLoadingTargetType(false)
     }
-  }, [target, scanType])
+  }, [scanType, scanTypeDetected])
 
   // Use targetTypeInfo from backend instead of local detection
   const isGitRepo = targetTypeInfo?.target_type === 'git_repo'
   const isImageTarget = targetTypeInfo?.target_type === 'container_registry'
   const isLocalPath = targetTypeInfo?.target_type === 'local_mount'
+
+  // Load scanners when scan type changes
+  useEffect(() => {
+    if (!scanType) {
+      setScanners([])
+      setSelectedScanners([])
+      return
+    }
+
+    setLoadingScanners(true)
+    setScannerError(null)
+    
+    const loadScanners = async () => {
+      try {
+        const response = await fetch(`/api/scanners?scan_type=${scanType}`)
+        if (!response.ok) {
+          throw new Error('Failed to load scanners')
+        }
+        const data = await response.json()
+        const loadedScanners = data.scanners || []
+        setScanners(loadedScanners)
+        
+        // Auto-select all enabled scanners by default (only if nothing selected yet)
+        if (selectedScanners.length === 0 && loadedScanners.length > 0) {
+          const enabledScanners = loadedScanners
+            .filter((s: any) => s.enabled)
+            .map((s: any) => s.name)
+          setSelectedScanners(enabledScanners)
+        }
+      } catch (err) {
+        setScannerError(err instanceof Error ? err.message : 'Failed to load scanners')
+        console.error('Error loading scanners:', err)
+      } finally {
+        setLoadingScanners(false)
+      }
+    }
+    
+    loadScanners()
+  }, [scanType])
 
   // Fetch branches when Git URL is detected
   useEffect(() => {
@@ -275,117 +363,78 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
     }
   }
 
+  const handleScannerToggle = (scannerName: string) => {
+    if (selectedScanners.includes(scannerName)) {
+      setSelectedScanners(selectedScanners.filter(s => s !== scannerName))
+    } else {
+      setSelectedScanners([...selectedScanners, scannerName])
+    }
+  }
+
+  const handleSelectAllScanners = () => {
+    const enabledScanners = scanners
+      .filter(s => s.enabled)
+      .map(s => s.name)
+    setSelectedScanners(enabledScanners)
+  }
+
+  const handleDeselectAllScanners = () => {
+    setSelectedScanners([])
+  }
+
   return (
-    <form onSubmit={handleSubmit}>
-      <div className="form-group">
-        <label>Scan Type</label>
-        <div className="radio-group">
-          {Object.entries(scanTypesConfig)
-            .filter(([_, typeConfig]) => typeConfig.enabled)
-            .map(([frontendValue, typeConfig]) => (
-              <label key={frontendValue}>
-                <input
-                  type="radio"
-                  value={frontendValue}
-                  checked={scanType === frontendValue}
-                  onChange={(e) => setScanType(e.target.value)}
-                />
-                {typeConfig.label}
-              </label>
-            ))}
-        </div>
-        {gitOnly && (
-          <small style={{ display: 'block', marginTop: '0.5rem', color: '#856404', fontSize: '0.875rem' }}>
-            ⚠️ Production Mode: Only Git repositories or Docker Hub container images are allowed
-          </small>
-        )}
-      </div>
-
-      {scanType === 'code' && isLocalPath && (
-        <div className="form-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={ciMode}
-              onChange={(e) => setCiMode(e.target.checked)}
-            />
-            CI Mode (scan only tracked files)
-          </label>
-          <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
-            Scans only files tracked by Git (ignores untracked files). Only available for local Git repositories.
-          </small>
-        </div>
-      )}
-
-      {scanType !== 'network' && (
+    <form onSubmit={handleSubmit} className="scan-form">
+      {/* Step 1: Target (FIRST - most important!) */}
+      <ScanStep
+        id="step-1"
+        title="Target"
+        trigger={targetTypeInfo ? targetTypeInfo.target_type : target}
+        autoScroll={false}
+        expanded={true}
+        completed={!!targetTypeInfo && target.trim().length > 0}
+        required={true}
+      >
         <div className="form-group">
           <label htmlFor="target">
-            Target {scanType === 'code' ? (gitOnly ? '(Git URL oder Container Registry)' : '(Path, Git URL oder Container Registry)') : scanType === 'image' ? '(Container Registry)' : '(URL)'}
+            Target (Git URL, Container Image, Local Path, Website URL, or Network Host)
           </label>
           <input
             id="target"
             type="text"
             value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            onBlur={(e) => setTarget(e.target.value.trim())} // Auto-trim on blur
-            placeholder={scanType === 'code' ? (gitOnly ? 'https://github.com/user/repo oder nginx:latest' : '/path/to/project, https://github.com/user/repo oder nginx:latest') : scanType === 'image' ? 'nginx:latest oder ghcr.io/org/image:tag' : 'https://example.com'}
-            required
-            style={{
-              borderColor: isGitRepo || isImageTarget ? '#28a745' : isLocalPath && !localPathsAllowed ? '#dc3545' : undefined,
+            onChange={(e) => {
+              setTarget(e.target.value)
+              setScanTypeDetected(false) // Reset detection flag when user types
             }}
+            onBlur={(e) => setTarget(e.target.value.trim())}
+            placeholder="https://github.com/user/repo, nginx:latest, /path/to/project, https://example.com, or 192.168.1.1"
+            required
+            style={{ fontSize: '1.1rem', padding: '1rem' }}
+            className={isGitRepo || isImageTarget ? 'input-border-success' : isLocalPath && !localPathsAllowed ? 'input-border-error' : ''}
           />
-          {isLocalPath && !localPathsAllowed && (
-            <small style={{ display: 'block', marginTop: '0.5rem', color: '#dc3545', fontSize: '0.875rem' }}>
-              ❌ Local paths are not allowed in Production Mode. Please use a Git repository URL (GitHub/GitLab) or a container registry image.
-            </small>
-          )}
-          {isImageTarget && gitOnly && !isDockerHubImage(target) && (
-            <small style={{ display: 'block', marginTop: '0.5rem', color: '#dc3545', fontSize: '0.875rem' }}>
-              ❌ Production Mode: Only Docker Hub images are allowed (docker.io/... or unqualified image names).
-            </small>
-          )}
           {loadingTargetType && target.trim() && (
-            <div style={{
-              marginTop: '0.75rem',
-              padding: '0.75rem',
-              background: 'rgba(108, 117, 125, 0.1)',
-              border: '1px solid #6c757d',
-              borderRadius: '6px',
-              fontSize: '0.875rem',
-              color: '#495057'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div className="glass form-info-box loading" style={{ marginTop: '0.75rem' }}>
+              <div className="form-info-box-header">
                 <span>🔄</span>
                 <span>Analyzing target...</span>
               </div>
             </div>
           )}
           {targetTypeInfo && !loadingTargetType && (
-            <div style={{
-              marginTop: '0.75rem',
-              padding: '0.75rem',
-              background: 'rgba(40, 167, 69, 0.1)',
-              border: '1px solid #28a745',
-              borderRadius: '6px',
-              fontSize: '0.875rem',
-              color: '#155724'
-            }}>
-              <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div className="glass form-info-box success" style={{ marginTop: '0.75rem' }}>
+              <div className="form-info-box-header">
                 <span>{targetTypeInfo.icon}</span>
                 <span>Target detected: {targetTypeInfo.display_name}</span>
+                {scanTypeDetected && (
+                  <span style={{ marginLeft: 'auto', fontSize: '0.875rem', color: 'var(--color-info)' }}>
+                    Scan Type: {scanType}
+                  </span>
+                )}
               </div>
-              <div style={{
-                marginBottom: '0.5rem',
-                padding: '0.5rem',
-                background: 'rgba(255, 255, 255, 0.3)',
-                borderRadius: '4px',
-                fontFamily: 'monospace',
-                fontSize: '0.8rem',
-                wordBreak: 'break-all'
-              }}>
+              <div className="form-target-url">
                 {targetTypeInfo.target_url}
               </div>
-              <ul style={{ margin: 0, paddingLeft: '1.25rem', lineHeight: '1.6' }}>
+              <ul className="form-info-box-list">
                 <li>Type: {targetTypeInfo.target_type}</li>
                 <li>Action: {targetTypeInfo.action}</li>
                 {targetTypeInfo.cleanup && (
@@ -394,73 +443,151 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
               </ul>
             </div>
           )}
-          {isGitRepo && (
-            <>
-              <div className="form-group" style={{ marginTop: '0.75rem' }}>
-                <label htmlFor="git-branch">
-                  Git Branch {availableBranches.length > 0 ? '(auto-detected)' : '(optional)'}
-                </label>
-                {loadingBranches ? (
-                  <div style={{ 
-                    padding: '0.5rem', 
-                    color: '#6c757d', 
-                    fontSize: '0.875rem',
-                    fontStyle: 'italic'
-                  }}>
-                    🔄 Loading branches...
-                  </div>
-                ) : availableBranches.length > 0 ? (
-                  <select
-                    id="git-branch"
-                    value={gitBranch}
-                    onChange={(e) => setGitBranch(e.target.value)}
-                    style={{
-                      fontSize: '0.875rem',
-                      width: '100%',
-                      padding: '0.5rem',
-                      borderRadius: '4px',
-                      border: '1px solid #ced4da'
-                    }}
-                  >
-                    {availableBranches.map((branch) => (
-                      <option key={branch} value={branch}>
-                        {branch}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <>
+        </div>
+
+        {/* Scan Type Selection - Only show if detection failed or user wants to override */}
+        {(showScanTypeSelection || (!scanTypeDetected && target.trim())) && (
+          <div className="form-group" style={{ marginTop: '1.5rem' }}>
+            <label>
+              Scan Type {scanTypeDetected ? '(auto-detected, can override)' : '(required)'}
+            </label>
+            <div className="radio-group">
+              {Object.entries(scanTypesConfig)
+                .filter(([_, typeConfig]) => typeConfig.enabled)
+                .map(([frontendValue, typeConfig]) => (
+                  <label key={frontendValue} className="scan-form-label">
                     <input
-                      id="git-branch"
-                      type="text"
-                      value={gitBranch}
-                      onChange={(e) => setGitBranch(e.target.value)}
-                      onBlur={(e) => setGitBranch(e.target.value.trim())}
-                      placeholder="main, master, develop, etc. (leer = Standard-Branch)"
-                      style={{
-                        fontSize: '0.875rem'
+                      type="radio"
+                      value={frontendValue}
+                      checked={scanType === frontendValue}
+                      onChange={(e) => {
+                        setScanType(e.target.value)
+                        setScanTypeDetected(false)
                       }}
                     />
-                    {branchError && (
-                      <small style={{ display: 'block', marginTop: '0.5rem', color: '#856404', fontSize: '0.875rem' }}>
-                        ⚠️ {branchError}
-                      </small>
-                    )}
-                  </>
-                )}
-                <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
-                  {availableBranches.length > 0 
-                    ? 'Default branch is automatically selected. You can choose a different branch.'
-                    : 'Leave empty for default branch (usually "main" or "master")'}
-                </small>
-              </div>
-            </>
-          )}
-        </div>
+                    {typeConfig.label}
+                  </label>
+                ))}
+            </div>
+            {gitOnly && (
+              <small className="form-help-text warning">
+                ⚠️ Production Mode: Only Git repositories or Docker Hub container images are allowed
+              </small>
+            )}
+          </div>
+        )}
+
+        {scanType === 'code' && isLocalPath && (
+          <div className="form-group" style={{ marginTop: '1rem' }}>
+            <label>
+              <input
+                type="checkbox"
+                checked={ciMode}
+                onChange={(e) => setCiMode(e.target.checked)}
+              />
+              CI Mode (scan only tracked files)
+            </label>
+            <small className="form-help-text info">
+              Scans only files tracked by Git (ignores untracked files). Only available for local Git repositories.
+            </small>
+          </div>
+        )}
+
+        {isLocalPath && !localPathsAllowed && (
+          <small className="form-help-text error">
+            ❌ Local paths are not allowed in Production Mode. Please use a Git repository URL (GitHub/GitLab) or a container registry image.
+          </small>
+        )}
+        {isImageTarget && gitOnly && !isDockerHubImage(target) && (
+          <small className="form-help-text error">
+            ❌ Production Mode: Only Docker Hub images are allowed (docker.io/... or unqualified image names).
+          </small>
+        )}
+
+        {isGitRepo && (
+          <>
+            <div className="form-group" style={{ marginTop: '0.75rem' }}>
+              <label htmlFor="git-branch">
+                Git Branch {availableBranches.length > 0 ? '(auto-detected)' : '(optional)'}
+              </label>
+              {loadingBranches ? (
+                <div className="form-loading-text">
+                  🔄 Loading branches...
+                </div>
+              ) : availableBranches.length > 0 ? (
+                <select
+                  id="git-branch"
+                  value={gitBranch}
+                  onChange={(e) => setGitBranch(e.target.value)}
+                >
+                  {availableBranches.map((branch) => (
+                    <option key={branch} value={branch}>
+                      {branch}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <>
+                  <input
+                    id="git-branch"
+                    type="text"
+                    value={gitBranch}
+                    onChange={(e) => setGitBranch(e.target.value)}
+                    onBlur={(e) => setGitBranch(e.target.value.trim())}
+                    placeholder="main, master, develop, etc. (leer = Standard-Branch)"
+                  />
+                  {branchError && (
+                    <small className="form-help-text warning">
+                      ⚠️ {branchError}
+                    </small>
+                  )}
+                </>
+              )}
+              <small className="form-help-text info">
+                {availableBranches.length > 0 
+                  ? 'Default branch is automatically selected. You can choose a different branch.'
+                  : 'Leave empty for default branch (usually "main" or "master")'}
+              </small>
+            </div>
+          </>
+        )}
+      </ScanStep>
+
+      {/* Step 2: Scanner Selection */}
+      {scanType && (
+        <ScanStep
+          id="step-2"
+          title="Scanner Selection"
+          trigger={targetTypeInfo ? targetTypeInfo.target_type : undefined}
+          autoScroll={!!targetTypeInfo && target.trim().length > 0}
+          expanded={true}
+          completed={selectedScanners.length > 0}
+          required={true}
+        >
+          <ScannerCardGrid
+            scanners={scanners}
+            selectedScanners={selectedScanners}
+            onToggle={handleScannerToggle}
+            onSelectAll={handleSelectAllScanners}
+            onDeselectAll={handleDeselectAllScanners}
+            loading={loadingScanners}
+            error={scannerError}
+          />
+        </ScanStep>
       )}
 
-      <div className="form-group">
-        <label htmlFor="finding-policy">Finding Policy (optional)</label>
+      {/* Step 3: Advanced Options */}
+      <ScanStep
+        id="step-3"
+        title="Advanced Options"
+        trigger={undefined}
+        autoScroll={false}
+        expanded={false}
+        completed={false}
+        required={false}
+      >
+        <div className="form-group">
+          <label htmlFor="finding-policy">Finding Policy (optional)</label>
         <input
           id="finding-policy"
           type="text"
@@ -471,13 +598,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
         />
       </div>
 
-      <ScannerSelector
-        scanType={scanType}
-        selectedScanners={selectedScanners}
-        onSelectionChange={setSelectedScanners}
-      />
-
-      {metadataCollection === 'optional' && (
+        {metadataCollection === 'optional' && (
         <div className="form-group">
           <label>
             <input
@@ -487,43 +608,37 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
             />
             Collect Metadata (optional - includes Git info, project path, etc.)
           </label>
-          <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
+          <small className="form-help-text info">
             By default, no metadata is collected for privacy. Enable this to include project information in the scan report.
           </small>
         </div>
       )}
       {metadataCollection === 'always' && (
-        <div style={{
-          marginBottom: '1rem',
-          padding: '0.75rem',
-          background: 'rgba(40, 167, 69, 0.1)',
-          border: '1px solid #28a745',
-          borderRadius: '6px',
-          fontSize: '0.875rem',
-          color: '#155724'
-        }}>
+        <div className="glass form-info-box success">
           ℹ️ Metadata collection is always enabled in Production Mode for scan deduplication.
         </div>
-      )}
+        )}
+      </ScanStep>
 
+      {/* Error Display */}
       {error && (
-        <div style={{ 
-          background: 'rgba(220, 53, 69, 0.2)', 
-          border: '1px solid #dc3545', 
-          borderRadius: '8px', 
-          padding: '1rem', 
-          marginBottom: '1rem',
-          color: '#dc3545'
-        }}>
+        <div className="glass form-info-box error">
           {error}
         </div>
       )}
 
-      <span title={scanDisabledReason} style={{ display: 'inline-block' }}>
-        <button type="submit" className="primary" disabled={isScanDisabled}>
-          {loading ? 'Starting...' : ' Start Scan'}
-        </button>
-      </span>
+      {/* Fixed Action Bar */}
+      <div className="glass action-bar">
+        <span title={scanDisabledReason} className="scan-form-submit-wrapper">
+          <button 
+            type="submit" 
+            className="primary scan-form-submit-button" 
+            disabled={isScanDisabled}
+          >
+            {loading ? '🔄 Starting Scan...' : '🚀 Start Scan'}
+          </button>
+        </span>
+      </div>
     </form>
   )
 }

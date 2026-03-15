@@ -671,7 +671,8 @@ async def skip_setup(
     In production, setup should always be performed through the wizard.
     """
     try:
-        if settings.ENVIRONMENT != "development":
+        # Check SECURITY_MODE (must be permissive for development skip)
+        if settings.SECURITY_MODE.lower() not in ["permissive"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Setup skip is only allowed in development environment"
@@ -792,10 +793,34 @@ async def _lock_setup_permanently():
 async def _create_system_state(config: Dict[str, Any]):
     """Create or update system state record with actual system state."""
     try:
+        from domain.services.security_policy_service import SecurityPolicyService
+        
         # Check actual system state
         tables_exist = await db_adapter.check_tables_exist()
         all_tables_exist = len(tables_exist) > 0 and all(tables_exist.values())
         admin_exists = await db_adapter.check_admin_user_exists()
+        
+        # Apply use case configuration if provided
+        use_case = config.get("use_case")
+        if use_case:
+            use_case_config = SecurityPolicyService.apply_use_case_config(use_case)
+            # Merge use case config into config dict
+            config.update({
+                "SECURITY_MODE": use_case_config["SECURITY_MODE"],
+                "AUTH_MODE": use_case_config["AUTH_MODE"],
+                "feature_flags": use_case_config["feature_flags"],
+                "rate_limits": use_case_config["rate_limits"],
+            })
+            # Update settings if use case is provided (for runtime)
+            # Note: This won't persist to .env file, but will work for current session
+            if hasattr(settings, 'SECURITY_MODE'):
+                settings.SECURITY_MODE = use_case_config["SECURITY_MODE"]
+            if hasattr(settings, 'AUTH_MODE'):
+                settings.AUTH_MODE = use_case_config["AUTH_MODE"]
+            # Set feature flags
+            for flag_name, flag_value in use_case_config["feature_flags"].items():
+                if hasattr(settings, flag_name):
+                    setattr(settings, flag_name, flag_value)
         
         async with db_adapter.async_session() as session:
             # Check if system state already exists
@@ -808,7 +833,7 @@ async def _create_system_state(config: Dict[str, Any]):
                 # Update existing system state with actual values
                 system_state.setup_status = SetupStatusEnum.COMPLETED
                 system_state.version = "1.0.0"
-                system_state.auth_mode = settings.AUTH_MODE
+                system_state.auth_mode = config.get("auth_mode", settings.AUTH_MODE)
                 system_state.config = config
                 system_state.database_initialized = all_tables_exist
                 system_state.admin_user_created = admin_exists
@@ -820,7 +845,7 @@ async def _create_system_state(config: Dict[str, Any]):
                 system_state = SystemState()
                 system_state.setup_status = SetupStatusEnum.COMPLETED
                 system_state.version = "1.0.0"
-                system_state.auth_mode = settings.AUTH_MODE
+                system_state.auth_mode = config.get("auth_mode", settings.AUTH_MODE)
                 system_state.config = config
                 system_state.database_initialized = all_tables_exist
                 system_state.admin_user_created = admin_exists

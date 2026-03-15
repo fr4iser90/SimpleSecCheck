@@ -78,7 +78,7 @@ class DockerRunner:
                 'command': command,
                 'volumes': volumes or {},
                 'environment': environment or {},
-                'network': network or settings.DOCKER_NETWORK,
+                'network': network if network else settings.DOCKER_NETWORK,
                 'remove': remove,
                 'detach': True,
                 **kwargs

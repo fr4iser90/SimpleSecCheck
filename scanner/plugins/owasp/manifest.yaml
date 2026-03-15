@@ -11,12 +11,12 @@ assets:
     type: data
     description: OWASP Dependency Check data cache
     mount:
-      host_subpath: scanner/scanners/owasp/data
-      container_path: /app/scanner/scanners/owasp/data
+      host_subpath: scanner/plugins/owasp/data
+      container_path: /app/scanner/plugins/owasp/data
     update:
       enabled: true
       command:
         - dependency-check
         - --updateonly
         - --data
-        - /app/scanner/scanners/owasp/data
+        - /app/scanner/plugins/owasp/data

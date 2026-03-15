@@ -53,7 +53,7 @@ class ActorContextDependency:
         jwt_secret_key: str = "your-secret-key",
         jwt_algorithm: str = "HS256",
         jwt_expiration_minutes: int = 30,
-        environment: str = "development"
+        environment: str = "permissive"  # SECURITY_MODE value
     ):
         self.security = HTTPBearer(auto_error=False)
         self.jwt_secret_key = jwt_secret_key

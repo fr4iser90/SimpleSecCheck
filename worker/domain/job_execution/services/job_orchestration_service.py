@@ -190,6 +190,8 @@ class JobOrchestrationService:
                 raise ValueError("collect_metadata is required in queue message but not provided. Backend must set collect_metadata.")
             exclude_paths = job_data.get('exclude_paths')
             git_branch = job_data.get('git_branch')
+            asset_volumes = job_data.get('asset_volumes', [])  # Asset volumes from scanner manifests (backend provides)
+            scanners = job_data.get('scanners', [])  # Selected scanners from backend (if empty, scanner filters by scan_type)
             
             # Create container specification
             # Pass host paths for volume mounting, container paths for environment variables
@@ -206,7 +208,9 @@ class JobOrchestrationService:
                 collect_metadata=collect_metadata,
                 exclude_paths=exclude_paths,
                 git_branch=git_branch,
-                results_dir_container=results_dir_container  # Container path (for Scanner env vars)
+                results_dir_container=results_dir_container,  # Container path (for Scanner env vars)
+                asset_volumes=asset_volumes,  # Asset volumes from scanner manifests
+                scanners=scanners  # Selected scanners from backend (if empty, scanner filters by scan_type)
             )
             
             # Create job execution

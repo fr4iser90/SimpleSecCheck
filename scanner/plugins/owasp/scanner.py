@@ -32,8 +32,8 @@ class OWASPScanner(BaseScanner):
     PRIORITY = 4
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "OWASP_DC_CONFIG_PATH": "/app/scanner/scanners/owasp/config/config.yaml",
-        "OWASP_DC_DATA_DIR": "/app/scanner/scanners/owasp/data"
+        "OWASP_DC_CONFIG_PATH": "/app/scanner/plugins/owasp/config/config.yaml",
+        "OWASP_DC_DATA_DIR": "/app/scanner/plugins/owasp/data"
     }
     # SCANNER_NAME wird automatisch aus manifest.yaml geladen
     
@@ -58,7 +58,7 @@ class OWASPScanner(BaseScanner):
             exclude_paths: Comma-separated paths to exclude
         """
         super().__init__("OWASP Dependency Check", target_path, results_dir, log_file, config_path)
-        self.data_dir = Path(data_dir) if data_dir else Path("/app/scanner/scanners/owasp/data")
+        self.data_dir = Path(data_dir) if data_dir else Path("/app/scanner/plugins/owasp/data")
         self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     def initialize_database(self):
@@ -70,8 +70,31 @@ class OWASPScanner(BaseScanner):
             self.log("Lock file found from previous session, removing...")
             lock_file.unlink()
         
-        # Check if database exists
-        if not self.data_dir.exists() or not any(self.data_dir.iterdir()):
+        # Debug: Log data directory status
+        self.log(f"Checking OWASP data directory: {self.data_dir}")
+        self.log(f"Data directory exists: {self.data_dir.exists()}")
+        
+        if self.data_dir.exists():
+            try:
+                files = list(self.data_dir.iterdir())
+                self.log(f"Data directory contains {len(files)} items")
+                # Check for H2 database files specifically
+                db_files = [f for f in files if f.name.endswith(('.mv.db', '.trace.db', '.lock.db'))]
+                self.log(f"Found {len(db_files)} database files: {[f.name for f in db_files]}")
+            except Exception as e:
+                self.log(f"Error checking data directory: {e}", "WARNING")
+                files = []
+        else:
+            files = []
+        
+        # Check if database exists - look for H2 database files
+        db_files = [
+            self.data_dir / "odc.mv.db",  # H2 database file
+            self.data_dir / "odc.trace.db",  # H2 trace file
+        ]
+        db_exists = self.data_dir.exists() and any(f.exists() for f in db_files)
+        
+        if not db_exists:
             self.log("OWASP Dependency Check database not found. Downloading vulnerability database (this may take 5-15 minutes)...")
             
             if not self.check_tool_installed("dependency-check"):
@@ -195,8 +218,8 @@ if __name__ == "__main__":
     target_path = os.getenv("TARGET_PATH", "/target")
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
-    config_path = os.getenv("OWASP_DC_CONFIG_PATH", "/app/scanner/scanners/owasp/config/config.yaml")
-    data_dir = os.getenv("OWASP_DC_DATA_DIR", "/app/scanner/scanners/owasp/data")
+    config_path = os.getenv("OWASP_DC_CONFIG_PATH", "/app/scanner/plugins/owasp/config/config.yaml")
+    data_dir = os.getenv("OWASP_DC_DATA_DIR", "/app/scanner/plugins/owasp/data")
     exclude_paths = os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     scanner = OWASPScanner(

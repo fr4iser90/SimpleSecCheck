@@ -36,7 +36,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         protected_paths: Optional[list] = None,
         public_paths: Optional[list] = None,
         admin_paths: Optional[list] = None,
-        environment: str = "development",
+        environment: str = "permissive",  # SECURITY_MODE value (default for first start, overwritten from DB after setup)
     ):
         """
         Initialize authentication middleware.
@@ -256,14 +256,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         
         Args:
             app: FastAPI application instance
-            rate_limits: Dictionary of rate limits per user type
+            rate_limits: Dictionary of rate limits per user type (optional, uses SecurityPolicyService if not provided)
         """
         super().__init__(app)
-        self.rate_limits = rate_limits or {
-            "guest": {"requests": 100, "window": 3600},  # 100 requests per hour for guests
-            "authenticated": {"requests": 1000, "window": 3600},  # 1000 requests per hour for authenticated users
-            "admin": {"requests": 5000, "window": 3600},  # 5000 requests per hour for admins
-        }
+        if rate_limits is None:
+            from domain.services.security_policy_service import SecurityPolicyService
+            rate_limits = SecurityPolicyService.get_rate_limits()
+        self.rate_limits = rate_limits
         self.request_counts = {}  # In-memory storage (use Redis in production)
     
     async def dispatch(
@@ -385,7 +384,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     - Strict-Transport-Security
     """
     
-    def __init__(self, app, environment: str = "development"):
+    def __init__(self, app, environment: str):
         """
         Initialize security headers middleware.
         

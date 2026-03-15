@@ -129,6 +129,40 @@ export default function ScannerDataUpdate() {
       alert('Please select a scanner asset to update.')
       return
     }
+    
+    // Handle "All" option for batch updates
+    if (selectedAssetKey === 'all') {
+      const updatePromises = updatableAssets.map(async (item) => {
+        try {
+          const response = await fetch(`/api/scanners/${item.scanner}/assets/${item.asset.id}/update`, {
+            method: 'POST',
+          })
+          if (!response.ok) {
+            const error = await response.json()
+            console.error(`Failed to update ${item.scanner}/${item.asset.id}: ${error.detail || 'Unknown error'}`)
+            return { success: false, scanner: item.scanner, asset: item.asset.id, error: error.detail }
+          }
+          return { success: true, scanner: item.scanner, asset: item.asset.id }
+        } catch (err) {
+          console.error(`[ScannerDataUpdate] Error updating ${item.scanner}/${item.asset.id}:`, err)
+          return { success: false, scanner: item.scanner, asset: item.asset.id, error: String(err) }
+        }
+      })
+      
+      setIsUpdating(true)
+      const results = await Promise.all(updatePromises)
+      const successCount = results.filter(r => r.success).length
+      const failCount = results.filter(r => !r.success).length
+      
+      if (failCount === 0) {
+        alert(`✅ All ${successCount} asset updates started successfully!`)
+      } else {
+        alert(`⚠️ Started ${successCount} updates, ${failCount} failed. Check console for details.`)
+      }
+      return
+    }
+    
+    // Single asset update
     const [scannerName, assetId] = selectedAssetKey.split(':')
     try {
       const response = await fetch(`/api/scanners/${scannerName}/assets/${assetId}/update`, {
@@ -273,6 +307,11 @@ export default function ScannerDataUpdate() {
             <option value="" disabled>
               {updatableAssets.length === 0 ? 'No updatable assets available' : 'Choose an asset'}
             </option>
+            {updatableAssets.length > 1 && (
+              <option value="all">
+                🔄 All Assets ({updatableAssets.length} assets)
+              </option>
+            )}
             {updatableAssets.map(item => (
               <option key={`${item.scanner}:${item.asset.id}`} value={`${item.scanner}:${item.asset.id}`}>
                 {item.scanner.toUpperCase()} · {item.asset.id}

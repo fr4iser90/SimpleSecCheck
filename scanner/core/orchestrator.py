@@ -8,7 +8,7 @@ import subprocess
 import sys
 import inspect
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import ipaddress
 from datetime import datetime
 
@@ -20,25 +20,48 @@ if "/app/scanner" not in sys.path:
 
 # Ensure scanner auto-discovery runs before registry usage
 # Import plugins to auto-register all scanners
-try:
-    import scanner.plugins  # noqa: F401 - This triggers auto-registration via __init__.py
-except Exception as e:
-    print(f"[Orchestrator] Warning: Could not import scanner.plugins: {e}")
-    # Fallback to old scanners import
-    try:
-        import scanner.scanners  # noqa: F401
-    except Exception:
-        pass
+import scanner.plugins  # noqa: F401 - This triggers auto-registration via __init__.py
 
-try:
-    from scanner.core.scanner_registry import ScannerRegistry, ScanType, TargetType, Scanner
-    from scanner.core.step_registry import StepRegistry, StepStatus, Step
-    from scanner.core.step_definitions import StepDefinitionsRegistry, StepType
-except ImportError:
-    # Fallback for direct execution
-    from core.scanner_registry import ScannerRegistry, ScanType, TargetType, Scanner
-    from core.step_registry import StepRegistry, StepStatus, Step
-    from core.step_definitions import StepDefinitionsRegistry, StepType
+from scanner.core.scanner_registry import ScannerRegistry, ScanType, TargetType, Scanner
+from scanner.core.step_registry import StepRegistry, StepStatus, Step
+from scanner.core.step_definitions import StepDefinitionsRegistry, StepType
+
+
+# Single Source of Truth: Mapping from frontend scan_type to scanner scan_types
+def get_scanner_scan_types_for_frontend_type(frontend_scan_type: str) -> List[ScanType]:
+    """
+    Map frontend scan_type to scanner scan_types.
+    
+    When user selects "code" scan, we want to include:
+    - CODE scanners (semgrep, codeql, etc.)
+    - DEPENDENCY scanners (safety, npm_audit, etc.)
+    - SECRETS scanners (gitleaks, trufflehog, etc.)
+    - CONFIG scanners (terraform, checkov, etc.)
+    
+    This is the SINGLE SOURCE OF TRUTH for this mapping.
+    """
+    if frontend_scan_type == "code":
+        return [ScanType.CODE, ScanType.DEPENDENCY, ScanType.SECRETS, ScanType.CONFIG]
+    else:
+        return [ScanType(frontend_scan_type)]
+
+
+def map_scanner_scan_type_to_frontend_type(scanner_scan_type: str) -> str:
+    """
+    Map scanner scan_type to frontend scan_type for display.
+    
+    This is the SINGLE SOURCE OF TRUTH for reverse mapping.
+    """
+    if scanner_scan_type in ["code", "dependency", "secrets", "config"]:
+        return "code"
+    elif scanner_scan_type in ["image", "container"]:
+        return "image"
+    elif scanner_scan_type == "website":
+        return "website"
+    elif scanner_scan_type == "network":
+        return "network"
+    else:
+        return scanner_scan_type
 
 
 class ScanOrchestrator:
@@ -83,7 +106,8 @@ class ScanOrchestrator:
                 "Backend must set scan_type and Worker must pass it to container via SCAN_TYPE env var."
             )
         try:
-            self.scan_types = [ScanType(scan_type_env)]
+            # Use single source of truth for mapping
+            self.scan_types = get_scanner_scan_types_for_frontend_type(scan_type_env)
         except ValueError as e:
             raise ValueError(
                 f"Invalid SCAN_TYPE value: '{scan_type_env}'. "
@@ -101,18 +125,22 @@ class ScanOrchestrator:
             )
         self.collect_metadata = collect_metadata_env.lower() == "true"
         
-        # Selected scanners (optional - if empty, run all scanners)
+        # Selected scanners: If provided, use them. Otherwise, auto-detect based on scan_type
         selected_scanners_json = os.getenv("SELECTED_SCANNERS")
         if selected_scanners_json:
             import json
             try:
                 self.selected_scanners = set(json.loads(selected_scanners_json))
-                self.log_message(f"Selected scanners: {', '.join(sorted(self.selected_scanners))}")
-            except (json.JSONDecodeError, TypeError):
-                self.log_message(f"[WARNING] Invalid SELECTED_SCANNERS format: {selected_scanners_json}, running all scanners")
-                self.selected_scanners = None
+                self.log_message(f"Using explicitly selected scanners: {', '.join(sorted(self.selected_scanners))}")
+            except (json.JSONDecodeError, TypeError) as e:
+                raise ValueError(
+                    f"Invalid SELECTED_SCANNERS format: {selected_scanners_json}. "
+                    f"Expected JSON array of scanner names. Error: {e}"
+                )
         else:
-            self.selected_scanners = None  # None means run all scanners
+            # Auto-detect scanners based on scan_type (no fallback - this is a feature!)
+            self.selected_scanners = None  # None means auto-detect based on scan_type
+            self.log_message(f"No SELECTED_SCANNERS provided, will auto-detect scanners for scan_type={scan_type_env}")
         
         # Overall success tracking
         self.overall_success = True
@@ -343,7 +371,6 @@ class ScanOrchestrator:
                 # Don't set overall_success = False - allow scan to complete even if one scanner fails
                 return False  # Return False but continue with other scanners
         
-        # Fallback to Bash script (legacy)
         script_path = Path(scanner.script_path)
         
         if not script_path.exists():
@@ -645,9 +672,8 @@ def _get_asset_last_updated(container_path: str) -> Optional[Dict[str, Any]]:
                         if file_mtime > newest_mtime:
                             newest_mtime = file_mtime
                 mtime = newest_mtime if newest_mtime > 0 else asset_path.stat().st_mtime
-            except (PermissionError, OSError):
-                # Fallback to directory mtime if we can't read files
-                mtime = asset_path.stat().st_mtime
+            except (PermissionError, OSError) as e:
+                raise ValueError(f"Cannot read asset files in {asset_path}: {e}")
         else:
             return None
         
@@ -683,7 +709,16 @@ async def list_scanners():
     """List all available scanners with their capabilities and assets."""
     import json
     import sys
+    import logging
     from pathlib import Path
+    
+    # Configure logging based on LOG_LEVEL environment variable
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.INFO),
+        format='[%(levelname)s] %(message)s'
+    )
+    logger = logging.getLogger(__name__)
     
     try:
         from scanner.core.scanner_registry import ScannerRegistry, ScanType
@@ -693,6 +728,150 @@ async def list_scanners():
         import scanner.plugins  # noqa: F401
         
         scanners = ScannerRegistry.get_all_scanners()
+        
+        # Scanner descriptions and categories
+        SCANNER_DESCRIPTIONS = {
+            "Semgrep": {
+                "description": "Static analysis tool for multiple languages. Finds bugs and security vulnerabilities in code.",
+                "categories": ["Code Scanning", "SAST"],
+                "icon": "🔍"
+            },
+            "CodeQL": {
+                "description": "GitHub's semantic code analysis engine. Finds security vulnerabilities using queries.",
+                "categories": ["Code Scanning", "SAST"],
+                "icon": "🔎"
+            },
+            "SonarQube": {
+                "description": "Code quality and security analysis platform. Detects bugs, vulnerabilities, and code smells.",
+                "categories": ["Code Scanning", "SAST", "Code Quality"],
+                "icon": "📊"
+            },
+            "ESLint": {
+                "description": "JavaScript and TypeScript linter with security rules. Finds code quality and security issues.",
+                "categories": ["Code Scanning", "Linting"],
+                "icon": "📝"
+            },
+            "Brakeman": {
+                "description": "Static analysis security scanner for Ruby on Rails applications.",
+                "categories": ["Code Scanning", "SAST"],
+                "icon": "💎"
+            },
+            "Bandit": {
+                "description": "Python security linter. Scans Python code for common security issues.",
+                "categories": ["Code Scanning", "SAST"],
+                "icon": "🐍"
+            },
+            "Trivy": {
+                "description": "Comprehensive security scanner. Scans filesystems, dependencies, and container images for vulnerabilities.",
+                "categories": ["Dependency Scanning", "Container Security", "Filesystem Scanning"],
+                "icon": "🛡️"
+            },
+            "Snyk": {
+                "description": "Developer security platform. Scans code and dependencies for vulnerabilities and license issues.",
+                "categories": ["Code Scanning", "Dependency Scanning"],
+                "icon": "🔐"
+            },
+            "OWASP Dependency Check": {
+                "description": "OWASP's dependency vulnerability scanner. Identifies known vulnerabilities in project dependencies.",
+                "categories": ["Dependency Scanning", "SCA"],
+                "icon": "🔒"
+            },
+            "npm audit": {
+                "description": "Node.js package vulnerability scanner. Checks npm dependencies for known security issues.",
+                "categories": ["Dependency Scanning"],
+                "icon": "📦"
+            },
+            "Safety": {
+                "description": "Python dependency vulnerability scanner. Checks Python packages against known vulnerabilities.",
+                "categories": ["Dependency Scanning"],
+                "icon": "🐍"
+            },
+            "GitLeaks": {
+                "description": "Secret scanning tool for Git repositories. Detects hardcoded secrets and credentials.",
+                "categories": ["Secrets Scanning"],
+                "icon": "🔑"
+            },
+            "TruffleHog": {
+                "description": "Advanced secret scanning tool. Finds credentials, API keys, and other secrets in code.",
+                "categories": ["Secrets Scanning"],
+                "icon": "🐷"
+            },
+            "detect-secrets": {
+                "description": "Enterprise-ready secret detection tool. Prevents secrets from entering codebase.",
+                "categories": ["Secrets Scanning"],
+                "icon": "🕵️"
+            },
+            "Checkov": {
+                "description": "Infrastructure as Code security scanner. Scans Terraform, CloudFormation, and Kubernetes configs.",
+                "categories": ["IaC Security", "Config Scanning"],
+                "icon": "☁️"
+            },
+            "Terraform": {
+                "description": "Terraform security scanner. Validates Terraform configurations for security best practices.",
+                "categories": ["IaC Security"],
+                "icon": "🏗️"
+            },
+            "ZAP": {
+                "description": "OWASP ZAP - Web application security scanner. Finds vulnerabilities in web applications.",
+                "categories": ["Web Application Security", "DAST"],
+                "icon": "🕷️"
+            },
+            "Burp": {
+                "description": "Burp Suite - Web application security testing platform.",
+                "categories": ["Web Application Security", "DAST"],
+                "icon": "🔪"
+            },
+            "Nuclei": {
+                "description": "Fast vulnerability scanner. Uses templates to scan for known vulnerabilities.",
+                "categories": ["Web Application Security", "Vulnerability Scanning"],
+                "icon": "⚛️"
+            },
+            "Nikto": {
+                "description": "Web server scanner. Tests web servers for dangerous files and misconfigurations.",
+                "categories": ["Web Application Security"],
+                "icon": "🌐"
+            },
+            "Wapiti": {
+                "description": "Web application vulnerability scanner. Detects security flaws in web applications.",
+                "categories": ["Web Application Security", "DAST"],
+                "icon": "🕸️"
+            },
+            "Clair": {
+                "description": "Container vulnerability scanner. Analyzes container images for known vulnerabilities.",
+                "categories": ["Container Security"],
+                "icon": "🐳"
+            },
+            "Anchore": {
+                "description": "Container image security scanner. Scans container images for vulnerabilities and policy violations.",
+                "categories": ["Container Security"],
+                "icon": "⚓"
+            },
+            "Docker Bench": {
+                "description": "Docker security benchmark. Checks Docker daemon configuration against CIS benchmarks.",
+                "categories": ["Container Security", "Configuration"],
+                "icon": "🐋"
+            },
+            "Kube Bench": {
+                "description": "Kubernetes security benchmark. Checks Kubernetes cluster configuration against CIS benchmarks.",
+                "categories": ["Kubernetes Security", "Configuration"],
+                "icon": "☸️"
+            },
+            "Kube Hunter": {
+                "description": "Kubernetes penetration testing tool. Hunts for security weaknesses in Kubernetes clusters.",
+                "categories": ["Kubernetes Security", "Penetration Testing"],
+                "icon": "🎯"
+            },
+            "Android": {
+                "description": "Android application security scanner. Analyzes Android APK files for security issues.",
+                "categories": ["Mobile Security"],
+                "icon": "📱"
+            },
+            "iOS": {
+                "description": "iOS application security scanner. Analyzes iOS IPA files and plist configurations.",
+                "categories": ["Mobile Security"],
+                "icon": "🍎"
+            },
+        }
         
         # Load assets from manifests
         scanners_root = Path("/app/scanner/plugins")
@@ -712,30 +891,33 @@ async def list_scanners():
             scan_types = []
             for cap in scanner_obj.capabilities:
                 scan_type = cap.scan_type.value
-                # Map to frontend scan types
-                if scan_type in ["code", "dependency", "secrets", "config"]:
-                    scan_types.append("code")
-                elif scan_type in ["image", "container"]:
-                    scan_types.append("image")
-                elif scan_type == "website":
-                    scan_types.append("website")
-                elif scan_type == "network":
-                    scan_types.append("network")
+                # Use single source of truth for mapping
+                frontend_type = map_scanner_scan_type_to_frontend_type(scan_type)
+                scan_types.append(frontend_type)
             
             # Remove duplicates
             scan_types = list(set(scan_types))
+            
+            # Get description and metadata
+            scanner_meta = SCANNER_DESCRIPTIONS.get(scanner_obj.name, {})
             
             scanner_data = {
                 "name": scanner_obj.name,
                 "scan_types": scan_types,
                 "priority": scanner_obj.priority,
                 "requires_condition": scanner_obj.requires_condition,
-                "enabled": scanner_obj.enabled
+                "enabled": scanner_obj.enabled,
+                "description": scanner_meta.get("description", f"Security scanner: {scanner_obj.name}"),
+                "categories": scanner_meta.get("categories", ["Security Scanning"]),
+                "icon": scanner_meta.get("icon", "🔧")
             }
             
-            # Add assets if available
-            if manifests and scanner_obj.name.lower() in manifests:
-                manifest = manifests[scanner_obj.name.lower()]
+            # Add assets if available 
+            manifest = None
+            if manifests and scanner_obj.manifest_name:
+                manifest = manifests.get(scanner_obj.manifest_name)
+            
+            if manifest:
                 assets = []
                 for asset in manifest.assets:
                     asset_dict = {
@@ -767,8 +949,15 @@ async def list_scanners():
         # Sort by priority
         scanner_list.sort(key=lambda x: x["priority"])
         
-        # Output as JSON
-        print(json.dumps({"scanners": scanner_list}, indent=2))
+        # Log scanner list at DEBUG level
+        logger.debug(f"Scanner list ({len(scanner_list)} scanners):")
+        logger.debug(json.dumps({"scanners": scanner_list}, indent=2))
+        
+        # Output JSON to stdout (structured data)
+        # Logs go to stderr (via logger), JSON goes to stdout (via print)
+        scanner_json = json.dumps({"scanners": scanner_list}, indent=2)
+        logger.info(f"Scanner list generated ({len(scanner_list)} scanners)")  # Goes to stderr
+        print(scanner_json)  # Goes to stdout (Worker reads only stdout)
         sys.exit(0)
         
     except Exception as e:

@@ -61,92 +61,50 @@ async def _get_scanners_from_container() -> List[Dict[str, Any]]:
         container.start()
         
         logger.info("Waiting for container to complete (timeout: 30s)...")
-        exit_code = container.wait(timeout=30)
+        exit_code_dict = container.wait(timeout=30)
+        exit_code = exit_code_dict.get('StatusCode', 1) if isinstance(exit_code_dict, dict) else exit_code_dict
         logger.info(f"Container exited with code: {exit_code}")
         
-        # Get logs before container is removed
-        logs = container.logs(stdout=True, stderr=True)
-        output = logs.decode('utf-8') if logs else ""
+        # Read JSON from stdout ONLY (stderr=False = no logs in output)
+        # Scanner outputs: Logs → stderr, JSON → stdout
+        # NOTE: Entrypoint script may write to stdout, so we need to extract JSON
+        logs = container.logs(stdout=True, stderr=False)
+        stdout_text = logs.decode('utf-8').strip() if logs else ""
         
-        # Remove container manually after reading logs
+        if not stdout_text:
+            raise ValueError("No output from scanner container")
+        
+        if exit_code != 0:
+            # If exit code is non-zero, read stderr for error details
+            error_logs = container.logs(stdout=False, stderr=True)
+            error_output = error_logs.decode('utf-8') if error_logs else ""
+            raise ValueError(f"Container exited with non-zero code {exit_code}. Error: {error_output[:1000]}")
+        
+        # Extract JSON from stdout (skip entrypoint messages)
+        # JSON starts with '{', find first occurrence
+        json_start = stdout_text.find('{')
+        if json_start == -1:
+            raise ValueError(f"No JSON found in stdout. Output: {stdout_text[:500]}")
+        
+        json_data = stdout_text[json_start:].strip()
+        
+        # Remove container manually after reading data
         try:
             container.remove()
         except Exception as e:
             logger.warning(f"Failed to remove container: {e}")
         
-        # Log first 500 chars of output for debugging
-        if output:
-            logger.debug(f"Container output (first 500 chars): {output[:500]}")
-        else:
-            logger.warning("Container produced no output")
-        
-        # Check exit code but continue anyway - JSON might still be in output
-        if exit_code != 0:
-            logger.warning(f"Container exited with non-zero code {exit_code}. Output preview: {output[:1000]}")
-            # Continue anyway - JSON might still be in output despite warnings
-        
-        if not output:
-            raise ValueError("No output from scanner container")
-        
-        # Extract JSON from output (might have extra lines and be multiline)
-        # The JSON structure is: {"scanners": [{...}, {...}, ...]}
-        # We need to capture the entire root object, not stop at the first scanner
-        lines = output.strip().split('\n')
-        json_lines = []
-        found_json_start = False
-        brace_count = 0
-        
-        for line in lines:
-            stripped = line.strip()
-            # Skip entrypoint messages and warnings
-            if (not stripped or
-                stripped.startswith('[') or 
-                stripped.startswith('Entrypoint') or 
-                stripped.startswith('error:') or 
-                stripped.startswith('WARNING:') or 
-                stripped.startswith('ls:') or
-                stripped.startswith('drwx')):
-                continue
-            
-            # Start collecting when we find opening brace (root object)
-            if stripped.startswith('{') and not found_json_start:
-                found_json_start = True
-                json_lines = [stripped]
-                # Count braces: opening braces increase count, closing braces decrease
-                brace_count = stripped.count('{') - stripped.count('}')
-                continue
-            
-            # Collect lines while we're in the JSON object
-            if found_json_start:
-                json_lines.append(stripped)
-                # Update brace count: +1 for each {, -1 for each }
-                brace_count += stripped.count('{') - stripped.count('}')
-                
-                # Stop when we've closed the root object (brace_count == 0)
-                # This means all opening braces have been matched with closing braces
-                if brace_count == 0:
-                    break
-        
-        if not json_lines:
-            logger.error(f"Could not find JSON in output. Full output (first 2000 chars): {output[:2000]}")
-            raise ValueError(f"Could not find JSON in output. Output preview: {output[:500]}")
-        
-        json_line = '\n'.join(json_lines)
-        
-        # Debug: Log the collected JSON to understand what we're parsing
-        logger.debug(f"Collected JSON ({len(json_lines)} lines, {len(json_line)} chars). First 500 chars: {json_line[:500]}")
-        logger.debug(f"Collected JSON last 500 chars: {json_line[-500:]}")
-        
+        # Parse JSON
         try:
-            data = json.loads(json_line)
+            data = json.loads(json_data)
             scanner_count = len(data.get("scanners", []))
-            logger.info(f"Successfully parsed {scanner_count} scanners from container output")
+            logger.info(f"Successfully parsed {scanner_count} scanners from container")
             # Return scanners with their assets included
             return data.get("scanners", [])
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON: {e}. JSON (first 1000 chars): {json_line[:1000]}")
-            logger.error(f"JSON (last 1000 chars): {json_line[-1000:]}")
-            logger.error(f"JSON length: {len(json_line)} chars, brace_count when stopped: {brace_count}")
+            logger.error(f"Failed to parse JSON: {e}. JSON (first 1000 chars): {json_data[:1000] if json_data else 'None'}")
+            logger.error(f"JSON (last 1000 chars): {json_data[-1000:] if json_data else 'None'}")
+            logger.error(f"JSON length: {len(json_data)} chars")
             raise ValueError(f"Invalid JSON from scanner container: {str(e)}")
         
     except HTTPException:

@@ -282,9 +282,7 @@ class DockerJobExecutor:
                     break
             
             if not results_dir:
-                # Fallback: try to get from environment or use default
-                results_dir = os.environ.get("RESULTS_DIR_CONTAINER", os.environ.get("RESULTS_DIR_HOST", "/app/results"))
-                self.logger.debug(f"Using fallback results_dir from environment: {results_dir}")
+                raise ValueError("results_dir is required but not provided")
             
             # Ensure results_dir is a string and exists
             if not isinstance(results_dir, str):
@@ -355,9 +353,7 @@ class DockerJobExecutor:
                     break
             
             if not results_dir:
-                # Fallback: try to get from environment or use default
-                results_dir = os.environ.get("RESULTS_DIR_CONTAINER", os.environ.get("RESULTS_DIR_HOST", "/app/results"))
-                self.logger.debug(f"Using fallback results_dir from environment: {results_dir}")
+                raise ValueError("results_dir is required but not provided")
             
             # Ensure results_dir is a string and exists
             if not isinstance(results_dir, str):
