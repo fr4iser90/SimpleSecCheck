@@ -4,8 +4,8 @@ Database Models
 This module defines the SQLAlchemy models for the refactored backend.
 Models represent the database schema and provide ORM functionality.
 """
-from sqlalchemy import Column, String, DateTime, Boolean, Integer, Text, JSON, Enum as SQLEnum, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, DateTime, Boolean, Integer, Text, JSON, Enum as SQLEnum, ForeignKey, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, INET
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -254,3 +254,258 @@ Index('idx_users_role', User.role)
 # Indexes for scanners
 Index('idx_scanners_name', Scanner.name)
 Index('idx_scanners_enabled', Scanner.enabled)
+
+
+# ============================================================================
+# Admin & Security Models
+# ============================================================================
+
+class AuditLog(Base):
+    """Audit log database model for tracking all security-relevant events."""
+    
+    __tablename__ = "audit_log"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    user_email = Column(String(255), nullable=True)  # Denormalized for deleted users
+    action_type = Column(String(50), nullable=False, index=True)  # USER_CREATED, FEATURE_FLAG_CHANGED, etc.
+    target = Column(String(500), nullable=True)  # What was changed
+    details = Column(JSON, default=dict)  # Additional context
+    ip_address = Column(INET, nullable=True)
+    user_agent = Column(Text, nullable=True)
+    result = Column(String(20), default="success", nullable=False)  # success, failure
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+    
+    def __repr__(self):
+        return f"<AuditLog(id={self.id}, action_type='{self.action_type}', user_id={self.user_id})>"
+
+
+class BlockedIP(Base):
+    """Blocked IP addresses for abuse protection."""
+    
+    __tablename__ = "blocked_ips"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ip_address = Column(INET, nullable=False, unique=True, index=True)
+    reason = Column(String(100), nullable=True)  # brute_force, request_spike, manual, etc.
+    blocked_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    blocked_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=True)  # NULL = permanent
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    
+    # Relationships
+    blocker = relationship("User", foreign_keys=[blocked_by])
+    
+    def __repr__(self):
+        return f"<BlockedIP(id={self.id}, ip_address='{self.ip_address}', reason='{self.reason}')>"
+
+
+class IPActivity(Base):
+    """IP activity tracking for abuse detection."""
+    
+    __tablename__ = "ip_activity"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ip_address = Column(INET, nullable=False, index=True)
+    event_type = Column(String(50), nullable=False, index=True)  # login_failed, request_spike, etc.
+    count = Column(Integer, default=1, nullable=False)
+    window_start = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    window_end = Column(DateTime, nullable=True)
+    activity_metadata = Column(JSON, default=dict)  # Renamed from 'metadata' (SQLAlchemy reserved)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    def __repr__(self):
+        return f"<IPActivity(id={self.id}, ip_address='{self.ip_address}', event_type='{self.event_type}', count={self.count})>"
+
+
+class VulnerabilityRule(Base):
+    """Vulnerability rules database model."""
+    
+    __tablename__ = "vulnerability_rules"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rule_id = Column(String(100), unique=True, nullable=False, index=True)  # e.g., "hardcoded-secrets"
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    severity = Column(String(20), nullable=False)  # critical, high, medium, low
+    category = Column(String(50), nullable=True)  # secrets, dependency, sast, etc.
+    enabled = Column(Boolean, default=True, nullable=False)
+    custom = Column(Boolean, default=False, nullable=False)  # Custom rule vs. built-in
+    config = Column(JSON, default=dict)  # Rule-specific configuration
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    def __repr__(self):
+        return f"<VulnerabilityRule(id={self.id}, rule_id='{self.rule_id}', name='{self.name}', enabled={self.enabled})>"
+
+
+class SuppressionRule(Base):
+    """Suppression rules for ignoring specific findings."""
+    
+    __tablename__ = "suppression_rules"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rule_id = Column(String(100), ForeignKey("vulnerability_rules.rule_id"), nullable=True)
+    pattern = Column(String(500), nullable=True)  # Path pattern or vulnerability ID
+    reason = Column(Text, nullable=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    expires_at = Column(DateTime, nullable=True)  # NULL = never expires
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    rule = relationship("VulnerabilityRule", foreign_keys=[rule_id])
+    creator = relationship("User", foreign_keys=[created_by])
+    
+    def __repr__(self):
+        return f"<SuppressionRule(id={self.id}, pattern='{self.pattern}', is_active={self.is_active})>"
+
+
+class ScanPolicy(Base):
+    """Scan policies/templates database model."""
+    
+    __tablename__ = "scan_policies"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    is_default = Column(Boolean, default=False, nullable=False)
+    enabled_scanners = Column(ARRAY(String), default=list, nullable=False)  # ['secrets', 'dependency', 'sast']
+    scan_depth = Column(String(20), default="medium", nullable=False)  # quick, medium, deep
+    timeout = Column(Integer, default=3600, nullable=False)
+    severity_threshold = Column(String(20), nullable=True)  # Only report findings >= this severity
+    custom_rules = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    def __repr__(self):
+        return f"<ScanPolicy(id={self.id}, name='{self.name}', is_default={self.is_default})>"
+
+
+class NotificationChannel(Base):
+    """Notification channels database model."""
+    
+    __tablename__ = "notification_channels"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    channel_type = Column(String(50), nullable=False)  # email, slack, discord, webhook
+    name = Column(String(255), nullable=False)
+    config = Column(JSON, nullable=False)  # Channel-specific config (webhook URL, etc.)
+    enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    def __repr__(self):
+        return f"<NotificationChannel(id={self.id}, channel_type='{self.channel_type}', name='{self.name}')>"
+
+
+class NotificationRule(Base):
+    """Notification rules database model."""
+    
+    __tablename__ = "notification_rules"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_type = Column(String(50), nullable=False)  # scan_completed, critical_vuln, etc.
+    channel_id = Column(UUID(as_uuid=True), ForeignKey("notification_channels.id"), nullable=False)
+    enabled = Column(Boolean, default=True, nullable=False)
+    severity_filter = Column(ARRAY(String), default=list)  # Only notify for these severities
+    rate_limit = Column(Integer, nullable=True)  # Max notifications per hour
+    template = Column(Text, nullable=True)  # Custom notification template
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    channel = relationship("NotificationChannel", foreign_keys=[channel_id])
+    
+    def __repr__(self):
+        return f"<NotificationRule(id={self.id}, event_type='{self.event_type}', channel_id={self.channel_id})>"
+
+
+# ============================================================================
+# User Features Models
+# ============================================================================
+
+class UserGitHubRepo(Base):
+    """User GitHub repositories database model."""
+    
+    __tablename__ = "user_github_repos"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    repo_url = Column(String(500), nullable=False)
+    repo_name = Column(String(255), nullable=False)
+    branch = Column(String(100), default="main", nullable=False)
+    auto_scan_enabled = Column(Boolean, default=True, nullable=False)
+    scan_on_push = Column(Boolean, default=True, nullable=False)
+    scan_frequency = Column(String(20), default="on_push", nullable=False)  # on_push, daily, weekly, manual
+    github_token = Column(Text, nullable=True)  # Encrypted GitHub token
+    webhook_secret = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+    
+    def __repr__(self):
+        return f"<UserGitHubRepo(id={self.id}, repo_url='{self.repo_url}', user_id={self.user_id})>"
+
+
+class RepoScanHistory(Base):
+    """Repository scan history database model."""
+    
+    __tablename__ = "repo_scan_history"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    repo_id = Column(UUID(as_uuid=True), ForeignKey("user_github_repos.id"), nullable=False, index=True)
+    scan_id = Column(UUID(as_uuid=True), ForeignKey("scans.id"), nullable=True)
+    branch = Column(String(100), nullable=True)
+    commit_hash = Column(String(100), nullable=True)
+    score = Column(Integer, nullable=True)  # 0-100
+    vulnerabilities = Column(JSON, default=dict)  # {critical: 0, high: 2, medium: 5, low: 10}
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    
+    # Relationships
+    repo = relationship("UserGitHubRepo", foreign_keys=[repo_id])
+    scan = relationship("Scan", foreign_keys=[scan_id])
+    
+    def __repr__(self):
+        return f"<RepoScanHistory(id={self.id}, repo_id={self.repo_id}, score={self.score})>"
+
+
+class APIKey(Base):
+    """API keys database model."""
+    
+    __tablename__ = "api_keys"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    key_hash = Column(String(255), unique=True, nullable=False, index=True)  # Hashed API key
+    name = Column(String(255), nullable=False)
+    last_used_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)  # NULL = never expires
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+    
+    def __repr__(self):
+        return f"<APIKey(id={self.id}, name='{self.name}', user_id={self.user_id})>"
+
+
+# Additional indexes for new tables
+Index('idx_audit_log_user_id', AuditLog.user_id)
+Index('idx_audit_log_action_type', AuditLog.action_type)
+Index('idx_audit_log_created_at', AuditLog.created_at)
+Index('idx_blocked_ips_ip_address', BlockedIP.ip_address)
+Index('idx_blocked_ips_is_active', BlockedIP.is_active)
+Index('idx_ip_activity_ip_address', IPActivity.ip_address)
+Index('idx_ip_activity_event_type', IPActivity.event_type)
+Index('idx_ip_activity_window', IPActivity.window_start, IPActivity.window_end)
+Index('idx_user_github_repos_user_id', UserGitHubRepo.user_id)
+Index('idx_repo_scan_history_repo_id', RepoScanHistory.repo_id)
+Index('idx_repo_scan_history_created_at', RepoScanHistory.created_at)
+Index('idx_api_keys_user_id', APIKey.user_id)
+Index('idx_api_keys_key_hash', APIKey.key_hash)

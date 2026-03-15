@@ -25,6 +25,7 @@ class ActorContext(BaseModel):
     is_authenticated: bool = False
     email: Optional[str] = None
     name: Optional[str] = None
+    role: Optional[str] = None  # 'admin' or 'user'
     
     def get_identifier(self) -> str:
         """Get the identifier for this actor (user_id or session_id)."""
@@ -102,6 +103,7 @@ class ActorContextDependency:
             user_id = payload.get("sub")
             email = payload.get("email")
             name = payload.get("name")
+            role = payload.get("role")
             
             if not user_id:
                 return None
@@ -111,7 +113,8 @@ class ActorContextDependency:
                 session_id=None,
                 is_authenticated=True,
                 email=email,
-                name=name
+                name=name,
+                role=role
             )
         except JWTError:
             return None
@@ -146,7 +149,7 @@ class ActorContextDependency:
             is_authenticated=False
         )
     
-    def create_jwt_token(self, user_id: str, email: str, name: str) -> str:
+    def create_jwt_token(self, user_id: str, email: str, name: str, role: Optional[str] = None) -> str:
         """Create JWT token for authenticated user."""
         expires_delta = timedelta(minutes=self.jwt_expiration_minutes)
         expire = datetime.utcnow() + expires_delta
@@ -155,6 +158,7 @@ class ActorContextDependency:
             "sub": user_id,
             "email": email,
             "name": name,
+            "role": role,
             "exp": expire,
             "iat": datetime.utcnow(),
         }

@@ -13,6 +13,14 @@ import SetupWizard from './pages/SetupWizard'
 import LoginPage from './pages/LoginPage'
 import PasswordResetPage from './pages/PasswordResetPage'
 import AdminSettingsPage from './pages/AdminSettingsPage'
+import AuditLogPage from './pages/AuditLogPage'
+import UserManagementPage from './pages/UserManagementPage'
+import FeatureFlagsPage from './pages/FeatureFlagsPage'
+import IPControlPage from './pages/IPControlPage'
+import ScannerManagementPage from './pages/ScannerManagementPage'
+import ProfilePage from './pages/ProfilePage'
+import APIKeysPage from './pages/APIKeysPage'
+import MyReposPage from './pages/MyReposPage'
 import './App.css'
 
 /**
@@ -121,10 +129,90 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
           <StatisticsPage />
         </ProtectedRoute>
       } />
+      {/* Admin Routes */}
       <Route path="/admin/settings" element={
         <ProtectedRoute>
           <Header />
           <AdminSettingsPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/users" element={
+        <ProtectedRoute>
+          <Header />
+          <UserManagementPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/feature-flags" element={
+        <ProtectedRoute>
+          <Header />
+          <FeatureFlagsPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/security" element={
+        <ProtectedRoute>
+          <Header />
+          <div style={{ padding: '2rem' }}>Security Policies - Coming Soon</div>
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/audit-log" element={
+        <ProtectedRoute>
+          <Header />
+          <AuditLogPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/security/ip-control" element={
+        <ProtectedRoute>
+          <Header />
+          <IPControlPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/scanner" element={
+        <ProtectedRoute>
+          <Header />
+          <ScannerManagementPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/vulnerabilities" element={
+        <ProtectedRoute>
+          <Header />
+          <div style={{ padding: '2rem' }}>Vulnerability Database - Coming Soon</div>
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/scan-policies" element={
+        <ProtectedRoute>
+          <Header />
+          <div style={{ padding: '2rem' }}>Scan Policies - Coming Soon</div>
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/notifications" element={
+        <ProtectedRoute>
+          <Header />
+          <div style={{ padding: '2rem' }}>Notification Management - Coming Soon</div>
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/health" element={
+        <ProtectedRoute>
+          <Header />
+          <div style={{ padding: '2rem' }}>System Health - Coming Soon</div>
+        </ProtectedRoute>
+      } />
+      {/* User Routes */}
+      <Route path="/profile" element={
+        <ProtectedRoute>
+          <Header />
+          <ProfilePage />
+        </ProtectedRoute>
+      } />
+      <Route path="/my-repos" element={
+        <ProtectedRoute>
+          <Header />
+          <MyReposPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/api-keys" element={
+        <ProtectedRoute>
+          <Header />
+          <APIKeysPage />
         </ProtectedRoute>
       } />
       {/* Redirect /setup to / if setup is already complete */}

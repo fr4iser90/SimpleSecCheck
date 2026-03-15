@@ -32,6 +32,7 @@ class LoginResponse(BaseModel):
     user_id: str = Field(description="User ID")
     email: str = Field(description="User email")
     name: Optional[str] = Field(None, description="User name")
+    role: Optional[str] = Field(None, description="User role (admin or user)")
 
 
 class LogoutResponse(BaseModel):
@@ -154,12 +155,14 @@ async def login(
             
             user_id = str(user.id)
             name = user.username or email.split('@')[0].title()
+            role = user.role.value if user.role else "user"  # Get role value from enum
         
         # Create JWT token
         access_token = actor_context_dependency.create_jwt_token(
             user_id=user_id,
             email=email,
-            name=name
+            name=name,
+            role=role
         )
         
         # Clear any existing guest session
@@ -173,6 +176,7 @@ async def login(
             user_id=user_id,
             email=email,
             name=name,
+            role=role,
         )
         
     except Exception as e:
@@ -282,11 +286,32 @@ async def refresh_token(
                 detail="Authentication required"
             )
         
+        # Get user role from database
+        from infrastructure.database.adapter import db_adapter
+        from sqlalchemy import select
+        from infrastructure.database.models import User
+        from uuid import UUID
+        
+        role = actor_context.role  # Try to get from context first
+        if not role and actor_context.user_id:
+            try:
+                async with db_adapter.async_session() as session:
+                    user_uuid = UUID(actor_context.user_id)
+                    result = await session.execute(
+                        select(User).where(User.id == user_uuid)
+                    )
+                    user = result.scalar_one_or_none()
+                    if user:
+                        role = user.role.value if user.role else "user"
+            except Exception:
+                role = "user"  # Default fallback
+        
         # Create new JWT token
         access_token = actor_context_dependency.create_jwt_token(
             user_id=actor_context.user_id,
             email=actor_context.email,
-            name=actor_context.name
+            name=actor_context.name,
+            role=role
         )
         
         return LoginResponse(
@@ -296,6 +321,7 @@ async def refresh_token(
             user_id=actor_context.user_id,
             email=actor_context.email,
             name=actor_context.name,
+            role=role,
         )
         
     except HTTPException:
@@ -331,6 +357,26 @@ async def get_current_user(
                 detail="Authentication required"
             )
         
+        # Get user role from database if not in context
+        role = actor_context.role
+        if not role and actor_context.user_id:
+            from infrastructure.database.adapter import db_adapter
+            from sqlalchemy import select
+            from infrastructure.database.models import User
+            from uuid import UUID
+            
+            try:
+                async with db_adapter.async_session() as session:
+                    user_uuid = UUID(actor_context.user_id)
+                    result = await session.execute(
+                        select(User).where(User.id == user_uuid)
+                    )
+                    user = result.scalar_one_or_none()
+                    if user:
+                        role = user.role.value if user.role else "user"
+            except Exception:
+                role = "user"  # Default fallback
+        
         return LoginResponse(
             access_token="",  # Token not included in response for security
             token_type="bearer",
@@ -338,6 +384,7 @@ async def get_current_user(
             user_id=actor_context.user_id,
             email=actor_context.email,
             name=actor_context.name,
+            role=role or "user",
         )
         
     except HTTPException:

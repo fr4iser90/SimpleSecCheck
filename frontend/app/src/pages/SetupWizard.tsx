@@ -52,6 +52,7 @@ export default function SetupWizard() {
     password: '',
     password_confirm: ''
   })
+  const [autoLogin, setAutoLogin] = useState(true) // Default: auto-login enabled
   
   const [useCase, setUseCase] = useState<string>('')
   const [useCases, setUseCases] = useState<Record<string, any>>({})
@@ -374,20 +375,32 @@ export default function SetupWizard() {
         sessionStorage.removeItem('setup_session_id')
         setSessionId(null)
         
-        // If auth_mode is not "free", automatically log in the admin user
-        if (systemConfig.auth_mode !== 'free') {
+        // Auto-login if enabled (default for all modes, user can disable)
+        if (autoLogin) {
           try {
             await login(adminUser.email, adminUser.password, true) // rememberMe = true
-            // Navigate to home page after successful login (only once)
+            // Navigate to home page after successful login
             window.location.href = '/' // Use window.location to avoid React Router loops
           } catch (loginError) {
-            // Login failed, but setup was successful - redirect to login page
+            // Login failed, but setup was successful - redirect to login page or home
             console.error('Auto-login after setup failed:', loginError)
-            window.location.href = '/login' // Use window.location to avoid React Router loops
+            if (systemConfig.auth_mode !== 'free') {
+              // Auth required - redirect to login
+              window.location.href = '/login'
+            } else {
+              // Free mode - go to home, user can login manually later
+              window.location.href = '/'
+            }
           }
         } else {
-          // Free mode - no login required, go to home
-          window.location.href = '/' // Use window.location to avoid React Router loops
+          // Auto-login disabled - redirect based on auth mode
+          if (systemConfig.auth_mode !== 'free') {
+            // Auth required - redirect to login
+            window.location.href = '/login'
+          } else {
+            // Free mode - no login required, go to home
+            window.location.href = '/'
+          }
         }
       } else {
         setError('Setup failed. Please try again.')
@@ -569,6 +582,34 @@ export default function SetupWizard() {
           placeholder="Confirm admin password"
         />
       </div>
+      <div style={{ 
+        marginTop: '1.5rem', 
+        padding: '1rem', 
+        backgroundColor: 'var(--glass-bg-light)', 
+        borderRadius: '8px',
+        border: '1px solid var(--glass-border-dark)'
+      }}>
+        <label style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '0.75rem', 
+          cursor: 'pointer',
+          fontSize: '0.9rem'
+        }}>
+          <input
+            type="checkbox"
+            checked={autoLogin}
+            onChange={(e) => setAutoLogin(e.target.checked)}
+            style={{ cursor: 'pointer', width: '1.2rem', height: '1.2rem' }}
+          />
+          <span>
+            <strong>Auto-Login nach Setup</strong>
+            <span style={{ display: 'block', color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+              Automatisch mit den Admin-Daten einloggen, damit du sofort die Admin- und User-Menüs nutzen kannst.
+            </span>
+          </span>
+        </label>
+      </div>
       <div className="step-actions">
         <button onClick={handleBack}>Back</button>
         <button className="primary" onClick={handleNext} disabled={loading || validateAdminUser().length > 0}>
@@ -741,11 +782,26 @@ export default function SetupWizard() {
             <strong>{useCases[useCase]?.name || useCase}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>Security Mode:</span>
+            <strong style={{ color: useCases[useCase]?.security_mode === 'permissive' ? 'var(--warning)' : 'var(--accent)' }}>
+              {useCases[useCase]?.security_mode === 'permissive' ? 'Permissive' : 'Restricted'}
+            </strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--text-secondary)' }}>Auth Mode:</span>
             <strong>
               {systemConfig.auth_mode === 'free' ? 'Free (No Authentication)' : 
                systemConfig.auth_mode === 'basic' ? 'Basic (Username/Password)' : 
                'JWT (Token-based / SSO)'}
+            </strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>Allowed Features:</span>
+            <strong style={{ textAlign: 'right', maxWidth: '60%' }}>
+              {useCases[useCase]?.features?.map((f: any) => {
+                const prefix = f.type === 'allowed' ? '✓' : '✗'
+                return `${prefix} ${f.text}`
+              }).join(' | ') || 'N/A'}
             </strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
@@ -34,6 +34,12 @@ export default function Header() {
     started_at: null,
   })
   const [shutdownStatus, setShutdownStatus] = useState<ShutdownStatus | null>(null)
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showAdminMenu, setShowAdminMenu] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+  const adminMenuRef = useRef<HTMLDivElement>(null)
+  
+  const isAdmin = user?.role === 'admin'
   
   // Only show auto-shutdown if enabled in config
   const showAutoShutdown = config?.features.auto_shutdown ?? true
@@ -163,6 +169,23 @@ export default function Header() {
     navigate('/login')
   }
 
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false)
+      }
+      if (adminMenuRef.current && !adminMenuRef.current.contains(event.target as Node)) {
+        setShowAdminMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
   return (
     <header className="header">
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
@@ -230,60 +253,118 @@ export default function Header() {
           New Scan
         </Link>
         {config?.features.queue_enabled && (
-          <>
-            <Link to="/queue" className="nav-pill">
-              Queue
-            </Link>
-            <Link to="/my-scans" className="nav-pill">
-              My Scans
-            </Link>
-          </>
+          <Link to="/queue" className="nav-pill">
+            Queue
+          </Link>
+        )}
+        {isAuthenticated && (
+          <Link to="/my-scans" className="nav-pill">
+            My Scans
+          </Link>
+        )}
+        {isAuthenticated && (
+          <Link to="/my-repos" className="nav-pill">
+            My Repos
+          </Link>
         )}
         {config?.is_production && (
           <Link to="/statistics" className="nav-pill">
             Statistics
           </Link>
         )}
-        {isAuthenticated && user && (
-          <Link to="/admin/settings" className="nav-pill">
-            Admin Settings
-          </Link>
-        )}
-        {isAuthenticated && user && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.5rem 1rem',
-            background: '#f8f9fa',
-            borderRadius: '8px',
-            fontSize: '0.9rem',
-          }}>
-            <span style={{ color: '#666' }}>{user.email}</span>
+        {isAuthenticated && user && isAdmin && (
+          <div className="dropdown" ref={adminMenuRef}>
             <button
-              onClick={handleLogout}
-              style={{
-                background: 'transparent',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                color: '#666',
-                padding: '0.25rem 0.75rem',
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#f0f0f0'
-                e.currentTarget.style.borderColor = '#999'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
-                e.currentTarget.style.borderColor = '#ddd'
+              className="dropdown-toggle"
+              onClick={() => {
+                setShowAdminMenu(!showAdminMenu)
+                setShowUserMenu(false)
               }}
             >
-              Logout
+              <span>⚙️ Admin</span>
+              <span>▼</span>
             </button>
+            <div className={`dropdown-menu ${showAdminMenu ? 'show' : ''}`}>
+              <Link to="/admin/settings" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                System Settings
+              </Link>
+              <Link to="/admin/users" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                User Management
+              </Link>
+              <Link to="/admin/feature-flags" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                Feature Flags
+              </Link>
+              <Link to="/admin/security" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                Security Policies
+              </Link>
+              <Link to="/admin/audit-log" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                Audit Log
+              </Link>
+              <Link to="/admin/security/ip-control" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                IP & Abuse Protection
+              </Link>
+              <Link to="/admin/scanner" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                Scan Engine Management
+              </Link>
+              <Link to="/admin/vulnerabilities" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                Vulnerability Database
+              </Link>
+              <Link to="/admin/scan-policies" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                Scan Policies
+              </Link>
+              <Link to="/admin/notifications" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                Notification Management
+              </Link>
+              <Link to="/admin/health" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                System Health
+              </Link>
+            </div>
           </div>
+        )}
+        {isAuthenticated && user && (
+          <div className="dropdown" ref={userMenuRef}>
+            <button
+              className="dropdown-toggle"
+              onClick={() => {
+                setShowUserMenu(!showUserMenu)
+                setShowAdminMenu(false)
+              }}
+            >
+              <span>{user.email}</span>
+              <span>▼</span>
+            </button>
+            <div className={`dropdown-menu ${showUserMenu ? 'show' : ''}`}>
+              <Link to="/profile" className="dropdown-item" onClick={() => setShowUserMenu(false)}>
+                Profile
+              </Link>
+              <Link to="/my-repos" className="dropdown-item" onClick={() => setShowUserMenu(false)}>
+                My GitHub Repos
+              </Link>
+              <Link to="/api-keys" className="dropdown-item" onClick={() => setShowUserMenu(false)}>
+                API Keys
+              </Link>
+              <div className="dropdown-divider"></div>
+              <button
+                className="dropdown-item"
+                onClick={() => {
+                  setShowUserMenu(false)
+                  handleLogout()
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        )}
+        {!isAuthenticated && config?.auth_mode !== 'free' && (
+          <Link to="/login" className="nav-pill">
+            Login
+          </Link>
+        )}
+        {!isAuthenticated && config?.auth_mode === 'free' && (
+          <Link to="/login" className="nav-pill" style={{ opacity: 0.7 }}>
+            Login (Optional)
+          </Link>
         )}
         <a
           href="https://coff.ee/fr4iser"

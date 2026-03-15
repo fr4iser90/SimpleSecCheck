@@ -150,6 +150,14 @@ def create_app() -> FastAPI:
     app.include_router(health_module.router)
     app.include_router(health_module.shutdown_router)
     
+    # User routes
+    from api.routes import user as user_routes
+    app.include_router(user_routes.router)
+    
+    # Webhook routes
+    from api.routes import webhooks
+    app.include_router(webhooks.router)
+    
     # Add global exception handlers
     app.add_exception_handler(RequestValidationError, handle_validation_error)
     app.add_exception_handler(StarletteHTTPException, handle_http_exception)

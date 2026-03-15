@@ -5,6 +5,7 @@ interface User {
   user_id: string
   email: string
   name?: string
+  role?: string  // 'admin' or 'user'
 }
 
 interface AuthContextType {
@@ -75,7 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser({
           user_id: data.user_id,
           email: data.email,
-          name: data.name
+          name: data.name,
+          role: data.role
         })
       } else {
         // Token invalid, clear it
@@ -111,7 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storage.setItem(USER_STORAGE_KEY, JSON.stringify({
       user_id: data.user_id,
       email: data.email,
-      name: data.name
+      name: data.name,
+      role: data.role
     }))
     
     // Also store in localStorage for apiFetch to find it
@@ -121,7 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser({
       user_id: data.user_id,
       email: data.email,
-      name: data.name
+      name: data.name,
+      role: data.role
     })
   }
 

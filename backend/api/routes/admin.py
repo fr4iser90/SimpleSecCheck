@@ -3,13 +3,14 @@ Admin API Routes
 
 Handles admin-only operations like system configuration updates.
 """
-from typing import Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional, Dict, Any, List
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel, EmailStr, Field
 
 from api.deps.actor_context import get_admin_user, ActorContext
 from infrastructure.database.adapter import db_adapter
 from infrastructure.database.models import SystemState
+from domain.services.audit_log_service import AuditLogService
 from sqlalchemy import select
 from datetime import datetime
 
@@ -201,7 +202,901 @@ async def get_smtp_config(
     except HTTPException:
         raise
     except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to get SMTP config: {str(e)}"
+            )
+
+
+# ============================================================================
+# Audit Log Endpoints
+# ============================================================================
+
+@router.get("/audit-log")
+async def get_audit_log(
+    request: Request,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    user_id: Optional[str] = Query(None),
+    action_type: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, Any]:
+    """
+    Get audit log entries with filtering and pagination.
+    
+    Requires admin privileges.
+    """
+    try:
+        # Parse dates
+        start_dt = None
+        end_dt = None
+        if start_date:
+            start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        if end_date:
+            end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        
+        result = await AuditLogService.get_audit_log(
+            limit=limit,
+            offset=offset,
+            user_id=user_id,
+            action_type=action_type,
+            start_date=start_dt,
+            end_date=end_dt,
+            search=search
+        )
+        
+        return result
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get SMTP config: {str(e)}"
+            detail=f"Failed to get audit log: {str(e)}"
+        )
+
+
+@router.post("/audit-log/export")
+async def export_audit_log(
+    request: Request,
+    format: str = Query("json", pattern="^(json|csv)$"),
+    user_id: Optional[str] = Query(None),
+    action_type: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    actor_context: ActorContext = Depends(get_admin_user),
+):
+    """
+    Export audit log in specified format (JSON or CSV).
+    
+    Requires admin privileges.
+    """
+    try:
+        # Parse dates
+        start_dt = None
+        end_dt = None
+        if start_date:
+            start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        if end_date:
+            end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        
+        data = await AuditLogService.export_audit_log(
+            format=format,
+            user_id=user_id,
+            action_type=action_type,
+            start_date=start_dt,
+            end_date=end_dt
+        )
+        
+        from fastapi.responses import Response
+        
+        if format == "csv":
+            return Response(
+                content=data,
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=audit_log_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"}
+            )
+        else:
+            return Response(
+                content=data,
+                media_type="application/json",
+                headers={"Content-Disposition": f"attachment; filename=audit_log_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"}
+            )
+    except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to export audit log: {str(e)}"
+            )
+
+
+# ============================================================================
+# User Management Endpoints
+# ============================================================================
+
+class UserCreateRequest(BaseModel):
+    """Request for creating a new user."""
+    email: EmailStr
+    username: str = Field(..., min_length=3, max_length=100)
+    password: str = Field(..., min_length=8)
+    role: str = Field(default="user", pattern="^(admin|user)$")
+
+
+class UserUpdateRequest(BaseModel):
+    """Request for updating a user."""
+    email: Optional[EmailStr] = None
+    username: Optional[str] = Field(None, min_length=3, max_length=100)
+    role: Optional[str] = Field(None, pattern="^(admin|user)$")
+    is_active: Optional[bool] = None
+
+
+class UserResponse(BaseModel):
+    """Response for user information."""
+    id: str
+    email: str
+    username: str
+    role: str
+    is_active: bool
+    is_verified: bool
+    created_at: str
+    last_login: Optional[str] = None
+
+
+@router.get("/users", response_model=List[UserResponse])
+async def list_users(
+    request: Request,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> List[UserResponse]:
+    """
+    List all users with pagination.
+    
+    Requires admin privileges.
+    """
+    try:
+        from infrastructure.database.models import User
+        from uuid import UUID
+        
+        async with db_adapter.async_session() as session:
+            result = await session.execute(
+                select(User)
+                .order_by(User.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            users = result.scalars().all()
+            
+            # Log audit event
+            await AuditLogService.log_event(
+                user_id=actor_context.user_id,
+                user_email=actor_context.email,
+                action_type="USER_LIST_VIEWED",
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("User-Agent")
+            )
+            
+            return [
+                UserResponse(
+                    id=str(user.id),
+                    email=user.email,
+                    username=user.username,
+                    role=user.role.value,
+                    is_active=user.is_active,
+                    is_verified=user.is_verified,
+                    created_at=user.created_at.isoformat(),
+                    last_login=user.last_login.isoformat() if user.last_login else None
+                )
+                for user in users
+            ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list users: {str(e)}"
+        )
+
+
+@router.post("/users", response_model=UserResponse)
+async def create_user(
+    request: Request,
+    user_data: UserCreateRequest,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> UserResponse:
+    """
+    Create a new user.
+    
+    Requires admin privileges.
+    """
+    try:
+        from infrastructure.database.models import User, UserRoleEnum
+        from api.services.password_service import PasswordService
+        from uuid import UUID
+        
+        password_service = PasswordService()
+        
+        async with db_adapter.async_session() as session:
+            # Check if user already exists
+            result = await session.execute(
+                select(User).where(
+                    (User.email == user_data.email) | (User.username == user_data.username)
+                )
+            )
+            existing_user = result.scalar_one_or_none()
+            
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="User with this email or username already exists"
+                )
+            
+            # Create user
+            password_hash = password_service.hash_password(user_data.password)
+            role_enum = UserRoleEnum.ADMIN if user_data.role == "admin" else UserRoleEnum.USER
+            
+            new_user = User(
+                email=user_data.email,
+                username=user_data.username,
+                password_hash=password_hash,
+                role=role_enum,
+                is_active=True,
+                is_verified=False
+            )
+            
+            session.add(new_user)
+            await session.commit()
+            await session.refresh(new_user)
+            
+            # Log audit event
+            await AuditLogService.log_event(
+                user_id=actor_context.user_id,
+                user_email=actor_context.email,
+                action_type="USER_CREATED",
+                target=user_data.email,
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("User-Agent")
+            )
+            
+            return UserResponse(
+                id=str(new_user.id),
+                email=new_user.email,
+                username=new_user.username,
+                role=new_user.role.value,
+                is_active=new_user.is_active,
+                is_verified=new_user.is_verified,
+                created_at=new_user.created_at.isoformat(),
+                last_login=None
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user: {str(e)}"
+        )
+
+
+@router.put("/users/{user_id}", response_model=UserResponse)
+async def update_user(
+    request: Request,
+    user_id: str,
+    user_data: UserUpdateRequest,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> UserResponse:
+    """
+    Update a user.
+    
+    Requires admin privileges.
+    """
+    try:
+        from infrastructure.database.models import User, UserRoleEnum
+        from uuid import UUID
+        
+        async with db_adapter.async_session() as session:
+            user_uuid = UUID(user_id)
+            result = await session.execute(select(User).where(User.id == user_uuid))
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            
+            # Update fields
+            if user_data.email is not None:
+                user.email = user_data.email
+            if user_data.username is not None:
+                user.username = user_data.username
+            if user_data.role is not None:
+                user.role = UserRoleEnum.ADMIN if user_data.role == "admin" else UserRoleEnum.USER
+            if user_data.is_active is not None:
+                user.is_active = user_data.is_active
+            
+            user.updated_at = datetime.utcnow()
+            await session.commit()
+            await session.refresh(user)
+            
+            # Log audit event
+            await AuditLogService.log_event(
+                user_id=actor_context.user_id,
+                user_email=actor_context.email,
+                action_type="USER_UPDATED",
+                target=user.email,
+                details={"changes": user_data.dict(exclude_unset=True)},
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("User-Agent")
+            )
+            
+            return UserResponse(
+                id=str(user.id),
+                email=user.email,
+                username=user.username,
+                role=user.role.value,
+                is_active=user.is_active,
+                is_verified=user.is_verified,
+                created_at=user.created_at.isoformat(),
+                last_login=user.last_login.isoformat() if user.last_login else None
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update user: {str(e)}"
+        )
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    request: Request,
+    user_id: str,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, str]:
+    """
+    Delete a user.
+    
+    Requires admin privileges.
+    """
+    try:
+        from infrastructure.database.models import User
+        from uuid import UUID
+        
+        async with db_adapter.async_session() as session:
+            user_uuid = UUID(user_id)
+            result = await session.execute(select(User).where(User.id == user_uuid))
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            
+            user_email = user.email
+            
+            await session.delete(user)
+            await session.commit()
+            
+            # Log audit event
+            await AuditLogService.log_event(
+                user_id=actor_context.user_id,
+                user_email=actor_context.email,
+                action_type="USER_DELETED",
+                target=user_email,
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("User-Agent")
+            )
+            
+            return {"message": "User deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete user: {str(e)}"
+        )
+
+
+# ============================================================================
+# Feature Flags Endpoints
+# ============================================================================
+
+@router.get("/feature-flags")
+async def get_feature_flags(
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, Any]:
+    """
+    Get current feature flags.
+    
+    Requires admin privileges.
+    """
+    try:
+        async with db_adapter.async_session() as session:
+            result = await session.execute(select(SystemState).limit(1))
+            system_state = result.scalar_one_or_none()
+            
+            if not system_state:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="System state not found"
+                )
+            
+            config = system_state.config or {}
+            feature_flags = config.get("feature_flags", {})
+            
+            return {
+                "ALLOW_LOCAL_PATHS": feature_flags.get("ALLOW_LOCAL_PATHS", True),
+                "ALLOW_NETWORK_SCANS": feature_flags.get("ALLOW_NETWORK_SCANS", True),
+                "ALLOW_CONTAINER_REGISTRY": feature_flags.get("ALLOW_CONTAINER_REGISTRY", True),
+                "ALLOW_GIT_REPOS": feature_flags.get("ALLOW_GIT_REPOS", True),
+                "ALLOW_ZIP_UPLOAD": feature_flags.get("ALLOW_ZIP_UPLOAD", True),
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get feature flags: {str(e)}"
+        )
+
+
+@router.put("/feature-flags")
+async def update_feature_flags(
+    request: Request,
+    feature_flags: Dict[str, bool],
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, Any]:
+    """
+    Update feature flags.
+    
+    Requires admin privileges.
+    """
+    try:
+        async with db_adapter.async_session() as session:
+            result = await session.execute(select(SystemState).limit(1))
+            system_state = result.scalar_one_or_none()
+            
+            if not system_state:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="System state not found"
+                )
+            
+            config = system_state.config or {}
+            if "feature_flags" not in config:
+                config["feature_flags"] = {}
+            
+            # Update feature flags
+            old_flags = config["feature_flags"].copy()
+            config["feature_flags"].update(feature_flags)
+            
+            system_state.config = config
+            system_state.updated_at = datetime.utcnow()
+            await session.commit()
+            
+            # Log audit event
+            changes = {k: v for k, v in feature_flags.items() if old_flags.get(k) != v}
+            await AuditLogService.log_event(
+                user_id=actor_context.user_id,
+                user_email=actor_context.email,
+                action_type="FEATURE_FLAG_CHANGED",
+                target="feature_flags",
+                details={"changes": changes},
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("User-Agent")
+            )
+            
+            return config["feature_flags"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update feature flags: {str(e)}"
+        )
+
+
+# ============================================================================
+# IP & Abuse Protection Endpoints
+# ============================================================================
+
+class BlockIPRequest(BaseModel):
+    """Request for blocking an IP address."""
+    ip_address: str = Field(..., description="IP address to block")
+    reason: str = Field(default="manual", description="Reason for blocking")
+    expires_at: Optional[str] = Field(None, description="Expiration date (ISO format), null for permanent")
+
+
+class IPControlResponse(BaseModel):
+    """Response for IP control dashboard."""
+    blocked_ips: List[Dict[str, Any]]
+    suspicious_activity: List[Dict[str, Any]]
+    statistics: Dict[str, Any]
+
+
+@router.get("/security/ip-control", response_model=IPControlResponse)
+async def get_ip_control(
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> IPControlResponse:
+    """
+    Get IP control dashboard data.
+    
+    Requires admin privileges.
+    """
+    try:
+        from infrastructure.database.models import BlockedIP, IPActivity
+        from sqlalchemy import func, and_
+        from datetime import datetime, timedelta
+        
+        async with db_adapter.async_session() as session:
+            # Get blocked IPs
+            result = await session.execute(
+                select(BlockedIP)
+                .where(BlockedIP.is_active == True)
+                .order_by(BlockedIP.blocked_at.desc())
+            )
+            blocked_ips = result.scalars().all()
+            
+            # Get suspicious activity (last 24 hours)
+            since = datetime.utcnow() - timedelta(hours=24)
+            activity_result = await session.execute(
+                select(IPActivity)
+                .where(IPActivity.created_at >= since)
+                .order_by(IPActivity.count.desc())
+                .limit(50)
+            )
+            suspicious = activity_result.scalars().all()
+            
+            # Get statistics
+            stats_result = await session.execute(
+                select(
+                    func.count(BlockedIP.id).label('total_blocked'),
+                    func.count(IPActivity.id).label('total_activity_24h')
+                )
+            )
+            stats = stats_result.first()
+            
+            return IPControlResponse(
+                blocked_ips=[
+                    {
+                        "id": str(ip.id),
+                        "ip_address": str(ip.ip_address),
+                        "reason": ip.reason,
+                        "blocked_at": ip.blocked_at.isoformat(),
+                        "expires_at": ip.expires_at.isoformat() if ip.expires_at else None
+                    }
+                    for ip in blocked_ips
+                ],
+                suspicious_activity=[
+                    {
+                        "ip_address": str(activity.ip_address),
+                        "event_type": activity.event_type,
+                        "count": activity.count,
+                        "window_start": activity.window_start.isoformat(),
+                        "metadata": activity.activity_metadata
+                    }
+                    for activity in suspicious
+                ],
+                statistics={
+                    "total_blocked": stats.total_blocked or 0,
+                    "total_activity_24h": stats.total_activity_24h or 0
+                }
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get IP control data: {str(e)}"
+        )
+
+
+@router.post("/security/ip-control/block")
+async def block_ip(
+    request: Request,
+    block_data: BlockIPRequest,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, str]:
+    """
+    Block an IP address.
+    
+    Requires admin privileges.
+    """
+    try:
+        from infrastructure.database.models import BlockedIP
+        from ipaddress import ip_address as validate_ip
+        
+        # Validate IP address
+        try:
+            validate_ip(block_data.ip_address)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid IP address"
+            )
+        
+        expires_at = None
+        if block_data.expires_at:
+            expires_at = datetime.fromisoformat(block_data.expires_at.replace('Z', '+00:00'))
+        
+        async with db_adapter.async_session() as session:
+            # Check if already blocked
+            result = await session.execute(
+                select(BlockedIP).where(BlockedIP.ip_address == block_data.ip_address)
+            )
+            existing = result.scalar_one_or_none()
+            
+            if existing:
+                # Update existing block
+                existing.reason = block_data.reason
+                existing.expires_at = expires_at
+                existing.is_active = True
+                existing.blocked_at = datetime.utcnow()
+            else:
+                # Create new block
+                blocked_ip = BlockedIP(
+                    ip_address=block_data.ip_address,
+                    reason=block_data.reason,
+                    blocked_by=UUID(actor_context.user_id) if actor_context.user_id else None,
+                    expires_at=expires_at
+                )
+                session.add(blocked_ip)
+            
+            await session.commit()
+            
+            # Log audit event
+            await AuditLogService.log_event(
+                user_id=actor_context.user_id,
+                user_email=actor_context.email,
+                action_type="IP_BLOCKED",
+                target=block_data.ip_address,
+                details={"reason": block_data.reason, "expires_at": block_data.expires_at},
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("User-Agent")
+            )
+            
+            return {"message": f"IP {block_data.ip_address} blocked successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to block IP: {str(e)}"
+        )
+
+
+@router.post("/security/ip-control/unblock")
+async def unblock_ip(
+    request: Request,
+    ip_address: str = Query(..., description="IP address to unblock"),
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, str]:
+    """
+    Unblock an IP address.
+    
+    Requires admin privileges.
+    """
+    try:
+        from infrastructure.database.models import BlockedIP
+        
+        async with db_adapter.async_session() as session:
+            result = await session.execute(
+                select(BlockedIP).where(BlockedIP.ip_address == ip_address)
+            )
+            blocked_ip = result.scalar_one_or_none()
+            
+            if not blocked_ip:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="IP address not found in blocked list"
+                )
+            
+            blocked_ip.is_active = False
+            await session.commit()
+            
+            # Log audit event
+            await AuditLogService.log_event(
+                user_id=actor_context.user_id,
+                user_email=actor_context.email,
+                action_type="IP_UNBLOCKED",
+                target=ip_address,
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("User-Agent")
+            )
+            
+            return {"message": f"IP {ip_address} unblocked successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unblock IP: {str(e)}"
+        )
+
+
+# ============================================================================
+# Scan Engine Management Endpoints
+# ============================================================================
+
+class ScannerStatusResponse(BaseModel):
+    """Response for scanner engine status."""
+    workers_running: int
+    queue_size: int
+    active_scans: int
+    average_scan_time: Optional[float] = None
+    timeouts_today: int
+    errors_today: int
+    scans_completed_today: int
+    queue_items: List[Dict[str, Any]] = []
+
+
+@router.get("/scanner", response_model=ScannerStatusResponse)
+async def get_scanner_status(
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> ScannerStatusResponse:
+    """
+    Get scan engine status and metrics.
+    
+    Requires admin privileges.
+    """
+    try:
+        from infrastructure.database.models import Scan
+        from infrastructure.services.queue_service import QueueService
+        from sqlalchemy import func, and_
+        from datetime import datetime, timedelta
+        
+        async with db_adapter.async_session() as session:
+            # Get queue size from Redis
+            queue_service = QueueService()
+            queue_size = await queue_service.get_queue_length()
+            
+            # Get active scans (running)
+            active_result = await session.execute(
+                select(func.count(Scan.id)).where(Scan.status == "running")
+            )
+            active_scans = active_result.scalar() or 0
+            
+            # Get today's statistics
+            today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # Timeouts today
+            timeout_result = await session.execute(
+                select(func.count(Scan.id)).where(
+                    and_(
+                        Scan.created_at >= today,
+                        Scan.error_message.ilike("%timeout%")
+                    )
+                )
+            )
+            timeouts_today = timeout_result.scalar() or 0
+            
+            # Errors today
+            error_result = await session.execute(
+                select(func.count(Scan.id)).where(
+                    and_(
+                        Scan.created_at >= today,
+                        Scan.status == "failed"
+                    )
+                )
+            )
+            errors_today = error_result.scalar() or 0
+            
+            # Completed scans today
+            completed_result = await session.execute(
+                select(func.count(Scan.id)).where(
+                    and_(
+                        Scan.created_at >= today,
+                        Scan.status == "completed"
+                    )
+                )
+            )
+            scans_completed_today = completed_result.scalar() or 0
+            
+            # Average scan time (from completed scans today)
+            avg_time_result = await session.execute(
+                select(func.avg(Scan.duration)).where(
+                    and_(
+                        Scan.created_at >= today,
+                        Scan.status == "completed",
+                        Scan.duration.isnot(None)
+                    )
+                )
+            )
+            avg_scan_time = avg_time_result.scalar()
+            
+            # Get queue items (pending scans)
+            queue_items_result = await session.execute(
+                select(Scan)
+                .where(Scan.status == "pending")
+                .order_by(Scan.priority.desc(), Scan.created_at.asc())
+                .limit(10)
+            )
+            queue_scans = queue_items_result.scalars().all()
+            
+            queue_items = [
+                {
+                    "scan_id": str(scan.id),
+                    "name": scan.name,
+                    "target": scan.target_url,
+                    "created_at": scan.created_at.isoformat() if scan.created_at else None,
+                    "priority": scan.priority
+                }
+                for scan in queue_scans
+            ]
+            
+            # Workers running - this would typically come from worker health endpoint
+            # For now, we'll estimate based on active scans
+            workers_running = max(1, active_scans)  # At least 1 worker if there are active scans
+            
+            return ScannerStatusResponse(
+                workers_running=workers_running,
+                queue_size=queue_size,
+                active_scans=active_scans,
+                average_scan_time=float(avg_scan_time) if avg_scan_time else None,
+                timeouts_today=timeouts_today,
+                errors_today=errors_today,
+                scans_completed_today=scans_completed_today,
+                queue_items=queue_items
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get scanner status: {str(e)}"
+        )
+
+
+@router.post("/scanner/pause")
+async def pause_scanning(
+    request: Request,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, str]:
+    """
+    Pause scanning (stop processing new scans).
+    
+    Requires admin privileges.
+    Note: This is a placeholder - actual implementation would require worker coordination.
+    """
+    try:
+        # Log audit event
+        await AuditLogService.log_event(
+            user_id=actor_context.user_id,
+            user_email=actor_context.email,
+            action_type="SCANNER_PAUSED",
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("User-Agent")
+        )
+        
+        # TODO: Implement actual pause logic (would need worker API call)
+        return {"message": "Scanning paused (placeholder - not yet implemented)"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to pause scanning: {str(e)}"
+        )
+
+
+@router.post("/scanner/resume")
+async def resume_scanning(
+    request: Request,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, str]:
+    """
+    Resume scanning (start processing new scans).
+    
+    Requires admin privileges.
+    Note: This is a placeholder - actual implementation would require worker coordination.
+    """
+    try:
+        # Log audit event
+        await AuditLogService.log_event(
+            user_id=actor_context.user_id,
+            user_email=actor_context.email,
+            action_type="SCANNER_RESUMED",
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("User-Agent")
+        )
+        
+        # TODO: Implement actual resume logic (would need worker API call)
+        return {"message": "Scanning resumed (placeholder - not yet implemented)"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to resume scanning: {str(e)}"
         )

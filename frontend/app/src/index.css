@@ -148,6 +148,79 @@ input:focus, select:focus {
   font-weight: 600;
 }
 
+/* Dropdown Menu */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--glass-bg-dark);
+  border: 1px solid var(--glass-border-dark);
+  border-radius: 8px;
+  color: var(--text-dark);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.dropdown-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.5rem;
+  min-width: 200px;
+  background: var(--glass-bg-dark);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border-dark);
+  border-radius: 8px;
+  box-shadow: var(--shadow-dark);
+  z-index: 1000;
+  padding: 0.5rem 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  transition: all 0.2s ease;
+}
+
+.dropdown-menu.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.dropdown-item {
+  display: block;
+  padding: 0.75rem 1rem;
+  color: var(--text-dark);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: var(--glass-border-dark);
+  margin: 0.5rem 0;
+}
+
 /* Cards */
 .card {
   background: var(--glass-bg-dark);
