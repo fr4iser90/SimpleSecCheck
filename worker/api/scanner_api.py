@@ -2,23 +2,28 @@
 Worker API for Scanner Discovery
 
 Provides HTTP API for backend to query available scanners.
-Worker calls scanner container with --list to get scanner info.
+Worker reads scanners from database (scanner writes directly to DB).
 """
 import json
 import asyncio
 import time
-from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
-import docker.errors
-from pathlib import Path
 import os
+from typing import List, Dict, Any, Optional
+from datetime import datetime
+from fastapi import APIRouter, HTTPException
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+import docker.errors
 
 from worker.infrastructure.docker_adapter import DockerAdapter
 from worker.infrastructure.logging_config import get_logger
+from worker.infrastructure.database_adapter import PostgreSQLAdapter
 
 logger = get_logger("worker.api.scanner")
 router = APIRouter(prefix="/api/scanners", tags=["scanners"])
+
+# Global database adapter (set by init_router)
+_database_adapter: Optional[PostgreSQLAdapter] = None
 
 # Cache for scanner list with TTL
 _scanner_cache: Optional[List[Dict[str, Any]]] = None
@@ -29,103 +34,183 @@ _cache_lock = asyncio.Lock()  # Lock to prevent race conditions when fetching sc
 CACHE_TTL_SECONDS = int(os.getenv("SCANNER_CACHE_TTL_SECONDS", "3600"))  # 1 hour default
 
 
-async def _get_scanners_from_container() -> List[Dict[str, Any]]:
-    """Get scanner list by running scanner container with --list flag."""
+def init_router(database_adapter: PostgreSQLAdapter) -> APIRouter:
+    """Initialize router with database adapter."""
+    global _database_adapter
+    _database_adapter = database_adapter
+    return router
+
+
+async def _get_scanners_from_database() -> List[Dict[str, Any]]:
+    """Get scanner list from database. If database is empty, trigger scanner container to populate it."""
+    if not _database_adapter:
+        raise HTTPException(status_code=503, detail="Database adapter not initialized")
+    
+    try:
+        async with _database_adapter.get_session() as session:
+            result = await session.execute(text("SELECT * FROM scanners ORDER BY priority"))
+            rows = result.fetchall()
+            
+            # If database is empty OR scanners have no metadata, trigger scanner container to populate it
+            needs_refresh = False
+            if not rows:
+                needs_refresh = True
+                logger.info("Database is empty, triggering scanner container to populate scanner list")
+            else:
+                # Check if any scanner is missing metadata (migration scenario)
+                for row in rows:
+                    try:
+                        scanner_metadata = getattr(row, 'scanner_metadata', None)
+                        if scanner_metadata is None or (isinstance(scanner_metadata, str) and scanner_metadata.strip() in ['', '{}', 'null']):
+                            needs_refresh = True
+                            logger.info("Found scanners without metadata, triggering scanner container to populate metadata")
+                            break
+                    except AttributeError:
+                        needs_refresh = True
+                        logger.info("scanner_metadata column missing, triggering scanner container")
+                        break
+            
+            if needs_refresh:
+                await _refresh_scanners_from_container()
+                # Retry query after refresh
+                result = await session.execute(text("SELECT * FROM scanners ORDER BY priority"))
+                rows = result.fetchall()
+            
+            scanners = []
+            for row in rows:
+                # Convert row to dict
+                scanner_dict = {
+                    "name": row.name,
+                    "scan_types": row.scan_types if isinstance(row.scan_types, list) else json.loads(row.scan_types) if row.scan_types else [],
+                    "priority": row.priority,
+                    "requires_condition": row.requires_condition,
+                    "enabled": row.enabled,
+                }
+                
+                # Extract metadata (description, categories, icon, assets)
+                # Handle case where scanner_metadata column doesn't exist yet (migration pending)
+                try:
+                    scanner_metadata = getattr(row, 'scanner_metadata', None)
+                    if scanner_metadata is None:
+                        metadata = {}
+                    elif isinstance(scanner_metadata, dict):
+                        metadata = scanner_metadata
+                    else:
+                        metadata = json.loads(scanner_metadata) if scanner_metadata else {}
+                except (AttributeError, KeyError, json.JSONDecodeError):
+                    # Column doesn't exist yet or invalid JSON, use empty metadata
+                    metadata = {}
+                scanner_dict["description"] = metadata.get("description")
+                scanner_dict["categories"] = metadata.get("categories", [])
+                scanner_dict["icon"] = metadata.get("icon")
+                scanner_dict["assets"] = metadata.get("assets", [])
+                
+                scanners.append(scanner_dict)
+            
+            logger.info(f"Retrieved {len(scanners)} scanners from database")
+            return scanners
+            
+    except Exception as e:
+        logger.error(f"Failed to get scanners from database: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get scanners from database: {str(e)}"
+        )
+
+
+async def _refresh_scanners_from_container() -> None:
+    """Trigger scanner container to update database with latest scanner list."""
     docker_adapter = DockerAdapter()
     if not docker_adapter.client:
         logger.error("Docker client not available")
         raise HTTPException(status_code=503, detail="Docker not available")
     
     try:
-        # Get scanner image name from environment or use default
+        import os
         scanner_image = "simpleseccheck-scanner:local"
         
-        logger.info(f"Creating scanner container with image: {scanner_image}")
-        # Generate a readable container name
-        import time
-        container_name = f"scanner-list-{int(time.time())}"
+        # Get DATABASE_URL from environment (passed to scanner container)
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            raise HTTPException(status_code=503, detail="DATABASE_URL not set")
         
-        # Create container with --list command
+        logger.info(f"Starting scanner container to refresh scanner list in database")
+        container_name = f"scanner-refresh-{int(time.time())}"
+        
+        # Find the actual network name (Docker Compose adds project prefix)
+        # Look for network containing "app" in its name (e.g., simpleseccheck_app)
+        network_name = None
+        try:
+            networks = await asyncio.to_thread(docker_adapter.client.networks.list)
+            for net in networks:
+                # Match networks like "simpleseccheck_app" or just "app"
+                if net.name.endswith("_app") or net.name == "app":
+                    network_name = net.name
+                    logger.info(f"Found network: {network_name}")
+                    break
+            if not network_name:
+                # Fallback: try to find any network with "app" in the name
+                for net in networks:
+                    if "app" in net.name.lower():
+                        network_name = net.name
+                        logger.info(f"Found network (fallback): {network_name}")
+                        break
+        except Exception as e:
+            logger.warning(f"Failed to find network: {e}")
+        
+        if not network_name:
+            raise HTTPException(
+                status_code=503,
+                detail="Could not find Docker network. Make sure docker-compose networks are created."
+            )
+        
+        # Create container with --list command and DATABASE_URL
+        # Use same network as DB so scanner can resolve 'postgres' hostname
         container = await asyncio.to_thread(
             docker_adapter.client.containers.create,
             image=scanner_image,
             command=["python3", "-m", "scanner.core.orchestrator", "--list"],
             name=container_name,
             detach=False,
-            auto_remove=False,  # Don't auto-remove so we can read logs
-            network_mode="bridge"
+            auto_remove=False,
+            network=network_name,
+            environment={"DATABASE_URL": database_url}
         )
         
-        logger.info(f"Starting scanner container: {container.id}")
-        # Start container and wait for completion
         container.start()
-        
-        logger.info("Waiting for container to complete (timeout: 30s)...")
         exit_code_dict = container.wait(timeout=30)
         exit_code = exit_code_dict.get('StatusCode', 1) if isinstance(exit_code_dict, dict) else exit_code_dict
-        logger.info(f"Container exited with code: {exit_code}")
         
-        # Read JSON from stdout ONLY (stderr=False = no logs in output)
-        # Scanner outputs: Logs → stderr, JSON → stdout
-        # NOTE: Entrypoint script may write to stdout, so we need to extract JSON
-        logs = container.logs(stdout=True, stderr=False)
-        stdout_text = logs.decode('utf-8').strip() if logs else ""
-        
-        if not stdout_text:
-            raise ValueError("No output from scanner container")
-        
+        # Get logs before removing container (for debugging)
         if exit_code != 0:
-            # If exit code is non-zero, read stderr for error details
-            error_logs = container.logs(stdout=False, stderr=True)
-            error_output = error_logs.decode('utf-8') if error_logs else ""
-            raise ValueError(f"Container exited with non-zero code {exit_code}. Error: {error_output[:1000]}")
+            try:
+                logs = container.logs(stdout=True, stderr=True, tail=100)
+                log_text = logs.decode('utf-8') if logs else "No logs available"
+                logger.error(f"Scanner container failed with exit code {exit_code}. Logs:\n{log_text}")
+            except Exception as e:
+                logger.warning(f"Failed to read container logs: {e}")
         
-        # Extract JSON from stdout (skip entrypoint messages)
-        # JSON starts with '{', find first occurrence
-        json_start = stdout_text.find('{')
-        if json_start == -1:
-            raise ValueError(f"No JSON found in stdout. Output: {stdout_text[:500]}")
-        
-        json_data = stdout_text[json_start:].strip()
-        
-        # Remove container manually after reading data
+        # Remove container
         try:
             container.remove()
         except Exception as e:
             logger.warning(f"Failed to remove container: {e}")
         
-        # Parse JSON
-        try:
-            data = json.loads(json_data)
-            scanner_count = len(data.get("scanners", []))
-            logger.info(f"Successfully parsed {scanner_count} scanners from container")
-            # Return scanners with their assets included
-            return data.get("scanners", [])
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON: {e}. JSON (first 1000 chars): {json_data[:1000] if json_data else 'None'}")
-            logger.error(f"JSON (last 1000 chars): {json_data[-1000:] if json_data else 'None'}")
-            logger.error(f"JSON length: {len(json_data)} chars")
-            raise ValueError(f"Invalid JSON from scanner container: {str(e)}")
+        if exit_code != 0:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Scanner container failed with exit code {exit_code}. Check worker logs for details."
+            )
+        
+        logger.info("Scanner list refreshed in database")
         
     except HTTPException:
         raise
-    except docker.errors.ImageNotFound:
-        logger.error(f"Scanner image not found: {scanner_image}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Scanner image '{scanner_image}' not found. Please build it with: docker compose build scanner"
-        )
-    except docker.errors.APIError as e:
-        logger.error(f"Docker API error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=503,
-            detail=f"Docker API error: {str(e)}"
-        )
     except Exception as e:
-        logger.error(f"Failed to get scanners from container: {e}", exc_info=True)
+        logger.error(f"Failed to refresh scanners from container: {e}", exc_info=True)
         raise HTTPException(
             status_code=503,
-            detail=f"Failed to get scanners: {str(e)}"
+            detail=f"Failed to refresh scanners: {str(e)}"
         )
 
 
@@ -148,10 +233,9 @@ def _is_cache_valid() -> bool:
 @router.get("/")
 async def get_scanners(scan_type: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Get list of available scanners, optionally filtered by scan type.
+    Get list of available scanners from database, optionally filtered by scan type.
     
-    Worker calls scanner container with --list to get scanner info.
-    Uses cache with TTL to avoid multiple container calls.
+    Uses cache with TTL to avoid multiple database queries.
     Cache is automatically revalidated after CACHE_TTL_SECONDS (default: 1 hour).
     """
     global _scanner_cache, _cache_timestamp
@@ -162,12 +246,12 @@ async def get_scanners(scan_type: Optional[str] = None) -> Dict[str, List[Dict[s
             # Check if cache is valid (exists and not expired)
             if not _is_cache_valid():
                 if _scanner_cache is None:
-                    logger.info("Cache miss - fetching scanners from container")
+                    logger.info("Cache miss - fetching scanners from database")
                 else:
                     age_seconds = time.time() - _cache_timestamp
                     logger.info(f"Cache expired ({age_seconds:.0f}s old, TTL: {CACHE_TTL_SECONDS}s) - refreshing")
                 
-                _scanner_cache = await _get_scanners_from_container()
+                _scanner_cache = await _get_scanners_from_database()
                 _cache_timestamp = time.time()
                 logger.info(f"Scanner cache refreshed, will expire in {CACHE_TTL_SECONDS}s")
             else:
@@ -198,13 +282,15 @@ async def get_scanners(scan_type: Optional[str] = None) -> Dict[str, List[Dict[s
 
 @router.post("/refresh")
 async def refresh_scanners() -> Dict[str, str]:
-    """Manually refresh scanner cache by querying scanner container again."""
+    """Manually refresh scanner list by triggering scanner container to update database."""
     global _scanner_cache, _cache_timestamp
     
     try:
         async with _cache_lock:
-            logger.info("Manually refreshing scanner cache")
-            _scanner_cache = await _get_scanners_from_container()
+            logger.info("Manually refreshing scanner list - triggering scanner container")
+            await _refresh_scanners_from_container()
+            # Reload from database after refresh
+            _scanner_cache = await _get_scanners_from_database()
             _cache_timestamp = time.time()
         return {"status": "ok", "count": len(_scanner_cache)}
     except Exception as e:
@@ -218,9 +304,9 @@ async def refresh_scanners() -> Dict[str, str]:
 @router.get("/assets")
 async def get_scanner_assets() -> Dict[str, List[Dict[str, Any]]]:
     """
-    Get list of all scanner assets.
+    Get list of all scanner assets from database.
     
-    Assets are extracted from scanner --list output (scanner provides everything).
+    Assets are stored in scanner metadata in database.
     Uses cache with TTL if available, otherwise fetches fresh data.
     """
     global _scanner_cache, _cache_timestamp
@@ -233,7 +319,7 @@ async def get_scanner_assets() -> Dict[str, List[Dict[str, Any]]]:
                     logger.info("Cache miss - fetching scanners for assets")
                 else:
                     logger.info("Cache expired - refreshing for assets")
-                _scanner_cache = await _get_scanners_from_container()
+                _scanner_cache = await _get_scanners_from_database()
                 _cache_timestamp = time.time()
             else:
                 logger.debug("Using cached scanner list for assets")

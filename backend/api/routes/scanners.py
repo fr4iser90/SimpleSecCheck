@@ -155,43 +155,35 @@ async def get_scanners(
             result = await session.execute(select(Scanner))
             db_scanners = result.scalars().all()
         
-        # If database is empty or stale (older than 1 hour), refresh from worker
+        # If database is empty or stale (older than 1 hour), trigger scanner container to refresh
         needs_refresh = False
         if not db_scanners:
             needs_refresh = True
-            logger.info("No scanners in database, fetching from worker")
+            logger.info("No scanners in database, triggering scanner container to populate")
         elif db_scanners[0].last_discovered_at:
             age_seconds = (datetime.utcnow() - db_scanners[0].last_discovered_at).total_seconds()
             if age_seconds > 3600:  # 1 hour
                 needs_refresh = True
-                logger.info(f"Scanners in database are stale ({age_seconds:.0f}s old), refreshing from worker")
+                logger.info(f"Scanners in database are stale ({age_seconds:.0f}s old), triggering scanner container to refresh")
         
         if needs_refresh:
             try:
-                # Fetch from worker and sync to DB
-                scanners_data = await _get_scanners_from_worker(None)  # Get all scanners
-                await _sync_scanners_to_db(scanners_data)
+                # Trigger worker to refresh scanners (worker triggers scanner container)
+                worker_url = os.getenv("WORKER_API_URL", "http://worker:8081")
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(f"{worker_url}/api/scanners/refresh", timeout=30.0)
+                    if response.status_code != 200:
+                        logger.warning(f"Failed to refresh scanners via worker: {response.status_code}")
                 
-                # Re-fetch from DB
+                # Re-fetch from DB after refresh
                 async with db_adapter.async_session() as session:
                     result = await session.execute(select(Scanner))
                     db_scanners = result.scalars().all()
             except Exception as e:
-                logger.warning(f"Failed to refresh scanners from worker, using cached data: {e}")
+                logger.warning(f"Failed to refresh scanners, using cached data: {e}")
                 # Continue with existing DB data if refresh fails
         
-        # Get fresh scanner data from worker (includes descriptions, categories, icons)
-        # This ensures we have the latest metadata even if DB is stale
-        worker_scanners_data = {}
-        try:
-            fresh_scanners = await _get_scanners_from_worker(scan_type)
-            for s in fresh_scanners:
-                worker_scanners_data[s.get("name")] = s
-        except Exception as e:
-            logger.warning(f"Could not fetch fresh scanner data from worker: {e}")
-            # Continue with DB data only
-        
-        # Filter by scan_type if provided
+        # Filter by scan_type if provided and build response from DB (includes metadata)
         scanner_list = []
         for scanner in db_scanners:
             # Check if scanner matches scan_type filter
@@ -199,8 +191,18 @@ async def get_scanners(
                 if scan_type.lower() not in [st.lower() for st in scanner.scan_types]:
                     continue
             
-            # Get metadata from worker data if available, otherwise use defaults
-            worker_data = worker_scanners_data.get(scanner.name, {})
+            # Extract metadata from DB (description, categories, icon, assets)
+            # Handle case where scanner_metadata column doesn't exist yet (migration pending)
+            try:
+                scanner_metadata = getattr(scanner, 'scanner_metadata', None)
+                if scanner_metadata is None:
+                    metadata = {}
+                elif isinstance(scanner_metadata, dict):
+                    metadata = scanner_metadata
+                else:
+                    metadata = {}
+            except (AttributeError, KeyError):
+                metadata = {}
             
             scanner_list.append(ScannerResponse(
                 name=scanner.name,
@@ -208,9 +210,9 @@ async def get_scanners(
                 priority=scanner.priority,
                 requires_condition=scanner.requires_condition,
                 enabled=scanner.enabled,
-                description=worker_data.get("description"),
-                categories=worker_data.get("categories"),
-                icon=worker_data.get("icon")
+                description=metadata.get("description"),
+                categories=metadata.get("categories", []),
+                icon=metadata.get("icon")
             ))
         
         return {"scanners": scanner_list}

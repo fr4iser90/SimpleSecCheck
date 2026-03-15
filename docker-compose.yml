@@ -21,12 +21,12 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-simpleseccheck}
       POSTGRES_USER: ${POSTGRES_USER:-ssc_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_INITDB_ARGS: "--locale=C"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - SimpleSecCheck_network
-      - SimpleSecCheck_internal
+      - app
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ssc_user} -d ${POSTGRES_DB:-simpleseccheck}"]
@@ -43,8 +43,8 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - SimpleSecCheck_network
-      - SimpleSecCheck_internal
+      - app
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -65,7 +65,6 @@ services:
       - ./results:/app/results
       - .:/project:ro
       - ${HOST_PROJECT_ROOT:-.}/scanner/plugins/owasp/data:/app/scanner/plugins/owasp/data
-      - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - .env
     environment:
@@ -85,8 +84,8 @@ services:
     ports:
       - "8080:8080"
     networks:
-      - SimpleSecCheck_network
-      - SimpleSecCheck_internal
+      - app
+      - internal
     read_only: false
     tmpfs:
       - /tmp:noexec,nosuid,size=100m
@@ -164,8 +163,8 @@ services:
     ports:
       - "8081:8081"  # Worker API port for scanner discovery
     networks:
-      - SimpleSecCheck_network
-      - SimpleSecCheck_internal
+      - app
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import sys; sys.path.append('/app'); from worker.cli.worker_main import main; main(['--healthcheck'])\""]
@@ -221,7 +220,6 @@ services:
     volumes:
       - ./results:/app/results
       - ${HOST_PROJECT_ROOT:-.}/scanner/plugins/owasp/data:/app/scanner/plugins/owasp/data
-      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - SCAN_TARGET=${SCAN_TARGET:-}
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
@@ -232,7 +230,8 @@ services:
       - NVD_API_KEY=${NVD_API_KEY:-}
       - SNYK_TOKEN=${SNYK_TOKEN:-}
     networks:
-      - SimpleSecCheck_network
+      - app
+      - internal
     restart: "no"
     stdin_open: true
     tty: true
@@ -260,7 +259,6 @@ services:
       - CHOWN
       - SETGID
       - SETUID
-      - SYS_ADMIN  # Required for Docker socket access
     # Additional Security (Phase 3)
     working_dir: /app
     shm_size: 256M
@@ -279,7 +277,7 @@ services:
       - API_BASE_URL=${API_BASE_URL:-http://backend:8080}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
     networks:
-      - SimpleSecCheck_network
+      - app
     read_only: false
     tmpfs:
       - /tmp:noexec,nosuid,size=100m
@@ -298,9 +296,9 @@ services:
       - no-new-privileges:true
 
 networks:
-  SimpleSecCheck_network:
+  app:
     driver: bridge
-  SimpleSecCheck_internal:
+  internal:
     driver: bridge
     internal: true
 

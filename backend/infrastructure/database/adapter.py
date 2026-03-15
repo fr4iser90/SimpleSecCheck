@@ -144,38 +144,67 @@ class DatabaseAdapter:
         """Apply migrations to existing tables."""
         try:
             async with self.async_session() as session:
-                # List of columns to check and add if missing
-                columns_to_add = [
-                    ("scheduled_at", "TIMESTAMP WITHOUT TIME ZONE"),
-                    ("total_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
-                    ("critical_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
-                    ("high_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
-                    ("medium_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
-                    ("low_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
-                    ("info_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL"),
+                # List of columns to check and add if missing for scans table
+                scan_columns_to_add = [
+                    ("scheduled_at", "TIMESTAMP WITHOUT TIME ZONE", "scans"),
+                    ("total_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL", "scans"),
+                    ("critical_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL", "scans"),
+                    ("high_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL", "scans"),
+                    ("medium_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL", "scans"),
+                    ("low_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL", "scans"),
+                    ("info_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL", "scans"),
                 ]
                 
-                for column_name, column_type in columns_to_add:
+                # List of columns to check and add if missing for scanners table
+                scanner_columns_to_add = [
+                    ("scanner_metadata", "JSONB DEFAULT '{}'::jsonb NOT NULL", "scanners"),
+                ]
+                
+                # Migrate scans table
+                for column_name, column_type, table_name in scan_columns_to_add:
                     # Check if column exists
                     result = await session.execute(
                         text("""
                             SELECT column_name 
                             FROM information_schema.columns 
-                            WHERE table_name = 'scans' AND column_name = :column_name
+                            WHERE table_name = :table_name AND column_name = :column_name
                         """),
-                        {"column_name": column_name}
+                        {"table_name": table_name, "column_name": column_name}
                     )
                     column_exists = result.scalar() is not None
                     
                     if not column_exists:
-                        logger.info(f"Adding {column_name} column to scans table")
+                        logger.info(f"Adding {column_name} column to {table_name} table")
                         await session.execute(
-                            text(f"ALTER TABLE scans ADD COLUMN {column_name} {column_type}")
+                            text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
                         )
                         await session.commit()
-                        logger.info(f"Successfully added {column_name} column")
+                        logger.info(f"Successfully added {column_name} column to {table_name}")
                     else:
-                        logger.debug(f"Column {column_name} already exists")
+                        logger.debug(f"Column {column_name} already exists in {table_name}")
+                
+                # Migrate scanners table
+                for column_name, column_type, table_name in scanner_columns_to_add:
+                    # Check if column exists
+                    result = await session.execute(
+                        text("""
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_name = :table_name AND column_name = :column_name
+                        """),
+                        {"table_name": table_name, "column_name": column_name}
+                    )
+                    column_exists = result.scalar() is not None
+                    
+                    if not column_exists:
+                        logger.info(f"Adding {column_name} column to {table_name} table")
+                        await session.execute(
+                            text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+                        )
+                        await session.commit()
+                        logger.info(f"Successfully added {column_name} column to {table_name}")
+                    else:
+                        logger.debug(f"Column {column_name} already exists in {table_name}")
                 
                 # Migrate old vulnerabilities_count to total_vulnerabilities if needed
                 result = await session.execute(

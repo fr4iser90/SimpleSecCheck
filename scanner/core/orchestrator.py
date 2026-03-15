@@ -706,11 +706,12 @@ def _get_asset_last_updated(container_path: str) -> Optional[Dict[str, Any]]:
 
 
 async def list_scanners():
-    """List all available scanners with their capabilities and assets."""
+    """List all available scanners and write directly to database."""
     import json
     import sys
     import logging
     from pathlib import Path
+    from datetime import datetime
     
     # Configure logging based on LOG_LEVEL environment variable
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -728,6 +729,29 @@ async def list_scanners():
         import scanner.plugins  # noqa: F401
         
         scanners = ScannerRegistry.get_all_scanners()
+        
+        # Get database URL
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            logger.error("DATABASE_URL not set, cannot write scanners to database")
+            sys.exit(1)
+        
+        # Convert postgresql:// to postgresql+asyncpg:// if needed
+        if database_url.startswith("postgresql://") and "+asyncpg" not in database_url:
+            database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        
+        # Connect to database
+        import asyncpg
+        try:
+            # Parse connection string
+            if database_url.startswith("postgresql+asyncpg://"):
+                database_url = database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+            
+            conn = await asyncpg.connect(database_url)
+            logger.info("Connected to database for scanner sync")
+        except Exception as e:
+            logger.error(f"Failed to connect to database: {e}")
+            sys.exit(1)
         
         # Scanner descriptions and categories
         SCANNER_DESCRIPTIONS = {
@@ -949,19 +973,82 @@ async def list_scanners():
         # Sort by priority
         scanner_list.sort(key=lambda x: x["priority"])
         
-        # Log scanner list at DEBUG level
-        logger.debug(f"Scanner list ({len(scanner_list)} scanners):")
-        logger.debug(json.dumps({"scanners": scanner_list}, indent=2))
+        # Write scanners directly to database
+        now = datetime.utcnow()
+        synced_count = 0
         
-        # Output JSON to stdout (structured data)
-        # Logs go to stderr (via logger), JSON goes to stdout (via print)
-        scanner_json = json.dumps({"scanners": scanner_list}, indent=2)
-        logger.info(f"Scanner list generated ({len(scanner_list)} scanners)")  # Goes to stderr
-        print(scanner_json)  # Goes to stdout (Worker reads only stdout)
-        sys.exit(0)
+        try:
+            for scanner_data in scanner_list:
+                # Extract metadata (description, categories, assets)
+                # Icons are NOT stored in DB - they remain in frontend code only
+                metadata = {
+                    "description": scanner_data.get("description"),
+                    "categories": scanner_data.get("categories", []),
+                    "assets": scanner_data.get("assets", [])
+                }
+                
+                # Check if scanner exists
+                existing = await conn.fetchrow(
+                    "SELECT id FROM scanners WHERE name = $1",
+                    scanner_data["name"]
+                )
+                
+                if existing:
+                    # Update existing scanner
+                    await conn.execute(
+                        """
+                        UPDATE scanners 
+                        SET scan_types = $1, 
+                            priority = $2, 
+                            requires_condition = $3, 
+                            enabled = $4,
+                            scanner_metadata = $5,
+                            last_discovered_at = $6,
+                            updated_at = $7
+                        WHERE name = $8
+                        """,
+                        json.dumps(scanner_data["scan_types"]),
+                        scanner_data["priority"],
+                        scanner_data.get("requires_condition"),
+                        scanner_data.get("enabled", True),
+                        json.dumps(metadata),
+                        now,
+                        now,
+                        scanner_data["name"]
+                    )
+                else:
+                    # Insert new scanner
+                    import uuid
+                    scanner_id = uuid.uuid4()
+                    await conn.execute(
+                        """
+                        INSERT INTO scanners (id, name, scan_types, priority, requires_condition, enabled, scanner_metadata, last_discovered_at, created_at, updated_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                        """,
+                        scanner_id,
+                        scanner_data["name"],
+                        json.dumps(scanner_data["scan_types"]),
+                        scanner_data["priority"],
+                        scanner_data.get("requires_condition"),
+                        scanner_data.get("enabled", True),
+                        json.dumps(metadata),
+                        now,
+                        now,
+                        now
+                    )
+                synced_count += 1
+            
+            await conn.close()
+            logger.info(f"Successfully synced {synced_count} scanners to database")
+            sys.exit(0)
+            
+        except Exception as db_error:
+            await conn.close()
+            logger.error(f"Failed to write scanners to database: {db_error}")
+            sys.exit(1)
         
     except Exception as e:
-        print(json.dumps({"error": str(e)}, indent=2), file=sys.stderr)
+        logger.error(f"Failed to list scanners: {e}", exc_info=True)
         sys.exit(1)
 
 

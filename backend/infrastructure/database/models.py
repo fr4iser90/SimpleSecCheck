@@ -218,6 +218,7 @@ class Scanner(Base):
     priority = Column(Integer, default=0, nullable=False)
     requires_condition = Column(String(100), nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
+    scanner_metadata = Column(JSON, default=dict, nullable=False)  # description, categories, icon, assets (renamed from 'metadata' - SQLAlchemy reserved)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -82,12 +82,12 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def start_api_server():
+async def start_api_server(database_adapter):
     """Start HTTP API server for scanner discovery."""
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
     import uvicorn
-    from worker.api.scanner_api import router
+    from worker.api.scanner_api import init_router
     
     app = FastAPI(title="SimpleSecCheck Worker API")
     
@@ -100,6 +100,8 @@ async def start_api_server():
         allow_headers=["*"],
     )
     
+    # Initialize router with database adapter
+    router = init_router(database_adapter)
     app.include_router(router)
     
     # Run API server
@@ -161,7 +163,7 @@ async def main():
         # Start worker and API server in parallel
         await asyncio.gather(
             job_orchestration_service.start_worker(),
-            start_api_server()
+            start_api_server(database_adapter)
         )
             
     except KeyboardInterrupt:
