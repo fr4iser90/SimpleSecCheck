@@ -54,6 +54,7 @@ export default function SetupWizard() {
   })
   
   const [useCase, setUseCase] = useState<string>('')
+  const [useCases, setUseCases] = useState<Record<string, any>>({})
   const [systemConfig, setSystemConfig] = useState<SystemConfig>({
     auth_mode: 'free',
     scanner_timeout: 3600,
@@ -73,7 +74,20 @@ export default function SetupWizard() {
   // Check setup status on component mount
   useEffect(() => {
     checkSetupStatus()
+    loadUseCases()
   }, [])
+  
+  const loadUseCases = async () => {
+    try {
+      const response = await fetch('/api/setup/use-cases')
+      if (response.ok) {
+        const data = await response.json()
+        setUseCases(data)
+      }
+    } catch (err) {
+      console.error('Failed to load use cases:', err)
+    }
+  }
 
   const checkSetupStatus = async () => {
     try {
@@ -216,7 +230,7 @@ export default function SetupWizard() {
   }
 
   const handleNext = () => {
-    if (step < 4) {
+    if (step < 3) {
       setStep(step + 1)
     }
   }
@@ -249,7 +263,7 @@ export default function SetupWizard() {
   }
 
   const handleBack = () => {
-    if (step > 1) {
+    if (step > 0) {
       setStep(step - 1)
     }
   }
@@ -389,7 +403,7 @@ export default function SetupWizard() {
   const renderStep0 = () => (
     <div className="setup-step">
       <h3>Step 0: Verify Setup Token</h3>
-      <p style={{ marginBottom: '20px', color: '#666' }}>
+      <p>
         Please enter the setup token that was generated when the server started.
         You can find it in the server logs.
       </p>
@@ -400,14 +414,7 @@ export default function SetupWizard() {
           value={setupToken}
           onChange={(e) => setSetupToken(e.target.value)}
           placeholder="Enter setup token"
-          style={{
-            width: '100%',
-            padding: '12px',
-            fontSize: '16px',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            fontFamily: 'monospace'
-          }}
+          style={{ fontFamily: 'monospace' }}
           onKeyPress={(e) => {
             if (e.key === 'Enter') {
               handleVerifyToken()
@@ -417,6 +424,7 @@ export default function SetupWizard() {
       </div>
       <div className="step-actions">
         <button 
+          className="primary"
           onClick={handleVerifyToken} 
           disabled={loading || !setupToken.trim()}
           style={{ width: '100%' }}
@@ -430,133 +438,88 @@ export default function SetupWizard() {
   const renderStep1 = () => (
     <div className="setup-step">
       <h3>Step 1: Select Deployment Use Case</h3>
-      <p style={{ marginBottom: '24px', color: '#666' }}>
+      <p>
         Choose the deployment scenario that best matches your setup. This will configure security settings and rate limits automatically.
       </p>
       
-      <div style={{ display: 'grid', gap: '16px', marginBottom: '24px' }}>
-        <div
-          onClick={() => handleUseCaseSelect('solo')}
-          style={{
-            padding: '20px',
-            border: `2px solid ${useCase === 'solo' ? '#4CAF50' : '#ddd'}`,
-            borderRadius: '8px',
-            cursor: 'pointer',
-            backgroundColor: useCase === 'solo' ? '#f0f9f0' : '#fff',
-            transition: 'all 0.2s',
-          }}
-        >
-          <h4 style={{ margin: '0 0 8px 0' }}>Solo</h4>
-          <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
-            Single user, self-hosted. All features enabled, no restrictions.
+      {/* Database Connection Check */}
+      {setupStatus && !setupStatus.database_connected && (
+        <div className="form-info-box error" style={{ marginBottom: '1.5rem' }}>
+          <strong>⚠️ Database Connection Required</strong>
+          <p style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+            Please ensure the database is running and accessible before continuing.
           </p>
-          <small style={{ color: '#888' }}>Security: Permissive | Auth: Free</small>
         </div>
-        
-        <div
-          onClick={() => handleUseCaseSelect('network_intern')}
-          style={{
-            padding: '20px',
-            border: `2px solid ${useCase === 'network_intern' ? '#4CAF50' : '#ddd'}`,
-            borderRadius: '8px',
-            cursor: 'pointer',
-            backgroundColor: useCase === 'network_intern' ? '#f0f9f0' : '#fff',
-            transition: 'all 0.2s',
-          }}
-        >
-          <h4 style={{ margin: '0 0 8px 0' }}>Network Intern</h4>
-          <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
-            Multiple users, internal network. User authentication required.
-          </p>
-          <small style={{ color: '#888' }}>Security: Permissive | Auth: Basic/JWT</small>
-        </div>
-        
-        <div
-          onClick={() => handleUseCaseSelect('public_web')}
-          style={{
-            padding: '20px',
-            border: `2px solid ${useCase === 'public_web' ? '#4CAF50' : '#ddd'}`,
-            borderRadius: '8px',
-            cursor: 'pointer',
-            backgroundColor: useCase === 'public_web' ? '#f0f9f0' : '#fff',
-            transition: 'all 0.2s',
-          }}
-        >
-          <h4 style={{ margin: '0 0 8px 0' }}>Public Web</h4>
-          <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
-            Public web access, many users. Restricted security, rate limited.
-          </p>
-          <small style={{ color: '#888' }}>Security: Restricted | Auth: Free</small>
-        </div>
-        
-        <div
-          onClick={() => handleUseCaseSelect('enterprise')}
-          style={{
-            padding: '20px',
-            border: `2px solid ${useCase === 'enterprise' ? '#4CAF50' : '#ddd'}`,
-            borderRadius: '8px',
-            cursor: 'pointer',
-            backgroundColor: useCase === 'enterprise' ? '#f0f9f0' : '#fff',
-            transition: 'all 0.2s',
-          }}
-        >
-          <h4 style={{ margin: '0 0 8px 0' }}>Enterprise</h4>
-          <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
-            Enterprise deployment with SSO. Restricted security, JWT authentication.
-          </p>
-          <small style={{ color: '#888' }}>Security: Restricted | Auth: JWT (SSO)</small>
+      )}
+      
+      {/* Security Mode Explanation */}
+      <div style={{ 
+        marginBottom: '1.5rem', 
+        padding: '1rem', 
+        backgroundColor: 'var(--glass-bg-light)', 
+        borderRadius: '8px',
+        border: '1px solid var(--glass-border-dark)'
+      }}>
+        <h4 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem' }}>Security Modes Explained:</h4>
+        <div style={{ display: 'grid', gap: '0.75rem', fontSize: '0.9rem' }}>
+          <div>
+            <strong style={{ color: 'var(--accent)' }}>Permissive:</strong> Allows access to host filesystem (local paths). 
+            <span style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
+              ✅ Can scan local directories on the server | ⚠️ Only safe for single-user deployments
+            </span>
+          </div>
+          <div>
+            <strong style={{ color: 'var(--accent)' }}>Restricted:</strong> No access to host filesystem. Only external targets allowed.
+            <span style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
+              ✅ Git repositories, ZIP upload, Container images, Network scans | ❌ No local file paths
+            </span>
+          </div>
         </div>
       </div>
       
+      <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
+        {Object.values(useCases).length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+            Loading use cases...
+          </div>
+        ) : (
+          Object.values(useCases).map((uc: any) => {
+            const securityModeLabel = uc.security_mode === 'permissive' ? 'Permissive' : 'Restricted'
+            const authModeLabel = uc.auth_mode === 'free' ? 'Free' : uc.auth_mode === 'basic' ? 'Basic/JWT' : 'JWT (SSO)'
+            const featuresText = uc.features.map((f: any) => {
+              const prefix = f.type === 'allowed' ? '✓' : '✗'
+              return `${prefix} ${f.text}`
+            }).join(' | ')
+            
+            return (
+              <div
+                key={uc.id}
+                className={`use-case-card ${useCase === uc.id ? 'selected' : ''}`}
+                onClick={() => handleUseCaseSelect(uc.id)}
+              >
+                <h4>{uc.name}</h4>
+                <p>{uc.description}</p>
+                <small>Security: {securityModeLabel} | Auth: {authModeLabel}</small>
+                <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  {featuresText}
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+      
       <div className="step-actions">
-        <button onClick={handleNext} disabled={!useCase}>
+        <button className="primary" onClick={handleNext} disabled={!useCase || (setupStatus?.database_connected === false)}>
           Continue
         </button>
       </div>
     </div>
   )
-  
+
   const renderStep2 = () => (
     <div className="setup-step">
-      <h3>Step 2: System Requirements</h3>
-      <div className="requirements-list">
-        <div className="requirement">
-          <span className={`status ${setupStatus?.database_connected ? 'success' : 'error'}`}>
-            {setupStatus?.database_connected ? '✓' : '✗'}
-          </span>
-          <span>Database Connection</span>
-        </div>
-        <div className="requirement">
-          <span className={`status ${setupStatus?.tables_exist ? 'success' : 'pending'}`}>
-            {Object.values(setupStatus?.tables_exist || {}).every(Boolean) ? '✓' : '○'}
-          </span>
-          <span>Database Tables</span>
-        </div>
-        <div className="requirement">
-          <span className={`status ${setupStatus?.admin_exists ? 'success' : 'pending'}`}>
-            {setupStatus?.admin_exists ? '✓' : '○'}
-          </span>
-          <span>Admin User</span>
-        </div>
-        <div className="requirement">
-          <span className={`status ${setupStatus?.system_state_exists ? 'success' : 'pending'}`}>
-            {setupStatus?.system_state_exists ? '✓' : '○'}
-          </span>
-          <span>System Configuration</span>
-        </div>
-      </div>
-      <div className="step-actions">
-        <button onClick={handleBack}>Back</button>
-        <button onClick={handleNext} disabled={loading || !setupStatus?.database_connected}>
-          {loading ? 'Checking...' : 'Continue'}
-        </button>
-      </div>
-    </div>
-  )
-
-  const renderStep3 = () => (
-    <div className="setup-step">
-      <h3>Step 3: Create Admin User</h3>
+      <h3>Step 2: Create Admin User</h3>
       <div className="form-group">
         <label>Username</label>
         <input
@@ -608,18 +571,18 @@ export default function SetupWizard() {
       </div>
       <div className="step-actions">
         <button onClick={handleBack}>Back</button>
-        <button onClick={handleNext} disabled={loading || validateAdminUser().length > 0}>
+        <button className="primary" onClick={handleNext} disabled={loading || validateAdminUser().length > 0}>
           Next
         </button>
       </div>
     </div>
   )
 
-  const renderStep4 = () => (
+  const renderStep3 = () => (
     <div className="setup-step">
-      <h3>Step 4: System Configuration</h3>
-      <p style={{ marginBottom: '20px', color: '#666', fontSize: '14px' }}>
-        Configuration based on your selected use case: <strong>{useCase}</strong>
+      <h3>Step 3: System Configuration</h3>
+      <p>
+        Configuration based on your selected use case: <strong>{useCases[useCase]?.name || useCase}</strong>
       </p>
       
       <div className="form-group">
@@ -635,7 +598,7 @@ export default function SetupWizard() {
           <option value="jwt">JWT (Token-based / SSO)</option>
         </select>
         {useCase === 'network_intern' && (
-          <small style={{ color: '#666', display: 'block', marginTop: '4px' }}>
+          <small className="form-help-text info" style={{ display: 'block', marginTop: '0.25rem' }}>
             Can be changed to JWT for SSO integration
           </small>
         )}
@@ -663,14 +626,14 @@ export default function SetupWizard() {
         />
       </div>
       
-      <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #ddd' }}>
-        <h4 style={{ marginBottom: '16px' }}>Email Configuration (Optional)</h4>
-        <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px' }}>
+      <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--glass-border-dark)' }}>
+        <h4>Email Configuration (Optional)</h4>
+        <p style={{ marginBottom: '1rem' }}>
           Configure SMTP settings to enable password reset emails. This can be configured later in Admin Settings.
         </p>
         
         <div className="form-group">
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
             <input
               type="checkbox"
               name="smtp.enabled"
@@ -727,7 +690,7 @@ export default function SetupWizard() {
               />
             </div>
             <div className="form-group">
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   name="smtp.use_tls"
@@ -762,9 +725,47 @@ export default function SetupWizard() {
         )}
       </div>
       
+      {/* Configuration Summary */}
+      <div style={{ 
+        marginTop: '2rem', 
+        paddingTop: '1.5rem', 
+        borderTop: '1px solid var(--glass-border-dark)',
+        backgroundColor: 'var(--glass-bg-light)',
+        padding: '1.5rem',
+        borderRadius: '8px'
+      }}>
+        <h4 style={{ marginTop: 0, marginBottom: '1rem' }}>Configuration Summary</h4>
+        <div style={{ display: 'grid', gap: '0.75rem', fontSize: '0.9rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>Use Case:</span>
+            <strong>{useCases[useCase]?.name || useCase}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>Auth Mode:</span>
+            <strong>
+              {systemConfig.auth_mode === 'free' ? 'Free (No Authentication)' : 
+               systemConfig.auth_mode === 'basic' ? 'Basic (Username/Password)' : 
+               'JWT (Token-based / SSO)'}
+            </strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>Scanner Timeout:</span>
+            <strong>{systemConfig.scanner_timeout}s</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>Max Concurrent Scans:</span>
+            <strong>{systemConfig.max_concurrent_scans}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>SMTP Email:</span>
+            <strong>{systemConfig.smtp?.enabled ? 'Enabled' : 'Disabled'}</strong>
+          </div>
+        </div>
+      </div>
+      
       <div className="step-actions">
         <button onClick={handleBack}>Back</button>
-        <button onClick={handleInitializeSetup} disabled={loading}>
+        <button className="primary" onClick={handleInitializeSetup} disabled={loading}>
           {loading ? 'Setting up...' : 'Complete Setup'}
         </button>
       </div>
@@ -777,7 +778,6 @@ export default function SetupWizard() {
       case 1: return renderStep1()
       case 2: return renderStep2()
       case 3: return renderStep3()
-      case 4: return renderStep4()
       default: return renderStep0()
     }
   }
@@ -798,29 +798,29 @@ export default function SetupWizard() {
       <div className="card">
         <h2>Setup Wizard</h2>
         {error && (
-          <div className="error-message">
+          <div className="form-info-box error">
             {error}
           </div>
         )}
         
         <div className="setup-progress">
-          <div className={`progress-step ${step >= 0 ? 'active' : ''}`}>
-            <div className="step-number">0</div>
+          <div className={`progress-step ${step > 0 ? 'completed' : step === 0 ? 'active' : ''}`}>
+            <div className="step-number">{step > 0 ? '✓' : '0'}</div>
             <div className="step-label">Token</div>
           </div>
           <div className="progress-line"></div>
-          <div className={`progress-step ${step >= 1 ? 'active' : ''}`}>
-            <div className="step-number">1</div>
-            <div className="step-label">Requirements</div>
+          <div className={`progress-step ${step > 1 ? 'completed' : step === 1 ? 'active' : ''}`}>
+            <div className="step-number">{step > 1 ? '✓' : '1'}</div>
+            <div className="step-label">Use Case</div>
           </div>
           <div className="progress-line"></div>
-          <div className={`progress-step ${step >= 2 ? 'active' : ''}`}>
-            <div className="step-number">2</div>
+          <div className={`progress-step ${step > 2 ? 'completed' : step === 2 ? 'active' : ''}`}>
+            <div className="step-number">{step > 2 ? '✓' : '2'}</div>
             <div className="step-label">Admin User</div>
           </div>
           <div className="progress-line"></div>
-          <div className={`progress-step ${step >= 3 ? 'active' : ''}`}>
-            <div className="step-number">3</div>
+          <div className={`progress-step ${step > 3 ? 'completed' : step === 3 ? 'active' : ''}`}>
+            <div className="step-number">{step > 3 ? '✓' : '3'}</div>
             <div className="step-label">Configuration</div>
           </div>
         </div>

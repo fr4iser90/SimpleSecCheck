@@ -63,6 +63,8 @@ class OWASPScanner(BaseScanner):
     
     def initialize_database(self):
         """Initialize OWASP Dependency Check database if not present"""
+        self.start_substep("Database Check", "Checking OWASP database...")
+        
         lock_file = self.data_dir / "odc.update.lock"
         
         # Remove lock file if exists (from interrupted update)
@@ -95,10 +97,13 @@ class OWASPScanner(BaseScanner):
         db_exists = self.data_dir.exists() and any(f.exists() for f in db_files)
         
         if not db_exists:
+            self.complete_substep("Database Check", "Database not found, downloading...")
+            self.start_substep("Download Database", "Downloading vulnerability database (this may take 5-15 minutes)...")
             self.log("OWASP Dependency Check database not found. Downloading vulnerability database (this may take 5-15 minutes)...")
             
             if not self.check_tool_installed("dependency-check"):
                 self.log("dependency-check command not found!", "ERROR")
+                self.fail_substep("Download Database", "dependency-check command not found")
                 return False
             
             cmd = ["dependency-check", "--updateonly", "--data", str(self.data_dir)]
@@ -111,7 +116,11 @@ class OWASPScanner(BaseScanner):
             result = self.run_command(cmd, capture_output=True, timeout=1800)  # 30 min timeout
             if result.returncode != 0:
                 self.log("Database download failed or incomplete, continuing with partial database...", "WARNING")
+                self.complete_substep("Download Database", "Download completed with warnings")
+            else:
+                self.complete_substep("Download Database", "Database downloaded successfully")
         else:
+            self.complete_substep("Database Check", "Using existing database")
             self.log("Using existing OWASP Dependency Check database.")
         
         return True
@@ -138,6 +147,7 @@ class OWASPScanner(BaseScanner):
         if not self.initialize_database():
             return False
         
+        self.start_substep("Scanning", "Running dependency vulnerability scan...")
         self.log(f"Running dependency vulnerability scan on {self.target_path}...")
         
         # Create temporary directory for scan results
@@ -161,6 +171,7 @@ class OWASPScanner(BaseScanner):
             exclude_args = self.get_exclude_args()
             
             # Run OWASP Dependency Check
+            self.update_substep("Scanning", "Analyzing dependencies and checking for vulnerabilities...")
             self.log("Running comprehensive dependency vulnerability scan...")
             cmd = [
                 "dependency-check",
@@ -176,10 +187,69 @@ class OWASPScanner(BaseScanner):
                 *exclude_args
             ]
             
-            # Run with suppressed output (errors still logged)
+            # Run command and capture all output
             result = self.run_command(cmd, capture_output=True, timeout=3600)  # 1 hour timeout
             if result.returncode != 0:
-                self.log("Scan completed with warnings (rate limits may apply)...", "WARNING")
+                # Collect actual error messages
+                error_messages = []
+                
+                # Check stderr first (usually contains error messages)
+                if result.stderr:
+                    stderr_text = result.stderr.strip()
+                    if stderr_text:
+                        error_messages.append(f"STDERR: {stderr_text[:500]}")  # First 500 chars
+                
+                # Check stdout for error messages
+                if result.stdout:
+                    stdout_text = result.stdout.strip()
+                    # Look for error patterns in stdout
+                    stdout_lines = stdout_text.split('\n')
+                    error_lines = []
+                    for line in stdout_lines:
+                        line_lower = line.lower()
+                        if any(keyword in line_lower for keyword in ['error', 'failed', 'exception', 'fatal', 'cannot', 'unable', 'failed to']):
+                            error_lines.append(line.strip())
+                    
+                    if error_lines:
+                        error_messages.append(f"STDOUT ERRORS: {' | '.join(error_lines[:10])}")
+                    elif stdout_text:
+                        # If no clear error pattern, log last 10 lines of stdout
+                        last_lines = stdout_lines[-10:]
+                        error_messages.append(f"STDOUT (last 10 lines): {' | '.join(last_lines)}")
+                
+                # Log the actual error
+                if error_messages:
+                    full_error = f"OWASP Dependency Check failed (exit code {result.returncode}): {' | '.join(error_messages)}"
+                    self.log(full_error, "ERROR")
+                    # Extract the actual error message for substep display
+                    # Prefer stdout errors (usually more descriptive)
+                    error_display = ""
+                    for msg in error_messages:
+                        if "STDOUT ERRORS" in msg:
+                            # Extract just the error lines without the prefix
+                            error_display = msg.replace("STDOUT ERRORS: ", "")
+                            break
+                        elif "STDERR" in msg and not error_display:
+                            error_display = msg.replace("STDERR: ", "")
+                    
+                    if not error_display and error_messages:
+                        error_display = error_messages[0].split(':', 1)[1].strip() if ':' in error_messages[0] else error_messages[0]
+                    
+                    # Clean up the error message for display (remove [ERROR] prefixes)
+                    error_display = error_display.replace("[ERROR] ", "").strip()
+                    if error_display:
+                        # Take first meaningful error line (max 200 chars)
+                        error_lines = error_display.split(' | ')
+                        first_error = error_lines[0][:200] if error_lines else error_display[:200]
+                        self.fail_substep("Scanning", first_error)
+                    else:
+                        self.fail_substep("Scanning", f"Failed with exit code {result.returncode}")
+                else:
+                    self.log(f"OWASP Dependency Check failed with exit code {result.returncode} (no error output captured)", "ERROR")
+                    self.fail_substep("Scanning", f"Failed with exit code {result.returncode}")
+            else:
+                # Only update to "Processing" if command succeeded
+                self.update_substep("Scanning", "Processing scan results...")
             
             # Copy results to results directory
             temp_json = temp_scan_dir / "dependency-check-report.json"
@@ -200,10 +270,18 @@ class OWASPScanner(BaseScanner):
             
             # Check if any reports were generated
             if json_output.exists() or html_output.exists() or xml_output.exists():
+                self.complete_substep("Scanning", "Scan completed successfully")
                 self.log("OWASP Dependency Check scan completed successfully", "SUCCESS")
                 return True
             else:
-                self.log("No OWASP Dependency Check report was generated!", "ERROR")
+                # Only show "No report was generated" if command succeeded but no report exists
+                # (if command failed, we already set the error message above)
+                if result.returncode == 0:
+                    self.fail_substep("Scanning", "No report was generated")
+                    self.log("No OWASP Dependency Check report was generated!", "ERROR")
+                else:
+                    # Error message already set above, just log
+                    self.log("No OWASP Dependency Check report was generated!", "ERROR")
                 return False
                 
         finally:

@@ -7,11 +7,20 @@ interface StepsSidebarProps {
   scanId?: string | null
 }
 
+interface SubStep {
+  name: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  message?: string
+  started_at?: string | null
+  completed_at?: string | null
+}
+
 interface Step {
   number: number
   name: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   message?: string
+  substeps?: SubStep[]
 }
 
 interface WebSocketMessage {
@@ -51,7 +60,14 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
               number: step.number || 0,
               name: step.name || 'Unknown',
               status: (step.status || 'pending') as 'pending' | 'running' | 'completed' | 'failed',
-              message: step.message || ''
+              message: step.message || '',
+              substeps: step.substeps ? step.substeps.map((substep: any) => ({
+                name: substep.name || '',
+                status: (substep.status || 'pending') as 'pending' | 'running' | 'completed' | 'failed',
+                message: substep.message || '',
+                started_at: substep.started_at || null,
+                completed_at: substep.completed_at || null,
+              })) : []
             }))
             setSteps(convertedSteps)
           }
@@ -167,30 +183,89 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
             <div style={{ opacity: 0.7 }}>No steps available</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {steps.map((step) => (
-                <div
-                  key={step.number}
-                  style={{
-                    padding: '1rem',
-                    background: 'var(--glass-bg-dark)',
-                    border: '1px solid var(--glass-border-dark)',
-                    borderRadius: '8px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                    <span style={{ fontWeight: 600 }}>Step {step.number}:</span>
-                    <span>{step.name}</span>
-                    {step.status === 'completed' && <span>✅</span>}
-                    {step.status === 'running' && <span>⏳</span>}
-                    {step.status === 'failed' && <span>❌</span>}
-                  </div>
-                  {step.message && (
-                    <div style={{ fontSize: '0.875rem', opacity: 0.8, marginTop: '0.25rem' }}>
-                      {step.message}
+              {steps.map((step) => {
+                const getSubStepIcon = (substepStatus: string) => {
+                  switch (substepStatus) {
+                    case 'completed': return '✓'
+                    case 'running': return '⟳'
+                    case 'failed': return '✗'
+                    default: return '○'
+                  }
+                }
+
+                const getSubStepColor = (substepStatus: string) => {
+                  switch (substepStatus) {
+                    case 'completed': return '#28a745'
+                    case 'running': return '#007bff'
+                    case 'failed': return '#dc3545'
+                    default: return '#6c757d'
+                  }
+                }
+
+                return (
+                  <div
+                    key={step.number}
+                    style={{
+                      padding: '1rem',
+                      background: 'var(--glass-bg-dark)',
+                      border: '1px solid var(--glass-border-dark)',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <span style={{ fontWeight: 600 }}>Step {step.number}:</span>
+                      <span>{step.name}</span>
+                      {step.status === 'completed' && <span>✅</span>}
+                      {step.status === 'running' && <span>⏳</span>}
+                      {step.status === 'failed' && <span>❌</span>}
                     </div>
-                  )}
-                </div>
-              ))}
+                    {step.message && (
+                      <div style={{ fontSize: '0.875rem', opacity: 0.8, marginTop: '0.25rem' }}>
+                        {step.message}
+                      </div>
+                    )}
+                    {step.substeps && step.substeps.length > 0 && (
+                      <div style={{
+                        marginTop: '0.75rem',
+                        paddingTop: '0.75rem',
+                        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+                      }}>
+                        {step.substeps.map((substep, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.5rem',
+                              padding: '0.5rem',
+                              marginBottom: '0.25rem',
+                              background: 'rgba(0, 0, 0, 0.2)',
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                            }}
+                          >
+                            <span style={{
+                              color: getSubStepColor(substep.status),
+                              fontWeight: 'bold',
+                              fontSize: '0.75rem',
+                            }}>
+                              {getSubStepIcon(substep.status)}
+                            </span>
+                            <span style={{ flex: 1, opacity: 0.9 }}>
+                              {substep.name}
+                            </span>
+                            {substep.message && (
+                              <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>
+                                {substep.message}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

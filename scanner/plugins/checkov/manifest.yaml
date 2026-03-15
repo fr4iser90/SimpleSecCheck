@@ -1,6 +1,7 @@
 name: checkov
 install:
   - ["pip3", "install", "checkov"]
+  - ["pip3", "install", "--upgrade", "bc-detect-secrets"]
 assets:
   - id: config
     type: config

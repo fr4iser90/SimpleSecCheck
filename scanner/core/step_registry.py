@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from enum import Enum
 
 
@@ -22,6 +22,16 @@ class StepStatus(Enum):
 
 
 @dataclass
+class SubStep:
+    """Sub-step definition (nested within a main step)"""
+    name: str
+    status: StepStatus = StepStatus.PENDING
+    message: str = ""
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+@dataclass
 class Step:
     """Step definition"""
     number: int
@@ -30,6 +40,7 @@ class Step:
     message: str = ""
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    substeps: List[SubStep] = field(default_factory=list)
 
 
 class StepRegistry:
@@ -236,12 +247,23 @@ class StepRegistry:
         """
         steps_list = []
         for step in sorted(self.steps.values(), key=lambda s: s.number):
-            steps_list.append({
+            step_dict = {
                 "number": step.number,
                 "name": step.name,
                 "status": step.status.value,
-                "message": step.message
-            })
+                "message": step.message,
+                "substeps": [
+                    {
+                        "name": substep.name,
+                        "status": substep.status.value,
+                        "message": substep.message,
+                        "started_at": substep.started_at.isoformat() if substep.started_at else None,
+                        "completed_at": substep.completed_at.isoformat() if substep.completed_at else None,
+                    }
+                    for substep in step.substeps
+                ]
+            }
+            steps_list.append(step_dict)
         return steps_list
     
     def get_total_steps(self) -> int:
@@ -272,6 +294,135 @@ class StepRegistry:
     def get_step(self, step_name: str) -> Optional[Step]:
         """Get a step by name"""
         return self.steps.get(step_name)
+    
+    def start_substep(self, step_name: str, substep_name: str, message: str = ""):
+        """
+        Start a substep within a main step
+        
+        Args:
+            step_name: Name of the parent step
+            substep_name: Name of the substep
+            message: Optional message for the substep
+        """
+        if step_name not in self.steps:
+            # Parent step doesn't exist, create it first
+            self.start_step(step_name, f"Running {step_name}...")
+        
+        step = self.steps[step_name]
+        
+        # Check if substep already exists
+        existing_substep = None
+        for substep in step.substeps:
+            if substep.name == substep_name:
+                existing_substep = substep
+                break
+        
+        if existing_substep:
+            # Update existing substep
+            existing_substep.status = StepStatus.RUNNING
+            existing_substep.started_at = datetime.now()
+            if message:
+                existing_substep.message = message
+        else:
+            # Create new substep
+            new_substep = SubStep(
+                name=substep_name,
+                status=StepStatus.RUNNING,
+                message=message or f"Running {substep_name}...",
+                started_at=datetime.now()
+            )
+            step.substeps.append(new_substep)
+        
+        # Write to log
+        self._write_to_log(step)
+        
+        # Send WebSocket update
+        asyncio.create_task(self._send_update())
+    
+    def complete_substep(self, step_name: str, substep_name: str, message: str = ""):
+        """
+        Mark a substep as completed
+        
+        Args:
+            step_name: Name of the parent step
+            substep_name: Name of the substep
+            message: Optional completion message
+        """
+        if step_name not in self.steps:
+            return
+        
+        step = self.steps[step_name]
+        
+        # Find substep
+        for substep in step.substeps:
+            if substep.name == substep_name:
+                substep.status = StepStatus.COMPLETED
+                substep.completed_at = datetime.now()
+                if message:
+                    substep.message = message
+                break
+        
+        # Write to log
+        self._write_to_log(step)
+        
+        # Send WebSocket update
+        asyncio.create_task(self._send_update())
+    
+    def fail_substep(self, step_name: str, substep_name: str, message: str = ""):
+        """
+        Mark a substep as failed
+        
+        Args:
+            step_name: Name of the parent step
+            substep_name: Name of the substep
+            message: Optional error message
+        """
+        if step_name not in self.steps:
+            return
+        
+        step = self.steps[step_name]
+        
+        # Find substep
+        for substep in step.substeps:
+            if substep.name == substep_name:
+                substep.status = StepStatus.FAILED
+                substep.completed_at = datetime.now()
+                if message:
+                    substep.message = message
+                break
+        
+        # Write to log
+        self._write_to_log(step)
+        
+        # Send WebSocket update
+        asyncio.create_task(self._send_update())
+    
+    def update_substep(self, step_name: str, substep_name: str, message: str = ""):
+        """
+        Update a substep message (status remains unchanged)
+        
+        Args:
+            step_name: Name of the parent step
+            substep_name: Name of the substep
+            message: New message
+        """
+        if step_name not in self.steps:
+            return
+        
+        step = self.steps[step_name]
+        
+        # Find substep
+        for substep in step.substeps:
+            if substep.name == substep_name:
+                if message:
+                    substep.message = message
+                break
+        
+        # Write to log
+        self._write_to_log(step)
+        
+        # Send WebSocket update
+        asyncio.create_task(self._send_update())
     
     def _load_existing_steps(self):
         """Load existing steps from steps.log (JSON Lines format - no regex parsing!)"""
@@ -326,6 +477,32 @@ class StepRegistry:
                             except (ValueError, AttributeError):
                                 pass
                         
+                        # Load substeps if present
+                        substeps = []
+                        substeps_data = step_data.get("substeps", [])
+                        for substep_data in substeps_data:
+                            substep_status_str = substep_data.get("status", "pending")
+                            substep_status = status_map.get(substep_status_str, StepStatus.PENDING)
+                            substep_started_at = None
+                            substep_completed_at = None
+                            if substep_data.get("started_at"):
+                                try:
+                                    substep_started_at = datetime.fromisoformat(substep_data["started_at"])
+                                except (ValueError, AttributeError):
+                                    pass
+                            if substep_data.get("completed_at"):
+                                try:
+                                    substep_completed_at = datetime.fromisoformat(substep_data["completed_at"])
+                                except (ValueError, AttributeError):
+                                    pass
+                            substeps.append(SubStep(
+                                name=substep_data.get("name", ""),
+                                status=substep_status,
+                                message=substep_data.get("message", ""),
+                                started_at=substep_started_at,
+                                completed_at=substep_completed_at
+                            ))
+                        
                         # Register step if not already registered
                         if step_name not in self.steps:
                             self.steps[step_name] = Step(
@@ -334,11 +511,15 @@ class StepRegistry:
                                 status=status,
                                 message=message,
                                 started_at=started_at,
-                                completed_at=completed_at
+                                completed_at=completed_at,
+                                substeps=substeps
                             )
                             # Update step_counter to highest step number
                             if step_number > self.step_counter:
                                 self.step_counter = step_number
+                        else:
+                            # Update existing step with latest substeps
+                            self.steps[step_name].substeps = substeps
                     except json.JSONDecodeError:
                         # Skip invalid JSON lines (e.g., old format lines)
                         continue
@@ -367,6 +548,16 @@ class StepRegistry:
                 "message": step.message,
                 "started_at": step.started_at.isoformat() if step.started_at else None,
                 "completed_at": step.completed_at.isoformat() if step.completed_at else None,
+                "substeps": [
+                    {
+                        "name": substep.name,
+                        "status": substep.status.value,
+                        "message": substep.message,
+                        "started_at": substep.started_at.isoformat() if substep.started_at else None,
+                        "completed_at": substep.completed_at.isoformat() if substep.completed_at else None,
+                    }
+                    for substep in step.substeps
+                ],
                 "timestamp": datetime.now().isoformat()
             }
             

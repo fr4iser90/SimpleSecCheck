@@ -27,11 +27,20 @@ interface QueueStatus {
   scan_id?: string
 }
 
+interface SubStep {
+  name: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  message?: string
+  started_at?: string | null
+  completed_at?: string | null
+}
+
 interface Step {
   number: number
   name: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   message?: string
+  substeps?: SubStep[]
 }
 
 interface WebSocketMessage {
@@ -161,7 +170,14 @@ export default function ScanView() {
               number: step.number || 0,
               name: step.name || 'Unknown',
               status: (step.status || 'pending') as 'pending' | 'running' | 'completed' | 'failed',
-              message: step.message || ''
+              message: step.message || '',
+              substeps: step.substeps ? step.substeps.map((substep: any) => ({
+                name: substep.name || '',
+                status: (substep.status || 'pending') as 'pending' | 'running' | 'completed' | 'failed',
+                message: substep.message || '',
+                started_at: substep.started_at || null,
+                completed_at: substep.completed_at || null,
+              })) : []
             }))
             setSteps(convertedSteps)
             if (data.progress_percentage !== undefined) {
@@ -393,6 +409,24 @@ export default function ScanView() {
                 }
               }
 
+              const getSubStepIcon = (substepStatus: string) => {
+                switch (substepStatus) {
+                  case 'completed': return '✓'
+                  case 'running': return '⟳'
+                  case 'failed': return '✗'
+                  default: return '○'
+                }
+              }
+
+              const getSubStepColor = (substepStatus: string) => {
+                switch (substepStatus) {
+                  case 'completed': return '#28a745'
+                  case 'running': return '#007bff'
+                  case 'failed': return '#dc3545'
+                  default: return '#6c757d'
+                }
+              }
+
               return (
                 <div
                   key={step.number}
@@ -407,7 +441,7 @@ export default function ScanView() {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
                     <span style={{ fontSize: '1.5rem' }}>{getStepIcon()}</span>
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: '1rem' }}>
                         Step {step.number}
                       </div>
@@ -416,7 +450,54 @@ export default function ScanView() {
                       </div>
                     </div>
                   </div>
-                  {step.status === 'running' && (
+                  {step.message && (
+                    <div style={{ fontSize: '0.875rem', opacity: 0.7, marginBottom: '0.5rem' }}>
+                      {step.message}
+                    </div>
+                  )}
+                  {step.substeps && step.substeps.length > 0 && (
+                    <div style={{
+                      marginTop: '1rem',
+                      paddingTop: '1rem',
+                      borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+                    }}>
+                      <div style={{ fontSize: '0.75rem', opacity: 0.6, marginBottom: '0.5rem', fontWeight: 600 }}>
+                        SUB-STEPS:
+                      </div>
+                      {step.substeps.map((substep, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            padding: '0.5rem',
+                            marginBottom: '0.25rem',
+                            background: 'rgba(0, 0, 0, 0.2)',
+                            borderRadius: '6px',
+                            fontSize: '0.875rem',
+                          }}
+                        >
+                          <span style={{
+                            color: getSubStepColor(substep.status),
+                            fontWeight: 'bold',
+                            fontSize: '0.75rem',
+                          }}>
+                            {getSubStepIcon(substep.status)}
+                          </span>
+                          <span style={{ flex: 1, opacity: 0.9 }}>
+                            {substep.name}
+                          </span>
+                          {substep.message && (
+                            <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>
+                              {substep.message}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {step.status === 'running' && (!step.substeps || step.substeps.length === 0) && (
                     <div style={{
                       width: '100%',
                       height: '4px',

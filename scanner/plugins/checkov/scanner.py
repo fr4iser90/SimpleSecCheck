@@ -91,12 +91,16 @@ class CheckovScanner(BaseScanner):
             self.log("Checkov CLI not found, skipping scan.", "WARNING")
             return True
         
+        # Finding Infrastructure Files
+        self.start_substep("Finding Files", "Scanning for infrastructure files...")
         infra_files = self.find_infra_files()
         
         if not infra_files:
+            self.complete_substep("Finding Files", "No infrastructure files found")
             self.log("No infrastructure files found, skipping scan.", "WARNING")
             return True
         
+        self.complete_substep("Finding Files", f"Found {len(infra_files)} infrastructure file(s)")
         self.log(f"Found {len(infra_files)} infrastructure file(s).")
         self.log(f"Running infrastructure security scan on {self.target_path}...")
         
@@ -111,29 +115,41 @@ class CheckovScanner(BaseScanner):
         
         skip_args = self.get_skip_args()
         
-        # JSON report
+        # JSON Report Generation
+        self.start_substep("JSON Report", "Generating JSON report...")
         self.log("Generating JSON report...")
+        # Set environment variables to prevent multiprocessing issues
+        env = os.environ.copy()
+        env["PYTHONHASHSEED"] = "0"  # Ensure deterministic hashing
+        env["OMP_NUM_THREADS"] = "1"  # Limit OpenMP threads
+        env["MKL_NUM_THREADS"] = "1"  # Limit MKL threads
         cmd = ["checkov", "-d", str(self.target_path), *skip_args, "--output", "json", "--quiet"]
         
-        result = self.run_command(cmd, capture_output=True)
+        result = self.run_command(cmd, capture_output=True, timeout=1800, env=env)  # 30 minute timeout
         if result.returncode == 0 and result.stdout:
             with open(json_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
+            self.complete_substep("JSON Report", "JSON report generated successfully")
         else:
             self.log("JSON report generation failed, creating minimal JSON", "WARNING")
             json_output.write_text('{"check_type":"","results":{"passed_checks":[],"failed_checks":[],"skipped_checks":[]},"summary":{"passed":0,"failed":0,"skipped":0}}')
+            self.complete_substep("JSON Report", "JSON report generated with warnings")
         
-        # Text report
+        # Text Report Generation
+        self.start_substep("Text Report", "Generating text report...")
         self.log("Generating text report...")
+        # Use same environment variables to prevent multiprocessing issues
         cmd = ["checkov", "-d", str(self.target_path), *skip_args, "--output", "cli", "--quiet"]
         
-        result = self.run_command(cmd, capture_output=True)
+        result = self.run_command(cmd, capture_output=True, timeout=1800, env=env)  # 30 minute timeout
         if result.returncode == 0 and result.stdout:
             with open(text_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
+            self.complete_substep("Text Report", "Text report generated successfully")
         else:
             self.log("Text report generation failed", "WARNING")
             text_output.write_text("Checkov scan completed but no results available.\n")
+            self.complete_substep("Text Report", "Text report generated with warnings")
         
         if json_output.exists() or text_output.exists():
             self.log("Infrastructure security scan completed successfully", "SUCCESS")

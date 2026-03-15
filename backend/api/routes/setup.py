@@ -24,6 +24,7 @@ from api.services.setup_session_manager import SetupSessionManager
 from api.services.setup_rate_limiter import SetupRateLimiter
 from api.services.password_policy_service import PasswordPolicyService
 from api.services.security_event_service import SecurityEventService
+from domain.services.security_policy_service import SecurityPolicyService
 
 
 class SetupStatusResponse(BaseModel):
@@ -93,6 +94,25 @@ router = APIRouter(
         500: {"description": "Internal Server Error"},
     },
 )
+
+
+@router.get(
+    "/use-cases",
+    summary="Get available use cases",
+    description="Get all available deployment use cases with metadata for frontend display.",
+    response_description="Dictionary of use cases with metadata",
+)
+async def get_use_cases() -> Dict[str, Any]:
+    """
+    Get all available use cases with metadata.
+    
+    Returns use cases with their configuration including:
+    - Display name and description
+    - Security mode (permissive/restricted)
+    - Auth mode and available options
+    - Feature flags and allowed features
+    """
+    return SecurityPolicyService.get_all_use_cases()
 
 
 @router.get(

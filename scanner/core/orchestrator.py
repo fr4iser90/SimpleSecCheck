@@ -25,6 +25,7 @@ import scanner.plugins  # noqa: F401 - This triggers auto-registration via __ini
 from scanner.core.scanner_registry import ScannerRegistry, ScanType, TargetType, Scanner
 from scanner.core.step_registry import StepRegistry, StepStatus, Step
 from scanner.core.step_definitions import StepDefinitionsRegistry, StepType
+from scanner.core.base_scanner import set_global_step_registry
 
 
 # Single Source of Truth: Mapping from frontend scan_type to scanner scan_types
@@ -1092,6 +1093,9 @@ async def main():
     # Create step registry (without WebSocket manager for now - will be added in integration)
     # Pass scan-specific directory to StepRegistry
     step_registry = StepRegistry(scan_id, scan_results_dir, websocket_manager=None)
+    
+    # Set global StepRegistry for scanner access
+    set_global_step_registry(step_registry)
     
     # Create orchestrator
     orchestrator = ScanOrchestrator(step_registry)

@@ -347,7 +347,7 @@ async def startup_event():
 
 
 async def _re_enqueue_pending_scans():
-    """Re-enqueue all pending scans that may have been lost from the queue."""
+    """Re-enqueue all pending scans and recover running scans that may have been lost from the queue."""
     from infrastructure.logging_config import get_logger
     logger = get_logger("api.main")
     
@@ -355,6 +355,10 @@ async def _re_enqueue_pending_scans():
         from infrastructure.repositories.scan_repository import DatabaseScanRepository
         from infrastructure.services.queue_service import QueueService
         from domain.entities.scan import ScanStatus
+        from infrastructure.database.adapter import db_adapter
+        from sqlalchemy import select, update
+        from infrastructure.database.models import Scan as ScanModel
+        from datetime import datetime
         
         # Get repository and queue service
         scan_repository = DatabaseScanRepository()
@@ -363,17 +367,58 @@ async def _re_enqueue_pending_scans():
         # Get all pending scans
         pending_scans = await scan_repository.get_by_status(ScanStatus.PENDING, limit=1000)
         
-        if not pending_scans:
-            logger.info("No pending scans to re-enqueue")
+        # Get all running scans (these were likely interrupted by restart)
+        running_scans = await scan_repository.get_by_status(ScanStatus.RUNNING, limit=1000)
+        
+        total_scans = len(pending_scans) + len(running_scans)
+        
+        if total_scans == 0:
+            logger.info("No pending or running scans to re-enqueue")
             return
         
-        logger.info(f"Found {len(pending_scans)} pending scans, re-enqueuing...")
+        logger.info(f"Found {len(pending_scans)} pending scans and {len(running_scans)} running scans to recover")
+        
+        # Reset running scans to pending (they were interrupted by restart)
+        recovered_scans = []
+        if running_scans:
+            await db_adapter.ensure_initialized()
+            async with db_adapter.async_session() as session:
+                for scan in running_scans:
+                    try:
+                        from uuid import UUID
+                        scan_uuid = UUID(scan.id)
+                        
+                        # Reset status to pending and clear started_at
+                        update_stmt = (
+                            update(ScanModel)
+                            .where(ScanModel.id == scan_uuid)
+                            .values(
+                                status="pending",
+                                started_at=None,
+                                updated_at=datetime.utcnow(),
+                                error_message=None
+                            )
+                        )
+                        await session.execute(update_stmt)
+                        
+                        # Reload scan entity to get updated status
+                        reloaded_scan = await scan_repository.get_by_id(scan.id)
+                        if reloaded_scan:
+                            recovered_scans.append(reloaded_scan)
+                            logger.info(f"Reset running scan {scan.id} to pending (was interrupted by restart)")
+                    except Exception as e:
+                        logger.error(f"Failed to reset running scan {scan.id}: {e}", exc_info=True)
+                
+                await session.commit()
+        
+        # Combine all scans to re-enqueue (pending + recovered running scans)
+        all_scans = list(pending_scans) + recovered_scans
         
         # Re-enqueue each scan
         enqueued_count = 0
         failed_count = 0
         
-        for scan in pending_scans:
+        for scan in all_scans:
             try:
                 await queue_service.enqueue_scan(scan)
                 enqueued_count += 1
@@ -383,7 +428,8 @@ async def _re_enqueue_pending_scans():
                 logger.error(f"Failed to re-enqueue scan {scan.id}: {e}", exc_info=True)
         
         logger.info(
-            f"Re-enqueue complete: {enqueued_count} successful, {failed_count} failed out of {len(pending_scans)} total"
+            f"Re-enqueue complete: {enqueued_count} successful, {failed_count} failed out of {total_scans} total "
+            f"({len(pending_scans)} pending + {len(running_scans)} recovered running)"
         )
         
     except Exception as e:

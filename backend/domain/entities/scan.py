@@ -74,6 +74,9 @@ class Scan:
     tags: List[str] = field(default_factory=list)
     scan_metadata: Dict[str, Any] = field(default_factory=dict)  # Additional metadata (e.g. session_id for guest sessions)
     
+    # Queue priority (higher = earlier in queue)
+    priority: int = 0
+    
     def start(self):
         """Start the scan."""
         if self.status != ScanStatus.PENDING:

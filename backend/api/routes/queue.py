@@ -200,8 +200,8 @@ async def get_queue(
                     Scan.status.in_(["pending", "running", "completed", "failed", "cancelled"])
                 )
             
-            # Order by created_at (oldest first for queue position)
-            query = query.order_by(Scan.created_at.asc())
+            # Order by priority (higher first), then created_at (oldest first)
+            query = query.order_by(Scan.priority.desc(), Scan.created_at.asc())
             
             # Limit results
             query = query.limit(limit)
@@ -222,11 +222,17 @@ async def get_queue(
                 # Calculate position only for pending/running scans
                 position = None
                 if scan.status.lower() in ["pending", "running"]:
-                    # Count how many scans are before this one with same status
+                    # Count how many scans are before this one (higher priority or same priority but earlier created_at)
                     position_query = select(func.count(Scan.id)).where(
                         and_(
                             Scan.status == scan.status,
-                            Scan.created_at < scan.created_at
+                            or_(
+                                Scan.priority > scan.priority,
+                                and_(
+                                    Scan.priority == scan.priority,
+                                    Scan.created_at < scan.created_at
+                                )
+                            )
                         )
                     )
                     pos_result = await session.execute(position_query)
@@ -297,8 +303,8 @@ async def get_my_scans(
             if status_filter:
                 query = query.where(Scan.status.ilike(f"%{status_filter}%"))
             
-            # Order by created_at (newest first)
-            query = query.order_by(Scan.created_at.desc())
+            # Order by priority (higher first), then created_at (newest first)
+            query = query.order_by(Scan.priority.desc(), Scan.created_at.desc())
             
             # Limit results
             query = query.limit(limit)
@@ -315,7 +321,13 @@ async def get_my_scans(
                     position_query = select(func.count(Scan.id)).where(
                         and_(
                             Scan.status == scan.status,
-                            Scan.created_at < scan.created_at
+                            or_(
+                                Scan.priority > scan.priority,
+                                and_(
+                                    Scan.priority == scan.priority,
+                                    Scan.created_at < scan.created_at
+                                )
+                            )
                         )
                     )
                     pos_result = await session.execute(position_query)
@@ -377,7 +389,13 @@ async def get_scan_queue_status(
                 position_query = select(func.count(Scan.id)).where(
                     and_(
                         Scan.status == scan.status,
-                        Scan.created_at < scan.created_at
+                        or_(
+                            Scan.priority > scan.priority,
+                            and_(
+                                Scan.priority == scan.priority,
+                                Scan.created_at < scan.created_at
+                            )
+                        )
                     )
                 )
                 pos_result = await session.execute(position_query)
@@ -411,4 +429,318 @@ async def get_scan_queue_status(
         raise HTTPException(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get scan queue status: {str(e)}"
+        )
+
+
+@router.delete(
+    "/{scan_id}",
+    summary="Delete scan from queue",
+    description="Delete a scan from the queue. Users can only delete their own scans (if pending). Admins can delete any scan.",
+)
+async def delete_scan_from_queue(
+    scan_id: str,
+    actor_context: ActorContext = Depends(get_actor_context),
+) -> Dict[str, Any]:
+    """
+    Delete a scan from the queue.
+    
+    - **User**: Can only delete own scans (if pending)
+    - **Admin**: Can delete any scan
+    - Removes scan from Redis queue and sets status to 'cancelled' in database
+    """
+    try:
+        await db_adapter.ensure_initialized()
+        is_admin = await _is_admin_user(actor_context)
+        
+        async with db_adapter.async_session() as session:
+            from uuid import UUID
+            from infrastructure.services.queue_service import QueueService
+            from application.services.scan_orchestration_service import ScanOrchestrationService
+            
+            try:
+                scan_uuid = UUID(scan_id)
+            except ValueError:
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid scan ID format"
+                )
+            
+            # Get scan
+            query = select(Scan).where(Scan.id == scan_uuid)
+            result = await session.execute(query)
+            scan = result.scalar_one_or_none()
+            
+            if not scan:
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_404_NOT_FOUND,
+                    detail=f"Scan {scan_id} not found"
+                )
+            
+            # Check permissions
+            if not is_admin:
+                # Regular user: can only delete own scans
+                user_identifier = actor_context.get_identifier()
+                
+                # Check if scan belongs to user
+                if actor_context.is_authenticated and actor_context.user_id:
+                    try:
+                        user_uuid = UUID(actor_context.user_id)
+                        if scan.user_id != user_uuid:
+                            raise HTTPException(
+                                status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                                detail="You can only delete your own scans"
+                            )
+                    except (ValueError, TypeError):
+                        raise HTTPException(
+                            status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                            detail="Invalid user context"
+                        )
+                elif actor_context.session_id:
+                    # Guest session: check session_id in metadata
+                    scan_session_id = scan.scan_metadata.get("session_id") if scan.scan_metadata else None
+                    if scan_session_id != actor_context.session_id:
+                        raise HTTPException(
+                            status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                            detail="You can only delete your own scans"
+                        )
+                else:
+                    raise HTTPException(
+                        status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                        detail="Authentication required"
+                    )
+                
+                # Regular users can only delete pending scans
+                if scan.status.lower() not in ["pending"]:
+                    raise HTTPException(
+                        status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+                        detail="You can only delete pending scans. Use cancel for running scans."
+                    )
+            
+            # Remove from Redis queue
+            queue_service = QueueService()
+            removed_from_queue = await queue_service.remove_scan_from_queue(scan_id)
+            
+            # If scan is running, cancel it first
+            if scan.status.lower() == "running":
+                orchestration_service = ScanOrchestrationService()
+                await orchestration_service.cancel_scan(scan_id)
+            
+            # Update scan status to cancelled
+            scan.status = "cancelled"
+            scan.updated_at = datetime.utcnow()
+            
+            # Add cancellation metadata
+            if not scan.scan_metadata:
+                scan.scan_metadata = {}
+            scan.scan_metadata["cancelled_at"] = datetime.utcnow().isoformat()
+            scan.scan_metadata["cancelled_by"] = actor_context.get_identifier()
+            
+            await session.commit()
+            
+            logger.info(f"Deleted scan {scan_id} from queue (removed from Redis: {removed_from_queue})")
+            
+            return {
+                "success": True,
+                "scan_id": scan_id,
+                "removed_from_queue": removed_from_queue,
+                "status": "cancelled",
+                "message": "Scan deleted from queue successfully"
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete scan from queue: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete scan from queue: {str(e)}"
+        )
+
+
+@router.post(
+    "/{scan_id}/remove",
+    summary="Remove scan from Redis queue only",
+    description="Remove a scan from Redis queue without updating database. Admin only. Useful if scan is stuck in queue.",
+)
+async def remove_scan_from_redis_queue(
+    scan_id: str,
+    actor_context: ActorContext = Depends(get_actor_context),
+) -> Dict[str, Any]:
+    """
+    Remove a scan from Redis queue only (does not update database).
+    
+    - **Admin only**
+    - Useful if scan is stuck in Redis queue
+    - Does not change scan status in database
+    """
+    try:
+        is_admin = await _is_admin_user(actor_context)
+        if not is_admin:
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                detail="Admin privileges required"
+            )
+        
+        from infrastructure.services.queue_service import QueueService
+        
+        queue_service = QueueService()
+        removed = await queue_service.remove_scan_from_queue(scan_id)
+        
+        if not removed:
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_404_NOT_FOUND,
+                detail=f"Scan {scan_id} not found in Redis queue"
+            )
+        
+        logger.info(f"Admin removed scan {scan_id} from Redis queue")
+        
+        return {
+            "success": True,
+            "scan_id": scan_id,
+            "message": "Scan removed from Redis queue successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to remove scan from Redis queue: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to remove scan from Redis queue: {str(e)}"
+        )
+
+
+@router.patch(
+    "/{scan_id}/position",
+    summary="Change scan position in queue",
+    description="Change the position of a scan in the queue by setting its priority. Admin only. Higher priority = earlier in queue.",
+)
+async def change_scan_position(
+    scan_id: str,
+    position: int = Query(..., ge=1, description="New position in queue (1 = first)"),
+    actor_context: ActorContext = Depends(get_actor_context),
+) -> Dict[str, Any]:
+    """
+    Change the position of a scan in the queue.
+    
+    - **Admin only**
+    - Sets priority based on position (higher position = higher priority)
+    - Only works for pending scans
+    - Position 1 = highest priority (will be processed first)
+    """
+    try:
+        is_admin = await _is_admin_user(actor_context)
+        if not is_admin:
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                detail="Admin privileges required"
+            )
+        
+        await db_adapter.ensure_initialized()
+        
+        async with db_adapter.async_session() as session:
+            from uuid import UUID
+            
+            try:
+                scan_uuid = UUID(scan_id)
+            except ValueError:
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid scan ID format"
+                )
+            
+            # Get scan
+            query = select(Scan).where(Scan.id == scan_uuid)
+            result = await session.execute(query)
+            scan = result.scalar_one_or_none()
+            
+            if not scan:
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_404_NOT_FOUND,
+                    detail=f"Scan {scan_id} not found"
+                )
+            
+            # Only allow position change for pending scans
+            if scan.status.lower() != "pending":
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+                    detail=f"Cannot change position for scan with status '{scan.status}'. Only pending scans can be reordered."
+                )
+            
+            # Get all pending scans ordered by current priority
+            pending_query = select(Scan).where(
+                Scan.status == "pending"
+            ).order_by(Scan.priority.desc(), Scan.created_at.asc())
+            
+            pending_result = await session.execute(pending_query)
+            pending_scans = pending_result.scalars().all()
+            
+            if position > len(pending_scans):
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+                    detail=f"Position {position} is out of range. There are only {len(pending_scans)} pending scans."
+                )
+            
+            # Calculate new priority
+            # Position 1 = highest priority (1000), position 2 = 999, etc.
+            # This ensures higher priority values = earlier in queue
+            max_priority = 1000
+            new_priority = max_priority - (position - 1)
+            
+            # If there are other scans with the same priority, we need to adjust
+            # Find the target scan's current position
+            current_position = None
+            for idx, s in enumerate(pending_scans):
+                if s.id == scan_uuid:
+                    current_position = idx + 1
+                    break
+            
+            if current_position is None:
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Could not determine current position"
+                )
+            
+            # If moving to same position, no change needed
+            if current_position == position:
+                return {
+                    "success": True,
+                    "scan_id": scan_id,
+                    "position": position,
+                    "priority": scan.priority,
+                    "message": "Scan already at requested position"
+                }
+            
+            # Update priority
+            scan.priority = new_priority
+            scan.updated_at = datetime.utcnow()
+            
+            # Add metadata about position change
+            if not scan.scan_metadata:
+                scan.scan_metadata = {}
+            scan.scan_metadata["position_changed_at"] = datetime.utcnow().isoformat()
+            scan.scan_metadata["position_changed_by"] = actor_context.get_identifier()
+            scan.scan_metadata["previous_position"] = current_position
+            scan.scan_metadata["new_position"] = position
+            
+            await session.commit()
+            
+            logger.info(f"Admin changed scan {scan_id} position from {current_position} to {position} (priority: {new_priority})")
+            
+            return {
+                "success": True,
+                "scan_id": scan_id,
+                "position": position,
+                "priority": new_priority,
+                "previous_position": current_position,
+                "message": f"Scan position changed from {current_position} to {position}"
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to change scan position: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to change scan position: {str(e)}"
         )

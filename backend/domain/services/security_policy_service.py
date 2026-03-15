@@ -52,24 +52,28 @@ class SecurityPolicyService:
             "ALLOW_NETWORK_SCANS": True,
             "ALLOW_CONTAINER_REGISTRY": True,
             "ALLOW_GIT_REPOS": True,
+            "ALLOW_ZIP_UPLOAD": True,
         },
         "network_intern": {
-            "ALLOW_LOCAL_PATHS": True,
-            "ALLOW_NETWORK_SCANS": True,
+            "ALLOW_LOCAL_PATHS": False,  # Security: No host filesystem access for multiple users
+            "ALLOW_NETWORK_SCANS": True,  # External network scans allowed
             "ALLOW_CONTAINER_REGISTRY": True,
             "ALLOW_GIT_REPOS": True,
+            "ALLOW_ZIP_UPLOAD": True,
         },
         "public_web": {
             "ALLOW_LOCAL_PATHS": False,  # Security risk
             "ALLOW_NETWORK_SCANS": True,  # Website scans allowed
             "ALLOW_CONTAINER_REGISTRY": False,  # Security risk
             "ALLOW_GIT_REPOS": True,  # Public repos OK
+            "ALLOW_ZIP_UPLOAD": True,
         },
         "enterprise": {
             "ALLOW_LOCAL_PATHS": False,  # Security risk
             "ALLOW_NETWORK_SCANS": True,  # Website scans allowed
             "ALLOW_CONTAINER_REGISTRY": True,  # Enterprise might need this
             "ALLOW_GIT_REPOS": True,
+            "ALLOW_ZIP_UPLOAD": True,
         },
     }
     
@@ -88,8 +92,8 @@ class SecurityPolicyService:
         if security_mode == "permissive" and auth_mode == "free":
             return "solo"
         
-        # Network Intern: permissive + (basic or jwt)
-        if security_mode == "permissive" and auth_mode in ["basic", "jwt"]:
+        # Network Intern: restricted + (basic or jwt)
+        if security_mode == "restricted" and auth_mode in ["basic", "jwt"]:
             return "network_intern"
         
         # Public Web: restricted + free
@@ -141,6 +145,7 @@ class SecurityPolicyService:
             "ALLOW_NETWORK_SCANS": settings.ALLOW_NETWORK_SCANS,
             "ALLOW_CONTAINER_REGISTRY": settings.ALLOW_CONTAINER_REGISTRY,
             "ALLOW_GIT_REPOS": settings.ALLOW_GIT_REPOS,
+            "ALLOW_ZIP_UPLOAD": settings.ALLOW_ZIP_UPLOAD,
         }
     
     @staticmethod
@@ -160,7 +165,7 @@ class SecurityPolicyService:
                 "AUTH_MODE": "free",
             },
             "network_intern": {
-                "SECURITY_MODE": "permissive",
+                "SECURITY_MODE": "restricted",  # No host filesystem access for security
                 "AUTH_MODE": "basic",  # Default to basic, can be changed to jwt
             },
             "public_web": {
@@ -178,3 +183,91 @@ class SecurityPolicyService:
         config["rate_limits"] = SecurityPolicyService.RATE_LIMITS.get(use_case, SecurityPolicyService.RATE_LIMITS["solo"])
         
         return config
+    
+    @staticmethod
+    def get_all_use_cases() -> Dict[str, Dict[str, Any]]:
+        """
+        Get all available use cases with metadata for frontend display.
+        
+        Returns:
+            Dictionary mapping use case IDs to their metadata including:
+            - id: Use case identifier
+            - name: Display name
+            - description: Short description
+            - security_mode: Security mode (permissive/restricted)
+            - auth_mode: Authentication mode (free/basic/jwt)
+            - auth_mode_options: Available auth mode options for this use case
+            - features: List of enabled/disabled features with descriptions
+        """
+        use_cases = {}
+        
+        # Helper to build feature descriptions
+        def build_features(use_case_id: str) -> list:
+            features = []
+            flags = SecurityPolicyService.FEATURE_DEFAULTS.get(use_case_id, {})
+            
+            if flags.get("ALLOW_LOCAL_PATHS", False):
+                features.append({"type": "allowed", "text": "Local paths allowed"})
+            else:
+                features.append({"type": "disabled", "text": "Local paths disabled"})
+            
+            allowed = []
+            if flags.get("ALLOW_GIT_REPOS", False):
+                allowed.append("Git repos")
+            if flags.get("ALLOW_CONTAINER_REGISTRY", False):
+                allowed.append("containers")
+            if flags.get("ALLOW_NETWORK_SCANS", False):
+                allowed.append("network scans")
+            if flags.get("ALLOW_ZIP_UPLOAD", False):
+                allowed.append("ZIP upload")
+            
+            if allowed:
+                features.append({"type": "allowed", "text": ", ".join(allowed)})
+            
+            return features
+        
+        # Solo
+        use_cases["solo"] = {
+            "id": "solo",
+            "name": "Solo",
+            "description": "Single user, self-hosted. All features enabled, no restrictions.",
+            "security_mode": "permissive",
+            "auth_mode": "free",
+            "auth_mode_options": ["free"],
+            "features": build_features("solo"),
+        }
+        
+        # Network Intern
+        use_cases["network_intern"] = {
+            "id": "network_intern",
+            "name": "Network Intern",
+            "description": "Multiple users, internal network. User authentication required.",
+            "security_mode": "restricted",
+            "auth_mode": "basic",
+            "auth_mode_options": ["basic", "jwt"],
+            "features": build_features("network_intern"),
+        }
+        
+        # Public Web
+        use_cases["public_web"] = {
+            "id": "public_web",
+            "name": "Public Web",
+            "description": "Public web access, many users. Restricted security, rate limited.",
+            "security_mode": "restricted",
+            "auth_mode": "free",
+            "auth_mode_options": ["free"],
+            "features": build_features("public_web"),
+        }
+        
+        # Enterprise
+        use_cases["enterprise"] = {
+            "id": "enterprise",
+            "name": "Enterprise",
+            "description": "Enterprise deployment with SSO. Restricted security, JWT authentication.",
+            "security_mode": "restricted",
+            "auth_mode": "jwt",
+            "auth_mode_options": ["jwt"],
+            "features": build_features("enterprise"),
+        }
+        
+        return use_cases

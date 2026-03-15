@@ -165,6 +165,9 @@ class Scan(Base):
     tags = Column(JSON, default=list)
     scan_metadata = Column(JSON, default=dict)  # Additional metadata (e.g. session_id for guest sessions)
     
+    # Queue priority (higher = earlier in queue)
+    priority = Column(Integer, default=0, nullable=False, index=True)
+    
     # Relationships
     user = relationship("User", back_populates="scans", foreign_keys=[user_id])
     

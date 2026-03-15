@@ -56,6 +56,7 @@ class DatabaseScanRepository(ScanRepository):
             project_id=scan.project_id,
             tags=scan.tags,
             scan_metadata=scan.scan_metadata,
+            priority=scan.priority,
         )
     
     async def _model_to_entity(self, model: ScanModel) -> Scan:
@@ -89,6 +90,7 @@ class DatabaseScanRepository(ScanRepository):
             project_id=model.project_id,
             tags=model.tags or [],
             scan_metadata=model.scan_metadata or {},
+            priority=model.priority or 0,
         )
     
     async def create(self, scan: Scan) -> Scan:

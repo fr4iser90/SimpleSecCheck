@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     ALLOW_NETWORK_SCANS: bool = Field(default=True, description="Allow network/website scans")
     ALLOW_CONTAINER_REGISTRY: bool = Field(default=True, description="Allow container registry scans")
     ALLOW_GIT_REPOS: bool = Field(default=True, description="Allow Git repository scans")
+    ALLOW_ZIP_UPLOAD: bool = Field(default=True, description="Allow ZIP file uploads as scan targets")
     
     # External Services
     GITHUB_API_URL: str = Field(default="https://api.github.com", description="GitHub API base URL")
@@ -132,6 +133,8 @@ async def load_settings_from_database(settings_instance: Settings) -> None:
                             settings_instance.ALLOW_CONTAINER_REGISTRY = feature_flags["ALLOW_CONTAINER_REGISTRY"]
                         if "ALLOW_GIT_REPOS" in feature_flags:
                             settings_instance.ALLOW_GIT_REPOS = feature_flags["ALLOW_GIT_REPOS"]
+                        if "ALLOW_ZIP_UPLOAD" in feature_flags:
+                            settings_instance.ALLOW_ZIP_UPLOAD = feature_flags["ALLOW_ZIP_UPLOAD"]
                 
                 # Load scanner timeout and max concurrent scans if in config
                 if "scanner_timeout" in config:

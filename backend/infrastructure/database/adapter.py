@@ -153,6 +153,7 @@ class DatabaseAdapter:
                     ("medium_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL", "scans"),
                     ("low_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL", "scans"),
                     ("info_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL", "scans"),
+                    ("priority", "INTEGER DEFAULT 0 NOT NULL", "scans"),
                 ]
                 
                 # List of columns to check and add if missing for scanners table

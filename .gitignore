@@ -4,7 +4,7 @@ logs/*
 .vscode/
 
 # OWASP Dependency Check database (downloaded at runtime, cached via volume mount)
-scanner/scanners/*/data/*
+scanner/plugins/*/data/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

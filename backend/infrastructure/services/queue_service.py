@@ -172,3 +172,68 @@ class QueueService:
         except Exception as e:
             logger.error(f"Failed to clear queue: {e}")
             return False
+    
+    async def remove_scan_from_queue(self, scan_id: str) -> bool:
+        """
+        Remove a specific scan from the Redis queue.
+        
+        Args:
+            scan_id: ID of the scan to remove
+            
+        Returns:
+            True if scan was found and removed, False otherwise
+        """
+        try:
+            if not redis_client.is_connected:
+                await redis_client.connect()
+            
+            # Get all items from queue
+            items = await redis_client.redis.lrange(self.QUEUE_KEY, 0, -1)
+            
+            # Find and remove the scan
+            removed = False
+            for item in items:
+                try:
+                    message = json.loads(item)
+                    if message.get("scan_id") == scan_id:
+                        # Remove this item from queue
+                        await redis_client.redis.lrem(self.QUEUE_KEY, 1, item)
+                        logger.info(f"Removed scan {scan_id} from Redis queue")
+                        removed = True
+                        break
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse queue item: {item}")
+                    continue
+            
+            if not removed:
+                logger.warning(f"Scan {scan_id} not found in Redis queue")
+            
+            return removed
+            
+        except Exception as e:
+            logger.error(f"Failed to remove scan {scan_id} from queue: {e}")
+            return False
+    
+    async def cancel_scan(self, scan_id: str) -> bool:
+        """
+        Cancel a scan - removes from queue if pending, signals worker if running.
+        
+        Args:
+            scan_id: ID of the scan to cancel
+            
+        Returns:
+            True if cancellation was successful
+        """
+        try:
+            # Remove from queue if pending
+            await self.remove_scan_from_queue(scan_id)
+            
+            # TODO: Signal worker to stop if running
+            # This would require worker API call or Redis pub/sub
+            
+            logger.info(f"Cancelled scan {scan_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to cancel scan {scan_id}: {e}")
+            return False

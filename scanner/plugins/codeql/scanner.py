@@ -109,12 +109,16 @@ class CodeQLScanner(BaseScanner):
         
         self.log(f"Running code analysis on {self.target_path}...")
         
+        # Language Detection
+        self.start_substep("Language Detection", "Detecting programming languages in target...")
         detected_languages = self.detect_languages()
         
         if not detected_languages:
+            self.complete_substep("Language Detection", "No supported languages detected")
             self.log("No supported languages detected, skipping CodeQL scan.", "WARNING")
             return True
         
+        self.complete_substep("Language Detection", f"Detected languages: {', '.join(detected_languages)}")
         self.log(f"Detected languages: {', '.join(detected_languages)}")
         
         db_dir = self.results_dir / "codeql-database"
@@ -137,6 +141,8 @@ class CodeQLScanner(BaseScanner):
         first_lang = None
         
         for lang in detected_languages:
+            # Database Creation
+            self.start_substep(f"Database Creation ({lang})", f"Creating CodeQL database for {lang}...")
             self.log(f"Creating database for language: {lang}")
             lang_db = db_dir / f"{lang}"
             
@@ -145,6 +151,7 @@ class CodeQLScanner(BaseScanner):
                 cpp_files = list(self.target_path.rglob("*.cpp")) + list(self.target_path.rglob("*.c"))
                 cpp_files = [f for f in cpp_files if "node_modules" not in str(f)]
                 if not cpp_files:
+                    self.complete_substep(f"Database Creation ({lang})", "No C++ source files found, skipping")
                     self.log("No C++ source files found (only node_modules), skipping C++ database creation", "WARNING")
                     continue
                 
@@ -157,13 +164,17 @@ class CodeQLScanner(BaseScanner):
             
             result = self.run_command(cmd, capture_output=True)
             if result.returncode != 0:
+                self.fail_substep(f"Database Creation ({lang})", f"Database creation failed for {lang}")
                 self.log(f"Database creation failed for {lang}", "WARNING")
                 continue
             
-            # Run analysis
+            self.complete_substep(f"Database Creation ({lang})", f"Database created successfully for {lang}")
+            
+            # Query Execution
             query_suite = f"codeql/{lang}-queries"
             lang_sarif = self.results_dir / f"codeql-{lang}.sarif"
             
+            self.start_substep(f"Query Execution ({lang})", f"Running security analysis for {lang}...")
             self.log(f"Running security analysis for {lang} with {query_suite}...")
             cmd = [*tool_cmd, "database", "analyze", str(lang_db), query_suite,
                    "--format=sarif-latest", f"--output={lang_sarif}", "--threads=4"]
@@ -173,6 +184,12 @@ class CodeQLScanner(BaseScanner):
                 self.log(f"Query execution failed for {lang} (exit code {result.returncode}), creating minimal SARIF", "WARNING")
                 # Create minimal SARIF structure
                 lang_sarif.write_text('{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"CodeQL","version":"unknown"}},"results":[]}]}')
+                self.complete_substep(f"Query Execution ({lang})", "Query execution completed with warnings")
+            else:
+                self.complete_substep(f"Query Execution ({lang})", f"Security analysis completed for {lang}")
+            
+            # Result Processing
+            self.start_substep(f"Result Processing ({lang})", f"Processing results for {lang}...")
             
             # Copy SARIF as JSON
             lang_json = self.results_dir / f"codeql-{lang}.json"
@@ -187,6 +204,8 @@ class CodeQLScanner(BaseScanner):
                 result = self.run_command(cmd, capture_output=True)
                 if result.returncode != 0:
                     lang_text.write_text("CodeQL analysis completed but report interpretation failed.")
+            
+            self.complete_substep(f"Result Processing ({lang})", f"Results processed for {lang}")
             
             # Combine results
             if lang_json.exists() and not first_lang:
@@ -214,15 +233,20 @@ class CodeQLScanner(BaseScanner):
             if lang_db.exists():
                 shutil.rmtree(lang_db, ignore_errors=True)
         
+        # Combining Results
+        self.start_substep("Combining Results", "Combining results from all languages...")
+        
         # Final output files are already in report.* format (combined_json, combined_sarif, combined_text)
         # Clean up temporary per-language files (already done in loop)
         # Clean up temporary combined files that were used during processing
         # Note: combined_json/sarif/text are now report.json/sarif/txt, so they stay
         
         if combined_json.exists() or combined_sarif.exists() or combined_text.exists():
+            self.complete_substep("Combining Results", "Results combined successfully")
             self.log("CodeQL scan completed successfully", "SUCCESS")
             return True
         else:
+            self.fail_substep("Combining Results", "No reports were generated")
             self.log("No CodeQL report was generated!", "ERROR")
             return False
 
