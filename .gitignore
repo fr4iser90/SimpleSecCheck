@@ -3,10 +3,12 @@ logs/*
 .env
 .vscode/
 
-# OWASP Dependency Check database (downloaded at runtime, cached via volume mount)
 scanner/plugins/*/data/*
+# OWASP Dependency Check DB (large; IDE may still try to include without this)
+*.mv.db
+scanner/plugins/owasp/data/
 
-# Byte-compiled / optimized / DLL files
+# Byte-compiled / optimized / DLL files / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
