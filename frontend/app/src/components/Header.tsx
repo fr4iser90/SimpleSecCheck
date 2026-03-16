@@ -285,6 +285,9 @@ export default function Header() {
               <span>▼</span>
             </button>
             <div className={`dropdown-menu ${showAdminMenu ? 'show' : ''}`}>
+              <Link to="/admin" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                Dashboard
+              </Link>
               <Link to="/admin/settings" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
                 System Settings
               </Link>

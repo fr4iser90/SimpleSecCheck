@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { FrontendConfig } from '../hooks/useConfig'
+import { useAuth } from '../hooks/useAuth'
 import ScanStep from './ScanStep'
 import ScannerCardGrid from './ScannerCardGrid'
 
@@ -47,12 +48,16 @@ function isGitUrl(url: string): boolean {
 }
 
 export default function ScanForm({ onScanStart, config }: ScanFormProps) {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+
   // Get available scan types from config (backend-driven!)
   const scanTypesConfig = config?.features.scan_types ?? {}
   const gitOnly = config?.features.git_only ?? false
   const localPathsAllowed = config?.features.local_paths ?? true
   const metadataCollection = config?.features.metadata_collection ?? 'optional'
-  
+  const dangerousTargets = config?.features.dangerous_targets ?? []
+
   // No default scan type - will be auto-detected from target
   const [scanType, setScanType] = useState<string>('')
   const [target, setTarget] = useState('')
@@ -80,10 +85,6 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const [scannerError, setScannerError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const isScanDisabled = loading || selectedScanners.length === 0
-  const scanDisabledReason = selectedScanners.length === 0
-    ? 'Bitte wähle mindestens einen Scanner aus.'
-    : undefined
   
   // Auto-detect scan type and target type from target input
   useEffect(() => {
@@ -173,6 +174,13 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const isGitRepo = targetTypeInfo?.target_type === 'git_repo'
   const isImageTarget = targetTypeInfo?.target_type === 'container_registry'
   const isLocalPath = targetTypeInfo?.target_type === 'local_mount'
+  const isLocalPathRestrictedByRole = isLocalPath && localPathsAllowed && !isAdmin && dangerousTargets.includes('local_mount')
+  const isScanDisabled = loading || selectedScanners.length === 0 || isLocalPathRestrictedByRole
+  const scanDisabledReason = isLocalPathRestrictedByRole
+    ? 'Local path scanning requires admin privileges.'
+    : selectedScanners.length === 0
+    ? 'Bitte wähle mindestens einen Scanner aus.'
+    : undefined
 
   // Load scanners when scan type changes
   useEffect(() => {
@@ -410,7 +418,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
             placeholder="https://github.com/user/repo, nginx:latest, /path/to/project, https://example.com, or 192.168.1.1"
             required
             style={{ fontSize: '1.1rem', padding: '1rem' }}
-            className={isGitRepo || isImageTarget ? 'input-border-success' : isLocalPath && !localPathsAllowed ? 'input-border-error' : ''}
+            className={isGitRepo || isImageTarget ? 'input-border-success' : (isLocalPath && !localPathsAllowed) || isLocalPathRestrictedByRole ? 'input-border-error' : ''}
           />
           {loadingTargetType && target.trim() && (
             <div className="glass form-info-box loading" style={{ marginTop: '0.75rem' }}>
@@ -496,6 +504,11 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
         {isLocalPath && !localPathsAllowed && (
           <small className="form-help-text error">
             ❌ Local paths are not allowed in Production Mode. Please use a Git repository URL (GitHub/GitLab) or a container registry image.
+          </small>
+        )}
+        {isLocalPathRestrictedByRole && (
+          <small className="form-help-text error">
+            ⚠️ Local path scanning requires admin privileges. Please log in as an administrator or use a Git repository URL / container image.
           </small>
         )}
         {isImageTarget && gitOnly && !isDockerHubImage(target) && (

@@ -12,6 +12,7 @@ import StatisticsPage from './pages/StatisticsPage'
 import SetupWizard from './pages/SetupWizard'
 import LoginPage from './pages/LoginPage'
 import PasswordResetPage from './pages/PasswordResetPage'
+import AdminDashboardPage from './pages/AdminDashboardPage'
 import AdminSettingsPage from './pages/AdminSettingsPage'
 import AuditLogPage from './pages/AuditLogPage'
 import UserManagementPage from './pages/UserManagementPage'
@@ -130,6 +131,12 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
         </ProtectedRoute>
       } />
       {/* Admin Routes */}
+      <Route path="/admin" element={
+        <ProtectedRoute>
+          <Header />
+          <AdminDashboardPage />
+        </ProtectedRoute>
+      } />
       <Route path="/admin/settings" element={
         <ProtectedRoute>
           <Header />

@@ -72,7 +72,7 @@ export default function FeatureFlagsPage() {
   const flagDescriptions: Record<keyof FeatureFlags, { name: string, description: string }> = {
     ALLOW_LOCAL_PATHS: {
       name: 'Local Paths',
-      description: 'Allow local filesystem paths as scan targets. Only safe for single-user deployments.'
+      description: 'Allow local filesystem paths as scan targets. When enabled, only administrators can use local path scanning (dangerous target).'
     },
     ALLOW_NETWORK_SCANS: {
       name: 'Network Scans',
@@ -138,12 +138,20 @@ export default function FeatureFlagsPage() {
               }}
             >
               <div style={{ flex: 1 }}>
-                <h3 style={{ margin: 0, marginBottom: '0.5rem' }}>
+                <h3 style={{ margin: 0, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {key === 'ALLOW_LOCAL_PATHS' && (
+                    <span title="Dangerous target – admin only">⚠️</span>
+                  )}
                   {flagDescriptions[key].name}
                 </h3>
                 <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
                   {flagDescriptions[key].description}
                 </p>
+                {key === 'ALLOW_LOCAL_PATHS' && flags.ALLOW_LOCAL_PATHS && (
+                  <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.8rem', color: 'var(--color-info, #0dcaf0)' }}>
+                    Only admins can start scans with local paths. Other users will get a permission error.
+                  </p>
+                )}
               </div>
               <label style={{
                 display: 'flex',

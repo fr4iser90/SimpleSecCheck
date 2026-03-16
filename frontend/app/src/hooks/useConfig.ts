@@ -23,6 +23,10 @@ export interface FrontendConfig {
     auto_shutdown: boolean
     zip_upload: boolean
     owasp_auto_update_enabled: boolean
+    /** Target types that require admin (e.g. local_mount). From API config. */
+    dangerous_targets?: string[]
+    target_security_level?: Record<string, string>
+    target_permission_map?: Record<string, string>
   }
   queue: {
     max_length: number

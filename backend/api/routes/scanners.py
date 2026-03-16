@@ -14,6 +14,11 @@ from sqlalchemy import select
 import httpx
 
 from config.settings import get_settings
+from domain.services.target_permission_policy import (
+    DANGEROUS_TARGETS,
+    TARGET_SECURITY_LEVEL,
+    TARGET_PERMISSION_MAP,
+)
 from infrastructure.logging_config import get_logger
 from infrastructure.database.adapter import db_adapter
 from infrastructure.database.models import Scanner
@@ -393,6 +398,10 @@ async def get_frontend_config():
             "auto_shutdown": True,  # TODO: Add setting
             "zip_upload": True,  # TODO: Add setting
             "owasp_auto_update_enabled": False,  # TODO: Add setting
+            # RBAC / permission policy: for UI to show warnings and filter options
+            "dangerous_targets": list(DANGEROUS_TARGETS),
+            "target_security_level": TARGET_SECURITY_LEVEL,
+            "target_permission_map": TARGET_PERMISSION_MAP,
         }
         
         # Queue config

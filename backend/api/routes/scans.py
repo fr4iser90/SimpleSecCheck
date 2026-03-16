@@ -40,8 +40,12 @@ from domain.exceptions.scan_exceptions import (
     ScanNotFoundException,
     ScanValidationException,
     ScanConcurrencyLimitException,
+    FeatureDisabledException,
+    TargetPermissionDeniedException,
 )
 from domain.entities.scan import ScanType
+from domain.services.target_permission_policy import check_can_scan_target
+from config.settings import get_settings
 from typing import Annotated
 import re
 
@@ -308,6 +312,19 @@ async def create_scan(
         if not target_type:
             target_type = _determine_target_type(scan_request.scan_type, scan_request.target_url)
         
+        # Feature flag + permission check (local/dangerous targets require admin)
+        settings = get_settings()
+        is_admin = actor_context.role == "admin"
+        check_can_scan_target(
+            target_type,
+            allow_local_paths=settings.ALLOW_LOCAL_PATHS,
+            allow_git_repos=settings.ALLOW_GIT_REPOS,
+            allow_zip_upload=settings.ALLOW_ZIP_UPLOAD,
+            allow_container_registry=settings.ALLOW_CONTAINER_REGISTRY,
+            allow_network_scans=settings.ALLOW_NETWORK_SCANS,
+            is_admin=is_admin,
+        )
+        
         # Convert request schema to DTO
         request_dto = ScanRequestDTO(
             name=scan_request.name,
@@ -355,6 +372,16 @@ async def create_scan(
         raise HTTPException(
             status_code=fastapi_status.HTTP_429_TOO_MANY_REQUESTS,
             detail=str(e)
+        )
+    except FeatureDisabledException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except TargetPermissionDeniedException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_403_FORBIDDEN,
+            detail=str(e),
         )
     except ScanValidationException as e:
         raise HTTPException(

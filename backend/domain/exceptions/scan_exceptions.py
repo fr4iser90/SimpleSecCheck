@@ -278,3 +278,24 @@ class ScanRetryException(ScanException):
         super().__init__(
             f"Scan '{self.scan_id}' exceeded maximum retries ({self.max_retries}): {self.message}"
         )
+
+
+class FeatureDisabledException(ScanException):
+    """Exception raised when a scan target type is disabled by system configuration (feature flag off)."""
+    
+    def __init__(self, target_type: str, feature_flag: Optional[str] = None):
+        self.target_type = target_type
+        self.feature_flag = feature_flag
+        msg = f"Scan target type '{target_type}' is disabled by system configuration."
+        if feature_flag:
+            msg += f" (Feature: {feature_flag})"
+        super().__init__(msg)
+
+
+class TargetPermissionDeniedException(ScanException):
+    """Exception raised when the user is not allowed to scan this target type (e.g. local_mount requires admin)."""
+    
+    def __init__(self, target_type: str, reason: str = "Insufficient permissions for this target type."):
+        self.target_type = target_type
+        self.reason = reason
+        super().__init__(f"Cannot scan target type '{target_type}': {reason}")
