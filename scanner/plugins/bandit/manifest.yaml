@@ -1,3 +1,16 @@
 name: bandit
+version: "1.0"
+description: Python security linter. Scans Python code for common security issues.
+categories:
+  - Code Scanning
+  - SAST
+icon: "🐍"
+category: code
+languages:
+  - python
+severity_supported: true
+timeout: 600
+homepage: https://github.com/PyCQA/bandit
+documentation: https://bandit.readthedocs.io/
 install:
   - ["pip3", "install", "bandit[toml]"]

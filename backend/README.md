@@ -44,7 +44,7 @@ backend-refactored/
 │   └── jobs/                   # Job definitions
 │
 ├── config/                     # Configuration
-│   ├── scanner_config.yaml
+│   ├── scanner_config.py      # Scanner config from DB/Worker, no YAML
 │   └── settings.py
 │
 ├── scripts/                    # Utility scripts

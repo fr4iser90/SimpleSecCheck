@@ -1,4 +1,10 @@
 name: base
+version: "1.0"
+description: Base image dependencies for scanner container (Python, Node, Java, Docker CLI, etc.).
+category: code
+languages: []
+severity_supported: false
+timeout: 0
 install:
   - ["apt-get", "update"]
   # Note: nodejs and npm are already installed via NodeSource in Dockerfile

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import inspect
 import os
 import json
 import datetime
@@ -31,13 +32,24 @@ for p in (str(APP_DIR), str(SRC_DIR)):
     if sys.path[0] != p:
         sys.path.insert(0, p)
 
-from scanner.output.html_utils import html_header, html_footer, generate_executive_summary, generate_tool_status_section
+from scanner.output.html_utils import (
+    html_header,
+    html_footer,
+    generate_executive_summary,
+    generate_tool_status_section,
+    SEVERITY_WEIGHTS,
+    PENALTY_CAP,
+    SCORE_FLOOR,
+    _weighted_penalty,
+    _findings_as_list,
+    _findings_count,
+)
 from scanner.core.finding_policy import load_policy
 from scanner.core.scan_metadata import load_metadata
 
 # Single source of truth: scanner names and paths come from ScannerRegistry only (required)
 # Must use scanner.core.scanner_registry so plugin discovery uses the same module (same _scanners dict)
-from scanner.core.scanner_registry import ScannerRegistry
+from scanner.core.scanner_registry import ScannerRegistry, ScanType
 
 # Get paths from central path_setup - NO PATH CALCULATIONS HERE!
 _results_dir = get_results_dir()
@@ -100,14 +112,16 @@ def read_json(path):
 
 def generate_metadata_section(metadata):
     """
-    Generate HTML section for scan metadata (only shown if metadata was collected).
+    Generate HTML section for scan metadata (only shown if metadata was collected). Collapsible.
     """
     if not metadata:
         return ""
     
     html_parts = []
-    html_parts.append('<div class="glass" style="margin: 2rem 0; padding: 2rem;">')
-    html_parts.append('<h2>📋 Scan Metadata</h2>')
+    html_parts.append('<div class="glass report-section-collapsible" style="margin: 2rem 0; padding: 0; overflow: hidden;">')
+    html_parts.append('<details class="tool-category" data-category-has-issues="false">')
+    html_parts.append('<summary class="category-header"><span class="category-icon">📋</span> Scan Metadata</summary>')
+    html_parts.append('<div style="padding: 2rem;">')
     html_parts.append('<p style="color: #6c757d; margin-bottom: 1.5rem;">Metadata was collected because you enabled "Collect Metadata" option.</p>')
     html_parts.append('<table style="width: 100%; border-collapse: collapse;">')
     
@@ -154,8 +168,71 @@ def generate_metadata_section(metadata):
             html_parts.append('<tr><td style="padding: 0.75rem; font-weight: bold; padding-left: 2rem;">CI Mode:</td><td style="padding: 0.75rem;">✅ Enabled</td></tr>')
     
     html_parts.append('</table>')
-    html_parts.append('</div>')
+    html_parts.append('</div></details></div>')
     
+    return "".join(html_parts)
+
+
+def _severity_icon(sev):
+    icons = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢", "INFO": "ℹ️"}
+    return icons.get(sev, "ℹ️")
+
+
+def generate_all_findings_section(report_findings):
+    """Generate filterable/sortable All Findings table and filter bar. report_findings: list of {tool, severity, path, line, message, rule_id}."""
+    if not report_findings:
+        return '<div class="glass" style="margin: 2rem 0; padding: 1.5rem;"><h2>📋 All Findings</h2><p>No findings in this scan.</p></div>'
+
+    tools = sorted({f["tool"] for f in report_findings})
+    severities = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+
+    html_parts = [
+        '<div class="glass report-section-collapsible" style="margin: 2rem 0; padding: 0; overflow: hidden;">',
+        '<details open class="tool-category" data-category-has-issues="true">',
+        '<summary class="category-header"><span class="category-icon">📋</span> All Findings</summary>',
+        '<div style="padding: 1rem 1.5rem 1.5rem;">',
+        # Filter bar
+        '<div class="filter-bar" id="findings-filter-bar">',
+        '<label>Tool: <select id="filter-tool"><option value="">All</option>',
+    ]
+    for t in tools:
+        html_parts.append(f'<option value="{html.escape(t)}">{html.escape(t)}</option>')
+    html_parts.append('</select></label>')
+    html_parts.append('<label>Severity: <select id="filter-severity"><option value="">All</option>')
+    for s in severities:
+        html_parts.append(f'<option value="{html.escape(s)}">{html.escape(s)}</option>')
+    html_parts.append('</select></label>')
+    html_parts.append(
+        '<label>Sort: <select id="sort-findings">'
+        '<option value="severity">Severity</option><option value="tool">Tool</option><option value="path">File</option>'
+        '</select></label>'
+    )
+    html_parts.append('<span id="findings-count" style="margin-left: auto; font-size: 0.9rem;"></span>')
+    html_parts.append('</div>')
+    # Table
+    html_parts.append(
+        '<table class="findings-table" id="findings-table">'
+        '<thead><tr><th>Severity</th><th>Tool</th><th>File</th><th>Line</th><th>Rule / Message</th></tr></thead>'
+        '<tbody id="findings-tbody">'
+    )
+    for f in report_findings:
+        sev = f["severity"]
+        icon = _severity_icon(sev)
+        path_esc = html.escape(f["path"])
+        line_esc = html.escape(f["line"])
+        tool_esc = html.escape(f["tool"])
+        msg_esc = html.escape(f["message"])[:200] + ("…" if len(f["message"]) > 200 else "")
+        rule_esc = html.escape(f["rule_id"])
+        title_attr = html.escape(f"{f['rule_id']}: {f['message'][:100]}")
+        html_parts.append(
+            f'<tr class="finding-row sev-{sev}" data-tool="{tool_esc}" data-severity="{sev}" data-path="{path_esc}" '
+            f'data-line="{line_esc}" title="{title_attr}">'
+            f'<td class="sev-{sev}"><span class="finding-icon" title="{title_attr}">{icon}</span> {sev}</td>'
+            f'<td>{tool_esc}</td><td><code>{path_esc}</code></td><td>{line_esc}</td>'
+            f'<td><span title="{html.escape(f["message"])}">{rule_esc}: {msg_esc}</span></td></tr>'
+        )
+    html_parts.append("</tbody></table>")
+    html_parts.append("</div></details></div>")
     return "".join(html_parts)
 
 
@@ -164,7 +241,11 @@ def generate_accepted_findings_section(accepted_findings):
         return ""
 
     html_parts = []
-    html_parts.append('<h2 id="accepted-findings">Accepted Findings (With Rationale)</h2>')
+    html_parts.append(
+        '<details class="tool-category report-section-collapsible" data-category-has-issues="false" id="accepted-findings-section">'
+        '<summary class="category-header"><span class="category-icon">✅</span> Accepted Findings (With Rationale)</summary>'
+        '<div style="padding: 1rem 1.5rem;">'
+    )
     html_parts.append("<table><tr><th>Tool</th><th>ID</th><th>File</th><th>Line</th><th>Reason</th></tr>")
     for finding in accepted_findings:
         tool = html.escape(str(finding.get("tool", "")))
@@ -175,7 +256,7 @@ def generate_accepted_findings_section(accepted_findings):
         html_parts.append(
             f"<tr><td>{tool}</td><td>{fid}</td><td>{path}</td><td>{line}</td><td>{reason}</td></tr>"
         )
-    html_parts.append("</table>")
+    html_parts.append("</table></div></details>")
     return "".join(html_parts)
 
 
@@ -186,7 +267,7 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
     If policy used: status + link to accepted findings.
     """
     html_parts = []
-    html_parts.append('<div class="glass" style="margin: 2rem 0; padding: 2rem;">')
+    html_parts.append('<div class="glass report-section-collapsible" style="margin: 2rem 0; padding: 0; overflow: hidden;">')
     
     policy_used = bool(finding_policy and policy_path)
     has_accepted = len(accepted_findings) > 0
@@ -220,7 +301,7 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
             html_parts.append(f'<strong>Accepted findings:</strong> {len(accepted_findings)} finding(s) were accepted by the policy.')
             html_parts.append('</p>')
             html_parts.append('<p style="margin-top: 0.5rem;">')
-            html_parts.append('<a href="#accepted-findings" style="color: #0dcaf0; text-decoration: underline;">View accepted findings →</a>')
+            html_parts.append('<a href="#accepted-findings-section" style="color: #0dcaf0; text-decoration: underline;">View accepted findings →</a>')
             html_parts.append('</p>')
         else:
             html_parts.append('<p style="margin-top: 1rem; color: #6c757d;">No findings were accepted by the policy in this scan.</p>')
@@ -265,6 +346,56 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
     
     return "".join(html_parts)
 
+def _normalize_severity(sev):
+    """Map any severity string to CRITICAL|HIGH|MEDIUM|LOW|INFO."""
+    if not sev:
+        return "INFO"
+    s = str(sev).upper()
+    if "CRIT" in s:
+        return "CRITICAL"
+    if s == "HIGH" or s == "ERROR":
+        return "HIGH"
+    if s in ("MEDIUM", "MED", "WARN", "MODERATE"):
+        return "MEDIUM"
+    if s == "LOW":
+        return "LOW"
+    return "INFO"
+
+
+def _normalize_finding_for_report(tool_name, finding):
+    """Extract tool, severity, path, line, message, rule_id from any finding dict for report table."""
+    if not isinstance(finding, dict):
+        return None
+    sev = str(finding.get("Severity", finding.get("severity", ""))).strip()
+    path = str(finding.get("path", finding.get("file", finding.get("filename", ""))))
+    line = finding.get("line") or finding.get("line_number") or (finding.get("start") if isinstance(finding.get("start"), (int, str)) else None)
+    if line is None and isinstance(finding.get("start"), dict):
+        line = finding["start"].get("line", "")
+    line = str(line) if line is not None else ""
+    message = str(finding.get("message", finding.get("issue_text", finding.get("description", finding.get("title", "")))))
+    rule_id = str(finding.get("rule_id", finding.get("check_id", finding.get("id", ""))))
+    return {
+        "tool": tool_name,
+        "severity": _normalize_severity(sev),
+        "path": path,
+        "line": line,
+        "message": message,
+        "rule_id": rule_id,
+    }
+
+
+def build_report_findings(all_findings):
+    """Build a flat list of normalized findings for filter/sort/export. Structure-based (dict with 'alerts' etc.), no tool names."""
+    report_findings = []
+    for tool, findings in all_findings.items():
+        findings_list = _findings_as_list(findings)
+        for f in findings_list:
+            norm = _normalize_finding_for_report(tool, f)
+            if norm:
+                report_findings.append(norm)
+    return report_findings
+
+
 def normalize_findings_for_ai_prompt(scanner_processors, all_findings):
     """Normalize findings for AI prompt. scanner_processors: list of (scanner, processor); all_findings keyed by scanner.name."""
     normalized = []
@@ -294,6 +425,168 @@ def sanitize_findings(findings_by_tool):
         else:
             sanitized[tool] = findings
     return sanitized
+
+
+def _report_features_script():
+    """Return inline script for filter, sort, export, expand/collapse in the standalone report."""
+    return r"""
+<script>
+(function() {
+  var SEV_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 };
+  function getReportFindings() {
+    var el = document.getElementById('report-findings-data');
+    return el ? JSON.parse(el.textContent) : [];
+  }
+  function applyFilterAndSort() {
+    var tbody = document.getElementById('findings-tbody');
+    if (!tbody) return;
+    var toolFilter = (document.getElementById('filter-tool') || {}).value || '';
+    var sevFilter = (document.getElementById('filter-severity') || {}).value || '';
+    var sortBy = (document.getElementById('sort-findings') || {}).value || 'severity';
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr.finding-row'));
+    rows.forEach(function(tr) {
+      var show = (!toolFilter || tr.getAttribute('data-tool') === toolFilter) &&
+                 (!sevFilter || tr.getAttribute('data-severity') === sevFilter);
+      tr.style.display = show ? '' : 'none';
+    });
+    var visible = rows.filter(function(tr) { return tr.style.display !== 'none'; });
+    var sorted = visible.slice().sort(function(a, b) {
+      if (sortBy === 'severity') {
+        var sa = SEV_ORDER[a.getAttribute('data-severity')] ?? 5;
+        var sb = SEV_ORDER[b.getAttribute('data-severity')] ?? 5;
+        if (sa !== sb) return sa - sb;
+        var ta = (a.getAttribute('data-tool') || '').toLowerCase();
+        var tb = (b.getAttribute('data-tool') || '').toLowerCase();
+        if (ta !== tb) return ta < tb ? -1 : 1;
+      } else if (sortBy === 'tool') {
+        var ta = (a.getAttribute('data-tool') || '').toLowerCase();
+        var tb = (b.getAttribute('data-tool') || '').toLowerCase();
+        if (ta !== tb) return ta < tb ? -1 : 1;
+        var sa = SEV_ORDER[a.getAttribute('data-severity')] ?? 5;
+        var sb = SEV_ORDER[b.getAttribute('data-severity')] ?? 5;
+        return sa - sb;
+      } else if (sortBy === 'path') {
+        var pa = (a.getAttribute('data-path') || '').toLowerCase();
+        var pb = (b.getAttribute('data-path') || '').toLowerCase();
+        if (pa !== pb) return pa < pb ? -1 : 1;
+        var sa = SEV_ORDER[a.getAttribute('data-severity')] ?? 5;
+        var sb = SEV_ORDER[b.getAttribute('data-severity')] ?? 5;
+        return sa - sb;
+      }
+      return 0;
+    });
+    sorted.forEach(function(tr) { tbody.appendChild(tr); });
+    var countEl = document.getElementById('findings-count');
+    if (countEl) countEl.textContent = visible.length + ' of ' + rows.length + ' findings';
+  }
+  function downloadJSON() {
+    var data = getReportFindings();
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'findings.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  function downloadCSV() {
+    var data = getReportFindings();
+    if (!data.length) return;
+    var headers = ['tool', 'severity', 'path', 'line', 'rule_id', 'message'];
+    var csv = headers.join(',') + '\n';
+    data.forEach(function(f) {
+      var row = headers.map(function(h) {
+        var v = (f[h] != null ? f[h] : '');
+        return '"' + String(v).replace(/"/g, '""') + '"';
+      });
+      csv += row.join(',') + '\n';
+    });
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'findings.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  function expandAllSections() {
+    document.querySelectorAll('.report-section-collapsible details, details.report-section-collapsible').forEach(function(d) { d.setAttribute('open', ''); });
+  }
+  function collapseAllSections() {
+    document.querySelectorAll('.report-section-collapsible details, details.report-section-collapsible').forEach(function(d) { d.removeAttribute('open'); });
+  }
+  function initReportFeatures() {
+    var tbody = document.getElementById('findings-tbody');
+    if (tbody) {
+      applyFilterAndSort();
+      ['filter-tool', 'filter-severity', 'sort-findings'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('change', applyFilterAndSort);
+      });
+    }
+    var btnJson = document.getElementById('export-json-btn');
+    if (btnJson) btnJson.addEventListener('click', downloadJSON);
+    var btnCsv = document.getElementById('export-csv-btn');
+    if (btnCsv) btnCsv.addEventListener('click', downloadCSV);
+    var btnExpand = document.getElementById('expand-all-btn');
+    if (btnExpand) btnExpand.addEventListener('click', expandAllSections);
+    var btnCollapse = document.getElementById('collapse-all-btn');
+    if (btnCollapse) btnCollapse.addEventListener('click', collapseAllSections);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initReportFeatures);
+  } else {
+    initReportFeatures();
+  }
+})();
+</script>
+"""
+
+
+def _compute_tool_severity_counts(all_findings):
+    """Compute per-tool severity counts (c, h, m, l, i) from all_findings. No hardcoded tool names."""
+    result = {}
+    for tool, findings in all_findings.items():
+        findings_list = _findings_as_list(findings)
+        c, h, m, l, i = 0, 0, 0, 0, 0
+        for finding in findings_list:
+            if not isinstance(finding, dict):
+                continue
+            sev = str(finding.get("Severity", finding.get("severity", ""))).upper()
+            if "CRITICAL" in sev or "CRIT" in sev:
+                c += 1
+            elif "HIGH" in sev or sev == "ERROR":
+                h += 1
+            elif "MEDIUM" in sev or "MED" in sev or "WARN" in sev or "MODERATE" in sev:
+                m += 1
+            elif "LOW" in sev:
+                l += 1
+            else:
+                i += 1
+        result[tool] = (c, h, m, l, i)
+    return result
+
+
+def _compute_domain_scores(all_findings):
+    """Compute domain scores from registry only: each ScanType aggregates tools that have that capability. No hardcoded tool names. Only includes domains that have at least one tool in this scan."""
+    tool_severity = _compute_tool_severity_counts(all_findings)
+    tools_in_scan = set(tool_severity.keys())
+    domain_scores = {}
+    for scan_type in ScanType:
+        scanners = ScannerRegistry.get_scanners_for_type(scan_type)
+        dc, dh, dm, dl, di = 0, 0, 0, 0, 0
+        has_any = False
+        for scanner in scanners:
+            if scanner.name not in tools_in_scan:
+                continue
+            has_any = True
+            c, h, m, l, i = tool_severity[scanner.name]
+            dc, dh, dm, dl, di = dc + c, dh + h, dm + m, dl + l, di + i
+        if not has_any:
+            continue
+        penalty = _weighted_penalty(dc, dh, dm, dl, di)
+        score = max(SCORE_FLOOR, int(100 - penalty))
+        label = scan_type.value.replace("_", " ").title()
+        domain_scores[label] = score
+    return domain_scores
 
 
 def load_tool_statuses_from_steps_log(results_dir):
@@ -430,7 +723,7 @@ def main():
         # Determine which tools were executed: use steps.log for real status (complete/failed/skipped)
         executed_tools = load_tool_statuses_from_steps_log(RESULTS_DIR)
         for tool, findings in all_findings.items():
-            if findings is not None or (tool == "ZAP" and isinstance(findings, dict)):
+            if findings is not None:
                 executed_tools[tool] = {"status": "complete", "message": ""}
         
         # Read and embed JavaScript files inline (required for both Blob URLs and file://)
@@ -476,54 +769,89 @@ def main():
         # JSON is safe in script tags (no script execution)
         embedded_scripts += f'<script type="application/json" id="findings-data">{findings_json}</script>\n'
         debug(f"Embedded {len(normalized_findings)} normalized findings for AI prompt")
-        
+
+        # Report findings for filter/sort/export (flat list)
+        report_findings = build_report_findings(all_findings)
+        embedded_scripts += f'<script type="application/json" id="report-findings-data">{json.dumps(report_findings)}</script>\n'
+        embedded_scripts += _report_features_script()
+
+        # Overall status for header badge: Critical | High | OK
+        critical_count = sum(1 for f in report_findings if f.get("severity") == "CRITICAL")
+        high_count = sum(1 for f in report_findings if f.get("severity") == "HIGH")
+        overall_status = "Critical" if critical_count > 0 else "High" if high_count > 0 else "OK"
+        repo_url = ""
+        if scan_metadata:
+            repo_url = (scan_metadata.get("git_info") or {}).get("repository_url", "") or ""
+
         # Generate HTML with robust error handling
         try:
             with open(OUTPUT_FILE, 'w') as f:
-                f.write(html_header(f'{target} - {now}', embedded_scripts, ai_prompt_disabled))
+                f.write(html_header(
+                    f'{target} - {now}',
+                    embedded_scripts,
+                    ai_prompt_disabled,
+                    overall_status=overall_status,
+                    repo_url=repo_url,
+                ))
                 
+                # Report actions: Expand/Collapse all, Export JSON/CSV
+                f.write(
+                    '<div class="filter-bar" style="margin-bottom: 1rem;">'
+                    '<button type="button" class="toggle-btn" id="expand-all-btn">📂 Expand all</button> '
+                    '<button type="button" class="toggle-btn" id="collapse-all-btn">📁 Collapse all</button> '
+                    '<button type="button" class="toggle-btn" id="export-json-btn">📥 Download JSON</button> '
+                    '<button type="button" class="toggle-btn" id="export-csv-btn">📥 Download CSV</button>'
+                    '</div>'
+                )
+
                 # Scan Metadata Section (only if metadata was collected)
                 if scan_metadata:
                     f.write(generate_metadata_section(scan_metadata))
 
-                # Executive Summary Dashboard
-                f.write(generate_executive_summary(all_findings))
+                # Executive Summary Dashboard (domain_scores from registry ScanType only, no hardcoded tools)
+                domain_scores = _compute_domain_scores(all_findings)
+                f.write(generate_executive_summary(all_findings, domain_scores=domain_scores))
 
                 # Tool execution status
                 f.write(generate_tool_status_section(executed_tools))
 
-                # Simple tool summary grid
+                # Simple tool summary grid (structure-based count, no tool names)
                 tool_cards = []
                 for tool, findings in all_findings.items():
                     if findings is None:
                         continue
-                    if tool == "ZAP" and isinstance(findings, dict):
-                        count = sum(findings.get('summary', findings).values()) if isinstance(findings, dict) else 0
-                    elif isinstance(findings, list):
-                        count = len(findings)
-                    else:
-                        count = 0
-                    tool_cards.append(f"<div class='tool-summary'><strong>{tool}</strong>: {count} findings</div>")
+                    count = _findings_count(findings)
+                    tool_cards.append(f"<div class='tool-summary'><strong>{html.escape(tool)}</strong>: {count} findings</div>")
                 if tool_cards:
                     f.write("<div class='summary-box'><h2>Tool Summary</h2>" + "".join(tool_cards) + "</div>")
 
-                # Tool-specific sections (scanner.name is the only key)
+                # All Findings section (filter/sort table)
+                f.write(generate_all_findings_section(report_findings))
+
+                # Tool-specific sections (scanner.name is the only key), each wrapped in <details>
                 for scanner, processor in scanner_processors:
                     tool_name = scanner.name
                     findings = all_findings.get(tool_name)
                     if not processor or not getattr(processor, "html_func", None):
                         continue
+                    if findings is None or _findings_count(findings) == 0:
+                        continue
                     try:
-                        if tool_name == "ZAP" and isinstance(findings, dict):
-                            if sum(findings.get('summary', findings).values()) > 0:
-                                html_path = _scanner_result_path(RESULTS_DIR, scanner.tools_key, processor.html_file)
-                                f.write(processor.html_func(findings, html_path, Path, os))
-                        elif findings is None:
-                            continue
-                        elif isinstance(findings, list) and len(findings) == 0:
-                            continue
+                        sig = inspect.signature(processor.html_func)
+                        nparams = len(sig.parameters)
+                        if nparams > 1:
+                            html_path = _scanner_result_path(RESULTS_DIR, scanner.tools_key, processor.html_file) or ""
+                            tool_html = processor.html_func(findings, html_path, Path, os)
                         else:
-                            f.write(processor.html_func(findings))
+                            tool_html = processor.html_func(findings)
+                        if tool_html:
+                            f.write(
+                                '<div class="glass report-section-collapsible" style="margin: 2rem 0; padding: 0; overflow: hidden;">'
+                                '<details class="tool-category" data-category-has-issues="true">'
+                                f'<summary class="category-header"><span class="category-icon">🔍</span> {html.escape(tool_name)}</summary>'
+                                f'<div style="padding: 1rem 1.5rem;">{tool_html}</div>'
+                                '</details></div>'
+                            )
                     except Exception as e:
                         debug(f"Warning: Could not generate HTML for {tool_name}: {e}")
                         continue

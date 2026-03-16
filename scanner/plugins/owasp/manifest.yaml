@@ -1,4 +1,17 @@
 name: owasp
+version: "1.0"
+display_name: OWASP Dependency Check
+description: OWASP's dependency vulnerability scanner. Identifies known vulnerabilities in project dependencies.
+categories:
+  - Dependency Scanning
+  - SCA
+icon: "🔒"
+category: dependency
+languages: []
+severity_supported: true
+timeout: 1200
+homepage: https://owasp.org/www-project-dependency-check/
+documentation: https://jeremylong.github.io/DependencyCheck/
 install:
   - ["wget", "https://api.github.com/repos/jeremylong/DependencyCheck/releases/latest", "-O", "/tmp/owasp-release.json"]
   - ["/bin/sh", "-c", "OWASP_DC_URL=$(cat /tmp/owasp-release.json | jq -r '.assets[] | select(.name | test(\"dependency-check.*release.zip\") and (test(\"ant\") | not) and (test(\"asc\") | not)) | .browser_download_url') && wget -O dependency-check.zip $OWASP_DC_URL"]

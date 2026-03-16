@@ -700,18 +700,18 @@ class TestScannerRegistryRegisterFromClass:
         scanner = ScannerRegistry.get_scanner("Semgrep")
         assert scanner is not None
     
-    def test_register_from_class_owasp_transformation(self, clean_registry):
-        """Test OWASP class name transformation."""
-        class OWASPDependencyCheckScanner:
+    def test_register_from_class_plugin_name_transformation(self, clean_registry):
+        """Test plugin module path -> display name transformation (e.g. BanditScanner from plugins.bandit)."""
+        class BanditScanner:
             CAPABILITIES = []
             PRIORITY = 0
             SCRIPT_PATH = "/app/test.sh"
-            __name__ = "OWASPDependencyCheckScanner"
-            __module__ = "scanner.plugins.owasp.scanner"
+            __name__ = "BanditScanner"
+            __module__ = "scanner.plugins.bandit.scanner"
         
-        ScannerRegistry.register_from_class(OWASPDependencyCheckScanner)
+        ScannerRegistry.register_from_class(BanditScanner)
         
-        scanner = ScannerRegistry.get_scanner("OWASP Dependency Check")
+        scanner = ScannerRegistry.get_scanner("Bandit")
         assert scanner is not None
     
     @patch('scanner.core.scanner_registry.ScannerAssetsManager')

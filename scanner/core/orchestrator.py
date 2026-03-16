@@ -331,8 +331,8 @@ class ScanOrchestrator:
                             # Parameter hat Default-Wert, also optional - setze Defaults
                             if param_name == "scan_type":
                                 scanner_kwargs[param_name] = "fs"
-                            elif param_name == "zap_target":
-                                scanner_kwargs[param_name] = "http://host.docker.internal:8000"
+                            elif param_name == "scan_target":
+                                scanner_kwargs[param_name] = os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
                             elif param_name == "startup_delay":
                                 scanner_kwargs[param_name] = 25
                 
@@ -900,151 +900,7 @@ async def list_scanners():
             logger.error(f"Failed to connect to database: {e}")
             sys.exit(1)
         
-        # Scanner descriptions and categories
-        SCANNER_DESCRIPTIONS = {
-            "Semgrep": {
-                "description": "Static analysis tool for multiple languages. Finds bugs and security vulnerabilities in code.",
-                "categories": ["Code Scanning", "SAST"],
-                "icon": "🔍"
-            },
-            "CodeQL": {
-                "description": "GitHub's semantic code analysis engine. Finds security vulnerabilities using queries.",
-                "categories": ["Code Scanning", "SAST"],
-                "icon": "🔎"
-            },
-            "SonarQube": {
-                "description": "Code quality and security analysis platform. Detects bugs, vulnerabilities, and code smells.",
-                "categories": ["Code Scanning", "SAST", "Code Quality"],
-                "icon": "📊"
-            },
-            "ESLint": {
-                "description": "JavaScript and TypeScript linter with security rules. Finds code quality and security issues.",
-                "categories": ["Code Scanning", "Linting"],
-                "icon": "📝"
-            },
-            "Brakeman": {
-                "description": "Static analysis security scanner for Ruby on Rails applications.",
-                "categories": ["Code Scanning", "SAST"],
-                "icon": "💎"
-            },
-            "Bandit": {
-                "description": "Python security linter. Scans Python code for common security issues.",
-                "categories": ["Code Scanning", "SAST"],
-                "icon": "🐍"
-            },
-            "Trivy": {
-                "description": "Comprehensive security scanner. Scans filesystems, dependencies, and container images for vulnerabilities.",
-                "categories": ["Dependency Scanning", "Container Security", "Filesystem Scanning"],
-                "icon": "🛡️"
-            },
-            "Snyk": {
-                "description": "Developer security platform. Scans code and dependencies for vulnerabilities and license issues.",
-                "categories": ["Code Scanning", "Dependency Scanning"],
-                "icon": "🔐"
-            },
-            "OWASP Dependency Check": {
-                "description": "OWASP's dependency vulnerability scanner. Identifies known vulnerabilities in project dependencies.",
-                "categories": ["Dependency Scanning", "SCA"],
-                "icon": "🔒"
-            },
-            "npm audit": {
-                "description": "Node.js package vulnerability scanner. Checks npm dependencies for known security issues.",
-                "categories": ["Dependency Scanning"],
-                "icon": "📦"
-            },
-            "Safety": {
-                "description": "Python dependency vulnerability scanner. Checks Python packages against known vulnerabilities.",
-                "categories": ["Dependency Scanning"],
-                "icon": "🐍"
-            },
-            "GitLeaks": {
-                "description": "Secret scanning tool for Git repositories. Detects hardcoded secrets and credentials.",
-                "categories": ["Secrets Scanning"],
-                "icon": "🔑"
-            },
-            "TruffleHog": {
-                "description": "Advanced secret scanning tool. Finds credentials, API keys, and other secrets in code.",
-                "categories": ["Secrets Scanning"],
-                "icon": "🐷"
-            },
-            "detect-secrets": {
-                "description": "Enterprise-ready secret detection tool. Prevents secrets from entering codebase.",
-                "categories": ["Secrets Scanning"],
-                "icon": "🕵️"
-            },
-            "Checkov": {
-                "description": "Infrastructure as Code security scanner. Scans Terraform, CloudFormation, and Kubernetes configs.",
-                "categories": ["IaC Security", "Config Scanning"],
-                "icon": "☁️"
-            },
-            "Terraform": {
-                "description": "Terraform security scanner. Validates Terraform configurations for security best practices.",
-                "categories": ["IaC Security"],
-                "icon": "🏗️"
-            },
-            "ZAP": {
-                "description": "OWASP ZAP - Web application security scanner. Finds vulnerabilities in web applications.",
-                "categories": ["Web Application Security", "DAST"],
-                "icon": "🕷️"
-            },
-            "Burp": {
-                "description": "Burp Suite - Web application security testing platform.",
-                "categories": ["Web Application Security", "DAST"],
-                "icon": "🔪"
-            },
-            "Nuclei": {
-                "description": "Fast vulnerability scanner. Uses templates to scan for known vulnerabilities.",
-                "categories": ["Web Application Security", "Vulnerability Scanning"],
-                "icon": "⚛️"
-            },
-            "Nikto": {
-                "description": "Web server scanner. Tests web servers for dangerous files and misconfigurations.",
-                "categories": ["Web Application Security"],
-                "icon": "🌐"
-            },
-            "Wapiti": {
-                "description": "Web application vulnerability scanner. Detects security flaws in web applications.",
-                "categories": ["Web Application Security", "DAST"],
-                "icon": "🕸️"
-            },
-            "Clair": {
-                "description": "Container vulnerability scanner. Analyzes container images for known vulnerabilities.",
-                "categories": ["Container Security"],
-                "icon": "🐳"
-            },
-            "Anchore": {
-                "description": "Container image security scanner. Scans container images for vulnerabilities and policy violations.",
-                "categories": ["Container Security"],
-                "icon": "⚓"
-            },
-            "Docker Bench": {
-                "description": "Docker security benchmark. Checks Docker daemon configuration against CIS benchmarks.",
-                "categories": ["Container Security", "Configuration"],
-                "icon": "🐋"
-            },
-            "Kube Bench": {
-                "description": "Kubernetes security benchmark. Checks Kubernetes cluster configuration against CIS benchmarks.",
-                "categories": ["Kubernetes Security", "Configuration"],
-                "icon": "☸️"
-            },
-            "Kube Hunter": {
-                "description": "Kubernetes penetration testing tool. Hunts for security weaknesses in Kubernetes clusters.",
-                "categories": ["Kubernetes Security", "Penetration Testing"],
-                "icon": "🎯"
-            },
-            "Android": {
-                "description": "Android application security scanner. Analyzes Android APK files for security issues.",
-                "categories": ["Mobile Security"],
-                "icon": "📱"
-            },
-            "iOS": {
-                "description": "iOS application security scanner. Analyzes iOS IPA files and plist configurations.",
-                "categories": ["Mobile Security"],
-                "icon": "🍎"
-            },
-        }
-        
-        # Load assets from manifests
+        # Load assets and metadata from manifests (no scanner names in core)
         scanners_root = Path("/app/scanner/plugins")
         assets_manager = None
         manifests = {}
@@ -1069,8 +925,11 @@ async def list_scanners():
             # Remove duplicates
             scan_types = list(set(scan_types))
             
-            # Get description and metadata
-            scanner_meta = SCANNER_DESCRIPTIONS.get(scanner_obj.name, {})
+            # Get manifest for this plugin (metadata and assets)
+            manifest = manifests.get(scanner_obj.manifest_name) if (manifests and scanner_obj.manifest_name) else None
+            description = manifest.description if manifest and manifest.description else f"Security scanner: {scanner_obj.name}"
+            categories = manifest.categories if manifest and manifest.categories else ["Security Scanning"]
+            icon = manifest.icon if manifest and manifest.icon else "🔧"
             
             scanner_data = {
                 "name": scanner_obj.name,
@@ -1078,15 +937,10 @@ async def list_scanners():
                 "priority": scanner_obj.priority,
                 "requires_condition": scanner_obj.requires_condition,
                 "enabled": scanner_obj.enabled,
-                "description": scanner_meta.get("description", f"Security scanner: {scanner_obj.name}"),
-                "categories": scanner_meta.get("categories", ["Security Scanning"]),
-                "icon": scanner_meta.get("icon", "🔧")
+                "description": description,
+                "categories": categories,
+                "icon": icon,
             }
-            
-            # Add assets if available 
-            manifest = None
-            if manifests and scanner_obj.manifest_name:
-                manifest = manifests.get(scanner_obj.manifest_name)
             
             if manifest:
                 assets = []

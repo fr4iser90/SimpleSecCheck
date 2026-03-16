@@ -159,16 +159,16 @@ def get_finding_policy_check_path_for_local_scan(host_path: str, policy_relative
     return None
 
 
-def get_owasp_data_path_host() -> str:
+def get_plugin_data_path_host(plugin_name: str) -> Optional[str]:
     """
-    Get host path for OWASP data directory.
+    Get host path for a plugin's data directory.
+    Used by plugins only; plugin_name must be passed from the plugin (e.g. from __name__).
     Returns host path or None if not found.
     """
     host_project_root = get_host_project_root()
     if not host_project_root:
         return None
-    
-    return os.path.join(host_project_root, "scanner", "scanners", "owasp", "data")
+    return os.path.join(host_project_root, "scanner", "plugins", plugin_name, "data")
 
 
 def get_config_path_host() -> str:
@@ -300,16 +300,25 @@ def get_backend_logs_dir():
     return base_dir / "logs"
 
 
-def get_backend_owasp_data_dir():
+def get_plugin_data_dir(plugin_name: str) -> Path:
     """
-    Get backend OWASP data directory.
-    Returns: Path object or None
+    Get container path for a plugin's data directory (e.g. in scanner container).
+    Used by plugins only; plugin_name must be passed from the plugin.
+    Returns: Path (e.g. /app/scanner/plugins/<plugin_name>/data)
+    """
+    return Path("/app/scanner/plugins") / plugin_name / "data"
+
+
+def get_backend_plugin_data_dir(plugin_name: str) -> Optional[Path]:
+    """
+    Get backend container path for a plugin's data directory (if backend needs it).
+    Used by backend only when mounting plugin data; plugin_name from caller.
+    Returns: Path or None if base_dir not available
     """
     base_dir = get_backend_base_dir()
     if not base_dir:
         return None
-    
-    return Path("/scanner/plugins/owasp/data")
+    return Path("/app/scanner/plugins") / plugin_name / "data"
 
 
 def get_frontend_static_paths():

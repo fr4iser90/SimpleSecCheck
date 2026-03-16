@@ -1,4 +1,16 @@
 name: zap
+version: "1.0"
+description: OWASP ZAP - Web application security scanner. Finds vulnerabilities in web applications.
+categories:
+  - Web Application Security
+  - DAST
+icon: "🕷️"
+category: web
+languages: []
+severity_supported: true
+timeout: 1200
+homepage: https://www.zaproxy.org
+documentation: https://www.zaproxy.org/docs/
 install:
   - ["wget", "https://github.com/zaproxy/zaproxy/releases/download/v2.16.1/ZAP_2.16.1_Linux.tar.gz"]
   - ["tar", "-xvzf", "ZAP_2.16.1_Linux.tar.gz", "-C", "/opt"]

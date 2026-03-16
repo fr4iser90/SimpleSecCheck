@@ -1,4 +1,24 @@
 name: sonarqube
+version: "1.0"
+description: Code quality and security analysis platform. Detects bugs, vulnerabilities, and code smells.
+categories:
+  - Code Scanning
+  - SAST
+  - Code Quality
+icon: "📊"
+category: code
+languages:
+  - python
+  - javascript
+  - typescript
+  - java
+  - go
+  - csharp
+  - kotlin
+severity_supported: true
+timeout: 900
+homepage: https://www.sonarsource.com/products/sonarqube/
+documentation: https://docs.sonarqube.org/
 install:
   - ["npm", "install", "-g", "sonar-scanner"]
 assets:

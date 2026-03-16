@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
 import html as html_module
 
-def html_header(title, embedded_scripts="", ai_prompt_disabled=False):
+def html_header(title, embedded_scripts="", ai_prompt_disabled=False, overall_status=None, repo_url=None):
+    # overall_status: "Critical" | "High" | "OK"; repo_url: optional link to repository
+    badge_html = ""
+    if overall_status:
+        badge_class = "severity-badge-critical" if overall_status == "Critical" else "severity-badge-high" if overall_status == "High" else "severity-badge-ok"
+        badge_html = f'<span class="severity-badge {badge_class}" title="Overall security status">{overall_status}</span>'
+    repo_link_html = ""
+    if repo_url and repo_url.strip():
+        repo_esc = html_module.escape(repo_url.strip())
+        repo_link_html = f'<a href="{repo_esc}" class="repo-link toggle-btn" target="_blank" rel="noopener noreferrer" title="Open repository">🔗 Open in GitHub</a>'
     return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>{title}</title>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<link rel="icon" type="image/png" href="assets/transparent.png">\n<style>\n
 /* ============================================
    GLASSMORPHISM MODERN DESIGN
@@ -18,6 +27,8 @@ def html_header(title, embedded_scripts="", ai_prompt_disabled=False):
   --bg-dark: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
   --text-light: #212529;
   --text-dark: #f8f9fa;
+  --text-primary: #1a1a1a;
+  --text-secondary: #495057;
   --border-radius: 16px;
   --shadow: 0 8px 32px rgba(0,0,0,0.1);
   --shadow-dark: 0 8px 32px rgba(0,0,0,0.3);
@@ -27,6 +38,7 @@ def html_header(title, embedded_scripts="", ai_prompt_disabled=False):
   --glass-border: rgba(255,255,255,0.18);
   --glass-border-dark: rgba(255,255,255,0.1);
 }}
+
 
 * {{
   box-sizing: border-box;
@@ -46,6 +58,8 @@ body.dark {{
   background: var(--bg-dark);
   background-attachment: fixed;
   color: var(--text-dark);
+  --text-primary: #f0f0f0;
+  --text-secondary: #b0b0b0;
 }}
 
 /* Glassmorphism effect */
@@ -185,6 +199,32 @@ body.dark .summary-card {{
   text-transform: uppercase;
   letter-spacing: 0.5px;
   opacity: 0.8;
+}}
+
+/* Domain scores row */
+.domain-scores-grid {{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}}
+.domain-score-card {{
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  border-left: 3px solid;
+  background: var(--glass-bg-dark);
+  font-size: 0.85rem;
+}}
+body.dark .domain-score-card {{
+  background: var(--glass-bg);
+}}
+.domain-score-card .domain-name {{
+  opacity: 0.9;
+}}
+.domain-score-card .domain-score {{
+  font-weight: 700;
 }}
 
 /* Tool Status Section */
@@ -666,6 +706,51 @@ body.dark .all-clear {{
   }}
 }}
 
+/* Severity badge in header */
+.severity-badge {{
+  display: inline-block;
+  margin-left: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+}}
+.severity-badge-critical {{
+  background: var(--color-critical);
+  color: #fff;
+}}
+.severity-badge-high {{
+  background: var(--color-high);
+  color: #fff;
+}}
+.severity-badge-ok {{
+  background: var(--color-pass);
+  color: #fff;
+}}
+.repo-link {{
+  text-decoration: none;
+}}
+
+/* Findings table: row background by severity */
+.findings-table .finding-row.sev-CRITICAL {{ background: rgba(220, 53, 69, 0.15); }}
+.findings-table .finding-row.sev-HIGH {{ background: rgba(253, 126, 20, 0.12); }}
+.findings-table .finding-row.sev-MEDIUM {{ background: rgba(255, 193, 7, 0.1); }}
+.findings-table .finding-row.sev-LOW {{ background: rgba(13, 202, 240, 0.08); }}
+.findings-table .finding-row.sev-INFO {{ background: rgba(108, 117, 125, 0.06); }}
+body.dark .findings-table .finding-row.sev-CRITICAL {{ background: rgba(220, 53, 69, 0.2); }}
+body.dark .findings-table .finding-row.sev-HIGH {{ background: rgba(253, 126, 20, 0.18); }}
+body.dark .findings-table .finding-row.sev-MEDIUM {{ background: rgba(255, 193, 7, 0.15); }}
+body.dark .findings-table .finding-row.sev-LOW {{ background: rgba(13, 202, 240, 0.12); }}
+body.dark .findings-table .finding-row.sev-INFO {{ background: rgba(108, 117, 125, 0.1); }}
+.finding-icon {{
+  font-size: 1em;
+  vertical-align: middle;
+  margin-right: 0.25rem;
+}}
+
 /* Scale down when opened directly (not in iframe) - larger viewports */
 @media (min-width: 1400px) {{
   html {{
@@ -710,12 +795,13 @@ window.onload = function() {{
 <div class="header">\n
   <div class="header-content">\n
     <div>\n
-      <h1>SimpleSecCheck Security Scan Summary</h1>\n
+      <h1>SimpleSecCheck Security Scan Summary {badge_html}</h1>\n
       <div class="scan-meta">\n
         <span>📅 {title}</span>\n
       </div>\n
     </div>\n
     <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">\n
+      {repo_link_html}\n
       <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n
       <div id="ai-prompt-container" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; padding: 0.5rem; background: var(--glass-bg); border-radius: 8px; border: 1px solid var(--glass-border);">\n
         <button id="ai-prompt-btn" class="toggle-btn" onclick="generateAIPrompt()" style="background: linear-gradient(135deg, #6c757d, #495057);" {"disabled" if ai_prompt_disabled else ""} title="{ 'No findings available for AI prompt.' if ai_prompt_disabled else '' }">🤖 AI Prompt</button>\n
@@ -729,75 +815,141 @@ window.onload = function() {{
 def html_footer():
     return '</div>\n</body></html>'
 
-def generate_executive_summary(all_findings):
-    """Generate executive dashboard with key metrics"""
+# Enterprise severity weights and score thresholds
+SEVERITY_WEIGHTS = {
+    "CRITICAL": 10,
+    "HIGH": 6,
+    "MEDIUM": 3,
+    "LOW": 1,
+    "INFO": 0,
+}
+PENALTY_CAP = 60
+SCORE_FLOOR = 10
+SCORE_LABELS = [
+    (90, "Excellent", "#28a745"),
+    (75, "Good", "#28a745"),
+    (60, "Moderate", "#ffc107"),
+    (40, "Needs Attention", "#fd7e14"),
+    (0, "Critical", "#dc3545"),
+]
+
+def _findings_as_list(findings):
+    """Return findings as a list. Structure-based: dict with 'alerts' -> list of alerts; list -> list; else []. No tool names."""
+    if findings is None:
+        return []
+    if isinstance(findings, list):
+        return findings
+    if isinstance(findings, dict) and "alerts" in findings:
+        a = findings["alerts"]
+        return a if isinstance(a, list) else []
+    return []
+
+
+def _findings_count(findings):
+    """Return number of findings for display. Structure-based: list -> len; dict with 'alerts' -> len(alerts); dict with 'summary' -> sum(values); else 0. No tool names."""
+    if findings is None:
+        return 0
+    if isinstance(findings, list):
+        return len(findings)
+    if isinstance(findings, dict):
+        if "alerts" in findings and isinstance(findings["alerts"], list):
+            return len(findings["alerts"])
+        if "summary" in findings and isinstance(findings["summary"], dict):
+            try:
+                return sum(findings["summary"].values())
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _score_label_and_color(score):
+    """Return (label, color) for a 0-100 score. Enterprise bands: 90+ Excellent, 75+ Good, 60+ Moderate, 40+ Needs Attention, 0-39 Critical."""
+    for threshold, label, color in SCORE_LABELS:
+        if score >= threshold:
+            return label, color
+    return "Critical", "#dc3545"
+
+
+def _weighted_penalty(critical, high, medium, low, info):
+    """Enterprise-style: severity-weighted penalty, capped."""
+    total = (
+        critical * SEVERITY_WEIGHTS["CRITICAL"]
+        + high * SEVERITY_WEIGHTS["HIGH"]
+        + medium * SEVERITY_WEIGHTS["MEDIUM"]
+        + low * SEVERITY_WEIGHTS["LOW"]
+        + info * SEVERITY_WEIGHTS["INFO"]
+    )
+    return min(total, PENALTY_CAP)
+
+
+def generate_executive_summary(all_findings, domain_scores=None):
+    """Generate executive dashboard with key metrics. Score = 100 - min(weighted_penalty, 60), floor 10. Enterprise bands for label.
+    domain_scores: optional dict of domain_label -> score (0-100), from report generator using registry scan_type only; no hardcoded tools."""
     critical_count = 0
     high_count = 0
     medium_count = 0
-    total_issues = 0
+    low_count = 0
+    info_count = 0
     tools_executed = 0
     tools_passed = 0
 
     for tool, findings in all_findings.items():
         if findings is None:
-            # Skipped tool (e.g., missing token). Count as executed+passed for score.
             tools_executed += 1
             tools_passed += 1
             continue
 
-        # ZAP returns a dict with summary and alerts, convert to list format
-        if tool == "ZAP" and isinstance(findings, dict):
-            # Convert ZAP dict format to list format for consistency
-            alerts = findings.get("alerts", [])
-            findings = alerts if isinstance(alerts, list) else []
-        elif not isinstance(findings, list):
-            raise ValueError(f"Unexpected findings type for {tool}: {type(findings).__name__}")
-
+        findings_list = _findings_as_list(findings)
         tools_executed += 1
-        if len(findings) == 0:
+        if len(findings_list) == 0:
             tools_passed += 1
-            continue
+        else:
+            for finding in findings_list:
+                if isinstance(finding, str):
+                    medium_count += 1
+                    continue
+                if not isinstance(finding, dict):
+                    print(
+                        f"[html_utils] Skipping non-dict finding from {tool}: {type(finding).__name__} -> {finding}",
+                        flush=True,
+                    )
+                    continue
+                sev = str(finding.get("Severity", finding.get("severity", ""))).upper()
+                if "CRITICAL" in sev or "CRIT" in sev:
+                    critical_count += 1
+                elif "HIGH" in sev or sev == "ERROR":
+                    high_count += 1
+                elif "MEDIUM" in sev or "MED" in sev or "WARN" in sev or "MODERATE" in sev:
+                    medium_count += 1
+                elif "LOW" in sev:
+                    low_count += 1
+                else:
+                    info_count += 1
 
-        total_issues += len(findings)
+    # Enterprise overall score: 100 - min(weighted_penalty, 60), floor 10
+    effective_penalty = _weighted_penalty(
+        critical_count, high_count, medium_count, low_count, info_count
+    )
+    security_score = max(SCORE_FLOOR, int(100 - effective_penalty))
+    score_label, score_color = _score_label_and_color(security_score)
 
-        # Count by severity
-        for finding in findings:
-            if isinstance(finding, str):
-                # Handle string findings by treating them as medium severity
-                medium_count += 1
-                continue
-
-            if not isinstance(finding, dict):
-                # Defensive: skip invalid entries but log them for debugging
-                print(
-                    f"[html_utils] Skipping non-dict finding from {tool}: {type(finding).__name__} -> {finding}",
-                    flush=True,
-                )
-                continue
-
-            # Standard structure - check both Severity and severity fields
-            sev = str(finding.get('Severity', finding.get('severity', ''))).upper()
-
-            # Map to severity levels
-            if 'CRITICAL' in sev or 'CRIT' in sev:
-                critical_count += 1
-            elif 'HIGH' in sev:
-                high_count += 1
-            elif 'MEDIUM' in sev or 'MED' in sev or 'WARN' in sev or 'MODERATE' in sev:
-                medium_count += 1
-            # LOW/INFO are intentionally not counted as MEDIUM to keep
-            # the dashboard focused on higher-priority risk.
-
-    # Calculate security score (0-100)
-    if tools_executed > 0:
-        pass_rate = (tools_passed / tools_executed) * 100
-        issue_penalty = min(total_issues * 2, 50)  # Max 50 point penalty
-        security_score = max(int(pass_rate - issue_penalty), 0)
-    else:
-        security_score = 0
-
-    score_color = '#28a745' if security_score >= 70 else '#ffc107' if security_score >= 40 else '#dc3545'
-    score_label = 'Excellent' if security_score >= 70 else 'Good' if security_score >= 40 else 'Needs Attention'
+    # Domain scores: render only what was passed (computed from registry scan_type in report generator)
+    domain_section = ""
+    if domain_scores:
+        domain_cards = []
+        for domain_label, dom_score in sorted(domain_scores.items()):
+            _, dom_color = _score_label_and_color(dom_score)
+            domain_cards.append(
+                f'<div class="domain-score-card" style="border-left-color: {dom_color};"><span class="domain-name">{html_module.escape(domain_label)}</span><span class="domain-score" style="color: {dom_color};">{dom_score}</span></div>'
+            )
+        if domain_cards:
+            domain_section = (
+                '<div class="domain-scores" style="grid-column: 1/-1; margin-top: 0.5rem;">'
+                '<div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; margin-bottom: 0.5rem;">Domain Scores</div>'
+                '<div class="domain-scores-grid">'
+                + "".join(domain_cards)
+                + "</div></div>"
+            )
 
     return f'''
     <div class="executive-summary">
@@ -818,9 +970,10 @@ def generate_executive_summary(all_findings):
         <span class="label">Tools Passed</span>
       </div>
       <div class="summary-card" style="grid-column: 1/-1; text-align: center; border-left: 4px solid {score_color};">
-        <div style="font-size: 2rem; font-weight: 700; color: {score_color};">{security_score}</div>
+        <div style="font-size: 2rem; font-weight: 700; color: {score_color};">{security_score} <span style="font-size: 1rem; font-weight: 400; opacity: 0.85;">/ 100</span></div>
         <div style="font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8;">Security Score: {score_label}</div>
       </div>
+      {domain_section}
     </div>
     '''
 

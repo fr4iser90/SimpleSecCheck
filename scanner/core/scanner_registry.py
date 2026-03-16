@@ -201,14 +201,13 @@ class ScannerRegistry:
         class_name = scanner_class.__name__
         module = scanner_class.__module__
         
-        # Always try to load manifest_name from manifest.yaml (for asset lookup)
-        # Extract plugin name from module path (e.g., "scanner.plugins.owasp.scanner" -> "owasp")
+        # Load manifest for this plugin (display_name, assets); plugin name from module path only
+        manifest = None
         manifest_name = None
         if module and "scanner.plugins." in module:
             parts = module.split(".")
             if len(parts) >= 3 and parts[0] == "scanner" and parts[1] == "plugins":
                 plugin_name = parts[2]
-                # Try to load manifest.yaml for this plugin
                 try:
                     from pathlib import Path
                     from scanner.core.scanner_assets.manager import ScannerAssetsManager
@@ -221,14 +220,15 @@ class ScannerRegistry:
                             if manifest:
                                 manifest_name = manifest.name
                 except Exception:
-                    # If manifest loading fails, continue without manifest_name
                     pass
-        
+
+        # Single source for display name: manifest.display_name (or manifest.name), else class name
         scanner_name = (
             getattr(scanner_class, "SCANNER_NAME", None)
             or getattr(scanner_class, "NAME", None)
+            or (manifest.display_name if manifest and getattr(manifest, "display_name", None) else None)
             or manifest_name
-            or class_name.replace("Scanner", "").replace("OWASP", "OWASP Dependency Check")
+            or class_name.replace("Scanner", "")
         )
         
         # Get metadata from class attributes

@@ -1,4 +1,17 @@
 name: trivy
+version: "1.0"
+description: Comprehensive security scanner. Scans filesystems, dependencies, and container images for vulnerabilities.
+categories:
+  - Dependency Scanning
+  - Container Security
+  - Filesystem Scanning
+icon: "🛡️"
+category: dependency
+languages: []
+severity_supported: true
+timeout: 900
+homepage: https://github.com/aquasecurity/trivy
+documentation: https://aquasecurity.github.io/trivy/
 install:
   - ["/bin/sh", "-c", "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin"]
 assets:

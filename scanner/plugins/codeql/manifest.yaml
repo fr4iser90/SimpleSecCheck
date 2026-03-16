@@ -1,4 +1,22 @@
 name: codeql
+version: "1.0"
+description: GitHub's semantic code analysis engine. Finds security vulnerabilities using queries.
+categories:
+  - Code Scanning
+  - SAST
+icon: "🔎"
+category: code
+languages:
+  - python
+  - javascript
+  - java
+  - cpp
+  - csharp
+  - go
+severity_supported: true
+timeout: 1200
+homepage: https://codeql.github.com
+documentation: https://codeql.github.com/docs/
 install:
   - ["/bin/sh", "-c", "CODEQL_URL=$(wget -qO- https://api.github.com/repos/github/codeql-cli-binaries/releases/latest | jq -r '.assets[] | select(.name | test(\"codeql-linux64.zip\")) | .browser_download_url') && wget -O /tmp/codeql.zip $CODEQL_URL"]
   - ["unzip", "/tmp/codeql.zip", "-d", "/opt"]

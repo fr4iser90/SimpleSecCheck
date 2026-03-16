@@ -1,4 +1,16 @@
 name: burp
+version: "1.0"
+description: Burp Suite - Web application security testing platform.
+categories:
+  - Web Application Security
+  - DAST
+icon: "🔪"
+category: web
+languages: []
+severity_supported: true
+timeout: 1200
+homepage: https://portswigger.net/burp
+documentation: https://portswigger.net/burp/documentation
 install:
   - ["wget", "-q", "https://portswigger.net/burp/releases/download?product=community&version=2024.2.5", "-O", "/tmp/burp-suite.jar"]
   - ["mkdir", "-p", "/opt/burp"]

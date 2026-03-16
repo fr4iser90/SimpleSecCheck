@@ -8,22 +8,24 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.path_setup import get_plugin_data_dir
 from scanner.core.scanner_registry import ScanType, TargetType, ScannerCapability
 from scanner.core.step_registry import SubStepType
+from scanner.core.scanner_assets.manager import get_plugin_display_name
+
+# Plugin name from package path only – no literal; used for paths and manifest
+PLUGIN_NAME = __name__.split(".")[2]
 
 
 class OWASPScanner(BaseScanner):
     """OWASP Dependency Check scanner implementation"""
     
-    # Metadaten für Auto-Registrierung
     CAPABILITIES = [
-        # Code scanning (can scan source code for vulnerabilities)
         ScannerCapability(
             scan_type=ScanType.CODE,
             supported_targets=[TargetType.LOCAL_MOUNT, TargetType.GIT_REPO, TargetType.UPLOADED_CODE],
             supported_artifacts=[],
         ),
-        # Dependency scanning (primary use case)
         ScannerCapability(
             scan_type=ScanType.DEPENDENCY,
             supported_targets=[TargetType.LOCAL_MOUNT, TargetType.GIT_REPO, TargetType.UPLOADED_CODE],
@@ -33,11 +35,10 @@ class OWASPScanner(BaseScanner):
     PRIORITY = 4
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "OWASP_DC_CONFIG_PATH": "/app/scanner/plugins/owasp/config/config.yaml",
-        "OWASP_DC_DATA_DIR": "/app/scanner/plugins/owasp/data"
+        "OWASP_DC_CONFIG_PATH": f"/app/scanner/plugins/{PLUGIN_NAME}/config/config.yaml",
+        "OWASP_DC_DATA_DIR": str(get_plugin_data_dir(PLUGIN_NAME)),
     }
-    # SCANNER_NAME wird automatisch aus manifest.yaml geladen
-    
+
     def __init__(
         self,
         target_path: str,
@@ -58,8 +59,9 @@ class OWASPScanner(BaseScanner):
             data_dir: Directory for OWASP data and cache
             exclude_paths: Comma-separated paths to exclude
         """
-        super().__init__("OWASP Dependency Check", target_path, results_dir, log_file, config_path)
-        self.data_dir = Path(data_dir) if data_dir else Path("/app/scanner/plugins/owasp/data")
+        display_name = get_plugin_display_name(PLUGIN_NAME)
+        super().__init__(display_name, target_path, results_dir, log_file, config_path)
+        self.data_dir = Path(data_dir) if data_dir else get_plugin_data_dir(PLUGIN_NAME)
         self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     def initialize_database(self):
@@ -348,9 +350,9 @@ if __name__ == "__main__":
     # Get default parameters from BaseScanner
     default_params = BaseScanner.get_default_params_from_env()
     
-    # Get scanner-specific parameters
-    config_path = os.getenv("OWASP_DC_CONFIG_PATH", "/app/scanner/plugins/owasp/config/config.yaml")
-    data_dir = os.getenv("OWASP_DC_DATA_DIR", "/app/scanner/plugins/owasp/data")
+    # Get scanner-specific parameters (paths from central helper, no hardcoded plugin path)
+    config_path = os.getenv("OWASP_DC_CONFIG_PATH", f"/app/scanner/plugins/{PLUGIN_NAME}/config/config.yaml")
+    data_dir = os.getenv("OWASP_DC_DATA_DIR", str(get_plugin_data_dir(PLUGIN_NAME)))
     exclude_paths = os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     scanner = OWASPScanner(

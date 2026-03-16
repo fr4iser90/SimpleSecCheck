@@ -31,20 +31,20 @@ class BurpScanner(BaseScanner):
         results_dir: str,
         log_file: str,
         config_path: Optional[str] = None,
-        zap_target: Optional[str] = None
+        scan_target: Optional[str] = None
     ):
         """
         Initialize Burp Suite scanner
-        
+
         Args:
             target_path: Path to scan (not used for website scans)
             results_dir: Results directory
             log_file: Log file path
             config_path: Path to Burp Suite config file
-            zap_target: Target URL to scan
+            scan_target: Target URL to scan (web application)
         """
         super().__init__("Burp Suite", target_path, results_dir, log_file, config_path)
-        self.zap_target = zap_target or os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
+        self.scan_target = scan_target or os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
         self.burp_jar = Path("/opt/burp/burp-suite.jar")
     
     def scan(self) -> bool:
@@ -57,7 +57,7 @@ class BurpScanner(BaseScanner):
             self.log("java not found in PATH", "ERROR")
             return False
         
-        self.log(f"Running web application security scan on {self.zap_target}...")
+        self.log(f"Running web application security scan on {self.scan_target}...")
         
         json_output = self.results_dir / "report.json"  # Changed from burp.json
         text_output = self.results_dir / "report.txt"   # Changed from burp.txt
@@ -68,14 +68,14 @@ class BurpScanner(BaseScanner):
         
         # JSON report
         self.log("Running web application security scan...")
-        cmd = ["java", "-jar", str(self.burp_jar), *config_args, "-u", self.zap_target, "-o", str(json_output)]
+        cmd = ["java", "-jar", str(self.burp_jar), *config_args, "-u", self.scan_target, "-o", str(json_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
             self.log("JSON report generation failed", "WARNING")
         
         # Text report
-        cmd = ["java", "-jar", str(self.burp_jar), *config_args, "-u", self.zap_target, "-o", str(text_output)]
+        cmd = ["java", "-jar", str(self.burp_jar), *config_args, "-u", self.scan_target, "-o", str(text_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
@@ -99,14 +99,14 @@ if __name__ == "__main__":
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
     config_path = os.getenv("BURP_CONFIG_PATH", "/app/scanner/plugins/burp/config/config.yaml")
-    zap_target = os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
+    scan_target = os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
     
     scanner = BurpScanner(
         target_path=target_path,
         results_dir=results_dir,
         log_file=log_file,
         config_path=config_path,
-        zap_target=zap_target
+        scan_target=scan_target
     )
     
     success = scanner.run()

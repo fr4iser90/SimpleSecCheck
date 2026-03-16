@@ -1,3 +1,15 @@
 name: snyk
+version: "1.0"
+description: Developer security platform. Scans code and dependencies for vulnerabilities and license issues.
+categories:
+  - Code Scanning
+  - Dependency Scanning
+icon: "🔐"
+category: dependency
+languages: []
+severity_supported: true
+timeout: 600
+homepage: https://snyk.io
+documentation: https://docs.snyk.io/
 install:
   - ["/bin/sh", "-c", "curl -s https://static.snyk.io/cli/latest/snyk-linux -o /tmp/snyk && chmod +x /tmp/snyk && mv /tmp/snyk /usr/local/bin/snyk"]

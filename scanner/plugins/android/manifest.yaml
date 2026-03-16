@@ -1,3 +1,14 @@
 name: android
+version: "1.0"
+description: Android application security scanner. Analyzes Android APK files for security issues.
+categories:
+  - Mobile Security
+icon: "📱"
+category: code
+languages: []
+severity_supported: true
+timeout: 600
+homepage: https://developer.android.com/studio
+documentation: https://developer.android.com/studio
 install:
   - ["pip3", "install", "defusedxml"]

@@ -33,22 +33,22 @@ class ZAPScanner(BaseScanner):
         results_dir: str,
         log_file: str,
         config_path: Optional[str] = None,
-        zap_target: Optional[str] = None,
+        scan_target: Optional[str] = None,
         startup_delay: int = 25
     ):
         """
         Initialize ZAP scanner
-        
+
         Args:
             target_path: Path to scan (not used for website scans)
             results_dir: Results directory
             log_file: Log file path
             config_path: Path to ZAP config file (optional)
-            zap_target: Target URL to scan
+            scan_target: Target URL to scan (web application)
             startup_delay: Delay in seconds to wait for target to be ready
         """
         super().__init__("ZAP", target_path, results_dir, log_file, config_path)
-        self.zap_target = zap_target or os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
+        self.scan_target = scan_target or os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
         self.startup_delay = startup_delay or int(os.getenv("ZAP_STARTUP_DELAY", "25"))
     
     def check_target_reachable(self) -> bool:
@@ -57,15 +57,15 @@ class ZAPScanner(BaseScanner):
             self.log("curl not found. Skipping target reachability check.", "WARNING")
             return True
         
-        self.log(f"Checking reachability of ZAP target {self.zap_target} with curl...")
-        cmd = ["curl", "--output", "/dev/null", "--silent", "--head", "--fail", "--max-time", "15", self.zap_target]
+        self.log(f"Checking reachability of ZAP target {self.scan_target} with curl...")
+        cmd = ["curl", "--output", "/dev/null", "--silent", "--head", "--fail", "--max-time", "15", self.scan_target]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0:
-            self.log(f"Successfully connected to {self.zap_target}.", "SUCCESS")
+            self.log(f"Successfully connected to {self.scan_target}.", "SUCCESS")
             return True
         else:
-            self.log(f"Failed to connect to {self.zap_target}. ZAP scan may fail or produce limited results. Proceeding anyway...", "WARNING")
+            self.log(f"Failed to connect to {self.scan_target}. ZAP scan may fail or produce limited results. Proceeding anyway...", "WARNING")
             return False
     
     def find_zap_baseline_script(self) -> Optional[Path]:
@@ -92,7 +92,7 @@ class ZAPScanner(BaseScanner):
         # Wait for target to be ready
         if self.startup_delay > 0:
             import time
-            self.log(f"Waiting {self.startup_delay} seconds for target application ({self.zap_target}) to start...")
+            self.log(f"Waiting {self.startup_delay} seconds for target application ({self.scan_target}) to start...")
             time.sleep(self.startup_delay)
         
         # Check target reachability
@@ -104,7 +104,7 @@ class ZAPScanner(BaseScanner):
         os.environ["ZAP_OPTIONS"] = "-config api.disablekey=true -config spider.maxDuration=10 -config scanner.maxDuration=30 -config scanner.maxRuleTimeInMs=60000"
         
         self.log(f"[ZAP ENV] ZAP_PATH={os.environ['ZAP_PATH']}, JAVA_HOME={os.environ['JAVA_HOME']}")
-        self.log(f"[ZAP] Starting DEEP baseline scan on {self.zap_target} with aggressive policies...")
+        self.log(f"[ZAP] Starting DEEP baseline scan on {self.scan_target} with aggressive policies...")
         
         xml_output = self.results_dir / "report.xml"  # Changed from zap-report.xml
         html_output = self.results_dir / "report.html"  # Changed from html-report.html
@@ -117,7 +117,7 @@ class ZAPScanner(BaseScanner):
         
         # XML report
         self.log("[ZAP CMD XML] Executing DEEP scan...")
-        cmd = ["python3", str(zap_baseline), "-d", "-t", self.zap_target, "-x", "report.xml", "-J", "-a"]  # Changed from zap-report.xml
+        cmd = ["python3", str(zap_baseline), "-d", "-t", self.scan_target, "-x", "report.xml", "-J", "-a"]  # Changed from zap-report.xml
         
         result = self.run_command(cmd, cwd=self.results_dir, capture_output=True)
         if result.returncode != 0:
@@ -125,7 +125,7 @@ class ZAPScanner(BaseScanner):
         
         # HTML report
         self.log("[ZAP CMD HTML] Executing DEEP scan...")
-        cmd = ["python3", str(zap_baseline), "-d", "-t", self.zap_target, "-f", "html", "-o", "report.html", "-J", "-a"]  # Changed from zap-report.html
+        cmd = ["python3", str(zap_baseline), "-d", "-t", self.scan_target, "-f", "html", "-o", "report.html", "-J", "-a"]  # Changed from zap-report.html
         
         result = self.run_command(cmd, cwd=self.results_dir, capture_output=True)
         if result.returncode != 0:
@@ -173,7 +173,7 @@ if __name__ == "__main__":
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
     config_path = os.getenv("ZAP_CONFIG_PATH", "/app/scanner/plugins/zap/config/baseline.conf")
-    zap_target = os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
+    scan_target = os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
     startup_delay = int(os.getenv("ZAP_STARTUP_DELAY", "25"))
     
     scanner = ZAPScanner(
@@ -181,7 +181,7 @@ if __name__ == "__main__":
         results_dir=results_dir,
         log_file=log_file,
         config_path=config_path,
-        zap_target=zap_target,
+        scan_target=scan_target,
         startup_delay=startup_delay
     )
     

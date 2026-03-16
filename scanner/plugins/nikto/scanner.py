@@ -30,20 +30,20 @@ class NiktoScanner(BaseScanner):
         results_dir: str,
         log_file: str,
         config_path: Optional[str] = None,
-        zap_target: Optional[str] = None
+        scan_target: Optional[str] = None
     ):
         """
         Initialize Nikto scanner
-        
+
         Args:
             target_path: Path to scan (not used for website scans)
             results_dir: Results directory
             log_file: Log file path
             config_path: Path to Nikto config file (optional)
-            zap_target: Target URL to scan
+            scan_target: Target URL to scan (web application)
         """
         super().__init__("Nikto", target_path, results_dir, log_file, config_path)
-        self.zap_target = zap_target or os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
+        self.scan_target = scan_target or os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
     
     def scan(self) -> bool:
         """Run Nikto scan"""
@@ -51,21 +51,21 @@ class NiktoScanner(BaseScanner):
             self.log("nikto not found in PATH", "ERROR")
             return False
         
-        self.log(f"Running web server scan on {self.zap_target}...")
+        self.log(f"Running web server scan on {self.scan_target}...")
         
         json_output = self.results_dir / "report.json"  # Changed from nikto.json
         text_output = self.results_dir / "report.txt"   # Changed from nikto.txt
         
         # JSON report
         self.log("Running web server scan...")
-        cmd = ["nikto", "-h", self.zap_target, "-Format", "json", "-output", str(json_output)]
+        cmd = ["nikto", "-h", self.scan_target, "-Format", "json", "-output", str(json_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
             self.log("JSON report generation failed", "WARNING")
         
         # Text report
-        cmd = ["nikto", "-h", self.zap_target, "-output", str(text_output)]
+        cmd = ["nikto", "-h", self.scan_target, "-output", str(text_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
@@ -86,14 +86,14 @@ if __name__ == "__main__":
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
     config_path = os.getenv("NIKTO_CONFIG_PATH", "/app/scanner/plugins/nikto/config/config.yaml")
-    zap_target = os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
+    scan_target = os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
     
     scanner = NiktoScanner(
         target_path=target_path,
         results_dir=results_dir,
         log_file=log_file,
         config_path=config_path,
-        zap_target=zap_target
+        scan_target=scan_target
     )
     
     success = scanner.run()

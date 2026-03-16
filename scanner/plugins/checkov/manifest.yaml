@@ -1,4 +1,16 @@
 name: checkov
+version: "1.0"
+description: Infrastructure as Code security scanner. Scans Terraform, CloudFormation, and Kubernetes configs.
+categories:
+  - IaC Security
+  - Config Scanning
+icon: "☁️"
+category: iac
+languages: []
+severity_supported: true
+timeout: 900
+homepage: https://www.checkov.io
+documentation: https://www.checkov.io/documentation.html
 install:
   - ["pip3", "install", "checkov"]
   - ["pip3", "install", "--upgrade", "bc-detect-secrets"]

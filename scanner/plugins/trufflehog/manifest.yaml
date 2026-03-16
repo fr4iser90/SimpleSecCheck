@@ -1,4 +1,15 @@
 name: trufflehog
+version: "1.0"
+description: Advanced secret scanning tool. Finds credentials, API keys, and other secrets in code.
+categories:
+  - Secrets Scanning
+icon: "🐷"
+category: secrets
+languages: []
+severity_supported: false
+timeout: 600
+homepage: https://github.com/trufflesecurity/trufflehog
+documentation: https://docs.trufflesecurity.com/
 install:
   - ["/bin/sh", "-c", "TRUFFLEHOG_URL=$(wget -qO- https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | jq -r '.assets[] | select(.name | test(\"trufflehog.*linux.*amd64.tar.gz\")) | .browser_download_url') && wget -O /tmp/trufflehog.tar.gz $TRUFFLEHOG_URL"]
   - ["tar", "-xvzf", "/tmp/trufflehog.tar.gz", "-C", "/opt"]

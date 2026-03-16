@@ -1,4 +1,15 @@
 name: nikto
+version: "1.0"
+description: Web server scanner. Tests web servers for dangerous files and misconfigurations.
+categories:
+  - Web Application Security
+icon: "🌐"
+category: web
+languages: []
+severity_supported: true
+timeout: 600
+homepage: https://github.com/sullo/nikto
+documentation: https://cirt.net/Nikto2
 install:
   - ["apt-get", "update"]
   - ["apt-get", "install", "-y", "perl", "libwww-perl", "liblwp-protocol-https-perl", "unzip"]

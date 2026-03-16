@@ -57,7 +57,7 @@ backend-refactored/
 │       └── scan_job.py
 │
 ├── config/                     # Configuration
-│   ├── scanner_config.yaml     # Scanner configurations
+│   ├── scanner_config.py      # Stub; scanner list/config from DB/Worker
 │   ├── settings.py             # Application settings
 │   └── database.yaml           # Database configuration
 │

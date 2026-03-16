@@ -1,4 +1,17 @@
 name: brakeman
+version: "1.0"
+description: Static analysis security scanner for Ruby on Rails applications.
+categories:
+  - Code Scanning
+  - SAST
+icon: "💎"
+category: code
+languages:
+  - ruby
+severity_supported: true
+timeout: 600
+homepage: https://brakemanscanner.org
+documentation: https://brakemanscanner.org/docs/
 install:
   - ["apt-get", "update"]
   - ["apt-get", "install", "-y", "ruby", "ruby-dev", "build-essential"]
