@@ -1,10 +1,12 @@
 import { GitHubRepo } from '../utils/repoUtils'
+import ScannerSelection from './ScannerSelection'
 
 interface EditRepoFormData {
   branch: string
   auto_scan_enabled: boolean
   scan_on_push: boolean
   scan_frequency: string
+  scanners: string[]
 }
 
 interface EditRepoModalProps {
@@ -14,9 +16,10 @@ interface EditRepoModalProps {
   onSubmit: (e: React.FormEvent) => void
   formData: EditRepoFormData
   onFormDataChange: (data: EditRepoFormData) => void
+  availableScanners: any[]
 }
 
-export default function EditRepoModal({ isOpen, repo, onClose, onSubmit, formData, onFormDataChange }: EditRepoModalProps) {
+export default function EditRepoModal({ isOpen, repo, onClose, onSubmit, formData, onFormDataChange, availableScanners }: EditRepoModalProps) {
   if (!isOpen || !repo) return null
 
   return (
@@ -94,6 +97,13 @@ export default function EditRepoModal({ isOpen, repo, onClose, onSubmit, formDat
               </div>
             </>
           )}
+          <div style={{ marginBottom: '1rem' }}>
+            <ScannerSelection
+              availableScanners={availableScanners}
+              selectedScanners={formData.scanners}
+              onSelectionChange={(scanners) => onFormDataChange({ ...formData, scanners })}
+            />
+          </div>
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
             <button type="button" onClick={onClose}>Cancel</button>
             <button type="submit" className="primary">Update</button>

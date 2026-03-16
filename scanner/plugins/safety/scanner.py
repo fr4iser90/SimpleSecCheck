@@ -25,7 +25,7 @@ class SafetyScanner(BaseScanner):
     PRIORITY = 5
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "SAFETY_CONFIG_PATH": "/app/scanner/scanners/safety/config/config.yaml"
+        "SAFETY_CONFIG_PATH": "/app/scanner/plugins/safety/config/config.yaml"
     }
     
     def __init__(
@@ -171,7 +171,7 @@ if __name__ == "__main__":
     target_path = os.getenv("TARGET_PATH", "/target")
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
-    config_path = os.getenv("SAFETY_CONFIG_PATH", "/app/scanner/scanners/safety/config/config.yaml")
+    config_path = os.getenv("SAFETY_CONFIG_PATH", "/app/scanner/plugins/safety/config/config.yaml")
     
     scanner = SafetyScanner(
         target_path=target_path,

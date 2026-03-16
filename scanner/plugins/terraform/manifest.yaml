@@ -6,5 +6,5 @@ assets:
     type: config
     description: Terraform Checkov config
     mount:
-      host_subpath: scanner/scanners/terraform/config/config.yaml
-      container_path: /app/scanner/scanners/terraform/config/config.yaml
+      host_subpath: scanner/plugins/terraform/config/config.yaml
+      container_path: /app/scanner/plugins/terraform/config/config.yaml

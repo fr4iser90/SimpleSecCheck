@@ -7,5 +7,5 @@ assets:
     type: config
     description: Checkov config
     mount:
-      host_subpath: scanner/scanners/checkov/config/config.yaml
-      container_path: /app/scanner/scanners/checkov/config/config.yaml
+      host_subpath: scanner/plugins/checkov/config/config.yaml
+      container_path: /app/scanner/plugins/checkov/config/config.yaml

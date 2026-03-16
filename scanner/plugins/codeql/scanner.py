@@ -25,8 +25,8 @@ class CodeQLScanner(BaseScanner):
     PRIORITY = 3
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "CODEQL_CONFIG_PATH": "/app/scanner/scanners/codeql/config/config.yaml",
-        "CODEQL_QUERIES_PATH": "/app/scanner/scanners/codeql/config/queries"
+        "CODEQL_CONFIG_PATH": "/app/scanner/plugins/codeql/config/config.yaml",
+        "CODEQL_QUERIES_PATH": "/app/scanner/plugins/codeql/config/queries"
     }
     
     def __init__(
@@ -48,7 +48,7 @@ class CodeQLScanner(BaseScanner):
             queries_path: Path to CodeQL queries directory
         """
         super().__init__("CodeQL", target_path, results_dir, log_file, config_path)
-        self.queries_path = Path(queries_path) if queries_path else Path("/app/scanner/scanners/codeql/config/queries")
+        self.queries_path = Path(queries_path) if queries_path else Path("/app/scanner/plugins/codeql/config/queries")
     
     def detect_languages(self) -> List[str]:
         """Detect programming languages in target"""
@@ -257,8 +257,8 @@ if __name__ == "__main__":
     target_path = os.getenv("TARGET_PATH", "/target")
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
-    config_path = os.getenv("CODEQL_CONFIG_PATH", "/app/scanner/scanners/codeql/config/config.yaml")
-    queries_path = os.getenv("CODEQL_QUERIES_PATH", "/app/scanner/scanners/codeql/config/queries")
+    config_path = os.getenv("CODEQL_CONFIG_PATH", "/app/scanner/plugins/codeql/config/config.yaml")
+    queries_path = os.getenv("CODEQL_QUERIES_PATH", "/app/scanner/plugins/codeql/config/queries")
     
     scanner = CodeQLScanner(
         target_path=target_path,

@@ -302,7 +302,7 @@ def get_backend_owasp_data_dir():
     if not base_dir:
         return None
     
-    return Path("/scanner/scanners/owasp/data")
+    return Path("/scanner/plugins/owasp/data")
 
 
 def get_frontend_static_paths():

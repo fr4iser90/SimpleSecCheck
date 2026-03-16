@@ -460,6 +460,7 @@ class GitHubRepoUpdateRequest(BaseModel):
     auto_scan_enabled: Optional[bool] = None
     scan_on_push: Optional[bool] = None
     scan_frequency: Optional[str] = Field(None, pattern="^(on_push|daily|weekly|manual)$")
+    scanners: Optional[List[str]] = None  # Scanner selection for this repo
 
 
 class GitHubRepoResponse(BaseModel):
@@ -472,6 +473,7 @@ class GitHubRepoResponse(BaseModel):
     auto_scan_enabled: bool
     scan_on_push: bool
     scan_frequency: str
+    scanners: Optional[List[str]] = None  # Scanner selection for this repo
     created_at: str
     updated_at: str
     last_scan: Optional[Dict[str, Any]] = None
@@ -618,6 +620,7 @@ async def list_github_repos(
                     auto_scan_enabled=repo.auto_scan_enabled,
                     scan_on_push=repo.scan_on_push,
                     scan_frequency=repo.scan_frequency,
+                    scanners=repo.scanners if repo.scanners else None,
                     created_at=repo.created_at.isoformat(),
                     updated_at=repo.updated_at.isoformat(),
                     last_scan=last_scan,
@@ -717,6 +720,7 @@ async def add_github_repo(
                 auto_scan_enabled=new_repo.auto_scan_enabled,
                 scan_on_push=new_repo.scan_on_push,
                 scan_frequency=new_repo.scan_frequency,
+                scanners=new_repo.scanners if new_repo.scanners else None,
                 created_at=new_repo.created_at.isoformat(),
                 updated_at=new_repo.updated_at.isoformat(),
                 last_scan=None,
@@ -798,6 +802,7 @@ async def get_github_repo(
                 auto_scan_enabled=repo.auto_scan_enabled,
                 scan_on_push=repo.scan_on_push,
                 scan_frequency=repo.scan_frequency,
+                scanners=repo.scanners if repo.scanners else None,
                 created_at=repo.created_at.isoformat(),
                 updated_at=repo.updated_at.isoformat(),
                 last_scan=last_scan,
@@ -863,6 +868,8 @@ async def update_github_repo(
                 repo.scan_on_push = repo_data.scan_on_push
             if repo_data.scan_frequency is not None:
                 repo.scan_frequency = repo_data.scan_frequency
+            if repo_data.scanners is not None:
+                repo.scanners = repo_data.scanners
             
             repo.updated_at = datetime.utcnow()
             await session.commit()
@@ -906,6 +913,7 @@ async def update_github_repo(
                 auto_scan_enabled=repo.auto_scan_enabled,
                 scan_on_push=repo.scan_on_push,
                 scan_frequency=repo.scan_frequency,
+                scanners=repo.scanners if repo.scanners else None,
                 created_at=repo.created_at.isoformat(),
                 updated_at=repo.updated_at.isoformat(),
                 last_scan=last_scan,
@@ -1032,6 +1040,7 @@ async def trigger_repo_scan(
                 repo_name=repo.repo_name,
                 branch=repo.branch,
                 user_id=actor_context.user_id,
+                scanners=repo.scanners if repo.scanners else None,  # Use repo-specific scanners if set
                 metadata={
                     "trigger": "manual",
                     "repo_id": str(repo.id)

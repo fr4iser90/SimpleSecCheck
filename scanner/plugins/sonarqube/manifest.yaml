@@ -6,5 +6,5 @@ assets:
     type: config
     description: SonarQube config
     mount:
-      host_subpath: scanner/scanners/sonarqube/config/config.yaml
-      container_path: /app/scanner/scanners/sonarqube/config/config.yaml
+      host_subpath: scanner/plugins/sonarqube/config/config.yaml
+      container_path: /app/scanner/plugins/sonarqube/config/config.yaml

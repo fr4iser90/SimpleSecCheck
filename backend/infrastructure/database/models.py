@@ -441,6 +441,7 @@ class UserGitHubRepo(Base):
     auto_scan_enabled = Column(Boolean, default=True, nullable=False)
     scan_on_push = Column(Boolean, default=True, nullable=False)
     scan_frequency = Column(String(20), default="on_push", nullable=False)  # on_push, daily, weekly, manual
+    scanners = Column(JSON, default=list, nullable=True)  # List of scanner names for this repo (if None, uses all code scanners)
     github_token = Column(Text, nullable=True)  # Encrypted GitHub token
     webhook_secret = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

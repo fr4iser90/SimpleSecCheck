@@ -23,7 +23,7 @@ class ESLintScanner(BaseScanner):
     PRIORITY = 22
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "ESLINT_CONFIG_PATH": "/app/scanner/scanners/eslint/config/config.yaml"
+        "ESLINT_CONFIG_PATH": "/app/scanner/plugins/eslint/config/config.yaml"
     }
     
     def __init__(
@@ -184,7 +184,7 @@ if __name__ == "__main__":
     target_path = os.getenv("TARGET_PATH", "/target")
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
-    config_path = os.getenv("ESLINT_CONFIG_PATH", "/app/scanner/scanners/eslint/config/config.yaml")
+    config_path = os.getenv("ESLINT_CONFIG_PATH", "/app/scanner/plugins/eslint/config/config.yaml")
     exclude_paths = os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     scanner = ESLintScanner(

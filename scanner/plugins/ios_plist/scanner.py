@@ -25,7 +25,7 @@ class iOSScanner(BaseScanner):
     PRIORITY = 41
     REQUIRES_CONDITION = "IS_NATIVE"
     ENV_VARS = {
-        "IOS_CONFIG_PATH": "/app/scanner/scanners/ios_plist/config/config.yaml"
+        "IOS_CONFIG_PATH": "/app/scanner/plugins/ios_plist/config/config.yaml"
     }
     # SCANNER_NAME wird automatisch aus manifest.yaml geladen
     
@@ -214,7 +214,7 @@ if __name__ == "__main__":
     target_path = os.getenv("TARGET_PATH", "/target")
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
-    config_path = os.getenv("IOS_CONFIG_PATH", "/app/scanner/scanners/ios_plist/config/config.yaml")
+    config_path = os.getenv("IOS_CONFIG_PATH", "/app/scanner/plugins/ios_plist/config/config.yaml")
     
     scanner = iOSScanner(
         target_path=target_path,

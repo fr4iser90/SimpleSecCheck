@@ -14,7 +14,7 @@
   - Results (`results/`)
   - Logs (`logs/`)
   - Config (`scanner/config/`)
-  - Rules (`scanner/scanners/semgrep/rules/`)
+  - Rules (`scanner/plugins/semgrep/rules/`)
 
 ### Docker Socket Access
 - Docker socket mounted read-only (`:ro`)

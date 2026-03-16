@@ -25,7 +25,7 @@ class SonarQubeScanner(BaseScanner):
     PRIORITY = 7
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "SONARQUBE_CONFIG_PATH": "/app/scanner/scanners/sonarqube/config/config.yaml"
+        "SONARQUBE_CONFIG_PATH": "/app/scanner/plugins/sonarqube/config/config.yaml"
     }
     
     def __init__(
@@ -156,7 +156,7 @@ if __name__ == "__main__":
     target_path = os.getenv("TARGET_PATH", "/target")
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
-    config_path = os.getenv("SONARQUBE_CONFIG_PATH", "/app/scanner/scanners/sonarqube/config/config.yaml")
+    config_path = os.getenv("SONARQUBE_CONFIG_PATH", "/app/scanner/plugins/sonarqube/config/config.yaml")
     
     scanner = SonarQubeScanner(
         target_path=target_path,

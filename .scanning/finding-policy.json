@@ -29,7 +29,7 @@
         "accepted_findings": [
             {
                 "rule_id": "database-password",
-                "file_regex": ".*/scanner/scanners/clair/config\\.yaml$",
+                "file_regex": ".*/scanner/plugins/clair/config\\.yaml$",
                 "description_regex": ".*",
                 "reason": "Config file contains example database connection strings for Clair tool configuration, not actual secrets"
             }
@@ -75,7 +75,7 @@
             },
             {
                 "rule_id": "B108",
-                "path_regex": ".*/scanner/scanners/zap_scanner\\.py$",
+                "path_regex": ".*/scanner/plugins/zap_scanner\\.py$",
                 "message_regex": "Probable insecure usage of temp file/directory",
                 "reason": "Only searches standard temp directories for generated ZAP reports; no insecure temp file creation."
             },

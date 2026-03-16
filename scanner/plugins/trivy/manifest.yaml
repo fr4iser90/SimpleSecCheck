@@ -6,5 +6,11 @@ assets:
     type: config
     description: Trivy config
     mount:
-      host_subpath: scanner/scanners/trivy/config/config.yaml
-      container_path: /app/scanner/scanners/trivy/config/config.yaml
+      host_subpath: scanner/plugins/trivy/config/config.yaml
+      container_path: /app/scanner/plugins/trivy/config/config.yaml
+  - id: cache
+    type: data
+    description: Trivy vulnerability database cache
+    mount:
+      host_subpath: scanner/plugins/trivy/cache
+      container_path: /tmp/scanner/.cache/trivy

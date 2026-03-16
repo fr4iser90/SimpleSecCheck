@@ -101,7 +101,18 @@ class ContainerSpec:
             host_config["read_only"] = True
         
         if self.tmpfs:
-            host_config["tmpfs"] = {path: "rw,noexec,nosuid,size=100m" for path in self.tmpfs}
+            # tmpfs can be either a list of paths or a dict with path:options
+            # If list items contain ":", parse as "path:options", otherwise use default
+            tmpfs_dict = {}
+            for item in self.tmpfs:
+                if ":" in item:
+                    # Format: "/tmp:size=500m" -> path: "/tmp", options: "size=500m"
+                    path, options = item.split(":", 1)
+                    tmpfs_dict[path] = f"rw,noexec,nosuid,{options}"
+                else:
+                    # Just a path, use default size
+                    tmpfs_dict[item] = "rw,noexec,nosuid,size=100m"
+            host_config["tmpfs"] = tmpfs_dict
         
         if self.cpu_limit:
             # CPU quota in microseconds (2000m = 2 cores = 2000000 microseconds)
@@ -248,13 +259,21 @@ class ContainerSpec:
         container_read_only = target_type != "git_repo"
         
         # Create container spec
+        # Increase tmpfs size to avoid "no space left on device" errors (especially for Trivy DB downloads)
+        # tmpfs format: ["/tmp:size=500m", "/var/tmp:size=200m"]
+        tmpfs_config = []
+        if container_read_only:
+            tmpfs_config = ["/tmp:size=500m", "/var/tmp:size=200m"]
+        else:
+            tmpfs_config = ["/tmp:size=500m", "/var/tmp:size=200m", "/target:size=2g"]
+        
         spec = cls(
             image=image,
             command=command,
             environment=environment,
             container_name=f"ssc-scan-{scan_id[:8]}",
             read_only=container_read_only,
-            tmpfs=["/tmp", "/var/tmp"] if container_read_only else ["/tmp", "/var/tmp", "/target"],
+            tmpfs=tmpfs_config,
             cpu_limit="2000m",  # 2 CPU cores
             memory_limit="4g",  # 4GB RAM
             labels={
@@ -274,6 +293,8 @@ class ContainerSpec:
         spec.add_volume(results_dir, container_results_dir, read_only=False)
         
         # Mount scanner asset volumes (if provided)
+        # Plugins define their required volumes in manifest.yaml (e.g., OWASP data, Trivy cache)
+        # Backend fetches these from worker API and includes them in queue message
         # Plugins define their required volumes in manifest.yaml, backend sends them via queue
         if asset_volumes:
             host_project_root = os.environ.get("HOST_PROJECT_ROOT", os.environ.get("PWD", "."))

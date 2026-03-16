@@ -34,17 +34,41 @@ async def create_repo_scan(
         branch: Branch to scan
         user_id: User ID who owns the repository
         commit_hash: Optional commit hash
-        scanners: Optional list of scanners to use (defaults to common code scanners)
+        scanners: Optional list of scanners to use (defaults to all enabled code scanners from database)
         metadata: Optional metadata to attach to scan
         
     Returns:
         Scan ID if successful, None otherwise
     """
     try:
-        # Default scanners for code repositories
-        default_scanners = ["semgrep", "gitleaks", "trivy"]
+        # If scanners not provided, get all enabled code scanners from database
         if scanners is None:
-            scanners = default_scanners
+            from infrastructure.database.adapter import db_adapter
+            from infrastructure.database.models import Scanner
+            from sqlalchemy import select
+            
+            await db_adapter.ensure_initialized()
+            async with db_adapter.async_session() as session:
+                # Get all enabled scanners that support "code" scan type
+                result = await session.execute(
+                    select(Scanner)
+                    .where(Scanner.enabled == True)
+                    .order_by(Scanner.priority.desc())
+                )
+                db_scanners = result.scalars().all()
+                
+                # Filter scanners that support "code" scan type
+                code_scanners = []
+                for scanner in db_scanners:
+                    scan_types = scanner.scan_types if isinstance(scanner.scan_types, list) else []
+                    if "code" in [st.lower() for st in scan_types]:
+                        code_scanners.append(scanner.name)
+                
+                if not code_scanners:
+                    raise ValueError("No code scanners found in database. Please ensure scanners are discovered.")
+                
+                scanners = code_scanners
+                logger.info(f"Using {len(scanners)} code scanners from database for repo {repo_name}: {', '.join(scanners)}")
         
         # Build scan name
         scan_name = f"Scan: {repo_name} ({branch})"

@@ -79,7 +79,7 @@ Use the published image without Compose.
 docker run --rm \
   -v /path/to/project:/target:ro \
   -v $(pwd)/results:/app/results \
-  -v $(pwd)/scanner/scanners/owasp/data:/app/scanner/scanners/owasp/data \
+  -v $(pwd)/scanner/plugins/owasp/data:/app/scanner/plugins/owasp/data \
   fr4iser/simpleseccheck:latest \
   python3 -m scanner.core.orchestrator
 ```

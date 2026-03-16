@@ -137,6 +137,7 @@ class AutoScanScheduler:
                                     repo_name=repo.repo_name,
                                     branch=repo.branch,
                                     user_id=str(repo.user_id),
+                                    scanners=repo.scanners if repo.scanners else None,  # Use repo-specific scanners if set
                                     metadata={
                                         "trigger": "auto_scan_scheduler",
                                         "repo_id": str(repo.id),

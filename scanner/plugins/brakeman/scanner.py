@@ -23,7 +23,7 @@ class BrakemanScanner(BaseScanner):
     PRIORITY = 23
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "BRAKEMAN_CONFIG_PATH": "/app/scanner/scanners/brakeman/config/config.yaml"
+        "BRAKEMAN_CONFIG_PATH": "/app/scanner/plugins/brakeman/config/config.yaml"
     }
     
     def __init__(
@@ -109,7 +109,7 @@ if __name__ == "__main__":
     target_path = os.getenv("TARGET_PATH", "/target")
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
-    config_path = os.getenv("BRAKEMAN_CONFIG_PATH", "/app/scanner/scanners/brakeman/config/config.yaml")
+    config_path = os.getenv("BRAKEMAN_CONFIG_PATH", "/app/scanner/plugins/brakeman/config/config.yaml")
     
     scanner = BrakemanScanner(
         target_path=target_path,

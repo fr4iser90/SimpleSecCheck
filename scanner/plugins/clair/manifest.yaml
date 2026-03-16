@@ -5,5 +5,5 @@ assets:
     type: config
     description: Clair config
     mount:
-      host_subpath: scanner/scanners/clair/config/config.yaml
-      container_path: /app/scanner/scanners/clair/config/config.yaml
+      host_subpath: scanner/plugins/clair/config/config.yaml
+      container_path: /app/scanner/plugins/clair/config/config.yaml

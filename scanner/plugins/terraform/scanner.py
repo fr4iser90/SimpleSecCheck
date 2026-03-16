@@ -23,7 +23,7 @@ class TerraformSecurityScanner(BaseScanner):
     PRIORITY = 11
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "TERRAFORM_SECURITY_CONFIG_PATH": "/app/scanner/scanners/terraform/config/config.yaml"
+        "TERRAFORM_SECURITY_CONFIG_PATH": "/app/scanner/plugins/terraform/config/config.yaml"
     }
     
     def __init__(
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     target_path = os.getenv("TARGET_PATH", "/target")
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
-    config_path = os.getenv("TERRAFORM_SECURITY_CONFIG_PATH", "/app/scanner/scanners/terraform/config/config.yaml")
+    config_path = os.getenv("TERRAFORM_SECURITY_CONFIG_PATH", "/app/scanner/plugins/terraform/config/config.yaml")
     
     scanner = TerraformSecurityScanner(
         target_path=target_path,

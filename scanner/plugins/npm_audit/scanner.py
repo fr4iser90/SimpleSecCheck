@@ -24,7 +24,7 @@ class NpmAuditScanner(BaseScanner):
     PRIORITY = 21
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "NPM_AUDIT_CONFIG_PATH": "/app/scanner/scanners/npm_audit/config/config.yaml"
+        "NPM_AUDIT_CONFIG_PATH": "/app/scanner/plugins/npm_audit/config/config.yaml"
     }
     
     def __init__(
@@ -132,7 +132,7 @@ if __name__ == "__main__":
     target_path = os.getenv("TARGET_PATH", "/target")
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
-    config_path = os.getenv("NPM_AUDIT_CONFIG_PATH", "/app/scanner/scanners/npm_audit/config/config.yaml")
+    config_path = os.getenv("NPM_AUDIT_CONFIG_PATH", "/app/scanner/plugins/npm_audit/config/config.yaml")
     exclude_paths = os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     scanner = NpmAuditScanner(

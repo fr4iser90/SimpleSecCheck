@@ -32,7 +32,7 @@ class SnykScanner(BaseScanner):
     PRIORITY = 6
     REQUIRES_CONDITION = None
     ENV_VARS = {
-        "SNYK_CONFIG_PATH": "/app/scanner/scanners/snyk/config/config.yaml"
+        "SNYK_CONFIG_PATH": "/app/scanner/plugins/snyk/config/config.yaml"
     }
     
     def __init__(
@@ -172,7 +172,7 @@ if __name__ == "__main__":
     target_path = os.getenv("TARGET_PATH", "/target")
     results_dir = os.getenv("RESULTS_DIR", "/app/results")
     log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
-    config_path = os.getenv("SNYK_CONFIG_PATH", "/app/scanner/scanners/snyk/config/config.yaml")
+    config_path = os.getenv("SNYK_CONFIG_PATH", "/app/scanner/plugins/snyk/config/config.yaml")
     
     scanner = SnykScanner(
         target_path=target_path,

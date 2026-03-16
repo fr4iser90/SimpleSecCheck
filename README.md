@@ -73,7 +73,7 @@ ENVIRONMENT=prod docker compose --profile prod up --build
 ## Usage Notes
 
 - **Legal**: Scan only systems you own or have explicit permission to test.
-- **OWASP cache**: When using Docker Compose, the cache is mounted automatically. For manual `docker run`, mount `scanner/scanners/owasp/data`.
+- **OWASP cache**: When using Docker Compose, the cache is mounted automatically. For manual `docker run`, mount `scanner/plugins/owasp/data`.
 - **CLI detail**: See [CLI & Docker examples](docs/CLI_DOCKER.md) for scan-only commands and full environment variables.
 
 ---

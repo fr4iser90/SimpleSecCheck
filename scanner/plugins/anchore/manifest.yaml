@@ -6,5 +6,5 @@ assets:
     type: config
     description: Anchore config
     mount:
-      host_subpath: scanner/scanners/anchore/config/config.yaml
-      container_path: /app/scanner/scanners/anchore/config/config.yaml
+      host_subpath: scanner/plugins/anchore/config/config.yaml
+      container_path: /app/scanner/plugins/anchore/config/config.yaml

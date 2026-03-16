@@ -64,7 +64,6 @@ services:
     volumes:
       - ./results:/app/results
       - .:/project:ro
-      - ${HOST_PROJECT_ROOT:-.}/scanner/plugins/owasp/data:/app/scanner/plugins/owasp/data
     env_file:
       - .env
     environment:
@@ -140,7 +139,6 @@ services:
     volumes:
       - ./results:/app/results
       - .:/project:ro
-      - ${HOST_PROJECT_ROOT:-.}/scanner/plugins/owasp/data:/app/scanner/plugins/owasp/data
       - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - .env
@@ -219,7 +217,6 @@ services:
     command: ["sleep", "infinity"]
     volumes:
       - ./results:/app/results
-      - ${HOST_PROJECT_ROOT:-.}/scanner/plugins/owasp/data:/app/scanner/plugins/owasp/data
     environment:
       - SCAN_TARGET=${SCAN_TARGET:-}
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}

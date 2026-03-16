@@ -144,6 +144,7 @@ async def github_webhook(
                     repo_name=repo.repo_name,
                     branch=branch,
                     user_id=str(repo.user_id),
+                    scanners=repo.scanners if repo.scanners else None,  # Use repo-specific scanners if set
                     commit_hash=commit_hash,
                     metadata={
                         "webhook_event": x_github_event,
@@ -266,6 +267,7 @@ async def generic_webhook(
                 repo_name=repo.repo_name,
                 branch=webhook_data.branch,
                 user_id=user_id,
+                scanners=repo.scanners if repo.scanners else None,  # Use repo-specific scanners if set
                 commit_hash=webhook_data.commit,
                 metadata={
                     "webhook_event": webhook_data.event,

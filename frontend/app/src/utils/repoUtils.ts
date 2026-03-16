@@ -7,6 +7,7 @@ export interface GitHubRepo {
   auto_scan_enabled: boolean
   scan_on_push: boolean
   scan_frequency: string
+  scanners: string[] | null  // Scanner selection for this repo
   created_at: string
   updated_at: string
   last_scan: {
