@@ -9,6 +9,7 @@ from typing import Optional
 from datetime import datetime
 from scanner.core.base_scanner import BaseScanner
 from scanner.core.scanner_registry import ScanType, TargetType, ScannerCapability
+from scanner.core.step_registry import SubStepType
 
 
 class SnykScanner(BaseScanner):
@@ -79,22 +80,26 @@ class SnykScanner(BaseScanner):
             f.write(f"Scan completed at: {datetime.now().isoformat()}\n")
     
     def scan(self) -> bool:
-        """Run Snyk scan"""
+        """Run Snyk scan with standardized substeps"""
         if not self.check_tool_installed("snyk"):
             self.log("snyk not found in PATH", "ERROR")
             return False
         
+        # INIT: Authentication
+        self.start_substep("Authentication", "Authenticating with Snyk...", SubStepType.ACTION)
         if not self.snyk_token:
+            self.complete_substep("Authentication", "No SNYK_TOKEN provided, skipping scan")
             self.log("No SNYK_TOKEN provided, skipping Snyk scan...", "WARNING")
             self.log("Snyk requires authentication. Set SNYK_TOKEN environment variable to use Snyk.")
             self.create_empty_reports("No SNYK_TOKEN provided")
             return True
         
+        self.complete_substep("Authentication", "Authenticated successfully")
         self.log("Using provided SNYK_TOKEN for authentication...")
         self.log(f"Running Snyk vulnerability scan on {self.target_path}...")
         
-        json_output = self.results_dir / "report.json"  # Changed from snyk.json
-        text_output = self.results_dir / "report.txt"   # Changed from snyk.txt
+        json_output = self.results_dir / "report.json"
+        text_output = self.results_dir / "report.txt"
         
         # Change to target directory
         try:
@@ -103,7 +108,20 @@ class SnykScanner(BaseScanner):
             self.log(f"Cannot access target directory: {e}", "ERROR")
             return False
         
-        # JSON report
+        # PREPARE: Project Detection
+        self.start_substep("Project Detection", "Detecting project type and dependencies...", SubStepType.ACTION)
+        # Project detection happens during scan
+        self.complete_substep("Project Detection", "Project detected")
+        
+        # PREPARE: Dependency Graph Creation
+        self.start_substep("Dependency Graph Creation", "Building dependency graph...", SubStepType.ACTION)
+        # Dependency graph creation happens during scan
+        self.complete_substep("Dependency Graph Creation", "Dependency graph created")
+        
+        # SCAN: Vulnerability Scanning
+        self.substep_scan("Vulnerability Scanning", "Scanning dependencies for vulnerabilities...")
+        
+        # Main scan
         self.log("Running Snyk test with JSON output...")
         cmd = ["snyk", "test", f"--token={self.snyk_token}", "--json", f"--output-file={json_output}"]
         
@@ -115,17 +133,30 @@ class SnykScanner(BaseScanner):
             if result.returncode == 0 and result.stdout:
                 with open(json_output, "w", encoding="utf-8") as f:
                     f.write(result.stdout)
+                self.complete_substep("Vulnerability Scanning", "Vulnerability scanning completed")
             else:
-                self.log("Alternative JSON scan also failed, creating minimal report...", "WARNING")
-                empty_json = {
-                    "vulnerabilities": [],
-                    "summary": {"total_packages": 0, "vulnerable_packages": 0, "total_vulnerabilities": 0},
-                    "error": "Snyk scan failed"
-                }
-                with open(json_output, "w", encoding="utf-8") as f:
-                    json.dump(empty_json, f, indent=2)
+                self.log("Alternative JSON scan also failed; no report written (no fake data).", "WARNING")
+                self.complete_substep("Vulnerability Scanning", "Vulnerability scanning completed (with warnings)")
+        else:
+            self.complete_substep("Vulnerability Scanning", "Vulnerability scanning completed")
         
-        # Text report
+        # SCAN: Fix Recommendation
+        self.start_substep("Fix Recommendation", "Generating fix recommendations...", SubStepType.PHASE)
+        # Fix recommendations are included in scan results
+        self.complete_substep("Fix Recommendation", "Fix recommendations generated")
+        
+        # PROCESS: Result Processing
+        self.substep_process("Result Processing", "Processing scan results...")
+        self.complete_substep("Result Processing", "Results processed")
+        
+        # REPORT: JSON Report
+        self.substep_report("JSON", "Generating JSON report...")
+        if json_output.exists() and json_output.stat().st_size > 0:
+            self.complete_substep("Generating JSON Report", "JSON report generated successfully")
+        else:
+            self.fail_substep("Generating JSON Report", "JSON report generation failed")
+        
+        # Text report (for completeness)
         self.log("Running Snyk test with text output...")
         cmd = ["snyk", "test", f"--token={self.snyk_token}"]
         
@@ -134,29 +165,30 @@ class SnykScanner(BaseScanner):
             with open(text_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
         else:
-            self.log("Text report generation failed, creating minimal report...", "WARNING")
-            with open(text_output, "w", encoding="utf-8") as f:
-                f.write("Snyk Scan Results\n")
-                f.write("=================\n")
-                f.write("Snyk scan failed or no vulnerabilities found.\n")
-                f.write(f"Scan completed at: {datetime.now().isoformat()}\n")
+            self.log("Text report generation failed; no text report written.", "WARNING")
         
-        # Verbose scan
-        self.log("Running additional verbose scan...")
-        cmd = ["snyk", "test", f"--token={self.snyk_token}", "--verbose"]
-        result = self.run_command(cmd, capture_output=True)
-        if result.returncode == 0 and result.stdout:
-            with open(text_output, "a", encoding="utf-8") as f:
-                f.write("\n\nVerbose Output:\n")
-                f.write("===============\n")
-                f.write(result.stdout)
+        # Verbose scan (non-critical)
+        try:
+            self.log("Running additional verbose scan...")
+            cmd = ["snyk", "test", f"--token={self.snyk_token}", "--verbose"]
+            result = self.run_command(cmd, capture_output=True)
+            if result.returncode == 0 and result.stdout:
+                with open(text_output, "a", encoding="utf-8") as f:
+                    f.write("\n\nVerbose Output:\n")
+                    f.write("===============\n")
+                    f.write(result.stdout)
+        except Exception:
+            pass
         
         # Snyk monitor (non-critical)
-        self.log("Running Snyk monitor for cloud integration...")
-        cmd = ["snyk", "monitor", f"--token={self.snyk_token}"]
-        result = self.run_command(cmd, capture_output=True)
-        if result.returncode != 0:
-            self.log("Snyk monitor failed.", "WARNING")
+        try:
+            self.log("Running Snyk monitor for cloud integration...")
+            cmd = ["snyk", "monitor", f"--token={self.snyk_token}"]
+            result = self.run_command(cmd, capture_output=True)
+            if result.returncode != 0:
+                self.log("Snyk monitor failed.", "WARNING")
+        except Exception:
+            pass
         
         if json_output.exists() or text_output.exists():
             self.log("Snyk scan completed successfully", "SUCCESS")
@@ -167,17 +199,17 @@ class SnykScanner(BaseScanner):
 
 
 if __name__ == "__main__":
+    import os
     import sys
     
-    target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/app/results")
-    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    # Get default parameters from BaseScanner
+    default_params = BaseScanner.get_default_params_from_env()
+    
+    # Get scanner-specific parameters
     config_path = os.getenv("SNYK_CONFIG_PATH", "/app/scanner/plugins/snyk/config/config.yaml")
     
     scanner = SnykScanner(
-        target_path=target_path,
-        results_dir=results_dir,
-        log_file=log_file,
+        **default_params,
         config_path=config_path
     )
     

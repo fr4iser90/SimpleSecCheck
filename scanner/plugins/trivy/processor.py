@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from scanner.output.processor_registry import ReportProcessor
 import sys
+import re
 
 def debug(msg):
     print(f"[trivy_processor] {msg}", file=sys.stderr)
@@ -55,6 +56,66 @@ def generate_trivy_html_section(trivy_vulns):
         html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No vulnerabilities found in dependencies or containers.</div>')
     return "".join(html_parts)
 
+
+def _matches_pattern(value, pattern):
+    if pattern is None:
+        return True
+    if value is None:
+        value = ""
+    try:
+        return re.search(pattern, str(value)) is not None
+    except re.error:
+        return False
+
+
+def _matches_trivy_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("VulnerabilityID", ""), rule.get("rule_id"))
+    path_ok = _matches_pattern(finding.get("PkgName", ""), rule.get("path_regex"))
+    msg_ok = _matches_pattern(finding.get("Title", ""), rule.get("message_regex"))
+    return rule_ok and path_ok and msg_ok
+
+
+def _accept_record_trivy(finding, reason):
+    return {
+        "tool": "Trivy",
+        "reason": reason or "Accepted by policy",
+        "id": finding.get("VulnerabilityID", ""),
+        "path": finding.get("PkgName", ""),
+        "line": "",
+        "message": finding.get("Title", ""),
+    }
+
+
+def apply_trivy_policy(findings, tool_policy):
+    if not findings:
+        return [], []
+    accepted_rules = tool_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+    for finding in findings:
+        accepted = None
+        for rule in accepted_rules:
+            if _matches_trivy_rule(finding, rule):
+                accepted = rule
+                break
+        if accepted:
+            accepted_records.append(_accept_record_trivy(finding, accepted.get("reason", "Accepted by policy")))
+            continue
+        processed.append(finding)
+    return processed, accepted_records
+
+
+TRIVY_POLICY_EXAMPLE = '''  "trivy": {
+    "accepted_findings": [
+      {
+        "rule_id": "CVE-2020-.*",
+        "path_regex": "libxml2|libexpat",
+        "message_regex": "Low severity.*unused",
+        "reason": "Vendored lib with known low-severity CVE, mitigated"
+      }
+    ]
+  }'''
+
 REPORT_PROCESSOR = ReportProcessor(
     name="Trivy",
     summary_func=trivy_summary,
@@ -63,12 +124,15 @@ REPORT_PROCESSOR = ReportProcessor(
         {
             "tool": "Trivy",
             "severity": str(f.get("severity", f.get("Severity", "UNKNOWN"))).upper(),
-            "rule_id": str(f.get("rule_id", f.get("id", ""))),
-            "path": str(f.get("path", f.get("file", f.get("filename", "")))),
+            "rule_id": str(f.get("rule_id", f.get("id", f.get("VulnerabilityID", "")))),
+            "path": str(f.get("path", f.get("file", f.get("filename", f.get("PkgName", ""))))),
             "line": str(f.get("line", f.get("line_number", f.get("start", "")))),
-            "message": str(f.get("message", f.get("description", f.get("title", "")))),
+            "message": str(f.get("message", f.get("description", f.get("title", f.get("Title", ""))))),
         }
         for f in (findings or [])
     ],
-    json_file="report.json",  # Changed from trivy.json
+    json_file="report.json",
+    policy_key="trivy",
+    apply_policy=apply_trivy_policy,
+    policy_example_snippet=TRIVY_POLICY_EXAMPLE,
 )

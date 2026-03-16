@@ -21,6 +21,35 @@ class StepStatus(Enum):
     SKIPPED = "skipped"
 
 
+class SubStepType(Enum):
+    """Substep type enumeration for UI categorization"""
+    PHASE = "phase"  # Large workflow steps (e.g., "Scanning Dependencies", "Scanning Secrets")
+    ACTION = "action"  # Technical actions (e.g., "Loading Rules", "Parsing Files")
+    OUTPUT = "output"  # Report/artifact generation (e.g., "Generating JSON Report")
+
+
+def _substep_type_value(substep) -> str:
+    """Return JSON-serializable string for substep type (never pass Enum to json.dumps)."""
+    st = getattr(substep, "substep_type", None)
+    if st is not None and hasattr(st, "value"):
+        v = st.value
+        return v if isinstance(v, str) else str(v)
+    return "action"
+
+
+def _json_serializable(obj: Any) -> Any:
+    """Convert enums/datetimes to JSON-serializable values; recurse into dicts/lists."""
+    if isinstance(obj, Enum):
+        return obj.value if isinstance(obj.value, (str, int, float, bool, type(None))) else str(obj.value)
+    if hasattr(obj, "isoformat") and callable(getattr(obj, "isoformat")):
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {k: _json_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_serializable(v) for v in obj]
+    return obj
+
+
 @dataclass
 class SubStep:
     """Sub-step definition (nested within a main step)"""
@@ -29,6 +58,7 @@ class SubStep:
     message: str = ""
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    substep_type: SubStepType = SubStepType.ACTION  # Default to ACTION
 
 
 @dataclass
@@ -78,27 +108,16 @@ class StepRegistry:
         
         # CRITICAL: Always create logs inside scan-specific directory
         # Structure: /app/results/{scan_id}/logs/steps.log
-        # This keeps results/ clean - only contains {scan_id}/ folders
         self.logs_dir = self.results_dir / "logs"
-        
-        # DEBUG: Log directory creation
-        print(f"[Step Registry] Initializing StepRegistry:")
-        print(f"[Step Registry]   scan_id: {scan_id}")
-        print(f"[Step Registry]   results_dir: {self.results_dir}")
-        print(f"[Step Registry]   logs_dir: {self.logs_dir}")
-        print(f"[Step Registry]   steps_log: {self.logs_dir / 'steps.log'}")
-        print(f"[Step Registry]   results_dir exists: {self.results_dir.exists()}")
-        
+        self._debug = os.environ.get("STEP_REGISTRY_DEBUG", "").strip().lower() in ("1", "true", "yes")
+
+        if self._debug:
+            print(f"[Step Registry] Initializing: scan_id={scan_id}, results_dir={self.results_dir}")
+
         # Create directories
         self.results_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.steps_log = self.logs_dir / "steps.log"
-        
-        # DEBUG: Verify directories were created
-        print(f"[Step Registry] After mkdir:")
-        print(f"[Step Registry]   results_dir exists: {self.results_dir.exists()}")
-        print(f"[Step Registry]   logs_dir exists: {self.logs_dir.exists()}")
-        print(f"[Step Registry]   steps_log path: {self.steps_log}")
 
         # Production DB support (optional)
         self.environment = os.getenv("ENVIRONMENT", "dev").lower()
@@ -295,7 +314,7 @@ class StepRegistry:
         """Get a step by name"""
         return self.steps.get(step_name)
     
-    def start_substep(self, step_name: str, substep_name: str, message: str = ""):
+    def start_substep(self, step_name: str, substep_name: str, message: str = "", substep_type: SubStepType = SubStepType.ACTION):
         """
         Start a substep within a main step
         
@@ -303,6 +322,7 @@ class StepRegistry:
             step_name: Name of the parent step
             substep_name: Name of the substep
             message: Optional message for the substep
+            substep_type: Type of substep (PHASE, ACTION, OUTPUT)
         """
         if step_name not in self.steps:
             # Parent step doesn't exist, create it first
@@ -321,6 +341,7 @@ class StepRegistry:
             # Update existing substep
             existing_substep.status = StepStatus.RUNNING
             existing_substep.started_at = datetime.now()
+            existing_substep.substep_type = substep_type
             if message:
                 existing_substep.message = message
         else:
@@ -329,7 +350,8 @@ class StepRegistry:
                 name=substep_name,
                 status=StepStatus.RUNNING,
                 message=message or f"Running {substep_name}...",
-                started_at=datetime.now()
+                started_at=datetime.now(),
+                substep_type=substep_type
             )
             step.substeps.append(new_substep)
         
@@ -495,12 +517,20 @@ class StepRegistry:
                                     substep_completed_at = datetime.fromisoformat(substep_data["completed_at"])
                                 except (ValueError, AttributeError):
                                     pass
+                            substep_type_str = substep_data.get("type", "action")
+                            substep_type = SubStepType.ACTION  # Default
+                            try:
+                                substep_type = SubStepType(substep_type_str)
+                            except ValueError:
+                                pass
+                            
                             substeps.append(SubStep(
                                 name=substep_data.get("name", ""),
                                 status=substep_status,
                                 message=substep_data.get("message", ""),
                                 started_at=substep_started_at,
-                                completed_at=substep_completed_at
+                                completed_at=substep_completed_at,
+                                substep_type=substep_type
                             ))
                         
                         # Register step if not already registered
@@ -532,19 +562,13 @@ class StepRegistry:
             import json
             import os
             
-            # DEBUG: Log file path and directory existence
-            print(f"[Step Registry] Writing step to: {self.steps_log}")
-            print(f"[Step Registry] Logs directory exists: {self.logs_dir.exists()}")
-            print(f"[Step Registry] Results directory exists: {self.results_dir.exists()}")
-            print(f"[Step Registry] Steps log file exists: {self.steps_log.exists()}")
-            
             # Ensure directory exists
             self.logs_dir.mkdir(parents=True, exist_ok=True)
             
             step_dict = {
                 "number": step.number,
                 "name": step.name,
-                "status": step.status.value,  # 'pending', 'running', 'completed', 'failed', 'skipped'
+                "status": step.status.value,
                 "message": step.message,
                 "started_at": step.started_at.isoformat() if step.started_at else None,
                 "completed_at": step.completed_at.isoformat() if step.completed_at else None,
@@ -555,23 +579,19 @@ class StepRegistry:
                         "message": substep.message,
                         "started_at": substep.started_at.isoformat() if substep.started_at else None,
                         "completed_at": substep.completed_at.isoformat() if substep.completed_at else None,
+                        "type": _substep_type_value(substep),
                     }
                     for substep in step.substeps
                 ],
                 "timestamp": datetime.now().isoformat()
             }
-            
+            step_dict = _json_serializable(step_dict)
+
             # Write to file
             with open(self.steps_log, "a", encoding="utf-8") as f:
                 f.write(json.dumps(step_dict) + "\n")
-            
-            # DEBUG: Verify file was written
-            if self.steps_log.exists():
-                file_size = os.path.getsize(self.steps_log)
-                print(f"[Step Registry] Successfully wrote step to {self.steps_log} (size: {file_size} bytes)")
-            else:
-                print(f"[Step Registry] ERROR: File {self.steps_log} does not exist after write!")
-                
+            if self._debug:
+                print(f"[Step Registry] Wrote step {step.number} to {self.steps_log}")
         except Exception as e:
             print(f"[Step Registry] Error writing to steps.log: {e}")
             import traceback

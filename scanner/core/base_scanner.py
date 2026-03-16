@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from scanner.core.scanner_registry import ScanType, TargetType, ArtifactType, ScannerCapability
+from scanner.core.step_registry import SubStepType
 from abc import ABC, abstractmethod
 
 # Global StepRegistry instance (set by orchestrator)
@@ -209,14 +210,16 @@ class BaseScanner(ABC):
     def get_tool_command(self, tool_name: str) -> Optional[List[str]]:
         """
         Determine the command to run a tool.
-        Checks for Python module, npx, and then PATH.
+        Checks PATH first (so e.g. semgrep binary is used, not python -m semgrep), then npx, then Python module.
         """
-        # 1. Check if it's a Python module
+        # 1. Check if it's in PATH (prefer binary over python -m for tools like semgrep)
         try:
-            import importlib.util
-            spec = importlib.util.find_spec(tool_name)
-            if spec:
-                return ["python3", "-m", tool_name]
+            result = subprocess.run(
+                ["which", tool_name],
+                capture_output=True, text=True, check=False, timeout=5
+            )
+            if result.returncode == 0:
+                return [tool_name]
         except Exception:
             pass
 
@@ -231,14 +234,12 @@ class BaseScanner(ABC):
         except Exception:
             pass
 
-        # 3. Check if it's in PATH
+        # 3. Check if it's a Python module
         try:
-            result = subprocess.run(
-                ["which", tool_name],
-                capture_output=True, text=True, check=False, timeout=5
-            )
-            if result.returncode == 0:
-                return [tool_name]
+            import importlib.util
+            spec = importlib.util.find_spec(tool_name)
+            if spec:
+                return ["python3", "-m", tool_name]
         except Exception:
             pass
 
@@ -269,17 +270,18 @@ class BaseScanner(ABC):
         file_path.parent.mkdir(parents=True, exist_ok=True)
         return file_path
     
-    def start_substep(self, substep_name: str, message: str = ""):
+    def start_substep(self, substep_name: str, message: str = "", substep_type: SubStepType = SubStepType.ACTION):
         """
         Start a substep for this scanner
         
         Args:
             substep_name: Name of the substep
             message: Optional message
+            substep_type: Type of substep (PHASE, ACTION, OUTPUT)
         """
         step_registry = get_global_step_registry()
         if step_registry:
-            step_registry.start_substep(self.name, substep_name, message)
+            step_registry.start_substep(self.name, substep_name, message, substep_type)
     
     def complete_substep(self, substep_name: str, message: str = ""):
         """
@@ -317,6 +319,27 @@ class BaseScanner(ABC):
         if step_registry:
             step_registry.update_substep(self.name, substep_name, message)
     
+    # Standardized Substep Pipeline Helpers
+    def substep_init(self, message: str = "Initializing..."):
+        """Standard INIT substep"""
+        self.start_substep("Initialization", message, SubStepType.ACTION)
+    
+    def substep_prepare(self, substep_name: str, message: str = ""):
+        """Standard PREPARE substep (Phase)"""
+        self.start_substep(substep_name, message, SubStepType.PHASE)
+    
+    def substep_scan(self, substep_name: str, message: str = ""):
+        """Standard SCAN substep (Phase)"""
+        self.start_substep(substep_name, message, SubStepType.PHASE)
+    
+    def substep_process(self, substep_name: str, message: str = ""):
+        """Standard PROCESS substep (Action)"""
+        self.start_substep(substep_name, message, SubStepType.ACTION)
+    
+    def substep_report(self, report_type: str, message: str = ""):
+        """Standard REPORT substep (Output)"""
+        self.start_substep(f"Generating {report_type} Report", message, SubStepType.OUTPUT)
+    
     @abstractmethod
     def scan(self) -> bool:
         """
@@ -345,3 +368,20 @@ class BaseScanner(ABC):
             import traceback
             self.log(traceback.format_exc(), "ERROR")
             return False
+    
+    @staticmethod
+    def get_default_params_from_env() -> Dict[str, str]:
+        """
+        Get default parameters from environment variables.
+        Used by __main__ blocks in scanner plugins.
+        
+        Returns:
+            Dictionary with default parameters (target_path, results_dir, log_file)
+        """
+        import os
+        scan_id = os.getenv("SCAN_ID", "test")
+        return {
+            "target_path": os.getenv("TARGET_PATH", "/target"),
+            "results_dir": os.getenv("RESULTS_DIR", f"/app/results/{scan_id}"),
+            "log_file": os.getenv("LOG_FILE", f"/app/results/{scan_id}/logs/scan.log"),
+        }

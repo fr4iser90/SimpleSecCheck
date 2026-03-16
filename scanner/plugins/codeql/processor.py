@@ -3,6 +3,7 @@ from scanner.output.processor_registry import ReportProcessor
 import sys
 import json
 import html
+import re
 
 def debug(msg):
     print(f"[codeql_processor] {msg}", file=sys.stderr)
@@ -99,6 +100,66 @@ def generate_codeql_html_section(codeql_findings):
         html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No CodeQL findings detected.</div>')
     return "".join(html_parts)
 
+
+def _matches_pattern(value, pattern):
+    if pattern is None:
+        return True
+    if value is None:
+        value = ""
+    try:
+        return re.search(pattern, str(value)) is not None
+    except re.error:
+        return False
+
+
+def _matches_codeql_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("rule_id", ""), rule.get("rule_id"))
+    path_ok = _matches_pattern(finding.get("path", ""), rule.get("path_regex"))
+    msg_ok = _matches_pattern(finding.get("message", ""), rule.get("message_regex"))
+    return rule_ok and path_ok and msg_ok
+
+
+def _accept_record_codeql(finding, reason):
+    return {
+        "tool": "CodeQL",
+        "reason": reason or "Accepted by policy",
+        "id": finding.get("rule_id", ""),
+        "path": finding.get("path", ""),
+        "line": str(finding.get("start", "")),
+        "message": finding.get("message", ""),
+    }
+
+
+def apply_codeql_policy(findings, tool_policy):
+    if not findings:
+        return [], []
+    accepted_rules = tool_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+    for finding in findings:
+        accepted = None
+        for rule in accepted_rules:
+            if _matches_codeql_rule(finding, rule):
+                accepted = rule
+                break
+        if accepted:
+            accepted_records.append(_accept_record_codeql(finding, accepted.get("reason", "Accepted by policy")))
+            continue
+        processed.append(finding)
+    return processed, accepted_records
+
+
+CODEQL_POLICY_EXAMPLE = '''  "codeql": {
+    "accepted_findings": [
+      {
+        "rule_id": "js/sql-injection",
+        "path_regex": "tests/.*|fixtures/.*",
+        "message_regex": "test.*query",
+        "reason": "Test code using parameterized queries in production"
+      }
+    ]
+  }'''
+
 REPORT_PROCESSOR = ReportProcessor(
     name="CodeQL",
     summary_func=codeql_summary,
@@ -114,5 +175,8 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="report.json",  # Changed from codeql.json
+    json_file="report.json",
+    policy_key="codeql",
+    apply_policy=apply_codeql_policy,
+    policy_example_snippet=CODEQL_POLICY_EXAMPLE,
 )

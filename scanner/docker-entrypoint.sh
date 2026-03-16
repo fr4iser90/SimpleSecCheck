@@ -3,108 +3,101 @@
 # The actual command execution will handle its own errors
 set +e
 
-# Optionally remap scanner user/group to host UID/GID for volume permissions
-PUID=${PUID:-1000}
-PGID=${PGID:-1000}
-echo "[Entrypoint] Requested PUID=$PUID PGID=$PGID"
-CURRENT_UID=$(id -u scanner)
-CURRENT_GID=$(id -g scanner)
+# =========================
+# 1️⃣ UID/GID Mapping - Automatically detect from PUID/PGID environment variables or /project mount
+# Worker passes PUID/PGID to scanner containers via environment (from container_spec.py)
+# If not set, automatically detect from /project mount (from docker-compose: .:/project:ro)
+# If /project not available, uses default scanner user (1000:1000)
+# =========================
 
-if [ "$PGID" != "$CURRENT_GID" ]; then
-    if getent group "$PGID" >/dev/null 2>&1; then
-        usermod -g "$PGID" scanner
+SCANNER_UID=""
+SCANNER_GID=""
+
+# Check if PUID/PGID are explicitly set (passed from worker)
+if [ -n "$PUID" ] && [ -n "$PGID" ]; then
+    SCANNER_UID=$PUID
+    SCANNER_GID=$PGID
+    echo "[Entrypoint] Using PUID=$SCANNER_UID PGID=$SCANNER_GID from environment"
+elif [ -d "/project" ]; then
+    # Auto-detect from /project mount (same logic as worker entrypoint)
+    DETECTED_UID=$(stat -c "%u" "/project" 2>/dev/null || echo "")
+    DETECTED_GID=$(stat -c "%g" "/project" 2>/dev/null || echo "")
+    if [ -n "$DETECTED_UID" ] && [ -n "$DETECTED_GID" ]; then
+        SCANNER_UID=$DETECTED_UID
+        SCANNER_GID=$DETECTED_GID
+        echo "[Entrypoint] Auto-detected UID=$SCANNER_UID GID=$SCANNER_GID from /project mount"
     else
-        groupmod -g "$PGID" scanner
+        echo "[Entrypoint] Could not detect UID/GID from /project, using default scanner user"
     fi
+else
+    # No PUID/PGID set and /project not mounted - use default scanner user (1000:1000)
+    echo "[Entrypoint] PUID/PGID not set and /project not mounted, using default scanner user (UID/GID from image)"
 fi
 
-if [ "$PUID" != "$CURRENT_UID" ]; then
-    usermod -u "$PUID" scanner
-fi
-
-CHOWN_UID=$(id -u scanner)
-CHOWN_GID=$(id -g scanner)
-
-# Ensure results directory exists and is writable by scanner
-RESULTS_DIR=${RESULTS_DIR_IN_CONTAINER:-/app/results}
-if [ ! -d "$RESULTS_DIR" ]; then
-    echo "[Entrypoint] Creating results directory at $RESULTS_DIR"
-    mkdir -p "$RESULTS_DIR"
-fi
-echo "[Entrypoint] Ensuring ownership for $RESULTS_DIR (uid=$CHOWN_UID gid=$CHOWN_GID)"
-chown -R "$CHOWN_UID:$CHOWN_GID" "$RESULTS_DIR" 2>/dev/null || true
-chmod -R u+rwX,g+rwX "$RESULTS_DIR" 2>/dev/null || true
-
-if ! gosu scanner test -w "$RESULTS_DIR"; then
-    echo "[Entrypoint] WARNING: $RESULTS_DIR is still not writable by scanner (uid=$CHOWN_UID gid=$CHOWN_GID)"
-    ls -ld "$RESULTS_DIR" || true
-fi
-
-# Dynamically determine Docker socket GID and add scanner user to docker group
-# This works across different systems where the docker socket GID may vary
-if [ -S /var/run/docker.sock ]; then
-    DOCKER_GID=$(stat -c "%g" /var/run/docker.sock)
-    echo "[Entrypoint] Docker socket GID: $DOCKER_GID"
-
-    # Resolve or create a group with the Docker socket GID
-    DOCKER_GROUP_NAME=$(getent group "$DOCKER_GID" | cut -d: -f1)
-    if [ -z "$DOCKER_GROUP_NAME" ]; then
-        if getent group docker > /dev/null 2>&1; then
-            DOCKER_GROUP_NAME=docker
+# Remap scanner user if UID/GID were detected
+if [ -n "$SCANNER_UID" ] && [ -n "$SCANNER_GID" ]; then
+    CURRENT_UID=$(id -u scanner)
+    CURRENT_GID=$(id -g scanner)
+    
+    # Only remap if different
+    if [ "$SCANNER_GID" != "$CURRENT_GID" ]; then
+        if getent group "$SCANNER_GID" >/dev/null 2>&1; then
+            usermod -g "$SCANNER_GID" scanner
         else
-            echo "[Entrypoint] Creating docker group with GID $DOCKER_GID"
-            if groupadd -g "$DOCKER_GID" docker 2>/dev/null; then
-                DOCKER_GROUP_NAME=docker
-            else
-                echo "[Entrypoint] Warning: Could not create docker group with GID $DOCKER_GID"
-            fi
+            groupmod -g "$SCANNER_GID" scanner
         fi
     fi
 
-    # Add scanner user to the resolved group (if any)
-    if [ -n "$DOCKER_GROUP_NAME" ] && ! id -nG scanner | grep -qw "$DOCKER_GROUP_NAME"; then
-        echo "[Entrypoint] Adding scanner user to group $DOCKER_GROUP_NAME"
-        usermod -aG "$DOCKER_GROUP_NAME" scanner
-    elif [ -z "$DOCKER_GROUP_NAME" ]; then
-        echo "[Entrypoint] Warning: Docker group not available, skipping usermod"
+    if [ "$SCANNER_UID" != "$CURRENT_UID" ]; then
+        usermod -u "$SCANNER_UID" scanner
     fi
-else
-    echo "[Entrypoint] Warning: Docker socket not found at /var/run/docker.sock"
 fi
 
-# Ensure mounted volumes exist and are writable by scanner
+# Get final UID/GID after remapping (if any)
+FINAL_UID=$(id -u scanner)
+FINAL_GID=$(id -g scanner)
+
+# =========================
+# 3️⃣ Ensure Results Directory and Other Volumes
+# =========================
 # CRITICAL: Do NOT create /app/results/logs directly!
 # Each scan creates its own /app/results/{scan_id}/logs/ directory
 # The results directory should only contain {scan_id}/ folders, nothing else!
-RESULTS_DIR="${RESULTS_DIR_IN_CONTAINER:-/app/results}"
+# Preserve RESULTS_DIR if already set (e.g. by orchestrator when invoking report script)
+RESULTS_DIR="${RESULTS_DIR:-${RESULTS_DIR_IN_CONTAINER:-/app/results}}"
+export RESULTS_DIR
 TARGET_DIR="${TARGET_PATH_IN_CONTAINER:-/target}"
 HOME_DIR="${HOME:-/tmp/scanner}"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME_DIR/.cache}"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME_DIR/.config}"
 
-mkdir -p "$HOME_DIR" "$CACHE_DIR" "$CONFIG_DIR" || true
+mkdir -p "$HOME_DIR" "$CACHE_DIR" "$CONFIG_DIR" "$RESULTS_DIR" || true
 
-# Only create base results directory - scanner will create {scan_id}/logs/ inside
-mkdir -p "$RESULTS_DIR"
-echo "[Entrypoint] Ensuring ownership for $RESULTS_DIR (uid=$CHOWN_UID gid=$CHOWN_GID)"
-chown -R "$CHOWN_UID:$CHOWN_GID" "$RESULTS_DIR" 2>/dev/null || true
-chmod -R u+rwX,g+rwX "$RESULTS_DIR" 2>/dev/null || true
+# Set ownership once with final UID/GID
+chown -R "$FINAL_UID:$FINAL_GID" "$RESULTS_DIR" "$HOME_DIR" "$CACHE_DIR" "$CONFIG_DIR" 2>/dev/null || true
+chmod -R u+rwX,g+rwX "$RESULTS_DIR" "$HOME_DIR" "$CACHE_DIR" "$CONFIG_DIR" 2>/dev/null || true
 
-if ! test -w "$RESULTS_DIR"; then
-    echo "[Entrypoint] WARNING: $RESULTS_DIR is not writable by current user (uid=$(id -u) gid=$(id -g))"
+# Verify write access (only warn if actually not writable)
+if ! gosu scanner test -w "$RESULTS_DIR"; then
+    echo "[Entrypoint] WARNING: $RESULTS_DIR not writable by scanner (uid=$FINAL_UID gid=$FINAL_GID)"
     ls -ld "$RESULTS_DIR" || true
 fi
 
-if ! test -w "$HOME_DIR"; then
-    echo "[Entrypoint] WARNING: $HOME_DIR is not writable by current user (uid=$(id -u) gid=$(id -g))"
-    ls -ld "$HOME_DIR" || true
-fi
+# /target is optional - only warn if command actually needs it (not for --list)
+# Check if command is --list (scanner discovery) - then /target is not needed
+NEEDS_TARGET=true
+for arg in "$@"; do
+    if [ "$arg" = "--list" ] || [ "$arg" = "-l" ]; then
+        NEEDS_TARGET=false
+        break
+    fi
+done
 
-if ! test -d "$TARGET_DIR"; then
-    echo "[Entrypoint] WARNING: Target directory $TARGET_DIR is missing. Ensure /target is mounted correctly."
-    ls -ld "/target" || true
-else
-    echo "[Entrypoint] Target directory available at $TARGET_DIR"
+if [ "$NEEDS_TARGET" = true ] && ! test -d "$TARGET_DIR"; then
+    echo "[Entrypoint] Auto-creating $TARGET_DIR (not mounted)"
+    mkdir -p "$TARGET_DIR" || true
+    chown -R "$FINAL_UID:$FINAL_GID" "$TARGET_DIR" 2>/dev/null || true
+    chmod -R u+rwX,g+rwX "$TARGET_DIR" 2>/dev/null || true
 fi
 
 

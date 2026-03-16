@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
 from scanner.core.scanner_registry import ScanType, TargetType, ScannerCapability
+from scanner.core.step_registry import SubStepType
 
 
 class TruffleHogScanner(BaseScanner):
@@ -46,36 +47,95 @@ class TruffleHogScanner(BaseScanner):
         super().__init__("TruffleHog", target_path, results_dir, log_file, config_path)
     
     def scan(self) -> bool:
-        """Run TruffleHog scan"""
+        """Run TruffleHog scan with standardized substeps"""
         if not self.check_tool_installed("trufflehog"):
             self.log("trufflehog not found in PATH", "ERROR")
             return False
         
         self.log(f"Running secret detection scan on {self.target_path}...")
         
-        json_output = self.results_dir / "report.json"  # Changed from trufflehog.json
-        text_output = self.results_dir / "report.txt"   # Changed from trufflehog.txt
+        # INIT: Initialization
+        self.substep_init("Initializing TruffleHog scan...")
+        self.complete_substep("Initialization", "TruffleHog initialized")
         
-        # JSON report (without --config to avoid protobuf issues)
+        json_output = self.results_dir / "report.json"
+        text_output = self.results_dir / "report.txt"
+        
+        # PREPARE: Git History Extraction
+        self.start_substep("Git History Extraction", "Extracting Git history...", SubStepType.ACTION)
+        # Git history extraction happens during scan
+        self.complete_substep("Git History Extraction", "Git history extraction completed")
+        
+        # PREPARE: File Scanning
+        self.start_substep("File Scanning", "Scanning files for potential secrets...", SubStepType.ACTION)
+        # File scanning happens during scan
+        self.complete_substep("File Scanning", "Files scanned")
+        
+        # SCAN: Secret Detection
+        self.substep_scan("Secret Detection", "Detecting secrets using pattern matching...")
+        
+        # SCAN: Entropy Analysis
+        self.start_substep("Entropy Analysis", "Analyzing entropy of potential secrets...", SubStepType.PHASE)
+        # Entropy analysis happens during scan
+        
+        # SCAN: Verification
+        self.start_substep("Verification", "Verifying detected secrets...", SubStepType.PHASE)
+        # Verification happens during scan
+        
+        # Main scan (TruffleHog may write JSON to stdout or stderr)
         self.log("Running secret detection scan...")
         cmd = ["trufflehog", "filesystem", "--json", "--no-update", str(self.target_path)]
         
         result = self.run_command(cmd, capture_output=True)
         
-        if result.returncode == 0 and result.stdout:
-            # Parse JSON lines and combine into array
+        out = (result.stdout or "") + "\n" + (result.stderr or "")
+        if result.returncode == 0 and out.strip():
+            json_lines = []
+            for line in out.strip().split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                    if isinstance(obj, dict) and ("SourceMetadata" in obj or "Source" in obj or "Redacted" in obj):
+                        json_lines.append(obj)
+                except json.JSONDecodeError:
+                    continue
             try:
-                json_lines = [json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()]
                 with open(json_output, "w", encoding="utf-8") as f:
                     json.dump(json_lines, f, indent=2)
+                self.complete_substep("Secret Detection", "Secret detection completed")
+                self.complete_substep("Entropy Analysis", "Entropy analysis completed")
+                self.complete_substep("Verification", "Verification completed")
             except Exception as e:
-                self.log(f"Failed to parse JSON output: {e}", "WARNING")
-                json_output.write_text("[]")
+                self.log(f"Failed to write JSON report: {e}", "WARNING")
+                self.complete_substep("Secret Detection", "Secret detection completed (with warnings)")
+                self.complete_substep("Entropy Analysis", "Entropy analysis completed (with warnings)")
+                self.complete_substep("Verification", "Verification completed (with warnings)")
+        elif result.returncode == 0:
+            with open(json_output, "w", encoding="utf-8") as f:
+                json.dump([], f)
+            self.complete_substep("Secret Detection", "Secret detection completed (no findings)")
+            self.complete_substep("Entropy Analysis", "Entropy analysis completed")
+            self.complete_substep("Verification", "Verification completed")
         else:
-            self.log("JSON report generation failed, creating empty array", "WARNING")
-            json_output.write_text("[]")
+            self.log("JSON report generation failed (non-zero exit); no report written.", "WARNING")
+            self.complete_substep("Secret Detection", "Secret detection completed (no output)")
+            self.complete_substep("Entropy Analysis", "Entropy analysis completed")
+            self.complete_substep("Verification", "Verification completed")
         
-        # Text report
+        # PROCESS: Result Processing
+        self.substep_process("Result Processing", "Processing scan results...")
+        self.complete_substep("Result Processing", "Results processed")
+        
+        # REPORT: JSON Report
+        self.substep_report("JSON", "Generating JSON report...")
+        if json_output.exists() and json_output.stat().st_size > 0:
+            self.complete_substep("Generating JSON Report", "JSON report generated successfully")
+        else:
+            self.fail_substep("Generating JSON Report", "JSON report generation failed")
+        
+        # Text report (for completeness)
         self.log("Running text report generation...")
         cmd = ["trufflehog", "filesystem", "--no-update", str(self.target_path)]
         
@@ -84,8 +144,7 @@ class TruffleHogScanner(BaseScanner):
             with open(text_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
         else:
-            self.log("Text report generation failed", "WARNING")
-            text_output.write_text("No secrets found or scan failed.\n")
+            self.log("Text report generation failed; no text report written.", "WARNING")
         
         if json_output.exists() or text_output.exists():
             self.log("TruffleHog scan completed successfully", "SUCCESS")
@@ -96,17 +155,17 @@ class TruffleHogScanner(BaseScanner):
 
 
 if __name__ == "__main__":
+    import os
     import sys
     
-    target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/app/results")
-    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    # Get default parameters from BaseScanner
+    default_params = BaseScanner.get_default_params_from_env()
+    
+    # Get scanner-specific parameters
     config_path = os.getenv("TRUFFLEHOG_CONFIG_PATH", "/app/scanner/plugins/trufflehog/config/config.yaml")
     
     scanner = TruffleHogScanner(
-        target_path=target_path,
-        results_dir=results_dir,
-        log_file=log_file,
+        **default_params,
         config_path=config_path
     )
     

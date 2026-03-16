@@ -229,14 +229,53 @@ async def handle_general_exception(request: Request, exc: Exception):
 
 async def startup_event():
     """Handle application startup."""
+    import logging
     from infrastructure.logging_config import get_logger
     logger = get_logger("api.main")
     
-    # Initialize database connection
+    # Check setup status early to configure logging
+    setup_complete = False
     try:
         from infrastructure.database.adapter import db_adapter
         await db_adapter.init_database()
-        logger.info("Database connected")
+        
+        # Check if setup is complete before logging anything
+        try:
+            from infrastructure.database.models import SystemState, SetupStatusEnum
+            from sqlalchemy import select
+            table_exists = await db_adapter.check_table_exists("system_state")
+            if table_exists:
+                session = await db_adapter.get_session()
+                async with session:
+                    result = await session.execute(select(SystemState).limit(1))
+                    system_state = result.scalar_one_or_none()
+                    if system_state:
+                        setup_complete = (
+                            (system_state.setup_status == SetupStatusEnum.COMPLETED or
+                             system_state.setup_status == SetupStatusEnum.LOCKED) and
+                            system_state.setup_locked and
+                            system_state.database_initialized and
+                            system_state.admin_user_created and
+                            system_state.system_configured
+                        )
+        except Exception:
+            pass  # If we can't check, assume setup is not complete
+        
+        # Configure logging based on setup status
+        if not setup_complete:
+            # During setup: Only show ERROR and CRITICAL, suppress INFO/DEBUG
+            logging.getLogger().setLevel(logging.ERROR)
+            logging.getLogger("api").setLevel(logging.ERROR)
+            logging.getLogger("backend").setLevel(logging.ERROR)
+            logging.getLogger("infrastructure").setLevel(logging.ERROR)
+        else:
+            # After setup: Normal logging
+            from config.settings import settings
+            logging.getLogger().setLevel(getattr(logging, settings.LOG_LEVEL.upper()))
+        
+        # Database initialization (only log if setup complete)
+        if setup_complete:
+            logger.info("Database connected")
         
         # Create tables if they don't exist
         try:
@@ -248,20 +287,25 @@ async def startup_event():
                 await db_adapter._migrate_existing_tables()
         except Exception as e:
             # If table creation fails, log but don't fail startup
-            logger.error("Failed to create database tables", error=str(e))
+            if setup_complete:
+                logger.error("Failed to create database tables", error=str(e))
         
         # Load settings from database if setup is completed
         try:
             from config.settings import load_settings_from_database, settings
             await load_settings_from_database(settings)
-            logger.info("Settings loaded from database (if setup completed)")
+            if setup_complete:
+                logger.info("Settings loaded from database (if setup completed)")
         except Exception as e:
-            logger.debug("Could not load settings from database (setup may not be completed)", error=str(e))
+            if setup_complete:
+                logger.debug("Could not load settings from database (setup may not be completed)", error=str(e))
             
     except Exception as e:
-        logger.error("Database connection failed", error=str(e))
+        if setup_complete:
+            logger.error("Database connection failed", error=str(e))
     
-    logger.info("API started")
+    if setup_complete:
+        logger.info("API started")
     
     # Generate setup token only if setup is not complete
     try:
@@ -270,12 +314,11 @@ async def startup_event():
         from sqlalchemy import select
         from datetime import datetime
         
-        # Check if system is already set up
+        # Check if system is already set up (silently, no logging during setup)
         setup_required = True
         try:
             # Check if system_state table exists
             table_exists = await db_adapter.check_table_exists("system_state")
-            logger.info(f"[DEBUG startup_event] system_state table exists: {table_exists}")
             
             if table_exists:
                 session = await db_adapter.get_session()
@@ -283,11 +326,9 @@ async def startup_event():
                     result = await session.execute(select(SystemState).limit(1))
                     system_state = result.scalar_one_or_none()
                     
-                    logger.info(f"[DEBUG startup_event] system_state found: {system_state is not None}")
-                    
                     if system_state:
                         # Check if setup is complete - must have all flags set
-                        setup_complete = (
+                        setup_complete_check = (
                             (system_state.setup_status == SetupStatusEnum.COMPLETED or
                              system_state.setup_status == SetupStatusEnum.LOCKED) and
                             system_state.setup_locked and
@@ -296,25 +337,15 @@ async def startup_event():
                             system_state.system_configured
                         )
                         
-                        logger.info(
-                            f"[DEBUG startup_event] Setup check: status={system_state.setup_status.value}, "
-                            f"locked={system_state.setup_locked}, "
-                            f"db_init={system_state.database_initialized}, "
-                            f"admin_created={system_state.admin_user_created}, "
-                            f"sys_configured={system_state.system_configured}, "
-                            f"setup_complete={setup_complete}"
-                        )
-                        
-                        if setup_complete:
+                        if setup_complete_check:
                             setup_required = False
+                            # Only log if setup is complete (normal operation)
                             logger.info("System setup already complete, skipping token generation")
-                    else:
-                        logger.info("[DEBUG startup_event] No system_state record found, setup required")
-            else:
-                logger.info("[DEBUG startup_event] system_state table does not exist, setup required")
         except Exception as e:
             # If we can't check, assume setup is required (safer)
-            logger.warning(f"Could not check setup status, assuming setup required: {e}", exc_info=True)
+            # Only log errors if setup is complete
+            if setup_complete:
+                logger.warning(f"Could not check setup status, assuming setup required: {e}", exc_info=True)
         
         # Only generate token if setup is required
         if setup_required:
@@ -322,39 +353,89 @@ async def startup_event():
             token = token_service.generate_token()
             token_hash = token_service.hash_token(token)
             created_at = datetime.utcnow()
-            print(f"[DEBUG startup_event] Generated token: hash[:16]={token_hash[:16]}..., created_at={created_at}")
             
-            # Store token in database - retry if table was just created
+            # Store token in database - retry if table was just created (silently)
             token_stored = False
             max_retries = 5
             for attempt in range(max_retries):
-                print(f"[DEBUG startup_event] Attempt {attempt + 1}/{max_retries} to store token in DB")
                 token_stored = await token_service.store_setup_token(token_hash, created_at)
-                print(f"[DEBUG startup_event] store_setup_token returned: {token_stored}")
                 if token_stored:
                     break
                 # If tables were just created, wait a bit and retry
                 if attempt < max_retries - 1:
                     import asyncio
-                    print(f"[DEBUG startup_event] Tables were just created, waiting 1s before retry...")
                     await asyncio.sleep(1)
             
             # Log token to stdout (not central logs) - always log even if storage failed
+            # This is the ONLY output during setup mode
             token_service.log_token_generation(token)
-            
-            if token_stored:
-                logger.info("Setup token generated and stored")
-            else:
-                logger.warning("Setup token generated but not stored (tables may not exist yet)")
         
     except Exception as e:
-        logger.error("Failed to generate setup token", error=str(e))
+        # Only log errors if setup is complete
+        if setup_complete:
+            logger.error("Failed to generate setup token", error=str(e))
     
     # Re-enqueue pending scans that may have been lost from queue
+    # Only log if setup is complete
     try:
         await _re_enqueue_pending_scans()
+        if setup_complete:
+            logger.info("No pending or running scans to re-enqueue")
     except Exception as e:
-        logger.error("Failed to re-enqueue pending scans", error=str(e), exc_info=True)
+        if setup_complete:
+            logger.error("Failed to re-enqueue pending scans", error=str(e), exc_info=True)
+    
+    # Pre-load scanners on startup (especially important during setup)
+    # This ensures scanners are available when user completes setup
+    # Do this silently during setup mode
+    try:
+        import httpx
+        import asyncio
+        
+        # Wait a bit for worker to be ready
+        await asyncio.sleep(2)
+        
+        worker_url = os.getenv("WORKER_API_URL", "http://worker:8081")
+        
+        # Wait for worker API to be ready (validate it responds)
+        worker_ready = False
+        max_wait_seconds = 30
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait_seconds:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    # Try to get scanners - if it works, worker is ready
+                    response = await client.get(f"{worker_url}/api/scanners/", timeout=5.0)
+                    if response.status_code in [200, 503]:  # 503 is OK if scanners not loaded yet
+                        worker_ready = True
+                        break
+            except Exception:
+                pass
+            
+            await asyncio.sleep(1)
+        
+        if worker_ready:
+            # Trigger scanner refresh to ensure they're loaded
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(f"{worker_url}/api/scanners/refresh", timeout=30.0)
+                    if response.status_code == 200:
+                        if setup_complete:
+                            logger.info("Scanners successfully pre-loaded on startup")
+                    else:
+                        if setup_complete:
+                            logger.warning(f"Failed to pre-load scanners: {response.status_code}")
+            except Exception as e:
+                if setup_complete:
+                    logger.warning(f"Failed to pre-load scanners: {e}")
+        else:
+            if setup_complete:
+                logger.warning("Worker API not ready, scanners will be loaded on first request")
+    except Exception as e:
+        if setup_complete:
+            logger.warning(f"Failed to pre-load scanners on startup: {e}")
+        # Don't fail startup - scanners will be loaded on first request
     
     # Start auto-scan scheduler for new repositories
     try:
@@ -364,9 +445,11 @@ async def startup_event():
         await auto_scan_scheduler.start()
         # Store scheduler instance globally for shutdown
         main_module._auto_scan_scheduler = auto_scan_scheduler
-        logger.info("Auto-scan scheduler started")
+        if setup_complete:
+            logger.info("Auto-scan scheduler started")
     except Exception as e:
-        logger.error("Failed to start auto-scan scheduler", error=str(e), exc_info=True)
+        if setup_complete:
+            logger.error("Failed to start auto-scan scheduler", error=str(e), exc_info=True)
 
 
 async def _re_enqueue_pending_scans():

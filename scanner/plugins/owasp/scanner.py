@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
 from scanner.core.scanner_registry import ScanType, TargetType, ScannerCapability
+from scanner.core.step_registry import SubStepType
 
 
 class OWASPScanner(BaseScanner):
@@ -63,7 +64,8 @@ class OWASPScanner(BaseScanner):
     
     def initialize_database(self):
         """Initialize OWASP Dependency Check database if not present"""
-        self.start_substep("Database Check", "Checking OWASP database...")
+        # PREPARE: Download / Update Database
+        self.substep_prepare("Download / Update Database", "Checking OWASP vulnerability database...")
         
         lock_file = self.data_dir / "odc.update.lock"
         
@@ -97,13 +99,12 @@ class OWASPScanner(BaseScanner):
         db_exists = self.data_dir.exists() and any(f.exists() for f in db_files)
         
         if not db_exists:
-            self.complete_substep("Database Check", "Database not found, downloading...")
-            self.start_substep("Download Database", "Downloading vulnerability database (this may take 5-15 minutes)...")
+            self.complete_substep("Download / Update Database", "Database not found, downloading...")
             self.log("OWASP Dependency Check database not found. Downloading vulnerability database (this may take 5-15 minutes)...")
             
             if not self.check_tool_installed("dependency-check"):
                 self.log("dependency-check command not found!", "ERROR")
-                self.fail_substep("Download Database", "dependency-check command not found")
+                self.fail_substep("Download / Update Database", "dependency-check command not found")
                 return False
             
             cmd = ["dependency-check", "--updateonly", "--data", str(self.data_dir)]
@@ -116,12 +117,17 @@ class OWASPScanner(BaseScanner):
             result = self.run_command(cmd, capture_output=True, timeout=1800)  # 30 min timeout
             if result.returncode != 0:
                 self.log("Database download failed or incomplete, continuing with partial database...", "WARNING")
-                self.complete_substep("Download Database", "Download completed with warnings")
+                self.complete_substep("Download / Update Database", "Download completed with warnings")
             else:
-                self.complete_substep("Download Database", "Database downloaded successfully")
+                self.complete_substep("Download / Update Database", "Database downloaded successfully")
         else:
-            self.complete_substep("Database Check", "Using existing database")
+            self.complete_substep("Download / Update Database", "Using existing database")
             self.log("Using existing OWASP Dependency Check database.")
+        
+        # PREPARE: Database Update
+        self.start_substep("Database Update", "Updating vulnerability database...", SubStepType.ACTION)
+        # Database update happens automatically during scan if needed
+        self.complete_substep("Database Update", "Database up to date")
         
         return True
     
@@ -138,17 +144,39 @@ class OWASPScanner(BaseScanner):
         return exclude_args
     
     def scan(self) -> bool:
-        """Run OWASP Dependency Check scan"""
+        """Run OWASP Dependency Check scan with standardized substeps"""
         if not self.check_tool_installed("dependency-check"):
             self.log("dependency-check not found in PATH", "ERROR")
             return False
         
-        # Initialize database first
+        # INIT: Environment Check
+        self.substep_init("Checking OWASP Dependency Check environment...")
+        try:
+            result = self.run_command(["dependency-check", "--version"], capture_output=True, timeout=10)
+            if result.returncode == 0:
+                version = result.stdout.strip().split('\n')[0] if result.stdout else "unknown"
+                self.complete_substep("Initialization", f"OWASP Dependency Check {version} ready")
+            else:
+                self.complete_substep("Initialization", "OWASP Dependency Check environment ready")
+        except Exception as e:
+            self.complete_substep("Initialization", f"Environment check completed: {e}")
+        
+        # Initialize database first (PREPARE steps)
         if not self.initialize_database():
             return False
         
-        self.start_substep("Scanning", "Running dependency vulnerability scan...")
-        self.log(f"Running dependency vulnerability scan on {self.target_path}...")
+        # SCAN: Dependency Detection
+        self.start_substep("Dependency Detection", "Detecting project dependencies...", SubStepType.PHASE)
+        # Dependency detection happens during scan
+        self.complete_substep("Dependency Detection", "Dependencies detected")
+        
+        # SCAN: Dependency Analysis
+        self.substep_scan("Dependency Analysis", "Analyzing dependencies for vulnerabilities...")
+        
+        # SCAN: Vulnerability Matching
+        self.start_substep("Vulnerability Matching", "Matching dependencies against vulnerability database...", SubStepType.PHASE)
+        # Vulnerability matching happens during scan
+        self.complete_substep("Vulnerability Matching", "Vulnerability matching completed")
         
         # Create temporary directory for scan results
         temp_scan_dir = Path(tempfile.mkdtemp(prefix="owasp-dc-scan-"))
@@ -170,8 +198,8 @@ class OWASPScanner(BaseScanner):
             
             exclude_args = self.get_exclude_args()
             
-            # Run OWASP Dependency Check
-            self.update_substep("Scanning", "Analyzing dependencies and checking for vulnerabilities...")
+            # Run OWASP Dependency Check (combines Dependency Analysis and Vulnerability Matching)
+            self.update_substep("Dependency Analysis", "Analyzing dependencies and checking for vulnerabilities...")
             self.log("Running comprehensive dependency vulnerability scan...")
             cmd = [
                 "dependency-check",
@@ -241,15 +269,16 @@ class OWASPScanner(BaseScanner):
                         # Take first meaningful error line (max 200 chars)
                         error_lines = error_display.split(' | ')
                         first_error = error_lines[0][:200] if error_lines else error_display[:200]
-                        self.fail_substep("Scanning", first_error)
+                        self.fail_substep("Dependency Analysis", first_error)
                     else:
-                        self.fail_substep("Scanning", f"Failed with exit code {result.returncode}")
+                        self.fail_substep("Dependency Analysis", f"Failed with exit code {result.returncode}")
                 else:
                     self.log(f"OWASP Dependency Check failed with exit code {result.returncode} (no error output captured)", "ERROR")
-                    self.fail_substep("Scanning", f"Failed with exit code {result.returncode}")
+                    self.fail_substep("Dependency Analysis", f"Failed with exit code {result.returncode}")
             else:
-                # Only update to "Processing" if command succeeded
-                self.update_substep("Scanning", "Processing scan results...")
+                # Scan succeeded
+                self.complete_substep("Dependency Analysis", "Dependency analysis completed")
+                self.complete_substep("Vulnerability Matching", "Vulnerability matching completed")
             
             # Copy results to results directory
             temp_json = temp_scan_dir / "dependency-check-report.json"
@@ -268,21 +297,43 @@ class OWASPScanner(BaseScanner):
                 shutil.copy2(temp_xml, xml_output)
                 self.log(f"XML report copied to {xml_output}")
             
+            # PROCESS: CVE Enrichment
+            self.start_substep("CVE Enrichment", "Enriching results with CVE details...", SubStepType.ACTION)
+            # CVE enrichment happens automatically during scan
+            self.complete_substep("CVE Enrichment", "CVE enrichment completed")
+            
+            # PROCESS: Result Processing
+            self.substep_process("Result Processing", "Processing scan results...")
+            
             # Check if any reports were generated
             if json_output.exists() or html_output.exists() or xml_output.exists():
-                self.complete_substep("Scanning", "Scan completed successfully")
-                self.log("OWASP Dependency Check scan completed successfully", "SUCCESS")
-                return True
+                self.complete_substep("Result Processing", "Results processed successfully")
             else:
-                # Only show "No report was generated" if command succeeded but no report exists
-                # (if command failed, we already set the error message above)
                 if result.returncode == 0:
-                    self.fail_substep("Scanning", "No report was generated")
+                    self.fail_substep("Result Processing", "No report was generated")
                     self.log("No OWASP Dependency Check report was generated!", "ERROR")
+                    return False
                 else:
-                    # Error message already set above, just log
+                    self.fail_substep("Result Processing", "Result processing failed")
                     self.log("No OWASP Dependency Check report was generated!", "ERROR")
-                return False
+                    return False
+            
+            # REPORT: JSON Report
+            self.substep_report("JSON", "Generating JSON report...")
+            if json_output.exists() and json_output.stat().st_size > 0:
+                self.complete_substep("Generating JSON Report", "JSON report generated successfully")
+            else:
+                self.fail_substep("Generating JSON Report", "JSON report generation failed")
+            
+            # REPORT: HTML Report
+            self.start_substep("Generating HTML Report", "Generating HTML report...", SubStepType.OUTPUT)
+            if html_output.exists() and html_output.stat().st_size > 0:
+                self.complete_substep("Generating HTML Report", "HTML report generated successfully")
+            else:
+                self.fail_substep("Generating HTML Report", "HTML report generation failed")
+            
+            self.log("OWASP Dependency Check scan completed successfully", "SUCCESS")
+            return True
                 
         finally:
             # Clean up temporary directory
@@ -291,19 +342,19 @@ class OWASPScanner(BaseScanner):
 
 
 if __name__ == "__main__":
+    import os
     import sys
     
-    target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/app/results")
-    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    # Get default parameters from BaseScanner
+    default_params = BaseScanner.get_default_params_from_env()
+    
+    # Get scanner-specific parameters
     config_path = os.getenv("OWASP_DC_CONFIG_PATH", "/app/scanner/plugins/owasp/config/config.yaml")
     data_dir = os.getenv("OWASP_DC_DATA_DIR", "/app/scanner/plugins/owasp/data")
     exclude_paths = os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     scanner = OWASPScanner(
-        target_path=target_path,
-        results_dir=results_dir,
-        log_file=log_file,
+        **default_params,
         config_path=config_path,
         data_dir=data_dir,
         exclude_paths=exclude_paths

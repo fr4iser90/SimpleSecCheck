@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import html as html_module
 
 def html_header(title, embedded_scripts="", ai_prompt_disabled=False):
     return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>{title}</title>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<link rel="icon" type="image/png" href="assets/transparent.png">\n<style>\n
@@ -244,6 +245,10 @@ body.dark .tool-status-item {{
 
 .tool-status-item.status-failed .status-icon {{
   background: var(--color-critical);
+}}
+
+.tool-status-item.status-skipped .status-icon {{
+  background: var(--color-info);
 }}
 
 @keyframes pulse {{
@@ -740,7 +745,12 @@ def generate_executive_summary(all_findings):
             tools_passed += 1
             continue
 
-        if not isinstance(findings, list):
+        # ZAP returns a dict with summary and alerts, convert to list format
+        if tool == "ZAP" and isinstance(findings, dict):
+            # Convert ZAP dict format to list format for consistency
+            alerts = findings.get("alerts", [])
+            findings = alerts if isinstance(alerts, list) else []
+        elif not isinstance(findings, list):
             raise ValueError(f"Unexpected findings type for {tool}: {type(findings).__name__}")
 
         tools_executed += 1
@@ -826,11 +836,17 @@ def generate_tool_status_section(executed_tools):
             status_class = 'status-running'
         elif isinstance(status, dict) and status.get('status') == 'failed':
             status_class = 'status-failed'
-        
+        elif isinstance(status, dict) and status.get('status') == 'skipped':
+            status_class = 'status-skipped'
+        msg = (status.get('message', '') or '') if isinstance(status, dict) else ''
+        msg_esc = html_module.escape(msg)
+        msg_short = msg_esc[:60] + ("..." if len(msg_esc) > 60 else "")
+        title_attr = f' title="{msg_esc}"' if msg else ''
         tool_items.append(f'''
-          <div class="tool-status-item {status_class}">
+          <div class="tool-status-item {status_class}"{title_attr}>
             <span class="status-icon"></span>
-            <span>{tool}</span>
+            <span>{html_module.escape(tool)}</span>
+            {f'<span style="font-size:0.8rem;opacity:0.9;margin-left:0.25rem;">({msg_short})</span>' if msg else ''}
           </div>
         ''')
     
@@ -842,7 +858,7 @@ def generate_tool_status_section(executed_tools):
         {''.join(tool_items)}
       </div>
       <p style="margin-top: 1rem; font-size: 0.85rem; opacity: 0.7;">
-        💡 <strong>Tip:</strong> Green = Complete | Yellow = Running | Red = Failed
+        💡 <strong>Tip:</strong> Green = Complete | Yellow = Running | Red = Failed | Gray = Skipped
       </p>
     </div>
     '''

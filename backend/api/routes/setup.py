@@ -4,18 +4,21 @@ Setup API Routes
 This module defines the FastAPI routes for the production setup wizard.
 Handles initial database setup, admin user creation, and system validation.
 """
+import os
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from starlette.requests import Request
 from pydantic import BaseModel, EmailStr, Field, validator
 from datetime import datetime
+import httpx
 
 from api.deps.actor_context import get_actor_context, ActorContext
 from config.settings import settings
 from infrastructure.database.adapter import get_database_health, check_setup_status, db_adapter
 from infrastructure.redis.client import redis_client
 from infrastructure.database.models import User, UserRoleEnum, SetupStatusEnum, SystemState
+from infrastructure.logging_config import get_logger
 from sqlalchemy import select
 
 # Import new services
@@ -25,6 +28,8 @@ from api.services.setup_rate_limiter import SetupRateLimiter
 from api.services.password_policy_service import PasswordPolicyService
 from api.services.security_event_service import SecurityEventService
 from domain.services.security_policy_service import SecurityPolicyService
+
+logger = get_logger(__name__)
 
 
 class SetupStatusResponse(BaseModel):
@@ -270,6 +275,26 @@ async def initialize_setup(
         
         # Finalize setup atomically (creates state, locks, marks completed)
         await _finalize_setup(setup_request.system_config)
+        
+        # Validate scanners are available (they should already be loaded by worker/backend startup)
+        # Only validate, don't refresh - if they're not there, it's a configuration issue
+        try:
+            import httpx
+            worker_url = os.getenv("WORKER_API_URL", "http://worker:8081")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{worker_url}/api/scanners/", timeout=10.0)
+                if response.status_code == 200:
+                    data = response.json()
+                    scanner_count = len(data.get("scanners", []))
+                    if scanner_count > 0:
+                        logger.info(f"Validated {scanner_count} scanners available after setup")
+                    else:
+                        logger.warning("No scanners found after setup - they should have been loaded on startup")
+                else:
+                    logger.warning(f"Could not validate scanners after setup: {response.status_code}")
+        except Exception as e:
+            logger.warning(f"Could not validate scanners after setup: {e}")
+            # Don't fail setup - scanners will be loaded on first request
         
         # Invalidate setup session after successful setup
         await setup_session_manager.invalidate_session(session_id)

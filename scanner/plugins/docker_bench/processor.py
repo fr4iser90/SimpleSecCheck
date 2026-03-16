@@ -4,15 +4,7 @@ import sys
 import html
 import json
 
-# Add parent directory to path for imports
-# Setup paths using central path_setup module
-# NO PATH CALCULATIONS HERE - everything is handled by path_setup.py
-sys.path.insert(0, "/project/src")
-sys.path.insert(0, "/app")  # For import
-from core.path_setup import setup_paths
-setup_paths()
-
-pass
+import re
 
 def debug(msg):
     print(f"[docker_bench_processor] {msg}", file=sys.stderr)
@@ -93,6 +85,50 @@ def generate_docker_bench_html_section(docker_bench_findings):
         html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No Docker compliance issues found.</div>')
     return "".join(html_parts)
 
+
+def _matches_pattern(value, pattern):
+    if pattern is None: return True
+    if value is None: value = ""
+    try: return re.search(pattern, str(value)) is not None
+    except re.error: return False
+
+
+def _matches_docker_bench_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("test", ""), rule.get("rule_id"))
+    path_ok = _matches_pattern(finding.get("group", ""), rule.get("path_regex"))
+    msg_ok = _matches_pattern(finding.get("description", ""), rule.get("message_regex"))
+    return rule_ok and path_ok and msg_ok
+
+
+def _accept_record_docker_bench(finding, reason):
+    return {"tool": "Docker Bench", "reason": reason or "Accepted by policy", "id": finding.get("test", ""), "path": finding.get("group", ""), "line": "", "message": finding.get("description", "")}
+
+
+def apply_docker_bench_policy(findings, tool_policy):
+    if not findings: return [], []
+    accepted_rules = tool_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+    for finding in findings:
+        accepted = next((r for r in accepted_rules if _matches_docker_bench_rule(finding, r)), None)
+        if accepted:
+            accepted_records.append(_accept_record_docker_bench(finding, accepted.get("reason", "Accepted by policy")))
+            continue
+        processed.append(finding)
+    return processed, accepted_records
+
+
+DOCKER_BENCH_POLICY_EXAMPLE = '''  "docker_bench": {
+    "accepted_findings": [
+      {
+        "rule_id": "2.1",
+        "path_regex": ".*",
+        "message_regex": "user.*namespace",
+        "reason": "User namespace enabled at daemon level"
+      }
+    ]
+  }'''
+
 REPORT_PROCESSOR = ReportProcessor(
     name="Docker Bench",
     summary_func=docker_bench_summary,
@@ -101,12 +137,15 @@ REPORT_PROCESSOR = ReportProcessor(
         {
             "tool": "Docker Bench",
             "severity": str(f.get("severity", f.get("Severity", "UNKNOWN"))).upper(),
-            "rule_id": str(f.get("rule_id", f.get("id", ""))),
-            "path": str(f.get("path", f.get("file", f.get("filename", "")))),
+            "rule_id": str(f.get("rule_id", f.get("id", f.get("test", "")))),
+            "path": str(f.get("path", f.get("file", f.get("filename", f.get("group", "")))),
             "line": str(f.get("line", f.get("line_number", f.get("start", "")))),
             "message": str(f.get("message", f.get("description", f.get("title", "")))),
         }
         for f in (findings or [])
     ],
-    json_file="report.json",  # Changed from docker-bench.json
+    json_file="report.json",
+    policy_key="docker_bench",
+    apply_policy=apply_docker_bench_policy,
+    policy_example_snippet=DOCKER_BENCH_POLICY_EXAMPLE,
 )

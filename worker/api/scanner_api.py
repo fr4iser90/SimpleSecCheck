@@ -59,6 +59,54 @@ async def _check_scanners_table_exists() -> bool:
         return False
 
 
+async def _wait_for_database_ready(max_wait_seconds: int = 30, check_interval: float = 1.0) -> bool:
+    """
+    Wait for database to be ready and writable.
+    
+    Validates:
+    1. Database connection works
+    2. Scanners table exists
+    3. Can write to database (test insert/delete)
+    
+    Returns:
+        True if database is ready, False if timeout
+    """
+    if not _database_adapter:
+        return False
+    
+    start_time = time.time()
+    
+    while time.time() - start_time < max_wait_seconds:
+        try:
+            # Check connection
+            async with _database_adapter.get_session() as session:
+                # Check if table exists
+                result = await session.execute(
+                    text("SELECT to_regclass(:table_name)"),
+                    {"table_name": "public.scanners"}
+                )
+                table_exists = result.scalar() is not None
+                
+                if not table_exists:
+                    logger.debug(f"Scanners table not found, waiting... ({time.time() - start_time:.1f}s)")
+                    await asyncio.sleep(check_interval)
+                    continue
+                
+                # Test write capability (try to query - if it works, DB is ready)
+                await session.execute(text("SELECT 1 FROM scanners LIMIT 1"))
+                await session.commit()
+                
+                logger.info("Database is ready and writable")
+                return True
+                
+        except Exception as e:
+            logger.debug(f"Database not ready yet: {e}, waiting... ({time.time() - start_time:.1f}s)")
+            await asyncio.sleep(check_interval)
+    
+    logger.warning(f"Database not ready after {max_wait_seconds}s")
+    return False
+
+
 async def _get_scanners_from_database() -> List[Dict[str, Any]]:
     """Get scanner list from database. If database is empty, trigger scanner container to populate it."""
     if not _database_adapter:
@@ -98,7 +146,7 @@ async def _get_scanners_from_database() -> List[Dict[str, Any]]:
                         break
             
             if needs_refresh:
-                await _refresh_scanners_from_container_with_retry()
+                await _ensure_scanners_loaded()
                 # Retry query after refresh
                 result = await session.execute(text("SELECT * FROM scanners ORDER BY priority"))
                 rows = result.fetchall()
@@ -153,50 +201,49 @@ async def _get_scanners_from_database() -> List[Dict[str, Any]]:
         )
 
 
-async def _refresh_scanners_from_container_with_retry(max_retries: int = 3, initial_delay: float = 2.0) -> None:
-    """Trigger scanner container to update database with latest scanner list, with retry logic."""
-    for attempt in range(1, max_retries + 1):
-        try:
-            # Check if table exists before attempting refresh
-            table_exists = await _check_scanners_table_exists()
-            if not table_exists:
-                if attempt < max_retries:
-                    delay = initial_delay * (2 ** (attempt - 1))  # Exponential backoff
-                    logger.info(f"Scanners table not ready yet, waiting {delay}s before retry {attempt}/{max_retries}")
-                    await asyncio.sleep(delay)
-                    continue
-                else:
-                    raise HTTPException(
-                        status_code=503,
-                        detail="Scanners table not initialized after multiple retries. Database may not be ready."
-                    )
-            
-            # Table exists, proceed with refresh
-            await _refresh_scanners_from_container()
-            
-            # Verify refresh succeeded by checking if scanners were written
-            async with _database_adapter.get_session() as session:
-                result = await session.execute(text("SELECT COUNT(*) FROM scanners"))
-                count = result.scalar()
-                if count == 0:
-                    raise Exception("Scanner refresh completed but no scanners found in database")
-            
-            logger.info(f"Scanner refresh succeeded (attempt {attempt}/{max_retries})")
+async def _ensure_scanners_loaded() -> None:
+    """
+    Ensure scanners are loaded in database.
+    
+    Validates database is ready, then loads scanners once correctly.
+    Raises exception if database is not ready or loading fails.
+    """
+    if not _database_adapter:
+        raise HTTPException(status_code=503, detail="Database adapter not initialized")
+    
+    # Wait for database to be ready
+    db_ready = await _wait_for_database_ready(max_wait_seconds=30)
+    if not db_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not ready after waiting. Please check database connection."
+        )
+    
+    # Check if scanners already exist
+    async with _database_adapter.get_session() as session:
+        result = await session.execute(text("SELECT COUNT(*) FROM scanners"))
+        count = result.scalar() or 0
+        
+        if count > 0:
+            logger.info(f"Scanners already loaded ({count} scanners found)")
             return
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            if attempt < max_retries:
-                delay = initial_delay * (2 ** (attempt - 1))
-                logger.warning(f"Scanner refresh failed (attempt {attempt}/{max_retries}): {e}. Retrying in {delay}s...")
-                await asyncio.sleep(delay)
-            else:
-                logger.error(f"Scanner refresh failed after {max_retries} attempts: {e}")
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"Failed to refresh scanners after {max_retries} attempts: {str(e)}"
-                )
+    
+    # Load scanners from container
+    logger.info("Loading scanners from container...")
+    await _refresh_scanners_from_container()
+    
+    # Verify scanners were loaded
+    async with _database_adapter.get_session() as session:
+        result = await session.execute(text("SELECT COUNT(*) FROM scanners"))
+        count = result.scalar() or 0
+        
+        if count == 0:
+            raise HTTPException(
+                status_code=503,
+                detail="Failed to load scanners. Scanner container may not be available."
+            )
+        
+        logger.info(f"Successfully loaded {count} scanners")
 
 
 async def _refresh_scanners_from_container() -> None:
@@ -245,6 +292,53 @@ async def _refresh_scanners_from_container() -> None:
                 detail="Could not find Docker network. Make sure docker-compose networks are created."
             )
         
+        # Automatically detect PUID/PGID from /project mount (same as container_spec.py)
+        # This ensures scanner container uses correct UID/GID for file permissions
+        environment_vars = {"DATABASE_URL": database_url}
+        
+        # Check setup status to suppress logs during setup
+        setup_complete = False
+        try:
+            from sqlalchemy import text, select
+            from infrastructure.database.models import SystemState, SetupStatusEnum
+            
+            async with _database_adapter.get_session() as session:
+                result = await session.execute(
+                    text("SELECT to_regclass(:table_name)"),
+                    {"table_name": "public.system_state"}
+                )
+                table_exists = result.scalar() is not None
+                
+                if table_exists:
+                    result = await session.execute(select(SystemState).limit(1))
+                    system_state = result.scalar_one_or_none()
+                    if system_state:
+                        setup_complete = (
+                            (system_state.setup_status == SetupStatusEnum.COMPLETED or
+                             system_state.setup_status == SetupStatusEnum.LOCKED) and
+                            system_state.setup_locked and
+                            system_state.database_initialized and
+                            system_state.admin_user_created and
+                            system_state.system_configured
+                        )
+        except Exception:
+            pass  # If we can't check, assume setup is not complete
+        
+        # During setup, suppress scanner logs (only show errors)
+        if not setup_complete:
+            environment_vars["LOG_LEVEL"] = "ERROR"
+        
+        try:
+            import os
+            project_path = "/project"
+            if os.path.exists(project_path):
+                project_root_stat = os.stat(project_path)
+                environment_vars["PUID"] = str(project_root_stat.st_uid)
+                environment_vars["PGID"] = str(project_root_stat.st_gid)
+                logger.debug(f"Detected PUID={environment_vars['PUID']} PGID={environment_vars['PGID']} from /project mount")
+        except (OSError, AttributeError) as e:
+            logger.warning(f"Could not detect host UID/GID from /project mount: {e}. Scanner will use default (1000:1000)")
+        
         # Create container with --list command and DATABASE_URL
         # Use same network as DB so scanner can resolve 'postgres' hostname
         container = await asyncio.to_thread(
@@ -255,7 +349,7 @@ async def _refresh_scanners_from_container() -> None:
             detach=False,
             auto_remove=False,
             network=network_name,
-            environment={"DATABASE_URL": database_url}
+            environment=environment_vars
         )
         
         container.start()
@@ -362,14 +456,14 @@ async def get_scanners(scan_type: Optional[str] = None) -> Dict[str, List[Dict[s
 
 
 @router.post("/refresh")
-async def refresh_scanners() -> Dict[str, str]:
+async def refresh_scanners() -> Dict[str, Any]:
     """Manually refresh scanner list by triggering scanner container to update database."""
     global _scanner_cache, _cache_timestamp
     
     try:
         async with _cache_lock:
             logger.info("Manually refreshing scanner list - triggering scanner container")
-            await _refresh_scanners_from_container_with_retry()
+            await _ensure_scanners_loaded()
             # Reload from database after refresh
             _scanner_cache = await _get_scanners_from_database()
             _cache_timestamp = time.time()

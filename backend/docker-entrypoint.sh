@@ -4,8 +4,9 @@
 set -e
 # Automatically detect UID/GID from mounted project root directory
 # This ensures files are created with correct ownership on host
+# /project is always mounted in docker-compose (.:/project:ro)
 
-PROJECT_ROOT=${HOST_PROJECT_ROOT:-/project}
+PROJECT_ROOT="/project"
 if [ -d "$PROJECT_ROOT" ]; then
     DETECTED_UID=$(stat -c "%u" "$PROJECT_ROOT" 2>/dev/null || echo "")
     DETECTED_GID=$(stat -c "%g" "$PROJECT_ROOT" 2>/dev/null || echo "")

@@ -94,11 +94,7 @@ class ESLintScanner(BaseScanner):
         js_files = self.find_js_files()
         
         if not js_files:
-            self.log("No JavaScript/TypeScript files found, skipping scan.", "WARNING")
-            json_output = self.results_dir / "report.json"  # Changed from eslint.json
-            text_output = self.results_dir / "report.txt"   # Changed from eslint.txt
-            json_output.write_text("[]")
-            text_output.write_text("ESLint: No JavaScript/TypeScript files found\n")
+            self.log("No JavaScript/TypeScript files found, skipping scan (no report written).", "WARNING")
             return True
         
         self.log(f"Found {len(js_files)} JavaScript/TypeScript file(s).")
@@ -107,6 +103,16 @@ class ESLintScanner(BaseScanner):
         json_output = self.results_dir / "report.json"  # Changed from eslint.json
         text_output = self.results_dir / "report.txt"   # Changed from eslint.txt
         temp_config = self.results_dir / "eslint.config.cjs"
+
+        # Ensure plugins are available where the config runs (config is in results_dir, so resolve from there)
+        install_result = self.run_command(
+            ["npm", "install", "eslint-plugin-security", "@typescript-eslint/parser", "@typescript-eslint/eslint-plugin"],
+            capture_output=True,
+            cwd=self.results_dir,
+            timeout=120,
+        )
+        if install_result.returncode != 0:
+            self.log("npm install for eslint plugins failed (will try anyway): " + (install_result.stderr or install_result.stdout or "")[:200], "WARNING")
 
         temp_config.write_text(
             """const security = require('eslint-plugin-security');
@@ -148,8 +154,7 @@ module.exports = [
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
-            self.log("JSON report generation failed (exit code {result.returncode}), creating empty array", "WARNING")
-            json_output.write_text("[]")
+            self.log("JSON report generation failed (exit code {}); no report written.".format(result.returncode), "WARNING")
         
         # Text report
         self.log("Running ESLint scan with text output...")

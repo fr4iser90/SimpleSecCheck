@@ -127,27 +127,108 @@ async def main():
     if not args.max_concurrent_jobs:
         raise ValueError("MAX_CONCURRENT_JOBS or WORKER_CONCURRENCY environment variable is required")
     
-    # Set up logging (optional, defaults to INFO if not set)
-    setup_logging(args.log_level or "INFO")
+    # Set up logging FIRST with ERROR level (will be adjusted after setup check)
+    # This prevents any logs during initialization before we can check setup status
+    import structlog
+    logging.basicConfig(
+        level=logging.ERROR,
+        format="%(message)s",
+        stream=sys.stdout,
+    )
+    # Set all loggers to ERROR level
+    logging.getLogger().setLevel(logging.ERROR)
+    logging.getLogger("worker").setLevel(logging.ERROR)
+    # Configure structlog with ERROR level to suppress INFO/DEBUG
+    structlog.configure(
+        processors=[
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            structlog.dev.ConsoleRenderer(),
+        ],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+    # Set structlog level to ERROR
+    structlog.get_logger().setLevel(logging.ERROR)
+    
+    # Initialize database adapter to check setup status
+    db_url = args.db_connection
+    if db_url.startswith("postgresql://") and "+asyncpg" not in db_url:
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    
+    database_adapter = PostgreSQLAdapter(db_url)
+    await database_adapter.initialize()
+    
+    # Check setup status early to configure logging
+    setup_complete = False
+    try:
+        from sqlalchemy import text, select
+        from infrastructure.database.models import SystemState, SetupStatusEnum
+        
+        async with database_adapter.get_session() as session:
+            # Check if system_state table exists
+            result = await session.execute(
+                text("SELECT to_regclass(:table_name)"),
+                {"table_name": "public.system_state"}
+            )
+            table_exists = result.scalar() is not None
+            
+            if table_exists:
+                result = await session.execute(select(SystemState).limit(1))
+                system_state = result.scalar_one_or_none()
+                if system_state:
+                    setup_complete = (
+                        (system_state.setup_status == SetupStatusEnum.COMPLETED or
+                         system_state.setup_status == SetupStatusEnum.LOCKED) and
+                        system_state.setup_locked and
+                        system_state.database_initialized and
+                        system_state.admin_user_created and
+                        system_state.system_configured
+                    )
+    except Exception:
+        pass  # If we can't check, assume setup is not complete
+    
+    # Configure logging based on setup status
+    if setup_complete:
+        # After setup: Normal logging - reconfigure with proper level
+        setup_logging(args.log_level or "INFO")
+    # If not complete, keep ERROR level (already set above)
+    
     from worker.infrastructure.logging_config import get_logger
     logger = get_logger(__name__)
     
-    logger.info("Worker started")
-    logger.info("Queue adapter initialized", queue_type=args.queue_type)
-    logger.info("Max concurrent jobs", max_jobs=args.max_concurrent_jobs)
+    # Only log if setup is complete
+    if setup_complete:
+        logger.info("Worker started")
+        logger.info("Queue adapter initialized", queue_type=args.queue_type)
+        logger.info("Max concurrent jobs", max_jobs=args.max_concurrent_jobs)
     
     try:
         # Initialize infrastructure adapters
         docker_adapter = DockerAdapter()
         queue_adapter = QueueAdapter(args.queue_type, args.queue_connection)
         
-        # Normalize database URL to use asyncpg driver if not already specified
-        db_url = args.db_connection
-        if db_url.startswith("postgresql://") and "+asyncpg" not in db_url:
-            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # Initialize scanner API router with database adapter (needed for pre-loading)
+        from worker.api.scanner_api import init_router
+        init_router(database_adapter)
         
-        database_adapter = PostgreSQLAdapter(db_url)
-        await database_adapter.initialize()  # Initialize database connection
+        # Pre-load scanners on worker startup (ensures they're available when backend starts)
+        try:
+            from worker.api.scanner_api import _ensure_scanners_loaded
+            if setup_complete:
+                logger.info("Pre-loading scanners on worker startup...")
+            await _ensure_scanners_loaded()
+            if setup_complete:
+                logger.info("Scanners successfully pre-loaded")
+        except Exception as e:
+            if setup_complete:
+                logger.warning(f"Failed to pre-load scanners on startup: {e}")
+            # Don't fail startup - scanners will be loaded on first API request
         
         # Initialize services
         docker_job_executor = DockerJobExecutor(docker_adapter, database_adapter)
@@ -167,9 +248,11 @@ async def main():
         )
             
     except KeyboardInterrupt:
-        logger.info("Worker stopped by user")
+        if setup_complete:
+            logger.info("Worker stopped by user")
     except Exception as e:
-        logger.error("Worker failed", error=str(e))
+        if setup_complete:
+            logger.error("Worker failed", error=str(e))
         sys.exit(1)
 
 

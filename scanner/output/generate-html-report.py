@@ -13,89 +13,39 @@ defuse_stdlib()
 import traceback
 
 # Setup paths FIRST before importing anything from core
-# Add src directory to path so we can import core modules
+# Ensure scanner and app are first so core/scanner resolve to container /app/scanner (not /project/src)
 import sys
 from pathlib import Path
-SCRIPT_DIR = Path(__file__).parent.absolute()
-SRC_DIR = SCRIPT_DIR.parent
-sys.path.insert(0, str(SRC_DIR))
+SCRIPT_DIR = Path(__file__).resolve().parent
+SRC_DIR = SCRIPT_DIR.parent  # scanner/
+APP_DIR = SRC_DIR.parent      # /app in container
+for p in (str(APP_DIR), str(SRC_DIR)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-# Now we can import from core
-try:
-    from core.path_setup import setup_paths, get_results_dir, get_output_file
-    setup_paths()
-except ImportError:
-    # Fallback if core modules not available
-    def setup_paths():
-        pass
-    def get_results_dir():
-        return os.environ.get("RESULTS_DIR", "/app/results")
-    def get_output_file():
-        return os.environ.get("OUTPUT_FILE", "/app/results/security-summary.html")
+# Use scanner.core so container always uses same code path (no /project/src)
+from scanner.core.path_setup import setup_paths, get_results_dir, get_output_file
+setup_paths()
+# Re-insert app/scanner at front so later imports use container code
+for p in (str(APP_DIR), str(SRC_DIR)):
+    if sys.path[0] != p:
+        sys.path.insert(0, p)
 
-try:
-    from html_utils import html_header, html_footer, generate_executive_summary, generate_tool_status_section
-except ImportError:
-    # Fallback HTML functions
-    def html_header(title, scripts, ai_disabled):
-        return f"""<!DOCTYPE html>
-<html>
-<head>
-    <title>{title}</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; margin: 20px; }}
-        .glass {{ background: rgba(255,255,255,0.1); border-radius: 8px; padding: 1rem; }}
-    </style>
-    {scripts}
-</head>
-<body>
-    <h1>{title}</h1>
-"""
-    
-    def html_footer():
-        return "</body></html>"
-    
-    def generate_executive_summary(findings):
-        return "<div class='glass'><h2>Executive Summary</h2><p>Summary not available.</p></div>"
-    
-    def generate_tool_status_section(tools):
-        return "<div class='glass'><h2>Tool Status</h2><p>Tool status not available.</p></div>"
+from scanner.output.html_utils import html_header, html_footer, generate_executive_summary, generate_tool_status_section
+from scanner.core.finding_policy import load_policy
+from scanner.core.scan_metadata import load_metadata
 
-try:
-    from processor_registry import ProcessorRegistry, register_default_processors
-except ImportError:
-    class ProcessorRegistry:
-        @staticmethod
-        def all():
-            return []
-    def register_default_processors():
-        pass
-
-try:
-    from finding_policy import load_policy, apply_semgrep_policy, apply_gitleaks_policy, apply_bandit_policy
-except ImportError:
-    def load_policy(path):
-        return {}
-    def apply_semgrep_policy(findings, policy):
-        return findings, []
-    def apply_gitleaks_policy(findings, policy):
-        return findings, []
-    def apply_bandit_policy(findings, policy):
-        return findings, []
-
-try:
-    from scan_metadata import load_metadata
-except ImportError:
-    # Fallback if scan_metadata module not available (should not happen, but be safe)
-    def load_metadata(results_dir):
-        return None
+# Single source of truth: scanner names and paths come from ScannerRegistry only (required)
+# Must use scanner.core.scanner_registry so plugin discovery uses the same module (same _scanners dict)
+from scanner.core.scanner_registry import ScannerRegistry
 
 # Get paths from central path_setup - NO PATH CALCULATIONS HERE!
-RESULTS_DIR = get_results_dir()
-if not RESULTS_DIR:
+_results_dir = get_results_dir()
+if not _results_dir:
     sys.stderr.write("[ERROR] RESULTS_DIR environment variable is not set!\n")
     sys.stderr.write("[ERROR] This script must be called via the Python orchestrator or with RESULTS_DIR set.\n")
     sys.exit(1)
+RESULTS_DIR = str(Path(_results_dir).resolve())
 
 OUTPUT_FILE = get_output_file()
 if not OUTPUT_FILE:
@@ -104,6 +54,33 @@ if not OUTPUT_FILE:
 
 def debug(msg):
     print(f"[generate-html-report] {msg}", file=sys.stderr)
+
+def _scanner_result_path(results_dir, tools_key, filename):
+    """Path from registry only: results_dir/tools/<tools_key>/<filename>. tools_key comes from Scanner.tools_key."""
+    if not filename or not tools_key:
+        return None
+    base = Path(results_dir)
+    return str(base / "tools" / tools_key / filename)
+
+
+def _get_processor_for_scanner(scanner):
+    """Resolve report processor for a scanner from the same plugin (by python_class module path)."""
+    if not getattr(scanner, "python_class", None):
+        return None
+    try:
+        # e.g. "scanner.plugins.checkov.scanner.CheckovScanner" -> plugin "checkov"
+        parts = scanner.python_class.split(".")
+        if len(parts) >= 3 and parts[0] == "scanner" and parts[1] == "plugins":
+            plugin_name = parts[2]
+            processor_module = __import__(
+                f"scanner.plugins.{plugin_name}.processor",
+                fromlist=["REPORT_PROCESSOR"],
+            )
+            return getattr(processor_module, "REPORT_PROCESSOR", None)
+    except Exception:
+        pass
+    return None
+
 
 def read_json(path):
     """Robust JSON reader that handles missing files and parsing errors gracefully"""
@@ -202,12 +179,11 @@ def generate_accepted_findings_section(accepted_findings):
     return "".join(html_parts)
 
 
-def generate_finding_policy_section(finding_policy, policy_path, accepted_findings):
+def generate_finding_policy_section(finding_policy, policy_path, accepted_findings, scanner_processors=None):
     """
     Generate expandable Finding Policy section.
-    Shows:
-    - If NO policy: Example JSON structure + instructions
-    - If policy used: Status + link to accepted findings
+    If no policy: example built from processors that have policy_example_snippet.
+    If policy used: status + link to accepted findings.
     """
     html_parts = []
     html_parts.append('<div class="glass" style="margin: 2rem 0; padding: 2rem;">')
@@ -258,49 +234,16 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
         html_parts.append('If you want to suppress false positives or override severities, create a JSON-based finding policy file.')
         html_parts.append('</p>')
         
-        # Example JSON (collapsible)
+        # Example JSON from processors that support policy (no hardcoded tool names)
+        snippets = []
+        if scanner_processors:
+            for _, proc in scanner_processors:
+                if getattr(proc, "policy_example_snippet", None):
+                    snippets.append(proc.policy_example_snippet)
+        example_json = "{\n" + ",\n".join(snippets) + "\n}" if snippets else "{}"
         html_parts.append('<details style="margin-top: 1rem;">')
         html_parts.append('<summary style="cursor: pointer; font-weight: 500; margin-bottom: 0.5rem; color: #0dcaf0;">📄 Example Policy Structure</summary>')
         html_parts.append('<pre style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; overflow-x: auto; margin-top: 0.5rem;"><code>')
-        
-        example_json = '''{
-  "semgrep": {
-    "severity_overrides": [
-      {
-        "rule_id": "python.django.security.debug-true.debug-true",
-        "path_regex": "settings_dev\\.py$",
-        "new_severity": "INFO",
-        "reason": "DEBUG=True is intentional for development settings"
-      }
-    ],
-    "accepted_findings": [
-      {
-        "rule_id": "generic.secrets.security.hardcoded-secret.hardcoded-secret",
-        "path_regex": "src/examples/.*",
-        "message_regex": "just_an_example",
-        "reason": "This is an example key in a demonstration file, not a real secret"
-      }
-    ],
-    "dedupe": {
-      "enabled": true,
-      "line_window": 2
-    }
-  },
-  "gitleaks": {
-    "accepted_findings": [
-      {
-        "rule_id": "generic-api-key",
-        "file_regex": "tests/.*",
-        "description_regex": "test.*key",
-        "reason": "Test files contain example keys, not real secrets"
-      }
-    ]
-  },
-  "dedupe": {
-    "enabled": true,
-    "line_window": 2
-  }
-}'''
         html_parts.append(html.escape(example_json))
         html_parts.append('</code></pre>')
         html_parts.append('</details>')
@@ -322,13 +265,13 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
     
     return "".join(html_parts)
 
-def normalize_findings_for_ai_prompt(processors, all_findings):
-    """Normalize findings via processor registry for AI prompt generation."""
+def normalize_findings_for_ai_prompt(scanner_processors, all_findings):
+    """Normalize findings for AI prompt. scanner_processors: list of (scanner, processor); all_findings keyed by scanner.name."""
     normalized = []
-    for processor in processors:
-        if not processor.ai_normalizer:
+    for scanner, processor in (scanner_processors or []):
+        if not processor or not getattr(processor, "ai_normalizer", None):
             continue
-        findings = all_findings.get(processor.name)
+        findings = all_findings.get(scanner.name)
         if findings is None:
             continue
         normalized.extend(processor.ai_normalizer(findings))
@@ -352,6 +295,50 @@ def sanitize_findings(findings_by_tool):
             sanitized[tool] = findings
     return sanitized
 
+
+def load_tool_statuses_from_steps_log(results_dir):
+    """
+    Read steps.log (JSON Lines) and return a dict: tool_name -> {'status': 'complete'|'failed'|'skipped', 'message': str}.
+    Only includes steps that correspond to scanners (names that appear as step names for scanner runs).
+    """
+    steps_log = Path(results_dir) / "logs" / "steps.log"
+    if not steps_log.exists():
+        return {}
+    scanner_names = {s.name for s in ScannerRegistry.get_all_scanners()}
+    tool_statuses = {}
+    try:
+        with open(steps_log, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if "init" in data:
+                    continue
+                name = data.get("name")
+                status_str = data.get("status", "")
+                message = data.get("message", "")
+                if not name:
+                    continue
+                if name not in scanner_names:
+                    continue
+                if status_str == "completed":
+                    tool_statuses[name] = {"status": "complete", "message": message or ""}
+                elif status_str == "failed":
+                    tool_statuses[name] = {"status": "failed", "message": message or ""}
+                elif status_str == "skipped":
+                    tool_statuses[name] = {"status": "skipped", "message": message or ""}
+                elif status_str == "running":
+                    tool_statuses[name] = {"status": "running", "message": message or ""}
+                else:
+                    tool_statuses[name] = {"status": "complete", "message": message or ""}
+    except Exception as e:
+        debug(f"Could not read steps.log: {e}")
+    return tool_statuses
+
 def main():
     debug(f"Starting HTML report generation. Output: {OUTPUT_FILE}")
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -370,78 +357,81 @@ def main():
             target = 'Code scan'
     else:
         target = os.environ.get('SCAN_TARGET', 'Unknown')
-    register_default_processors()
-    processors = ProcessorRegistry.all()
+    # Single source of truth: use ScannerRegistry for tool names and paths; bind processor by plugin
     findings_by_tool = {}
+    scanner_processors = []
+    try:
+        scanners = ScannerRegistry.get_all_scanners()
+        for scanner in scanners:
+            if not getattr(scanner, "tools_key", None):
+                continue
+            processor = _get_processor_for_scanner(scanner)
+            if not processor:
+                continue
+            tool_name = scanner.name
+            if processor.html_file:
+                html_path = _scanner_result_path(RESULTS_DIR, scanner.tools_key, processor.html_file)
+                json_path = _scanner_result_path(RESULTS_DIR, scanner.tools_key, processor.json_file) if processor.json_file else None
+                path_to_check = Path(html_path) if html_path else None
+            elif processor.json_file:
+                json_path = _scanner_result_path(RESULTS_DIR, scanner.tools_key, processor.json_file)
+                html_path = None
+                path_to_check = Path(json_path) if json_path else None
+            else:
+                continue
+            if path_to_check and not path_to_check.exists():
+                continue
+            try:
+                if processor.html_file:
+                    findings_by_tool[tool_name] = processor.summary_func(html_path or "", json_path)
+                else:
+                    json_data = read_json(json_path)
+                    findings_by_tool[tool_name] = processor.summary_func(json_data) if json_data is not None else None
+            except Exception as e:
+                debug(f"Warning: Could not process {tool_name}: {e}")
+                findings_by_tool[tool_name] = None
+            scanner_processors.append((scanner, processor))
+    except Exception as e:
+        debug(f"ScannerRegistry failed: {e}")
+        scanner_processors = []
+        findings_by_tool = {}
 
-    for processor in processors:
-        if processor.html_file:
-            html_path = os.path.join(RESULTS_DIR, processor.html_file)
-            json_path = os.path.join(RESULTS_DIR, processor.json_file) if processor.json_file else None
-            try:
-                findings_by_tool[processor.name] = processor.summary_func(html_path, json_path)
-            except Exception as e:
-                debug(f"Warning: Could not process {processor.name} HTML file: {e}")
-                findings_by_tool[processor.name] = None
-        elif processor.json_file:
-            json_path = os.path.join(RESULTS_DIR, processor.json_file)
-            try:
-                json_data = read_json(json_path)
-                findings_by_tool[processor.name] = processor.summary_func(json_data)
-            except Exception as e:
-                debug(f"Warning: Could not process {processor.name} JSON file: {e}")
-                findings_by_tool[processor.name] = None
-        else:
-            findings_by_tool[processor.name] = None
     accepted_findings = []
-    semgrep_findings = findings_by_tool.get("Semgrep")
-    gitleaks_findings = findings_by_tool.get("GitLeaks")
-    bandit_findings = findings_by_tool.get("Bandit")
 
-    # Load scan metadata (only if user enabled metadata collection)
-    scan_metadata = load_metadata(RESULTS_DIR)
+    # Load scan metadata from results_dir/metadata/scan.json (not results_dir/scan.json)
+    metadata_dir = os.path.join(RESULTS_DIR, "metadata")
+    scan_metadata = load_metadata(metadata_dir)
     
-    # Load finding policy - check environment variable first, then metadata
-    policy_path = os.environ.get("FINDING_POLICY_FILE")
-    if not policy_path or policy_path.strip() == "":
-        # Try to get from metadata if available
-        if scan_metadata and scan_metadata.get("finding_policy"):
-            policy_path = scan_metadata.get("finding_policy")
+    # Load finding policy: env FINDING_POLICY_FILE, then FINDING_POLICY_FILE_IN_CONTAINER, then metadata
+    policy_path = os.environ.get("FINDING_POLICY_FILE", "").strip()
+    if not policy_path:
+        policy_path = os.environ.get("FINDING_POLICY_FILE_IN_CONTAINER", "").strip()
+    if not policy_path and scan_metadata and scan_metadata.get("finding_policy"):
+        policy_path = scan_metadata.get("finding_policy", "")
     
     if not policy_path or policy_path.strip() == "":
-        # No policy specified - don't use any policy
         finding_policy = {}
     else:
-        # Policy was explicitly provided - try to load it
         finding_policy = load_policy(policy_path)
     
-    if semgrep_findings is not None:
-        semgrep_findings, semgrep_accepted = apply_semgrep_policy(semgrep_findings, finding_policy.get("semgrep", {}))
-        findings_by_tool["Semgrep"] = semgrep_findings
-        accepted_findings.extend(semgrep_accepted)
-    if gitleaks_findings is not None:
-        gitleaks_findings, gitleaks_accepted = apply_gitleaks_policy(gitleaks_findings, finding_policy.get("gitleaks", {}))
-        findings_by_tool["GitLeaks"] = gitleaks_findings
-        accepted_findings.extend(gitleaks_accepted)
-    if bandit_findings is not None:
-        bandit_findings, bandit_accepted = apply_bandit_policy(bandit_findings, finding_policy.get("bandit", {}))
-        findings_by_tool["Bandit"] = bandit_findings
-        accepted_findings.extend(bandit_accepted)
+    for scanner, processor in scanner_processors:
+        if not getattr(processor, "policy_key", None) or not getattr(processor, "apply_policy", None):
+            continue
+        findings = findings_by_tool.get(scanner.name)
+        if findings is not None:
+            tool_policy = finding_policy.get(processor.policy_key, {}) if isinstance(finding_policy, dict) else {}
+            updated, accepted = processor.apply_policy(findings, tool_policy)
+            findings_by_tool[scanner.name] = updated
+            accepted_findings.extend(accepted)
 
     try:
         all_findings = sanitize_findings(findings_by_tool)
         
-        # Determine which tools were executed
-        # A tool was executed if it has actual findings or if it was run but found nothing
-        # We need to check if findings exist AND are not None
-        # None means skipped, [] or items means executed but may have no findings
-        executed_tools = {}
+        # Determine which tools were executed: use steps.log for real status (complete/failed/skipped)
+        executed_tools = load_tool_statuses_from_steps_log(RESULTS_DIR)
         for tool, findings in all_findings.items():
-            # Tools that have findings (even if empty list) or ZAP with alerts should show as executed
-            if findings is not None:
-                executed_tools[tool] = {'status': 'complete'}
-            elif tool == 'ZAP' and isinstance(findings, dict):
-                executed_tools[tool] = {'status': 'complete'}
+            if findings is not None or (tool == "ZAP" and isinstance(findings, dict)):
+                executed_tools[tool] = {"status": "complete", "message": ""}
         
         # Read and embed JavaScript files inline (required for both Blob URLs and file://)
         embedded_scripts = ""
@@ -452,7 +442,7 @@ def main():
         possible_dirs = [
             Path("/app/scanner/output"),  # Container absolute path (PRIMARY)
             SCRIPT_DIR,  # scanner/output/ (relative to script)
-            Path(RESULTS_DIR),  # results/ (fallback - files copied after report generation)
+            Path(RESULTS_DIR),  # results/ (files copied after report generation)
         ]
         
         for js_file in js_files:
@@ -479,7 +469,7 @@ def main():
                 sys.stderr.write(f"[ERROR] Failed to embed {js_file} - AI Prompt feature will not work!\n")
         
         # Normalize findings for AI prompt (for client-side generation when frontend is not available)
-        normalized_findings = normalize_findings_for_ai_prompt(processors, all_findings)
+        normalized_findings = normalize_findings_for_ai_prompt(scanner_processors, all_findings)
         ai_prompt_disabled = len(normalized_findings) == 0
         findings_json = json.dumps(normalized_findings, indent=2)
         # Embed as JSON in script tag - no HTML escape needed since it's in a script tag
@@ -517,80 +507,40 @@ def main():
                 if tool_cards:
                     f.write("<div class='summary-box'><h2>Tool Summary</h2>" + "".join(tool_cards) + "</div>")
 
-                # Tool-specific sections
-                for processor in processors:
-                    findings = all_findings.get(processor.name)
-                    if processor.html_func:
-                        try:
-                            if processor.name == "ZAP" and isinstance(findings, dict):
-                                if sum(findings.get('summary', findings).values()) > 0:
-                                    html_path = os.path.join(RESULTS_DIR, processor.html_file)
-                                    f.write(processor.html_func(findings, html_path, Path, os))
-                            elif findings is None:
-                                continue
-                            elif isinstance(findings, list) and len(findings) == 0:
-                                continue
-                            else:
-                                f.write(processor.html_func(findings))
-                        except Exception as e:
-                            debug(f"Warning: Could not generate HTML for {processor.name}: {e}")
-                            # Continue with other processors instead of failing completely
+                # Tool-specific sections (scanner.name is the only key)
+                for scanner, processor in scanner_processors:
+                    tool_name = scanner.name
+                    findings = all_findings.get(tool_name)
+                    if not processor or not getattr(processor, "html_func", None):
+                        continue
+                    try:
+                        if tool_name == "ZAP" and isinstance(findings, dict):
+                            if sum(findings.get('summary', findings).values()) > 0:
+                                html_path = _scanner_result_path(RESULTS_DIR, scanner.tools_key, processor.html_file)
+                                f.write(processor.html_func(findings, html_path, Path, os))
+                        elif findings is None:
                             continue
+                        elif isinstance(findings, list) and len(findings) == 0:
+                            continue
+                        else:
+                            f.write(processor.html_func(findings))
+                    except Exception as e:
+                        debug(f"Warning: Could not generate HTML for {tool_name}: {e}")
+                        continue
 
                 # Accepted Findings Section (only if policy accepted any findings)
                 if len(accepted_findings) > 0:
                     f.write(generate_accepted_findings_section(accepted_findings))
 
                 # Finding Policy Section (always shown - shows status or instructions)
-                f.write(generate_finding_policy_section(finding_policy, policy_path, accepted_findings))
+                f.write(generate_finding_policy_section(finding_policy, policy_path, accepted_findings, scanner_processors))
 
                 f.write(html_footer())
             debug(f"HTML report successfully written to {OUTPUT_FILE}")
         except Exception as e:
             debug(f"Failed to write HTML report: {e}")
             traceback.print_exc()
-            # Create a minimal fallback HTML report
-            debug("Creating minimal fallback HTML report...")
-            try:
-                with open(OUTPUT_FILE, 'w') as f:
-                    f.write(f"""<!DOCTYPE html>
-<html>
-<head>
-    <title>{target} - {now} - Fallback Report</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; margin: 20px; }}
-        .error-box {{ background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 4px; margin: 20px 0; }}
-        .tool-list {{ margin: 20px 0; }}
-        .tool-item {{ margin: 5px 0; padding: 5px; }}
-    </style>
-</head>
-<body>
-    <h1>Security Scan Report - {target}</h1>
-    <p><strong>Scan Date:</strong> {now}</p>
-    
-    <div class="error-box">
-        <h3>⚠️ Report Generation Error</h3>
-        <p>The full HTML report could not be generated due to an error. This is a minimal fallback report.</p>
-        <p><strong>Error:</strong> {str(e)}</p>
-    </div>
-    
-    <h2>Tool Execution Status</h2>
-    <div class="tool-list">
-        {"".join(f"<div class='tool-item'><strong>{tool}:</strong> {'Executed' if data.get('status') == 'complete' else 'Skipped'}</div>" for tool, data in executed_tools.items())}
-    </div>
-    
-    <h2>Available Scanner Data</h2>
-    <div class="tool-list">
-        {"".join(f"<div class='tool-item'><strong>{tool}:</strong> {'Data available' if findings is not None else 'No data'}</div>" for tool, findings in all_findings.items())}
-    </div>
-    
-    <p><em>For detailed results, please check the individual scanner output files in the results directory.</em></p>
-</body>
-</html>""")
-                debug(f"Minimal fallback HTML report created at {OUTPUT_FILE}")
-            except Exception as fallback_error:
-                debug(f"Failed to create fallback HTML report: {fallback_error}")
-                sys.exit(1)
+            sys.exit(1)
     except Exception as e:
         debug(f"Failed to process findings: {e}")
         traceback.print_exc()

@@ -2,6 +2,7 @@
 Brakeman Scanner
 Python implementation of run_brakeman.sh
 """
+import json
 import os
 from pathlib import Path
 from typing import List, Optional
@@ -65,6 +66,11 @@ class BrakemanScanner(BaseScanner):
         
         if not ruby_files:
             self.log("No Ruby/Rails files found, skipping scan.", "WARNING")
+            status_file = Path(self.results_dir) / "status.json"
+            try:
+                status_file.write_text(json.dumps({"status": "skipped", "message": "No Ruby/Rails files found, skipping scan."}), encoding="utf-8")
+            except Exception:
+                pass
             return True
         
         self.log(f"Found {len(ruby_files)} Ruby/Rails file(s).")

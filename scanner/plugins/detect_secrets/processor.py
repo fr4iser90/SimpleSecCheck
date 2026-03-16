@@ -4,14 +4,7 @@ import sys
 import html
 import json
 
-# Setup paths using central path_setup module
-# NO PATH CALCULATIONS HERE - everything is handled by path_setup.py
-sys.path.insert(0, "/project/src")
-sys.path.insert(0, "/app")  # For import
-from core.path_setup import setup_paths
-setup_paths()
-
-pass
+import re
 
 def debug(msg):
     print(f"[detect_secrets_processor] {msg}", file=sys.stderr)
@@ -75,6 +68,48 @@ def generate_detect_secrets_html_section(detect_secrets_findings):
         html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No secrets detected.</div>')
     return "".join(html_parts)
 
+
+def _matches_pattern(value, pattern):
+    if pattern is None: return True
+    if value is None: value = ""
+    try: return re.search(pattern, str(value)) is not None
+    except re.error: return False
+
+
+def _matches_detect_secrets_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("type", ""), rule.get("rule_id"))
+    path_ok = _matches_pattern(finding.get("filename", ""), rule.get("path_regex"))
+    return rule_ok and path_ok
+
+
+def _accept_record_detect_secrets(finding, reason):
+    return {"tool": "Detect-secrets", "reason": reason or "Accepted by policy", "id": finding.get("type", ""), "path": finding.get("filename", ""), "line": str(finding.get("line_number", "")), "message": ""}
+
+
+def apply_detect_secrets_policy(findings, tool_policy):
+    if not findings: return [], []
+    accepted_rules = tool_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+    for finding in findings:
+        accepted = next((r for r in accepted_rules if _matches_detect_secrets_rule(finding, r)), None)
+        if accepted:
+            accepted_records.append(_accept_record_detect_secrets(finding, accepted.get("reason", "Accepted by policy")))
+            continue
+        processed.append(finding)
+    return processed, accepted_records
+
+
+DETECT_SECRETS_POLICY_EXAMPLE = '''  "detect_secrets": {
+    "accepted_findings": [
+      {
+        "rule_id": "Private Key",
+        "path_regex": "tests/fixtures/.*\\.pem$",
+        "reason": "Test fixture keys, not used in production"
+      }
+    ]
+  }'''
+
 REPORT_PROCESSOR = ReportProcessor(
     name="Detect-secrets",
     summary_func=detect_secrets_summary,
@@ -83,12 +118,15 @@ REPORT_PROCESSOR = ReportProcessor(
         {
             "tool": "Detect-secrets",
             "severity": str(f.get("severity", f.get("Severity", "UNKNOWN"))).upper(),
-            "rule_id": str(f.get("rule_id", f.get("id", ""))),
+            "rule_id": str(f.get("rule_id", f.get("id", f.get("type", "")))),
             "path": str(f.get("path", f.get("file", f.get("filename", "")))),
             "line": str(f.get("line", f.get("line_number", f.get("start", "")))),
             "message": str(f.get("message", f.get("description", f.get("title", "")))),
         }
         for f in (findings or [])
     ],
-    json_file="report.json",  # Changed from detect-secrets.json
+    json_file="report.json",
+    policy_key="detect_secrets",
+    apply_policy=apply_detect_secrets_policy,
+    policy_example_snippet=DETECT_SECRETS_POLICY_EXAMPLE,
 )

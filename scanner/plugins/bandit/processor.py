@@ -4,6 +4,7 @@ import sys
 import json
 import html
 import os
+import re
 
 def debug(msg):
     print(f"[bandit_processor] {msg}", file=sys.stderr)
@@ -68,6 +69,66 @@ def generate_bandit_html_section(bandit_findings):
     
     return '\n'.join(html_parts)
 
+
+def _matches_pattern(value, pattern):
+    if pattern is None:
+        return True
+    if value is None:
+        value = ""
+    try:
+        return re.search(pattern, str(value)) is not None
+    except re.error:
+        return False
+
+
+def _matches_bandit_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or rule.get("rule_id") == finding.get("rule_id")
+    path_ok = _matches_pattern(finding.get("filename", ""), rule.get("path_regex"))
+    msg_ok = _matches_pattern(finding.get("message", ""), rule.get("message_regex"))
+    return rule_ok and path_ok and msg_ok
+
+
+def _accept_record_bandit(finding, reason):
+    return {
+        "tool": "Bandit",
+        "reason": reason or "Accepted by policy",
+        "id": finding.get("rule_id", ""),
+        "path": finding.get("filename", ""),
+        "line": finding.get("line_number", ""),
+        "message": finding.get("message", ""),
+    }
+
+
+def apply_bandit_policy(findings, tool_policy):
+    if not findings:
+        return [], []
+    accepted_rules = tool_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+    for finding in findings:
+        accepted = None
+        for rule in accepted_rules:
+            if _matches_bandit_rule(finding, rule):
+                accepted = rule
+                break
+        if accepted:
+            accepted_records.append(_accept_record_bandit(finding, accepted.get("reason", "Accepted by policy")))
+            continue
+        processed.append(finding)
+    return processed, accepted_records
+
+
+BANDIT_POLICY_EXAMPLE = '''  "bandit": {
+    "accepted_findings": [
+      {
+        "rule_id": "B101",
+        "path_regex": "tests/.*|conftest\\.py$",
+        "message_regex": "assert_used",
+        "reason": "Assert used only in tests, acceptable"
+      }
+    ]
+  }'''
+
 # Main processing logic
 if __name__ == "__main__":
     results_dir = sys.argv[1] if len(sys.argv) > 1 else "/app/results"
@@ -94,5 +155,8 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="report.json",  # Changed from bandit.json
+    json_file="report.json",
+    policy_key="bandit",
+    apply_policy=apply_bandit_policy,
+    policy_example_snippet=BANDIT_POLICY_EXAMPLE,
 )

@@ -36,12 +36,19 @@ def get_host_project_root():
     """
     Get host project root directory.
     Returns host path or None if not found.
-    """
-    host_project_root = os.environ.get("HOST_PROJECT_ROOT")
-    if host_project_root:
-        return host_project_root
     
-    # Try to get from docker inspect
+    Uses RESULTS_DIR_HOST to derive project root (same as worker).
+    Falls back to docker inspect if RESULTS_DIR_HOST not available.
+    """
+    # Primary method: Use RESULTS_DIR_HOST (same as worker uses)
+    # RESULTS_DIR_HOST is ${PWD}/results, so go up one level to get project root
+    results_dir_host = os.environ.get("RESULTS_DIR_HOST")
+    if results_dir_host:
+        host_project_root = os.path.dirname(results_dir_host)
+        if os.path.isabs(host_project_root):
+            return host_project_root
+    
+    # Fallback: Try to get from docker inspect
     import subprocess as sp
     try:
         result = sp.run(

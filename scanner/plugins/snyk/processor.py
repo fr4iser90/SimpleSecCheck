@@ -3,6 +3,7 @@ from scanner.output.processor_registry import ReportProcessor
 import sys
 import html
 import json
+import re
 
 def debug(msg):
     print(f"[snyk_processor] {msg}", file=sys.stderr)
@@ -99,6 +100,66 @@ def generate_snyk_html_section(snyk_findings):
         html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No vulnerabilities found by Snyk.</div>')
     return "".join(html_parts)
 
+
+def _matches_pattern(value, pattern):
+    if pattern is None:
+        return True
+    if value is None:
+        value = ""
+    try:
+        return re.search(pattern, str(value)) is not None
+    except re.error:
+        return False
+
+
+def _matches_snyk_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("vulnerability_id", ""), rule.get("rule_id"))
+    path_ok = _matches_pattern(finding.get("package", ""), rule.get("path_regex"))
+    msg_ok = _matches_pattern(finding.get("title", ""), rule.get("message_regex"))
+    return rule_ok and path_ok and msg_ok
+
+
+def _accept_record_snyk(finding, reason):
+    return {
+        "tool": "Snyk",
+        "reason": reason or "Accepted by policy",
+        "id": finding.get("vulnerability_id", ""),
+        "path": finding.get("package", ""),
+        "line": "",
+        "message": finding.get("title", ""),
+    }
+
+
+def apply_snyk_policy(findings, tool_policy):
+    if not findings:
+        return [], []
+    accepted_rules = tool_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+    for finding in findings:
+        accepted = None
+        for rule in accepted_rules:
+            if _matches_snyk_rule(finding, rule):
+                accepted = rule
+                break
+        if accepted:
+            accepted_records.append(_accept_record_snyk(finding, accepted.get("reason", "Accepted by policy")))
+            continue
+        processed.append(finding)
+    return processed, accepted_records
+
+
+SNYK_POLICY_EXAMPLE = '''  "snyk": {
+    "accepted_findings": [
+      {
+        "rule_id": "SNYK-JS-LODASH-.*",
+        "path_regex": "lodash",
+        "message_regex": "Prototype Pollution",
+        "reason": "Lodash pinned and used in safe context only"
+      }
+    ]
+  }'''
+
 REPORT_PROCESSOR = ReportProcessor(
     name="Snyk",
     summary_func=snyk_summary,
@@ -107,12 +168,15 @@ REPORT_PROCESSOR = ReportProcessor(
         {
             "tool": "Snyk",
             "severity": str(f.get("severity", f.get("Severity", "UNKNOWN"))).upper(),
-            "rule_id": str(f.get("rule_id", f.get("id", ""))),
-            "path": str(f.get("path", f.get("file", f.get("filename", "")))),
+            "rule_id": str(f.get("rule_id", f.get("id", f.get("vulnerability_id", "")))),
+            "path": str(f.get("path", f.get("file", f.get("filename", f.get("package", "")))),
             "line": str(f.get("line", f.get("line_number", f.get("start", "")))),
             "message": str(f.get("message", f.get("description", f.get("title", "")))),
         }
         for f in (findings or [])
     ],
-    json_file="report.json",  # Changed from snyk.json
+    json_file="report.json",
+    policy_key="snyk",
+    apply_policy=apply_snyk_policy,
+    policy_example_snippet=SNYK_POLICY_EXAMPLE,
 )

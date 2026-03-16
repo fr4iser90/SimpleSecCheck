@@ -69,7 +69,7 @@ class ScannerCapability:
 
 @dataclass
 class Scanner:
-    """Scanner definition"""
+    """Scanner definition. tools_key is the canonical key for results/tools/<key>/ (from registry only)."""
     name: str
     capabilities: List[ScannerCapability]
     script_path: str  # Path to scanner script (inside container)
@@ -78,6 +78,7 @@ class Scanner:
     requires_condition: Optional[str] = None  # Optional condition (e.g., "IS_NATIVE")
     python_class: Optional[str] = None  # Fully-qualified Python scanner class
     manifest_name: Optional[str] = None  # Manifest name from manifest.yaml (for asset lookup)
+    tools_key: Optional[str] = None  # Canonical subdir name under results/tools/; set from plugin module path at registration
 
 
 class ScannerRegistry:
@@ -237,7 +238,11 @@ class ScannerRegistry:
         script_path = getattr(scanner_class, "SCRIPT_PATH", None)
         module = scanner_class.__module__
         python_class = f"{module}.{class_name}"
-                
+        tools_key: Optional[str] = None
+        if python_class:
+            parts = python_class.split(".")
+            if len(parts) >= 3 and parts[0] == "scanner" and parts[1] == "plugins":
+                tools_key = parts[2]
         # Create and register Scanner
         scanner = Scanner(
             name=scanner_name,
@@ -246,9 +251,9 @@ class ScannerRegistry:
             priority=priority,
             requires_condition=requires_condition,
             python_class=python_class,
-            manifest_name=manifest_name  # Store manifest name for asset lookup
+            manifest_name=manifest_name,
+            tools_key=tools_key,
         )
-        
         cls.register(scanner)
 
 
@@ -270,11 +275,4 @@ _register_all_scanners()
 try:
     import scanner.plugins  # noqa: F401 - This triggers auto-registration via __init__.py
 except Exception:
-    # Fallback to old scanners import
-    try:
-        import scanner.scanners  # noqa: F401
-    except Exception:
-        try:
-            import scanners  # type: ignore # noqa: F401
-        except Exception:
-            pass
+    pass  # Plugin import failed, fallback to manual registration

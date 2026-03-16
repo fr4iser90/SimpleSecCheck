@@ -152,15 +152,7 @@ def collect_scan_metadata(
         }
     }
     
-    # Extract project name from host path if available, otherwise from container path
-    if actual_path_for_name:
-        try:
-            abs_path = os.path.abspath(actual_path_for_name)
-            metadata["project_name"] = os.path.basename(abs_path.rstrip("/"))
-        except Exception:
-            metadata["project_name"] = os.path.basename(actual_path_for_name) if actual_path_for_name else None
-    
-    # Collect Git information
+    # Collect Git information first (needed for project name extraction)
     # IMPORTANT: For CI mode, use target_path_host (original repo) instead of target_path (tracked snapshot)
     # The tracked snapshot has no .git directory, so we need the original repository
     if scan_type == "code":
@@ -173,6 +165,29 @@ def collect_scan_metadata(
         elif actual_path_for_files and os.path.exists(actual_path_for_files):
             # Normal mode: Use container path
             metadata["git_info"] = get_git_info(actual_path_for_files)
+    
+    # Extract project name: prefer Git repository name, fallback to path
+    if metadata.get("git_info", {}).get("repository_url"):
+        # Extract project name from Git URL (e.g., https://github.com/user/repo.git -> repo)
+        repo_url = metadata["git_info"]["repository_url"]
+        try:
+            # Remove .git suffix if present
+            repo_url = repo_url.rstrip(".git")
+            # Extract repo name from URL (last part after /)
+            repo_name = repo_url.split("/")[-1]
+            if repo_name:
+                metadata["project_name"] = repo_name
+        except Exception:
+            pass  # Fall through to path-based extraction
+    
+    # Fallback: Extract project name from host path if available, otherwise from container path
+    if not metadata.get("project_name"):
+        if actual_path_for_name:
+            try:
+                abs_path = os.path.abspath(actual_path_for_name)
+                metadata["project_name"] = os.path.basename(abs_path.rstrip("/"))
+            except Exception:
+                metadata["project_name"] = os.path.basename(actual_path_for_name) if actual_path_for_name else None
     
     return metadata
 

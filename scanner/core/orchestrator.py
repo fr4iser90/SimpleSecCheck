@@ -23,7 +23,7 @@ if "/app/scanner" not in sys.path:
 import scanner.plugins  # noqa: F401 - This triggers auto-registration via __init__.py
 
 from scanner.core.scanner_registry import ScannerRegistry, ScanType, TargetType, Scanner
-from scanner.core.step_registry import StepRegistry, StepStatus, Step
+from scanner.core.step_registry import StepRegistry, StepStatus, Step, SubStepType
 from scanner.core.step_definitions import StepDefinitionsRegistry, StepType
 from scanner.core.base_scanner import set_global_step_registry
 
@@ -277,10 +277,12 @@ class ScanOrchestrator:
         # Start step
         self.step_registry.start_step(scanner.name, f"Running {scanner.name} scan...")
         self.log_message(f"--- Orchestrating {scanner.name} Scan ---")
-        
-        # Create scanner-specific directory in tools/
-        scanner_name_lower = scanner.name.lower()
-        scanner_dir = self.tools_dir_results / scanner_name_lower
+        if not scanner.tools_key:
+            self.log_message(f"[ORCHESTRATOR] Scanner {scanner.name} has no tools_key in registry, skipping.")
+            self.scanner_statuses[scanner.name] = "FAILED"
+            self.step_registry.fail_step(scanner.name, "No tools_key in registry")
+            return False
+        scanner_dir = self.tools_dir_results / scanner.tools_key
         scanner_dir.mkdir(parents=True, exist_ok=True)
         scanner_log_file = scanner_dir / "log"
         
@@ -351,6 +353,22 @@ class ScanOrchestrator:
                 scanner_instance = scanner_class(**valid_kwargs)
                 
                 success = scanner_instance.run()
+                
+                # If scanner wrote status.json with status "skipped", mark step as skipped (e.g. Brakeman/Terraform no files)
+                scanner_dir = self.tools_dir_results / scanner.tools_key
+                status_file = scanner_dir / "status.json"
+                if status_file.exists():
+                    try:
+                        import json
+                        data = json.loads(status_file.read_text(encoding="utf-8"))
+                        if data.get("status") == "skipped":
+                            msg = data.get("message", f"{scanner.name} skipped")
+                            self.log_message(f"{scanner.name} skipped: {msg}")
+                            self.scanner_statuses[scanner.name] = "SKIPPED"
+                            self.step_registry.skip_step(scanner.name, msg)
+                            return False
+                    except Exception:
+                        pass
                 
                 if success:
                     self.log_message(f"{scanner.name} completed successfully (exit code 0)")
@@ -478,6 +496,115 @@ class ScanOrchestrator:
             self.log_message(f"[ERROR] Error collecting metadata: {e}")
             self.step_registry.complete_step("Metadata Collection", "Metadata collection completed (with errors)")
     
+    async def _collect_artifacts(self):
+        """Collect all scan artifacts (SARIF, JSON, HTML, logs) for CI/CD integration"""
+        import json
+        import shutil
+        
+        self.log_message("--- Collecting Artifacts ---")
+        self.step_registry.start_step("Artifact Collection", "Collecting scan artifacts...")
+        
+        # Create artifacts directory
+        artifacts_dir = self.results_dir / "artifacts"
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        
+        artifacts_manifest = {
+            "scan_id": self.step_registry.scan_id,
+            "collected_at": datetime.now().isoformat(),
+            "artifacts": {
+                "sarif": [],
+                "json": [],
+                "html": [],
+                "logs": []
+            }
+        }
+        
+        try:
+            # Collect SARIF files
+            self.step_registry.start_substep("Artifact Collection", "Collecting SARIF files...", SubStepType.ACTION)
+            sarif_files = list(self.results_dir.rglob("*.sarif"))
+            sarif_count = 0
+            for sarif_file in sarif_files:
+                if sarif_file.is_file() and sarif_file.stat().st_size > 0:
+                    dest = artifacts_dir / "sarif" / sarif_file.name
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(sarif_file, dest)
+                    artifacts_manifest["artifacts"]["sarif"].append({
+                        "name": sarif_file.name,
+                        "path": str(dest.relative_to(self.results_dir)),
+                        "size": sarif_file.stat().st_size
+                    })
+                    sarif_count += 1
+            self.step_registry.complete_substep("Collecting SARIF files...", f"Collected {sarif_count} SARIF file(s)")
+            
+            # Collect JSON files
+            self.step_registry.start_substep("Artifact Collection", "Collecting JSON reports...", SubStepType.ACTION)
+            json_files = list(self.results_dir.rglob("report.json"))
+            json_count = 0
+            for json_file in json_files:
+                if json_file.is_file() and json_file.stat().st_size > 0:
+                    # Preserve directory structure
+                    rel_path = json_file.relative_to(self.results_dir)
+                    dest = artifacts_dir / "json" / rel_path
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(json_file, dest)
+                    artifacts_manifest["artifacts"]["json"].append({
+                        "name": json_file.name,
+                        "path": str(dest.relative_to(self.results_dir)),
+                        "size": json_file.stat().st_size
+                    })
+                    json_count += 1
+            self.step_registry.complete_substep("Collecting JSON reports...", f"Collected {json_count} JSON file(s)")
+            
+            # Collect HTML files
+            self.step_registry.start_substep("Artifact Collection", "Collecting HTML reports...", SubStepType.ACTION)
+            html_files = list(self.results_dir.rglob("*.html"))
+            html_count = 0
+            for html_file in html_files:
+                if html_file.is_file() and html_file.stat().st_size > 0:
+                    rel_path = html_file.relative_to(self.results_dir)
+                    dest = artifacts_dir / "html" / rel_path
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(html_file, dest)
+                    artifacts_manifest["artifacts"]["html"].append({
+                        "name": html_file.name,
+                        "path": str(dest.relative_to(self.results_dir)),
+                        "size": html_file.stat().st_size
+                    })
+                    html_count += 1
+            self.step_registry.complete_substep("Collecting HTML reports...", f"Collected {html_count} HTML file(s)")
+            
+            # Collect log files
+            self.step_registry.start_substep("Artifact Collection", "Collecting log files...", SubStepType.ACTION)
+            log_files = list(self.logs_dir.rglob("*.log"))
+            log_count = 0
+            for log_file in log_files:
+                if log_file.is_file() and log_file.stat().st_size > 0:
+                    rel_path = log_file.relative_to(self.results_dir)
+                    dest = artifacts_dir / "logs" / rel_path
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(log_file, dest)
+                    artifacts_manifest["artifacts"]["logs"].append({
+                        "name": log_file.name,
+                        "path": str(dest.relative_to(self.results_dir)),
+                        "size": log_file.stat().st_size
+                    })
+                    log_count += 1
+            self.step_registry.complete_substep("Collecting log files...", f"Collected {log_count} log file(s)")
+            
+            # Save artifacts manifest
+            manifest_path = artifacts_dir / "artifacts.json"
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(artifacts_manifest, f, indent=2)
+            
+            total_artifacts = sarif_count + json_count + html_count + log_count
+            self.log_message(f"Artifact collection completed: {total_artifacts} artifact(s) collected")
+            self.step_registry.complete_step("Artifact Collection", f"Collected {total_artifacts} artifact(s) (SARIF: {sarif_count}, JSON: {json_count}, HTML: {html_count}, Logs: {log_count})")
+            
+        except Exception as e:
+            self.log_message(f"[ERROR] Error collecting artifacts: {e}")
+            self.step_registry.complete_step("Artifact Collection", f"Artifact collection completed (with errors: {e})")
+    
     def _pre_register_all_steps(self):
         """
         Pre-register all steps as 'pending' BEFORE scan starts.
@@ -566,7 +693,7 @@ class ScanOrchestrator:
             scanner_count=len(scanners)
         )
         
-        # Execute steps in order from registry
+        # Execute steps in order from registry (EXCEPT Completion and Artifact Collection - they run AFTER scanners)
         for step_def in step_definitions:
             if step_def.step_type == StepType.GIT_CLONE:
                 await self._run_git_clone()
@@ -576,14 +703,7 @@ class ScanOrchestrator:
                 self.step_registry.complete_step("Initialization", "Scan initialized")
             elif step_def.step_type == StepType.METADATA_COLLECTION:
                 await self._collect_metadata()
-            elif step_def.step_type == StepType.COMPLETION:
-                self.step_registry.start_step("Completion", "Finalizing scan...")
-                self._generate_html_report()
-                self.log_message("SimpleSecCheck Scan Completed")
-                if self.overall_success:
-                    self.step_registry.complete_step("Completion", "Scan completed successfully")
-                else:
-                    self.step_registry.complete_step("Completion", "Scan completed with some errors")
+            # Skip Completion and Artifact Collection here - they run AFTER all scanners
         
         # Run scanners (they are registered as steps but executed separately)
         if self.selected_scanners:
@@ -595,6 +715,32 @@ class ScanOrchestrator:
         
         for scanner in scanners:
             await self._run_scanner(scanner)
+        
+        # Run Artifact Collection step AFTER all scanners (before Completion)
+        artifact_collection_step_def = None
+        for step_def in step_definitions:
+            if step_def.step_type == StepType.ARTIFACT_COLLECTION:
+                artifact_collection_step_def = step_def
+                break
+        
+        if artifact_collection_step_def:
+            await self._collect_artifacts()
+        
+        # Run Completion step AFTER Artifact Collection (correct order!)
+        completion_step_def = None
+        for step_def in step_definitions:
+            if step_def.step_type == StepType.COMPLETION:
+                completion_step_def = step_def
+                break
+        
+        if completion_step_def:
+            self.step_registry.start_step("Completion", "Finalizing scan...")
+            self._generate_html_report()
+            self.log_message("SimpleSecCheck Scan Completed")
+            if self.overall_success:
+                self.step_registry.complete_step("Completion", "Scan completed successfully")
+            else:
+                self.step_registry.complete_step("Completion", "Scan completed with some errors")
         
         # Always return 0 to allow summary generation
         return 0
@@ -1057,6 +1203,12 @@ async def main():
     """Main entry point for orchestrator"""
     import sys
     
+    # Check for --help flag
+    if len(sys.argv) > 1 and (sys.argv[1] == "--help" or sys.argv[1] == "-h"):
+        from scanner.core.help import print_help
+        print_help()
+        return
+    
     # Check for --list flag
     if len(sys.argv) > 1 and sys.argv[1] == "--list":
         await list_scanners()
@@ -1072,14 +1224,15 @@ async def main():
         # Silent exit - container is just running, no scan requested
         sys.exit(0)
     
-    # CRITICAL: SCAN_ID is REQUIRED - do not generate fallback!
-    # Worker MUST provide SCAN_ID via environment variable
-    # Without SCAN_ID, we cannot create scan-specific directories
+    # Auto-generate SCAN_ID for standalone usage (when not provided)
+    # Worker-provided scans MUST have SCAN_ID set, but for standalone CLI usage we can auto-generate
     if not scan_id:
-        print("[Orchestrator] ERROR: SCAN_ID environment variable is required but not set!")
-        print("[Orchestrator] Worker must provide SCAN_ID when starting scanner container.")
-        print("[Orchestrator] Cannot create scan-specific results directory without SCAN_ID.")
-        sys.exit(1)
+        # Generate auto ID for standalone usage
+        from datetime import datetime
+        import uuid
+        scan_id = f"scan-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{str(uuid.uuid4())[:8]}"
+        print(f"[Orchestrator] No SCAN_ID provided, auto-generating: {scan_id}")
+        print(f"[Orchestrator] Note: For Worker-based scans, SCAN_ID must be provided!")
     
     # Get base results directory (orchestrator will append scan_id)
     base_results_dir = Path(os.getenv("RESULTS_DIR_IN_CONTAINER", "/app/results"))

@@ -33,6 +33,7 @@ interface SubStep {
   message?: string
   started_at?: string | null
   completed_at?: string | null
+  type?: 'phase' | 'action' | 'output'  // Substep type for visual distinction
 }
 
 interface Step {
@@ -464,37 +465,72 @@ export default function ScanView() {
                       <div style={{ fontSize: '0.75rem', opacity: 0.6, marginBottom: '0.5rem', fontWeight: 600 }}>
                         SUB-STEPS:
                       </div>
-                      {step.substeps.map((substep, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                            padding: '0.5rem',
-                            marginBottom: '0.25rem',
-                            background: 'rgba(0, 0, 0, 0.2)',
-                            borderRadius: '6px',
-                            fontSize: '0.875rem',
-                          }}
-                        >
-                          <span style={{
-                            color: getSubStepColor(substep.status),
-                            fontWeight: 'bold',
-                            fontSize: '0.75rem',
-                          }}>
-                            {getSubStepIcon(substep.status)}
-                          </span>
-                          <span style={{ flex: 1, opacity: 0.9 }}>
-                            {substep.name}
-                          </span>
-                          {substep.message && (
-                            <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>
-                              {substep.message}
+                      {step.substeps.map((substep, idx) => {
+                        const getSubStepTypeStyle = () => {
+                          const type = substep.type || 'action'
+                          switch (type) {
+                            case 'phase':
+                              return {
+                                badge: '🔹',
+                                bgColor: 'rgba(59, 130, 246, 0.15)',  // Blue tint
+                                borderColor: 'rgba(59, 130, 246, 0.3)',
+                                label: 'PHASE'
+                              }
+                            case 'output':
+                              return {
+                                badge: '📄',
+                                bgColor: 'rgba(34, 197, 94, 0.15)',  // Green tint
+                                borderColor: 'rgba(34, 197, 94, 0.3)',
+                                label: 'OUTPUT'
+                              }
+                            default: // 'action'
+                              return {
+                                badge: '⚙️',
+                                bgColor: 'rgba(0, 0, 0, 0.2)',
+                                borderColor: 'rgba(255, 255, 255, 0.1)',
+                                label: 'ACTION'
+                              }
+                          }
+                        }
+                        
+                        const typeStyle = getSubStepTypeStyle()
+                        
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.5rem',
+                              padding: '0.5rem',
+                              marginBottom: '0.25rem',
+                              background: typeStyle.bgColor,
+                              border: `1px solid ${typeStyle.borderColor}`,
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                            }}
+                          >
+                            <span style={{
+                              color: getSubStepColor(substep.status),
+                              fontWeight: 'bold',
+                              fontSize: '0.75rem',
+                            }}>
+                              {getSubStepIcon(substep.status)}
                             </span>
-                          )}
-                        </div>
-                      ))}
+                            <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>
+                              {typeStyle.badge}
+                            </span>
+                            <span style={{ flex: 1, opacity: 0.9 }}>
+                              {substep.name}
+                            </span>
+                            {substep.message && (
+                              <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>
+                                {substep.message}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                   {step.status === 'running' && (!step.substeps || step.substeps.length === 0) && (

@@ -1,0 +1,38 @@
+{
+  "result_keys": ["is_react_native", "is_android", "is_ios", "has_native", "project_type", "detected_files"],
+  "project_type_default": "unknown",
+  "rules": [
+    {
+      "type": "deps",
+      "file": "package.json",
+      "deps_key": ["dependencies", "devDependencies"],
+      "deps": ["react-native", "expo"],
+      "set": {"is_react_native": true},
+      "project_type_from_dep": {"expo": "react-native-expo", "react-native": "react-native"},
+      "add_detected": "package.json"
+    },
+    {
+      "type": "paths",
+      "files": ["AndroidManifest.xml", "build.gradle"],
+      "dirs": ["android"],
+      "set": {"is_android": true, "has_native": true},
+      "project_type": "android-native",
+      "add_detected": ["AndroidManifest.xml"],
+      "add_detected_under_dir": {"android": "AndroidManifest.xml"}
+    },
+    {
+      "type": "paths",
+      "files": ["Info.plist"],
+      "dirs": ["ios"],
+      "set": {"is_ios": true, "has_native": true},
+      "project_type": "ios-native",
+      "add_detected": ["Info.plist"]
+    },
+    {
+      "type": "combine",
+      "when_all": ["is_react_native"],
+      "when_any": ["is_android", "is_ios"],
+      "set": {"has_native": true}
+    }
+  ]
+}

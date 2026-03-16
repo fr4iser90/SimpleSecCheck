@@ -179,7 +179,7 @@ def generate_html_report(data):
 
 def main():
     if len(sys.argv) != 2:
-        print("Usage: python3 zap_xml_parser.py <zap-report.xml>", file=sys.stderr)
+        print("Usage: python3 xml_parser.py <zap-report.xml>", file=sys.stderr)
         sys.exit(1)
     
     xml_file = sys.argv[1]

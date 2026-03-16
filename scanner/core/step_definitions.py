@@ -14,6 +14,7 @@ class StepType(Enum):
     INITIALIZATION = "initialization"
     SCANNER = "scanner"
     METADATA_COLLECTION = "metadata_collection"
+    ARTIFACT_COLLECTION = "artifact_collection"
     COMPLETION = "completion"
 
 
@@ -124,6 +125,13 @@ def register_default_steps():
         step_type=StepType.METADATA_COLLECTION,
         priority=100,  # After scanners
         requires_condition="collect_metadata"
+    ))
+    
+    # Artifact Collection Step - collects all scan artifacts (SARIF, JSON, HTML, logs)
+    StepDefinitionsRegistry.register(StepDefinition(
+        name="Artifact Collection",
+        step_type=StepType.ARTIFACT_COLLECTION,
+        priority=200  # After scanners, before completion
     ))
     
     # Completion Step - always runs last

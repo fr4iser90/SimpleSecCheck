@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from scanner.output.processor_registry import ReportProcessor
 import sys
+import re
 
 def debug(msg):
     print(f"[clair_processor] {msg}", file=sys.stderr)
@@ -57,6 +58,50 @@ def generate_clair_html_section(clair_vulns):
     
     return "".join(html_parts)
 
+
+def _matches_pattern(value, pattern):
+    if pattern is None: return True
+    if value is None: value = ""
+    try: return re.search(pattern, str(value)) is not None
+    except re.error: return False
+
+
+def _matches_clair_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("VulnerabilityID", ""), rule.get("rule_id"))
+    path_ok = _matches_pattern(finding.get("PkgName", ""), rule.get("path_regex"))
+    msg_ok = _matches_pattern(finding.get("Title", ""), rule.get("message_regex"))
+    return rule_ok and path_ok and msg_ok
+
+
+def _accept_record_clair(finding, reason):
+    return {"tool": "Clair", "reason": reason or "Accepted by policy", "id": finding.get("VulnerabilityID", ""), "path": finding.get("PkgName", ""), "line": "", "message": finding.get("Title", "")}
+
+
+def apply_clair_policy(findings, tool_policy):
+    if not findings: return [], []
+    accepted_rules = tool_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+    for finding in findings:
+        accepted = next((r for r in accepted_rules if _matches_clair_rule(finding, r)), None)
+        if accepted:
+            accepted_records.append(_accept_record_clair(finding, accepted.get("reason", "Accepted by policy")))
+            continue
+        processed.append(finding)
+    return processed, accepted_records
+
+
+CLAIR_POLICY_EXAMPLE = '''  "clair": {
+    "accepted_findings": [
+      {
+        "rule_id": "CVE-2019-.*",
+        "path_regex": "openssl|libssl",
+        "message_regex": "Low.*severity",
+        "reason": "OpenSSL low severity, patched in next base"
+      }
+    ]
+  }'''
+
 REPORT_PROCESSOR = ReportProcessor(
     name="Clair",
     summary_func=clair_summary,
@@ -65,12 +110,15 @@ REPORT_PROCESSOR = ReportProcessor(
         {
             "tool": "Clair",
             "severity": str(f.get("severity", f.get("Severity", "UNKNOWN"))).upper(),
-            "rule_id": str(f.get("rule_id", f.get("id", ""))),
-            "path": str(f.get("path", f.get("file", f.get("filename", "")))),
+            "rule_id": str(f.get("rule_id", f.get("id", f.get("VulnerabilityID", "")))),
+            "path": str(f.get("path", f.get("file", f.get("filename", f.get("PkgName", "")))),
             "line": str(f.get("line", f.get("line_number", f.get("start", "")))),
-            "message": str(f.get("message", f.get("description", f.get("title", "")))),
+            "message": str(f.get("message", f.get("description", f.get("title", f.get("Title", ""))))),
         }
         for f in (findings or [])
     ],
-    json_file="report.json",  # Changed from clair.json
+    json_file="report.json",
+    policy_key="clair",
+    apply_policy=apply_clair_policy,
+    policy_example_snippet=CLAIR_POLICY_EXAMPLE,
 )

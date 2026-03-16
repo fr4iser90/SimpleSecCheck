@@ -93,9 +93,7 @@ class NucleiScanner(BaseScanner):
             self.log("Text report generated successfully", "SUCCESS")
             return True
         else:
-            # No vulnerabilities found - this is acceptable
-            self.log("No vulnerabilities found (scan completed successfully)", "SUCCESS")
-            json_output.write_text('{"info": "No vulnerabilities found"}')
+            self.log("No report file produced (scan may have found nothing or failed); no fake report written.", "SUCCESS")
             return True
 
 

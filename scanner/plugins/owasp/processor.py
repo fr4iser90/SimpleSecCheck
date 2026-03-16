@@ -2,6 +2,7 @@
 from scanner.output.processor_registry import ReportProcessor
 import sys
 import json
+import re
 # Security: Use defusedxml instead of xml.etree to prevent XXE attacks
 # defusedxml is a REQUIRED dependency - no fallback, script will fail if missing
 from defusedxml.ElementTree import parse as safe_parse
@@ -158,6 +159,49 @@ if __name__ == "__main__":
         debug("Usage: python3 owasp_dependency_check_processor.py <json_file>")
         sys.exit(1)
 
+def _matches_pattern(value, pattern):
+    if pattern is None: return True
+    if value is None: value = ""
+    try: return re.search(pattern, str(value)) is not None
+    except re.error: return False
+
+
+def _matches_owasp_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("CVE", ""), rule.get("rule_id"))
+    path_ok = _matches_pattern(finding.get("Dependency", ""), rule.get("path_regex"))
+    msg_ok = _matches_pattern(finding.get("Title", "") or finding.get("Description", ""), rule.get("message_regex"))
+    return rule_ok and path_ok and msg_ok
+
+
+def _accept_record_owasp(finding, reason):
+    return {"tool": "OWASP DC", "reason": reason or "Accepted by policy", "id": finding.get("CVE", ""), "path": finding.get("Dependency", ""), "line": "", "message": finding.get("Title", "") or finding.get("Description", "")}
+
+
+def apply_owasp_policy(findings, tool_policy):
+    if not findings: return [], []
+    accepted_rules = tool_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+    for finding in findings:
+        accepted = next((r for r in accepted_rules if _matches_owasp_rule(finding, r)), None)
+        if accepted:
+            accepted_records.append(_accept_record_owasp(finding, accepted.get("reason", "Accepted by policy")))
+            continue
+        processed.append(finding)
+    return processed, accepted_records
+
+
+OWASP_POLICY_EXAMPLE = '''  "owasp_dc": {
+    "accepted_findings": [
+      {
+        "rule_id": "CVE-2021-44228",
+        "path_regex": "log4j.*2\\.(1[0-4]|0\\.)",
+        "message_regex": "Log4j.*RCE",
+        "reason": "log4j in test scope only, not packaged"
+      }
+    ]
+  }'''
+
 REPORT_PROCESSOR = ReportProcessor(
     name="OWASP DC",
     summary_func=owasp_dependency_check_summary,
@@ -166,12 +210,15 @@ REPORT_PROCESSOR = ReportProcessor(
         {
             "tool": "OWASP DC",
             "severity": str(f.get("severity", f.get("Severity", "UNKNOWN"))).upper(),
-            "rule_id": str(f.get("rule_id", f.get("id", ""))),
-            "path": str(f.get("path", f.get("file", f.get("filename", "")))),
+            "rule_id": str(f.get("rule_id", f.get("id", f.get("CVE", "")))),
+            "path": str(f.get("path", f.get("file", f.get("filename", f.get("Dependency", "")))),
             "line": str(f.get("line", f.get("line_number", f.get("start", "")))),
             "message": str(f.get("message", f.get("description", f.get("title", "")))),
         }
         for f in (findings or [])
     ],
-    json_file="report.json",  # Changed from owasp-dependency-check.json
+    json_file="report.json",
+    policy_key="owasp_dc",
+    apply_policy=apply_owasp_policy,
+    policy_example_snippet=OWASP_POLICY_EXAMPLE,
 )

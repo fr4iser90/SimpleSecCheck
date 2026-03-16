@@ -74,18 +74,8 @@ class ClairScanner(BaseScanner):
         self.log("Clair requires external PostgreSQL setup.", "WARNING")
         self.log("Please ensure Clair server is running separately.", "WARNING")
         
-        # Create placeholder output since Clair requires complex setup
-        placeholder = {
-            "vulnerabilities": [],
-            "note": "Clair requires PostgreSQL database setup. Please use Trivy for container scanning."
-        }
-        
-        with open(json_output, "w", encoding="utf-8") as f:
-            json.dump(placeholder, f, indent=2)
-        
-        text_output.write_text("Clair requires PostgreSQL database setup. Please use Trivy for container scanning.\n")
-        
-        self.log("Placeholder report generated (Clair requires PostgreSQL setup)", "WARNING")
+        # Clair requires external setup; do not write fake report
+        self.log("Clair requires PostgreSQL database setup. No report written; use Trivy for container scanning.", "WARNING")
         return True
 
 

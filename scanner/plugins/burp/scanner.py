@@ -81,16 +81,8 @@ class BurpScanner(BaseScanner):
         if result.returncode != 0:
             self.log("Text report generation failed", "WARNING")
         
-        # If Burp Suite CLI doesn't support automated scans, create placeholder
         if not json_output.exists() and not text_output.exists():
-            self.log("Creating placeholder report...", "WARNING")
-            placeholder = {
-                "note": "Burp Suite Community Edition requires manual scan configuration",
-                "target": self.zap_target,
-                "vulnerabilities": []
-            }
-            with open(json_output, "w", encoding="utf-8") as f:
-                json.dump(placeholder, f, indent=2)
+            self.log("Burp Suite produced no report (manual configuration may be required); no fake report written.", "WARNING")
         
         if json_output.exists() or text_output.exists():
             self.log("Burp Suite scan completed successfully", "SUCCESS")

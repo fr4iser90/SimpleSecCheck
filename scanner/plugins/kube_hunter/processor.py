@@ -4,15 +4,7 @@ import sys
 import html
 import json
 
-# Add parent directory to path for imports
-# Setup paths using central path_setup module
-# NO PATH CALCULATIONS HERE - everything is handled by path_setup.py
-sys.path.insert(0, "/project/src")
-sys.path.insert(0, "/app")  # For import
-from core.path_setup import setup_paths
-setup_paths()
-
-pass
+import re
 
 def debug(msg):
     print(f"[kube_hunter_processor] {msg}", file=sys.stderr)
@@ -88,6 +80,50 @@ def generate_kube_hunter_html_section(kube_hunter_findings):
         html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No Kubernetes vulnerabilities found.</div>')
     return "".join(html_parts)
 
+
+def _matches_pattern(value, pattern):
+    if pattern is None: return True
+    if value is None: value = ""
+    try: return re.search(pattern, str(value)) is not None
+    except re.error: return False
+
+
+def _matches_kube_hunter_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("vulnerability", "") or finding.get("vid", ""), rule.get("rule_id"))
+    path_ok = _matches_pattern(finding.get("location", "") or finding.get("category", ""), rule.get("path_regex"))
+    msg_ok = _matches_pattern(finding.get("description", ""), rule.get("message_regex"))
+    return rule_ok and path_ok and msg_ok
+
+
+def _accept_record_kube_hunter(finding, reason):
+    return {"tool": "Kube-hunter", "reason": reason or "Accepted by policy", "id": finding.get("vulnerability", "") or finding.get("vid", ""), "path": finding.get("location", ""), "line": "", "message": finding.get("description", "")}
+
+
+def apply_kube_hunter_policy(findings, tool_policy):
+    if not findings: return [], []
+    accepted_rules = tool_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+    for finding in findings:
+        accepted = next((r for r in accepted_rules if _matches_kube_hunter_rule(finding, r)), None)
+        if accepted:
+            accepted_records.append(_accept_record_kube_hunter(finding, accepted.get("reason", "Accepted by policy")))
+            continue
+        processed.append(finding)
+    return processed, accepted_records
+
+
+KUBE_HUNTER_POLICY_EXAMPLE = '''  "kube_hunter": {
+    "accepted_findings": [
+      {
+        "rule_id": "Kube Dashboard Exposed",
+        "path_regex": ".*",
+        "message_regex": "informational|info",
+        "reason": "Dashboard behind VPN, not public"
+      }
+    ]
+  }'''
+
 REPORT_PROCESSOR = ReportProcessor(
     name="Kube-hunter",
     summary_func=kube_hunter_summary,
@@ -96,12 +132,15 @@ REPORT_PROCESSOR = ReportProcessor(
         {
             "tool": "Kube-hunter",
             "severity": str(f.get("severity", f.get("Severity", "UNKNOWN"))).upper(),
-            "rule_id": str(f.get("rule_id", f.get("id", ""))),
-            "path": str(f.get("path", f.get("file", f.get("filename", "")))),
+            "rule_id": str(f.get("rule_id", f.get("id", f.get("vulnerability", f.get("vid", ""))))),
+            "path": str(f.get("path", f.get("file", f.get("filename", f.get("location", "")))),
             "line": str(f.get("line", f.get("line_number", f.get("start", "")))),
             "message": str(f.get("message", f.get("description", f.get("title", "")))),
         }
         for f in (findings or [])
     ],
-    json_file="report.json",  # Changed from kube-hunter.json
+    json_file="report.json",
+    policy_key="kube_hunter",
+    apply_policy=apply_kube_hunter_policy,
+    policy_example_snippet=KUBE_HUNTER_POLICY_EXAMPLE,
 )

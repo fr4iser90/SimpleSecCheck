@@ -69,7 +69,6 @@ services:
     environment:
       - SIMPLESECCHECK_ROOT=/app
       - PYTHONUNBUFFERED=1
-      - HOST_PROJECT_ROOT=${PWD}
       - SCANNER_WORKER_ENABLED=false  # Worker is now separate service
       - SCANNER_PROXY_MODE=false
       - DATABASE_TYPE=postgresql
@@ -157,7 +156,6 @@ services:
       - RESULTS_DIR_HOST=${PWD}/results
       # Container paths (what Scanner container sees inside)
       - RESULTS_DIR_CONTAINER=/app/results
-      - HOST_PROJECT_ROOT=${PWD}  # For mounting OWASP data volume to scanner containers
     ports:
       - "8081:8081"  # Worker API port for scanner discovery
     networks:
@@ -217,6 +215,7 @@ services:
     command: ["sleep", "infinity"]
     volumes:
       - ./results:/app/results
+      - .:/project:ro
     environment:
       - SCAN_TARGET=${SCAN_TARGET:-}
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}

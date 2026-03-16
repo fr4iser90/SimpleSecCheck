@@ -18,6 +18,9 @@ class ReportProcessor:
     json_file: Optional[str] = None
     html_file: Optional[str] = None
     extra_files: Optional[List[str]] = None
+    policy_key: Optional[str] = None
+    apply_policy: Optional[Callable[[Any, dict], tuple]] = None
+    policy_example_snippet: Optional[str] = None
 
 
 class ProcessorRegistry:
@@ -39,7 +42,11 @@ def register_default_processors():
 
 def _discover_processors():
     """Auto-discover processors from scanner modules."""
-    package = importlib.import_module("scanner.scanners")
+    try:
+        package = importlib.import_module("scanner.plugins")
+    except ImportError:
+        return
+    
     for _, module_name, is_pkg in pkgutil.iter_modules(package.__path__, package.__name__ + "."):
         if not is_pkg:
             continue

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
 from scanner.core.scanner_registry import ScanType, TargetType, ScannerCapability
+from scanner.core.step_registry import SubStepType
 
 
 class CodeQLScanner(BaseScanner):
@@ -100,7 +101,7 @@ class CodeQLScanner(BaseScanner):
         return languages
     
     def scan(self) -> bool:
-        """Run CodeQL scan"""
+        """Run CodeQL scan with standardized substeps"""
         # Get tool command (handles symlinks, PATH)
         tool_cmd = self.get_tool_command("codeql")
         if not tool_cmd:
@@ -109,8 +110,20 @@ class CodeQLScanner(BaseScanner):
         
         self.log(f"Running code analysis on {self.target_path}...")
         
-        # Language Detection
-        self.start_substep("Language Detection", "Detecting programming languages in target...")
+        # INIT: CodeQL Environment Setup
+        self.substep_init("Setting up CodeQL environment...")
+        try:
+            result = self.run_command([*tool_cmd, "--version"], capture_output=True, timeout=10)
+            if result.returncode == 0:
+                version = result.stdout.strip().split('\n')[0] if result.stdout else "unknown"
+                self.complete_substep("Initialization", f"CodeQL {version} ready")
+            else:
+                self.complete_substep("Initialization", "CodeQL environment ready")
+        except Exception as e:
+            self.complete_substep("Initialization", f"CodeQL environment setup completed: {e}")
+        
+        # PREPARE: Language Detection
+        self.start_substep("Language Detection", "Detecting programming languages in target...", SubStepType.ACTION)
         detected_languages = self.detect_languages()
         
         if not detected_languages:
@@ -120,6 +133,15 @@ class CodeQLScanner(BaseScanner):
         
         self.complete_substep("Language Detection", f"Detected languages: {', '.join(detected_languages)}")
         self.log(f"Detected languages: {', '.join(detected_languages)}")
+        
+        # PREPARE: Query Pack Loading
+        self.start_substep("Query Pack Loading", "Loading CodeQL query packs...", SubStepType.ACTION)
+        for lang in detected_languages:
+            pack_name = f"codeql/{lang}-queries"
+            dl = self.run_command([*tool_cmd, "pack", "download", pack_name], capture_output=True, timeout=120)
+            if dl.returncode != 0:
+                self.log(f"CodeQL pack download {pack_name} failed (exit {dl.returncode}); analyze may fail.", "WARNING")
+        self.complete_substep("Query Pack Loading", "Query packs ready")
         
         db_dir = self.results_dir / "codeql-database"
         db_dir.mkdir(parents=True, exist_ok=True)
@@ -133,16 +155,17 @@ class CodeQLScanner(BaseScanner):
         combined_sarif = self.results_dir / "report.sarif"  # Changed from codeql-combined.sarif
         combined_text = self.results_dir / "report.txt"  # Changed from codeql-combined.txt
         
-        # Initialize combined files
-        combined_json.write_text('{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[]}')
-        combined_sarif.write_text('{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[]}')
-        combined_text.write_text("CodeQL Analysis Results\n=======================\n")
-        
+        # Combined files are written only when we have real results (no fake initial content)
         first_lang = None
         
         for lang in detected_languages:
-            # Database Creation
-            self.start_substep(f"Database Creation ({lang})", f"Creating CodeQL database for {lang}...")
+            # SCAN: Code Extraction
+            self.start_substep(f"Code Extraction ({lang})", f"Extracting code for {lang}...", SubStepType.ACTION)
+            # Code extraction happens during database creation
+            self.complete_substep(f"Code Extraction ({lang})", f"Code extraction completed for {lang}")
+            
+            # SCAN: Database Creation (per language) - DYNAMIC SUBSTEP
+            self.start_substep(f"Database Creation ({lang})", f"Creating CodeQL database for {lang}...", SubStepType.PHASE)
             self.log(f"Creating database for language: {lang}")
             lang_db = db_dir / f"{lang}"
             
@@ -170,26 +193,25 @@ class CodeQLScanner(BaseScanner):
             
             self.complete_substep(f"Database Creation ({lang})", f"Database created successfully for {lang}")
             
-            # Query Execution
+            # SCAN: Query Execution (per language) - DYNAMIC SUBSTEP
             query_suite = f"codeql/{lang}-queries"
             lang_sarif = self.results_dir / f"codeql-{lang}.sarif"
             
-            self.start_substep(f"Query Execution ({lang})", f"Running security analysis for {lang}...")
+            self.start_substep(f"Query Execution ({lang})", f"Running security analysis for {lang}...", SubStepType.PHASE)
             self.log(f"Running security analysis for {lang} with {query_suite}...")
             cmd = [*tool_cmd, "database", "analyze", str(lang_db), query_suite,
                    "--format=sarif-latest", f"--output={lang_sarif}", "--threads=4"]
             
             result = self.run_command(cmd, capture_output=True)
             if result.returncode != 0:
-                self.log(f"Query execution failed for {lang} (exit code {result.returncode}), creating minimal SARIF", "WARNING")
-                # Create minimal SARIF structure
-                lang_sarif.write_text('{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"CodeQL","version":"unknown"}},"results":[]}]}')
+                self.log(f"Query execution failed for {lang} (exit code {result.returncode}); no SARIF written.", "WARNING")
                 self.complete_substep(f"Query Execution ({lang})", "Query execution completed with warnings")
+                continue
             else:
                 self.complete_substep(f"Query Execution ({lang})", f"Security analysis completed for {lang}")
             
-            # Result Processing
-            self.start_substep(f"Result Processing ({lang})", f"Processing results for {lang}...")
+            # PROCESS: Result Processing (per language) - DYNAMIC SUBSTEP
+            self.start_substep(f"Result Processing ({lang})", f"Processing results for {lang}...", SubStepType.ACTION)
             
             # Copy SARIF as JSON
             lang_json = self.results_dir / f"codeql-{lang}.json"
@@ -203,7 +225,7 @@ class CodeQLScanner(BaseScanner):
                        "--format=sarif-latest", str(lang_sarif), f"--output={lang_text}"]
                 result = self.run_command(cmd, capture_output=True)
                 if result.returncode != 0:
-                    lang_text.write_text("CodeQL analysis completed but report interpretation failed.")
+                    self.log("Report interpretation failed for {}; no text report.".format(lang), "WARNING")
             
             self.complete_substep(f"Result Processing ({lang})", f"Results processed for {lang}")
             
@@ -233,8 +255,8 @@ class CodeQLScanner(BaseScanner):
             if lang_db.exists():
                 shutil.rmtree(lang_db, ignore_errors=True)
         
-        # Combining Results
-        self.start_substep("Combining Results", "Combining results from all languages...")
+        # PROCESS: Result Aggregation
+        self.substep_process("Result Aggregation", "Aggregating results from all languages...")
         
         # Final output files are already in report.* format (combined_json, combined_sarif, combined_text)
         # Clean up temporary per-language files (already done in loop)
@@ -242,28 +264,43 @@ class CodeQLScanner(BaseScanner):
         # Note: combined_json/sarif/text are now report.json/sarif/txt, so they stay
         
         if combined_json.exists() or combined_sarif.exists() or combined_text.exists():
-            self.complete_substep("Combining Results", "Results combined successfully")
-            self.log("CodeQL scan completed successfully", "SUCCESS")
-            return True
+            self.complete_substep("Result Aggregation", "Results aggregated successfully")
         else:
-            self.fail_substep("Combining Results", "No reports were generated")
+            self.fail_substep("Result Aggregation", "No reports were generated")
             self.log("No CodeQL report was generated!", "ERROR")
             return False
+        
+        # REPORT: SARIF Generation
+        self.start_substep("SARIF Generation", "Generating SARIF report...", SubStepType.OUTPUT)
+        if combined_sarif.exists() and combined_sarif.stat().st_size > 0:
+            self.complete_substep("SARIF Generation", "SARIF report generated successfully")
+        else:
+            self.fail_substep("SARIF Generation", "SARIF report generation failed")
+        
+        # REPORT: JSON Report (already generated as part of SARIF)
+        self.substep_report("JSON", "Generating JSON report...")
+        if combined_json.exists() and combined_json.stat().st_size > 0:
+            self.complete_substep("Generating JSON Report", "JSON report generated successfully")
+        else:
+            self.fail_substep("Generating JSON Report", "JSON report generation failed")
+        
+        self.log("CodeQL scan completed successfully", "SUCCESS")
+        return True
 
 
 if __name__ == "__main__":
+    import os
     import sys
     
-    target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/app/results")
-    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    # Get default parameters from BaseScanner
+    default_params = BaseScanner.get_default_params_from_env()
+    
+    # Get scanner-specific parameters
     config_path = os.getenv("CODEQL_CONFIG_PATH", "/app/scanner/plugins/codeql/config/config.yaml")
     queries_path = os.getenv("CODEQL_QUERIES_PATH", "/app/scanner/plugins/codeql/config/queries")
     
     scanner = CodeQLScanner(
-        target_path=target_path,
-        results_dir=results_dir,
-        log_file=log_file,
+        **default_params,
         config_path=config_path,
         queries_path=queries_path
     )

@@ -6,6 +6,7 @@ Processes Android manifest scan results and generates HTML sections
 """
 
 import json
+import re
 from pathlib import Path
 
 
@@ -140,6 +141,49 @@ def generate_android_manifest_html(json_path):
     except Exception:
         return ""
 
+def _matches_pattern(value, pattern):
+    if pattern is None: return True
+    if value is None: value = ""
+    try: return re.search(pattern, str(value)) is not None
+    except re.error: return False
+
+
+def _matches_android_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("type", ""), rule.get("rule_id"))
+    path_ok = _matches_pattern(finding.get("file", ""), rule.get("path_regex"))
+    msg_ok = _matches_pattern(finding.get("description", ""), rule.get("message_regex"))
+    return rule_ok and path_ok and msg_ok
+
+
+def _accept_record_android(finding, reason):
+    return {"tool": "android_manifest", "reason": reason or "Accepted by policy", "id": finding.get("type", ""), "path": finding.get("file", ""), "line": "", "message": finding.get("description", "")}
+
+
+def apply_android_policy(findings, tool_policy):
+    if not findings: return [], []
+    accepted_rules = tool_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+    for finding in findings:
+        accepted = next((r for r in accepted_rules if _matches_android_rule(finding, r)), None)
+        if accepted:
+            accepted_records.append(_accept_record_android(finding, accepted.get("reason", "Accepted by policy")))
+            continue
+        processed.append(finding)
+    return processed, accepted_records
+
+
+ANDROID_POLICY_EXAMPLE = '''  "android_manifest": {
+    "accepted_findings": [
+      {
+        "rule_id": "usesCleartextTraffic",
+        "path_regex": ".*debug.*AndroidManifest\\.xml$",
+        "message_regex": "cleartext",
+        "reason": "Cleartext only in debug build, not release"
+      }
+    ]
+  }'''
+
 REPORT_PROCESSOR = ReportProcessor(
     name="android_manifest",
     summary_func=android_manifest_summary,
@@ -155,5 +199,8 @@ REPORT_PROCESSOR = ReportProcessor(
         }
         for f in (findings or [])
     ],
-    json_file="report.json",  # Changed from android-manifest.json
+    json_file="report.json",
+    policy_key="android_manifest",
+    apply_policy=apply_android_policy,
+    policy_example_snippet=ANDROID_POLICY_EXAMPLE,
 )

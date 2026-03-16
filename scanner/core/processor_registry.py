@@ -39,7 +39,12 @@ def register_default_processors():
 
 def _discover_processors():
     """Auto-discover processors from scanner modules."""
-    package = importlib.import_module("scanner.scanners")
+    try:
+        package = importlib.import_module("scanner.plugins")
+    except ImportError:
+        # Fallback: processors are registered manually in generate-html-report.py
+        return
+    
     for _, module_name, is_pkg in pkgutil.iter_modules(package.__path__, package.__name__ + "."):
         if not is_pkg:
             continue

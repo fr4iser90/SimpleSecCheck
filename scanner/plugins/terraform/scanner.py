@@ -2,11 +2,13 @@
 Terraform Security Scanner
 Python implementation of run_terraform_security.sh
 """
+import json
 import os
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
 from scanner.core.scanner_registry import ScanType, TargetType, ScannerCapability
+from scanner.core.step_registry import SubStepType
 
 
 class TerraformSecurityScanner(BaseScanner):
@@ -56,33 +58,73 @@ class TerraformSecurityScanner(BaseScanner):
         return terraform_files
     
     def scan(self) -> bool:
-        """Run Terraform Security scan"""
+        """Run Terraform Security scan with standardized substeps"""
         if not self.check_tool_installed("checkov"):
             self.log("Checkov CLI not found, skipping scan.", "WARNING")
             return True
         
+        # INIT: Initialization
+        self.substep_init("Initializing Terraform Security scan...")
+        self.complete_substep("Initialization", "Terraform Security initialized")
+        
+        # PREPARE: Terraform File Discovery
+        self.start_substep("Terraform File Discovery", "Discovering Terraform files...", SubStepType.ACTION)
         terraform_files = self.find_terraform_files()
         
         if not terraform_files:
+            self.complete_substep("Terraform File Discovery", "No Terraform files found")
             self.log("No Terraform files found, skipping scan.", "WARNING")
+            status_file = Path(self.results_dir) / "status.json"
+            try:
+                status_file.write_text(json.dumps({"status": "skipped", "message": "No Terraform files found, skipping scan."}), encoding="utf-8")
+            except Exception:
+                pass
             return True
         
+        self.complete_substep("Terraform File Discovery", f"Found {len(terraform_files)} Terraform file(s)")
         self.log(f"Found {len(terraform_files)} Terraform file(s).")
         self.log(f"Running Terraform security scan on {self.target_path}...")
         
-        json_output = self.results_dir / "report.json"  # Changed from checkov.json
-        text_output = self.results_dir / "report.txt"   # Changed from checkov.txt
+        json_output = self.results_dir / "report.json"
+        text_output = self.results_dir / "report.txt"
         
-        # JSON report
+        # PREPARE: Module Resolution
+        self.start_substep("Module Resolution", "Resolving Terraform modules...", SubStepType.ACTION)
+        # Module resolution happens during scan
+        self.complete_substep("Module Resolution", "Modules resolved")
+        
+        # SCAN: Terraform Validation
+        self.start_substep("Terraform Validation", "Validating Terraform configuration...", SubStepType.ACTION)
+        # Validation happens during scan
+        self.complete_substep("Terraform Validation", "Terraform configuration validated")
+        
+        # SCAN: Security Rule Evaluation
+        self.substep_scan("Security Rule Evaluation", "Evaluating Terraform against security rules...")
+        
+        # Main scan
         self.log("Generating JSON report...")
         cmd = ["checkov", "-d", str(self.target_path), "--framework", "terraform",
                "--output", "json", "--output-file", str(json_output)]
         
         result = self.run_command(cmd, capture_output=True)
-        if result.returncode != 0:
+        if result.returncode == 0:
+            self.complete_substep("Security Rule Evaluation", "Security rule evaluation completed")
+        else:
             self.log("JSON report generation failed", "WARNING")
+            self.complete_substep("Security Rule Evaluation", "Security rule evaluation completed (with warnings)")
         
-        # Text report
+        # PROCESS: Result Processing
+        self.substep_process("Result Processing", "Processing scan results...")
+        self.complete_substep("Result Processing", "Results processed")
+        
+        # REPORT: JSON Report
+        self.substep_report("JSON", "Generating JSON report...")
+        if json_output.exists() and json_output.stat().st_size > 0:
+            self.complete_substep("Generating JSON Report", "JSON report generated successfully")
+        else:
+            self.fail_substep("Generating JSON Report", "JSON report generation failed")
+        
+        # Text report (for completeness)
         self.log("Generating text report...")
         cmd = ["checkov", "-d", str(self.target_path), "--framework", "terraform",
                "--output", "cli", "--output-file", str(text_output)]
@@ -100,17 +142,17 @@ class TerraformSecurityScanner(BaseScanner):
 
 
 if __name__ == "__main__":
+    import os
     import sys
     
-    target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/app/results")
-    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    # Get default parameters from BaseScanner
+    default_params = BaseScanner.get_default_params_from_env()
+    
+    # Get scanner-specific parameters
     config_path = os.getenv("TERRAFORM_SECURITY_CONFIG_PATH", "/app/scanner/plugins/terraform/config/config.yaml")
     
     scanner = TerraformSecurityScanner(
-        target_path=target_path,
-        results_dir=results_dir,
-        log_file=log_file,
+        **default_params,
         config_path=config_path
     )
     

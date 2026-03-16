@@ -3,6 +3,7 @@ from scanner.output.processor_registry import ReportProcessor
 import sys
 import html
 import json
+import re
 
 def debug(msg):
     print(f"[npm_audit_processor] {msg}", file=sys.stderr)
@@ -59,6 +60,66 @@ def generate_npm_audit_html_section(npm_audit_findings):
         html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No npm dependency vulnerabilities found.</div>')
     return "".join(html_parts)
 
+
+def _matches_pattern(value, pattern):
+    if pattern is None:
+        return True
+    if value is None:
+        value = ""
+    try:
+        return re.search(pattern, str(value)) is not None
+    except re.error:
+        return False
+
+
+def _matches_npm_audit_rule(finding, rule):
+    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("package", ""), rule.get("rule_id"))
+    path_ok = _matches_pattern(finding.get("dependency_path", finding.get("package", "")), rule.get("path_regex"))
+    msg_ok = _matches_pattern(finding.get("severity", ""), rule.get("message_regex"))
+    return rule_ok and path_ok and msg_ok
+
+
+def _accept_record_npm_audit(finding, reason):
+    return {
+        "tool": "npm audit",
+        "reason": reason or "Accepted by policy",
+        "id": finding.get("package", ""),
+        "path": finding.get("dependency_path", finding.get("package", "")),
+        "line": "",
+        "message": finding.get("severity", ""),
+    }
+
+
+def apply_npm_audit_policy(findings, tool_policy):
+    if not findings:
+        return [], []
+    accepted_rules = tool_policy.get("accepted_findings", [])
+    accepted_records = []
+    processed = []
+    for finding in findings:
+        accepted = None
+        for rule in accepted_rules:
+            if _matches_npm_audit_rule(finding, rule):
+                accepted = rule
+                break
+        if accepted:
+            accepted_records.append(_accept_record_npm_audit(finding, accepted.get("reason", "Accepted by policy")))
+            continue
+        processed.append(finding)
+    return processed, accepted_records
+
+
+NPM_AUDIT_POLICY_EXAMPLE = '''  "npm_audit": {
+    "accepted_findings": [
+      {
+        "rule_id": "minimist",
+        "path_regex": ".*",
+        "message_regex": "low|moderate",
+        "reason": "Low/minor dependency, accepted risk"
+      }
+    ]
+  }'''
+
 REPORT_PROCESSOR = ReportProcessor(
     name="npm audit",
     summary_func=npm_audit_summary,
@@ -67,12 +128,15 @@ REPORT_PROCESSOR = ReportProcessor(
         {
             "tool": "npm audit",
             "severity": str(f.get("severity", f.get("Severity", "UNKNOWN"))).upper(),
-            "rule_id": str(f.get("rule_id", f.get("id", ""))),
-            "path": str(f.get("path", f.get("file", f.get("filename", "")))),
+            "rule_id": str(f.get("rule_id", f.get("id", f.get("package", "")))),
+            "path": str(f.get("path", f.get("file", f.get("filename", f.get("dependency_path", f.get("package", ""))))),
             "line": str(f.get("line", f.get("line_number", f.get("start", "")))),
-            "message": str(f.get("message", f.get("description", f.get("title", "")))),
+            "message": str(f.get("message", f.get("description", f.get("title", f.get("severity", ""))))),
         }
         for f in (findings or [])
     ],
-    json_file="report.json",  # Changed from npm-audit.json
+    json_file="report.json",
+    policy_key="npm_audit",
+    apply_policy=apply_npm_audit_policy,
+    policy_example_snippet=NPM_AUDIT_POLICY_EXAMPLE,
 )

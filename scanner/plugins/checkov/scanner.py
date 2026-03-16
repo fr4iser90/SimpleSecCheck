@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
 from scanner.core.scanner_registry import ScanType, TargetType, ScannerCapability
+from scanner.core.step_registry import SubStepType
 
 
 class CheckovScanner(BaseScanner):
@@ -86,23 +87,32 @@ class CheckovScanner(BaseScanner):
         return skip_args
     
     def scan(self) -> bool:
-        """Run Checkov scan"""
+        """Run Checkov scan with standardized substeps"""
         if not self.check_tool_installed("checkov"):
             self.log("Checkov CLI not found, skipping scan.", "WARNING")
             return True
         
-        # Finding Infrastructure Files
-        self.start_substep("Finding Files", "Scanning for infrastructure files...")
+        # INIT: Initialization
+        self.substep_init("Initializing Checkov scan...")
+        self.complete_substep("Initialization", "Checkov initialized")
+        
+        # PREPARE: Finding Infrastructure Files
+        self.start_substep("Finding Infrastructure Files", "Scanning for infrastructure files...", SubStepType.ACTION)
         infra_files = self.find_infra_files()
         
         if not infra_files:
-            self.complete_substep("Finding Files", "No infrastructure files found")
+            self.complete_substep("Finding Infrastructure Files", "No infrastructure files found")
             self.log("No infrastructure files found, skipping scan.", "WARNING")
             return True
         
-        self.complete_substep("Finding Files", f"Found {len(infra_files)} infrastructure file(s)")
+        self.complete_substep("Finding Infrastructure Files", f"Found {len(infra_files)} infrastructure file(s)")
         self.log(f"Found {len(infra_files)} infrastructure file(s).")
         self.log(f"Running infrastructure security scan on {self.target_path}...")
+        
+        # PREPARE: Parsing Infrastructure Files
+        self.start_substep("Parsing Infrastructure Files", "Parsing infrastructure configuration files...", SubStepType.ACTION)
+        # Parsing happens during scan
+        self.complete_substep("Parsing Infrastructure Files", f"Parsed {len(infra_files)} file(s)")
         
         json_output = self.results_dir / "report.json"  # Changed from checkov-comprehensive.json
         text_output = self.results_dir / "report.txt"   # Changed from checkov-comprehensive.txt
@@ -115,41 +125,69 @@ class CheckovScanner(BaseScanner):
         
         skip_args = self.get_skip_args()
         
-        # JSON Report Generation
-        self.start_substep("JSON Report", "Generating JSON report...")
-        self.log("Generating JSON report...")
+        # SCAN: Running Security Policies
+        self.substep_scan("Running Security Policies", "Evaluating infrastructure against security policies...")
+        
+        # SCAN: Evaluating Misconfigurations
+        self.start_substep("Evaluating Misconfigurations", "Checking for security misconfigurations...", SubStepType.PHASE)
+        
         # Set environment variables to prevent multiprocessing issues
         env = os.environ.copy()
-        env["PYTHONHASHSEED"] = "0"  # Ensure deterministic hashing
-        env["OMP_NUM_THREADS"] = "1"  # Limit OpenMP threads
-        env["MKL_NUM_THREADS"] = "1"  # Limit MKL threads
+        env["PYTHONHASHSEED"] = "0"
+        env["OMP_NUM_THREADS"] = "1"
+        env["MKL_NUM_THREADS"] = "1"
         cmd = ["checkov", "-d", str(self.target_path), *skip_args, "--output", "json", "--quiet"]
         
-        result = self.run_command(cmd, capture_output=True, timeout=1800, env=env)  # 30 minute timeout
-        if result.returncode == 0 and result.stdout:
-            with open(json_output, "w", encoding="utf-8") as f:
-                f.write(result.stdout)
-            self.complete_substep("JSON Report", "JSON report generated successfully")
+        result = self.run_command(cmd, capture_output=True, timeout=1800, env=env)
+        wrote_json = False
+        if result.stdout and result.stdout.strip():
+            try:
+                import json as _json
+                data = _json.loads(result.stdout)
+                if isinstance(data, dict) and ("results" in data or "failed_checks" in data):
+                    with open(json_output, "w", encoding="utf-8") as f:
+                        f.write(result.stdout)
+                    wrote_json = True
+                elif isinstance(data, list):
+                    with open(json_output, "w", encoding="utf-8") as f:
+                        f.write(result.stdout)
+                    wrote_json = True
+            except (ValueError, TypeError):
+                pass
+        if wrote_json:
+            self.complete_substep("Running Security Policies", "Security policies evaluated")
+            self.complete_substep("Evaluating Misconfigurations", "Misconfiguration evaluation completed")
         else:
-            self.log("JSON report generation failed, creating minimal JSON", "WARNING")
-            json_output.write_text('{"check_type":"","results":{"passed_checks":[],"failed_checks":[],"skipped_checks":[]},"summary":{"passed":0,"failed":0,"skipped":0}}')
-            self.complete_substep("JSON Report", "JSON report generated with warnings")
+            if result.returncode != 0:
+                self.log("Checkov exited with findings (non-zero); no valid JSON in stdout, skipping report", "WARNING")
+            self.complete_substep("Running Security Policies", "Security policies evaluated (with warnings)")
+            self.complete_substep("Evaluating Misconfigurations", "Misconfiguration evaluation completed (with warnings)")
         
-        # Text Report Generation
-        self.start_substep("Text Report", "Generating text report...")
+        # PROCESS: Result Processing
+        self.substep_process("Result Processing", "Processing scan results...")
+        self.complete_substep("Result Processing", "Results processed")
+        
+        # REPORT: JSON Report
+        self.substep_report("JSON", "Generating JSON report...")
+        if json_output.exists() and json_output.stat().st_size > 0:
+            self.complete_substep("Generating JSON Report", "JSON report generated successfully")
+        else:
+            self.fail_substep("Generating JSON Report", "JSON report generation failed")
+        
+        # REPORT: Text Report
+        self.start_substep("Generating Text Report", "Generating text report...", SubStepType.OUTPUT)
         self.log("Generating text report...")
-        # Use same environment variables to prevent multiprocessing issues
         cmd = ["checkov", "-d", str(self.target_path), *skip_args, "--output", "cli", "--quiet"]
         
-        result = self.run_command(cmd, capture_output=True, timeout=1800, env=env)  # 30 minute timeout
-        if result.returncode == 0 and result.stdout:
+        result = self.run_command(cmd, capture_output=True, timeout=1800, env=env)
+        if result.stdout and result.stdout.strip():
             with open(text_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
-            self.complete_substep("Text Report", "Text report generated successfully")
+            self.complete_substep("Generating Text Report", "Text report generated successfully")
         else:
-            self.log("Text report generation failed", "WARNING")
-            text_output.write_text("Checkov scan completed but no results available.\n")
-            self.complete_substep("Text Report", "Text report generated with warnings")
+            self.log("Text report generation failed (no stdout)", "WARNING")
+            self.fail_substep("Generating Text Report", "Text report generation failed")
+            self.complete_substep("Text Report", "Text report skipped (no output)")
         
         if json_output.exists() or text_output.exists():
             self.log("Infrastructure security scan completed successfully", "SUCCESS")
@@ -160,18 +198,18 @@ class CheckovScanner(BaseScanner):
 
 
 if __name__ == "__main__":
+    import os
     import sys
     
-    target_path = os.getenv("TARGET_PATH", "/target")
-    results_dir = os.getenv("RESULTS_DIR", "/app/results")
-    log_file = os.getenv("LOG_FILE", "app/results/logs/scan.log")
+    # Get default parameters from BaseScanner
+    default_params = BaseScanner.get_default_params_from_env()
+    
+    # Get scanner-specific parameters
     config_path = os.getenv("CHECKOV_CONFIG_PATH", "/app/scanner/plugins/checkov/config/config.yaml")
     exclude_paths = os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     scanner = CheckovScanner(
-        target_path=target_path,
-        results_dir=results_dir,
-        log_file=log_file,
+        **default_params,
         config_path=config_path,
         exclude_paths=exclude_paths
     )

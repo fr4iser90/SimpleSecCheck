@@ -237,21 +237,38 @@ class ContainerSpec:
         if git_branch:
             environment["GIT_BRANCH"] = git_branch
         
+        # Finding policy: tell scanner where the policy file is in the container.
+        # For both git_repo and local_mount the project (or clone) is mounted at /target,
+        # so a relative path (e.g. .scanning/finding-policy.json) becomes /target/.scanning/finding-policy.json.
+        if finding_policy and isinstance(finding_policy, str) and finding_policy.strip():
+            fp = finding_policy.strip()
+            if fp.startswith("/target/"):
+                container_policy_path = fp
+            elif fp.startswith("/"):
+                container_policy_path = fp
+            else:
+                container_policy_path = "/target/" + fp.lstrip("/")
+            environment["FINDING_POLICY_FILE_IN_CONTAINER"] = container_policy_path
+        
         # Automatically detect PUID/PGID from mounted project root directory
         # This ensures files are created with correct ownership on host
-        # Same approach as backend/worker - detect from project root ownership
+        # Uses /project mount (always available in docker-compose) to detect host UID/GID
         try:
-            host_project_root = os.environ.get("HOST_PROJECT_ROOT", os.environ.get("PWD", "."))
-            if not os.path.isabs(host_project_root):
-                host_project_root = os.path.abspath(host_project_root)
-            project_root_stat = os.stat(host_project_root)
+            project_path = "/project"
+            if not os.path.exists(project_path):
+                raise OSError(f"/project mount not found - cannot detect host UID/GID")
+            
+            project_root_stat = os.stat(project_path)
             detected_uid = str(project_root_stat.st_uid)
             detected_gid = str(project_root_stat.st_gid)
             environment["PUID"] = detected_uid
             environment["PGID"] = detected_gid
-        except (OSError, AttributeError):
-            # If stat fails, don't set PUID/PGID - scanner will use defaults
-            pass
+        except (OSError, AttributeError) as e:
+            # If /project mount is missing, this is a configuration error
+            # Don't silently fall back - log error and let scanner use defaults
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Could not detect host UID/GID from /project mount: {e}. Scanner will use default (1000:1000)")
         
         # Determine if container should be read-only
         # For git_repo, we need /target to be writable for Git Clone
@@ -297,15 +314,58 @@ class ContainerSpec:
         # Backend fetches these from worker API and includes them in queue message
         # Plugins define their required volumes in manifest.yaml, backend sends them via queue
         if asset_volumes:
-            host_project_root = os.environ.get("HOST_PROJECT_ROOT", os.environ.get("PWD", "."))
+            # Get host project root from /project mount (same as UID/GID detection)
+            # /project is mounted from docker-compose: .:/project:ro
+            # We need the HOST path, not the container path
+            # Use RESULTS_DIR_HOST as base and go up one level (results is in project root)
+            host_project_root = None
+            results_dir_host = os.environ.get("RESULTS_DIR_HOST")
+            if results_dir_host:
+                # RESULTS_DIR_HOST is ${PWD}/results, so go up one level to get project root
+                host_project_root = os.path.dirname(results_dir_host)
+            else:
+                # Fallback: try to get from /project mount (but this gives container path, not host)
+                # Actually, we can't get host path from container - need environment variable
+                raise ValueError(
+                    "RESULTS_DIR_HOST environment variable is required for asset volume mounting. "
+                    "Worker must set RESULTS_DIR_HOST (e.g., ${PWD}/results in docker-compose.yml)"
+                )
+            
             if not os.path.isabs(host_project_root):
                 host_project_root = os.path.abspath(host_project_root)
+            
             for asset_volume in asset_volumes:
                 host_subpath = asset_volume.get("host_subpath")
                 container_path = asset_volume.get("container_path")
                 if host_subpath and container_path:
                     asset_host_path = os.path.join(host_project_root, host_subpath)
-                    spec.add_volume(asset_host_path, container_path, read_only=False)
+                    # Validate that the path exists before trying to mount
+                    if not os.path.exists(asset_host_path):
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(
+                            f"Asset volume path does not exist on host: {asset_host_path}. "
+                            f"Skipping mount for {container_path}"
+                        )
+                        continue
+                    
+                    # Docker limitation: Cannot mount a file if the path already exists in the image
+                    # If the file exists in the image, we need to mount the parent directory instead
+                    # This allows the file to be accessible while respecting Docker's mount constraints
+                    if os.path.isfile(asset_host_path):
+                        # For files that might exist in the image, mount the parent directory
+                        # This ensures the file is accessible even if it exists in the image
+                        parent_dir = os.path.dirname(asset_host_path)
+                        container_parent_dir = os.path.dirname(container_path)
+                        if parent_dir and container_parent_dir:
+                            # Mount the parent directory so the file is accessible
+                            spec.add_volume(parent_dir, container_parent_dir, read_only=False)
+                        else:
+                            # Fallback: try to mount the file directly (may fail if exists in image)
+                            spec.add_volume(asset_host_path, container_path, read_only=False)
+                    else:
+                        # For directories, mount normally
+                        spec.add_volume(asset_host_path, container_path, read_only=False)
         
         # For local_mount, mount target from host (read-only)
         # For git_repo, /target is tmpfs (writable for Git Clone)

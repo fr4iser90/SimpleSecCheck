@@ -81,8 +81,7 @@ class DetectSecretsScanner(BaseScanner):
             with open(json_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
         else:
-            self.log("JSON report generation failed", "WARNING")
-            json_output.write_text("{}")
+            self.log("JSON report generation failed; no report written.", "WARNING")
         
         # Text report (same command, different output)
         self.log("Running text report generation...")
@@ -91,8 +90,7 @@ class DetectSecretsScanner(BaseScanner):
             with open(text_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
         else:
-            self.log("Text report generation failed", "WARNING")
-            text_output.write_text("No secrets detected or scan failed.\n")
+            self.log("Text report generation failed; no text report written.", "WARNING")
         
         if json_output.exists() or text_output.exists():
             self.log("Detect-secrets scan completed successfully", "SUCCESS")

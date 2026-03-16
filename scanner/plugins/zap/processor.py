@@ -9,9 +9,8 @@ from defusedxml import defuse_stdlib
 defuse_stdlib()
 from bs4 import BeautifulSoup
 import os
+import re
 
-# It's good practice to have a common debug utility or pass it as an argument
-# For now, defining it here for simplicity as it was in the original script context
 def debug(msg):
     print(f"[zap_processor] {msg}", file=sys.stderr)
 
