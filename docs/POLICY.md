@@ -5,6 +5,8 @@ All environment-specific restrictions are defined in:
 
 - `backend/app/services/policy_service.py`
 
+**Related:** For the RBAC and permission model (Feature Flags → Permissions → Target Types → Scan Types), see [RBAC_AND_PERMISSIONS_DESIGN.md](RBAC_AND_PERMISSIONS_DESIGN.md).
+
 ## Why a Central Policy?
 
 The policy service prevents scattered production checks by centralizing:
