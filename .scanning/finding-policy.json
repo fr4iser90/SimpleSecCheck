@@ -7,9 +7,45 @@
         "accepted_findings": [
             {
                 "rule_id": "javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop",
-                "path_regex": ".*/webui/frontend/src/i18n/index\\.ts$",
+                "path_regex": ".*/i18n/index\\.ts$",
                 "message_regex": "Possibility of prototype polluting function detected",
                 "reason": "Translation key access uses static JSON objects from locale files. Keys are derived from translation strings, not user input. The translations object structure is controlled and does not allow prototype pollution in practice. The code safely accesses nested translation keys for i18n functionality."
+            },
+            {
+                "rule_id": "python.fastapi.security.wildcard-cors.wildcard-cors",
+                "path_regex": ".*/(backend/api/main\\.py|worker/cli/worker_main\\.py)$",
+                "message_regex": "CORS policy allows any origin",
+                "reason": "Wildcard CORS is intentional for dev and simple deployments; production can restrict via reverse proxy or env-driven allow_origins."
+            },
+            {
+                "rule_id": "python.lang.security.audit.insecure-file-permissions.insecure-file-permissions",
+                "path_regex": ".*/(backend/volumes/config_manager\\.py|backend/volumes/redis_config\\.py|backend/volumes/results_manager\\.py)$",
+                "message_regex": "permissions.*0o755|0o700.*widely permissive",
+                "reason": "0o755/0o700 are appropriate for config dirs and executable scripts; 0o644 is for files. Rule recommendation does not fit directory/script use."
+            },
+            {
+                "rule_id": "javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring",
+                "path_regex": ".*/(ScannerDataUpdate\\.tsx|useRepos\\.ts|ScannerManagementPage\\.tsx)$",
+                "message_regex": "string concatenation.*console\\.log|util\\.format",
+                "reason": "Frontend console.log with variables; low risk, no user-controlled format specifiers in security boundary."
+            },
+            {
+                "rule_id": "generic.nginx.security.possible-h2c-smuggling.possible-nginx-h2c-smuggling",
+                "path_regex": ".*/frontend/nginx\\.conf$",
+                "message_regex": "H2C smuggling|Upgrade",
+                "reason": "WebSocket support is required; Upgrade header is intentionally forwarded for WebSocket connections."
+            },
+            {
+                "rule_id": "python.lang.security.audit.non-literal-import.non-literal-import",
+                "path_regex": ".*/(scanner/core/processor_registry\\.py|scanner/output/processor_registry\\.py|scanner/plugins/__init__\\.py)$",
+                "message_regex": "importlib\\.import_module|Untrusted user input",
+                "reason": "Plugin discovery uses pkgutil package path (server-controlled), not user input; modules are from installed scanner plugins."
+            },
+            {
+                "rule_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+                "path_regex": ".*/scanner/plugins/sonarqube/scanner\\.py$",
+                "message_regex": "dynamic.*urllib|file://",
+                "reason": "urlopen used for HTTP health check; URL from env or localhost. No file:/ or user-controlled URL."
             },
             {
                 "rule_id": "python.lang.security.audit.sqli.asyncpg-sqli.asyncpg-sqli",
@@ -34,16 +70,6 @@
                 "path_regex": ".*/(scanner|worker)/Dockerfile$",
                 "message_regex": "By not specifying a USER",
                 "reason": "USER is intentionally not set so the entrypoint runs as root for one-time setup (chown, usermod, groupadd). The process then drops to non-root (scanner/worker) via gosu. Industry-standard pattern for images that need runtime permission and UID/GID setup."
-            }
-        ]
-    },
-    "gitleaks": {
-        "accepted_findings": [
-            {
-                "rule_id": "database-password",
-                "file_regex": ".*/scanner/plugins/clair/config\\.yaml$",
-                "description_regex": ".*",
-                "reason": "Config file contains example database connection strings for Clair tool configuration, not actual secrets"
             }
         ]
     },
@@ -180,6 +206,68 @@
                 "path_regex": ".*/tests/integration/test_setup_wizard\\.py$",
                 "message_regex": "Possible hardcoded password",
                 "reason": "Test-only passwords (TestPass123!, ProdPass123!) for setup wizard tests; not production credentials."
+            },
+            {
+                "rule_id": "B107",
+                "path_regex": ".*/backend/api/deps/actor_context\\.py$",
+                "message_regex": "Possible hardcoded password: ''",
+                "reason": "Empty string is intentional fail-safe default; real secret is injected from settings in main.py. Not a credential."
+            },
+            {
+                "rule_id": "B104",
+                "path_regex": ".*/worker/cli/worker_main\\.py$",
+                "message_regex": "Possible binding to all interfaces",
+                "reason": "Binding to 0.0.0.0 is intentional for container deployment; access controlled by network/orchestration."
+            },
+            {
+                "rule_id": "B108",
+                "path_regex": ".*/worker/domain/job_execution/entities/container_spec\\.py$",
+                "message_regex": "Probable insecure usage of temp file/directory",
+                "reason": "Strings are Docker tmpfs mount specs (/tmp, /var/tmp) for scan containers, not insecure temp file creation."
+            }
+        ]
+    },
+    "codeql": {
+        "accepted_findings": [
+            {
+                "rule_id": "py/stack-trace-exposure",
+                "path_regex": ".*/(backend/api/health\\.py|backend/api/middleware/setup_middleware\\.py)$",
+                "message_regex": "Stack trace.*may be exposed",
+                "reason": "Only exception message str(e) is included in HTTPException detail, not full stack trace. Acceptable for health/setup error responses."
+            },
+            {
+                "rule_id": "py/weak-sensitive-data-hashing",
+                "path_regex": ".*/(backend/domain/entities/user\\.py|backend/api/routes/user\\.py)$",
+                "message_regex": "SHA256.*insecure for password hashing",
+                "reason": "Domain entity uses SHA256 as placeholder (comment notes production should use bcrypt). API key hashing for storage; production should use stronger hashing. Accepted as known technical debt."
+            },
+            {
+                "rule_id": "py/incomplete-url-substring-sanitization",
+                "path_regex": ".*/(backend/api/routes/queue\\.py|backend/api/routes/user\\.py)$",
+                "message_regex": "github\\.com|gitlab\\.com.*arbitrary position",
+                "reason": "Substring checks used for display name extraction from repo URLs, not security boundary. Allowlist context only."
+            },
+            {
+                "rule_id": "py/path-injection",
+                "path_regex": ".*/backend/api/routes/scans\\.py$",
+                "message_regex": "path depends on.*user-provided",
+                "reason": "scan_id is server-issued (UUID from scan creation); path is under results_dir and validated by scan service. No arbitrary path traversal."
+            }
+        ]
+    },
+    "gitleaks": {
+        "accepted_findings": [
+            {
+                "rule_id": "database-password",
+                "file_regex": ".*/scanner/plugins/clair/config\\.yaml$",
+                "description_regex": ".*",
+                "reason": "Config file contains example database connection strings for Clair tool configuration, not actual secrets"
+            },
+            {
+                "rule_id": "curl-auth-header",
+                "file_regex": ".*/docs/ADMIN_USER_FEATURES\\.md$",
+                "description_regex": ".*",
+                "reason": "Documentation example curl command with placeholder Authorization: Bearer YOUR_API_KEY; not a real secret."
             }
         ]
     }

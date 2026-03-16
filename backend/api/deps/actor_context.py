@@ -12,7 +12,7 @@ import logging
 
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
+import jwt
 from pydantic import BaseModel
 
 from config.settings import settings
@@ -77,7 +77,7 @@ class ActorContextDependency:
                 context = await self._get_context_from_jwt(credentials.credentials)
                 if context:
                     return context
-            except JWTError:
+            except jwt.PyJWTError:
                 # JWT is invalid, continue to session check
                 pass
         
@@ -116,7 +116,7 @@ class ActorContextDependency:
                 name=name,
                 role=role
             )
-        except JWTError:
+        except jwt.PyJWTError:
             return None
     
     async def _get_context_from_session(self, session_id: str) -> Optional[ActorContext]:

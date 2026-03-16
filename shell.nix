@@ -76,7 +76,7 @@ pkgs.mkShell {
       alembic
       redis
       aioredis
-      python-jose
+      pyjwt
       passlib
       python-multipart
       structlog

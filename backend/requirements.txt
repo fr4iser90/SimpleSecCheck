@@ -15,9 +15,9 @@ redis==5.0.3
 aioredis==2.0.1
 
 # Authentication & Security
-python-jose[cryptography]==3.3.0
+PyJWT[crypto]==2.10.1
 passlib[bcrypt]==1.7.4
-python-multipart==0.0.9
+python-multipart==0.0.22
 argon2-cffi==21.3.0
 
 # HTTP Client
@@ -33,7 +33,7 @@ pyyaml==6.0.2
 pytest==8.3.4
 pytest-asyncio==0.24.0
 pytest-cov==5.0.0
-black==24.8.0
+black>=26.3.1
 mypy==1.11.2
 ruff==0.5.7
 
