@@ -51,7 +51,7 @@ class ActorContextDependency:
     
     def __init__(
         self,
-        jwt_secret_key: str = "your-secret-key",
+        jwt_secret_key: str = "",  # Must be set via constructor (e.g. from settings); empty = fail-safe
         jwt_algorithm: str = "HS256",
         jwt_expiration_minutes: int = 30,
         environment: str = "permissive"  # SECURITY_MODE value

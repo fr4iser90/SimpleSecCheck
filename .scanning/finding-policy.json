@@ -108,6 +108,78 @@
                 "path_regex": ".*/scanner/backend/app/database/postgresql_database\\.py$",
                 "message_regex": "Possible SQL injection vector through string-based query construction",
                 "reason": "Dynamic column lists are built from server-side kwargs, and values remain parameterized. No user-controlled SQL fragments are interpolated."
+            },
+            {
+                "rule_id": "B107",
+                "path_regex": ".*/backend/config/settings\\.py$",
+                "message_regex": "Possible hardcoded password",
+                "reason": "Default is a placeholder for environment/config; production must set JWT secret via env. Not a real secret in code."
+            },
+            {
+                "rule_id": "B104",
+                "path_regex": ".*/(backend/api/main\\.py|backend/config/(production_)?settings\\.py|backend/volumes/redis_config\\.py)$",
+                "message_regex": "Possible binding to all interfaces",
+                "reason": "Binding to 0.0.0.0 is intentional for containers and reverse-proxy deployments; access is controlled by network and proxy."
+            },
+            {
+                "rule_id": "B106",
+                "path_regex": ".*/backend/api/routes/auth\\.py$",
+                "message_regex": "Possible hardcoded password: '.*'",
+                "reason": "OAuth token_type literal 'bearer' and intentional empty token in /me response; not credentials."
+            },
+            {
+                "rule_id": "B105",
+                "path_regex": ".*/backend/api/services/security_event_service\\.py$",
+                "message_regex": "Possible hardcoded password",
+                "reason": "Strings are log severity levels (CRITICAL, INFO, WARNING), not passwords."
+            },
+            {
+                "rule_id": "B105",
+                "path_regex": ".*/(backend/domain/entities/system_state\\.py|backend/domain/entities/vulnerability\\.py|backend/infrastructure/database/models\\.py)$",
+                "message_regex": "Possible hardcoded password",
+                "reason": "Enum values (token_generated, weak_password) for domain/DB state and vulnerability types, not secrets."
+            },
+            {
+                "rule_id": "B103",
+                "path_regex": ".*/(backend/volumes/config_manager\\.py|backend/volumes/redis_config\\.py|backend/volumes/results_manager\\.py)$",
+                "message_regex": "Chmod setting a permissive mask 0o755",
+                "reason": "0o755 is standard for config dirs and executable scripts; sensitive data uses 0o700 where required."
+            },
+            {
+                "rule_id": "B112",
+                "path_regex": ".*/(scanner/core/processor_registry\\.py|scanner/output/processor_registry\\.py|scanner/plugins/__init__\\.py)$",
+                "message_regex": "Try, Except, Continue detected",
+                "reason": "Plugin/processor discovery skips modules that fail to load; intentional and safe."
+            },
+            {
+                "rule_id": "B310",
+                "path_regex": ".*/scanner/plugins/sonarqube/scanner\\.py$",
+                "message_regex": "Audit url open for permitted schemes",
+                "reason": "urlopen used for HTTP health check of SonarQube; URL from env or localhost. No file:/ or custom schemes."
+            },
+            {
+                "rule_id": "B108",
+                "path_regex": ".*/scanner/plugins/zap/scanner\\.py$",
+                "message_regex": "Probable insecure usage of temp file/directory",
+                "reason": "Code searches known ZAP output dirs (/home/zap/.ZAP/, /zap/wrk/, /tmp/) for reports; does not create insecure temp files."
+            },
+            {
+                "rule_id": "B101",
+                "path_regex": ".*/tests/",
+                "message_regex": "Use of assert detected",
+                "reason": "Assertions in test code are expected and do not affect production; pytest runs with assert rewriting."
+            },
+            {
+                "rule_id": "B105",
+                "path_regex": ".*/tests/integration/test_setup_wizard\\.py$",
+                "message_regex": "Possible hardcoded password",
+                "reason": "Regex pattern for token extraction and test-only placeholder passwords; not used in production."
+            },
+            {
+                "rule_id": "B106",
+                "path_regex": ".*/tests/integration/test_setup_wizard\\.py$",
+                "message_regex": "Possible hardcoded password",
+                "reason": "Test-only passwords (TestPass123!, ProdPass123!) for setup wizard tests; not production credentials."
             }
         ]
     }
