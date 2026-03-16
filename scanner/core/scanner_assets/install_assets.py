@@ -9,6 +9,7 @@ import os
 import subprocess
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -94,8 +95,14 @@ def install_from_manifests(
         if should_install:
             changed_manifests.append(manifest.name)
             print(f"[Install] Installing {manifest.name} (manifest changed or first install)")
-            for command in manifest.install:
-                run_command(command)
+            try:
+                for command in manifest.install:
+                    run_command(command)
+            except subprocess.CalledProcessError as e:
+                print(
+                    f"[Warning] Install failed for {manifest.name}: {e}. Continuing (tool may be optional or installed at runtime).",
+                    file=sys.stderr,
+                )
         else:
             print(f"[Skip] Skipping {manifest.name} (manifest unchanged)")
         

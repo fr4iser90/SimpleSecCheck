@@ -367,13 +367,13 @@ def _normalize_finding_for_report(tool_name, finding):
     if not isinstance(finding, dict):
         return None
     sev = str(finding.get("Severity", finding.get("severity", ""))).strip()
-    path = str(finding.get("path", finding.get("file", finding.get("filename", ""))))
+    path = str(finding.get("path", finding.get("file", finding.get("filename", finding.get("PkgName", "")))))
     line = finding.get("line") or finding.get("line_number") or (finding.get("start") if isinstance(finding.get("start"), (int, str)) else None)
     if line is None and isinstance(finding.get("start"), dict):
         line = finding["start"].get("line", "")
     line = str(line) if line is not None else ""
-    message = str(finding.get("message", finding.get("issue_text", finding.get("description", finding.get("title", "")))))
-    rule_id = str(finding.get("rule_id", finding.get("check_id", finding.get("id", ""))))
+    message = str(finding.get("message", finding.get("issue_text", finding.get("description", finding.get("Description", finding.get("title", finding.get("Title", "")))))))
+    rule_id = str(finding.get("rule_id", finding.get("check_id", finding.get("id", finding.get("VulnerabilityID", "")))))
     return {
         "tool": tool_name,
         "severity": _normalize_severity(sev),
