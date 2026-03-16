@@ -476,10 +476,28 @@ class ResultsManager:
                 shutil.move(self.results_path, backup_current)
                 logger.info(f"Current results backed up to: {backup_current}")
             
-            # Extract backup
+            # Extract backup (safe: reject path traversal; only allow members under base_path)
+            base_resolved = self.base_path.resolve()
             with tarfile.open(backup_path, "r:gz") as tar:
-                tar.extractall(path=self.base_path)
-            
+                for member in tar.getmembers():
+                    if member.islnk() or member.issym():
+                        logger.warning(f"Restore: skipping link {member.name}")
+                        continue
+                    dest = (self.base_path / member.name).resolve()
+                    try:
+                        if not dest.is_relative_to(base_resolved):
+                            logger.warning(f"Restore: skipping path traversal attempt {member.name}")
+                            continue
+                    except AttributeError:
+                        # Python <3.9: use os.path
+                        if not os.path.abspath(dest).startswith(os.path.abspath(base_resolved)):
+                            logger.warning(f"Restore: skipping path traversal attempt {member.name}")
+                            continue
+                    # filter= only on Python 3.12+ to strip setuid etc.
+                    kwargs = {"path": self.base_path}
+                    if hasattr(tarfile, "data_filter"):
+                        kwargs["filter"] = tarfile.data_filter
+                    tar.extract(member, **kwargs)
             logger.info(f"Results restored from: {backup_file}")
             return True
             

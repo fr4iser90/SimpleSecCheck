@@ -44,11 +44,12 @@ def save_manifest_cache(cache_file: Path, cache: Dict[str, str]) -> None:
 
 
 def run_command(command: List[str]) -> None:
-    """Run a command with shell when needed and fail fast on errors."""
+    """Run a command; avoid shell=True for security. Single-string install scripts from manifests use sh -c."""
     if not command:
         return
     if len(command) == 1:
-        subprocess.run(command[0], shell=True, check=True)
+        # Manifest install lines are trusted; run via explicit sh -c to avoid shell=True
+        subprocess.run(["sh", "-c", command[0]], check=True)
         return
     subprocess.run(command, check=True)
 

@@ -875,14 +875,34 @@ SCORE_LABELS = [
 ]
 
 def _findings_as_list(findings):
-    """Return findings as a list. Structure-based: dict with 'alerts' -> list of alerts; list -> list; else []. No tool names."""
+    """Return findings as a list. Structure-based: dict with 'alerts' -> list of alerts; Trivy 'Results' -> flattened vulns; list -> list; else []. No tool names."""
     if findings is None:
         return []
     if isinstance(findings, list):
         return findings
-    if isinstance(findings, dict) and "alerts" in findings:
-        a = findings["alerts"]
-        return a if isinstance(a, list) else []
+    if isinstance(findings, dict):
+        if "alerts" in findings:
+            a = findings["alerts"]
+            return a if isinstance(a, list) else []
+        # Trivy report.json: {"Results": [{"Target": "...", "Vulnerabilities": [{...}]}]}
+        if "Results" in findings:
+            out = []
+            for result in findings.get("Results", []) or []:
+                target = result.get("Target", "")
+                for v in result.get("Vulnerabilities", []) or []:
+                    pkg = v.get("PkgName", "")
+                    title = v.get("Title", "") or v.get("Description", "")
+                    out.append({
+                        "path": f"{target} | {pkg}" if target else pkg,
+                        "file": pkg,
+                        "PkgName": pkg,
+                        "Severity": v.get("Severity", ""),
+                        "VulnerabilityID": v.get("VulnerabilityID", ""),
+                        "Title": title,
+                        "message": title,
+                        "rule_id": v.get("VulnerabilityID", ""),
+                    })
+            return out
     return []
 
 

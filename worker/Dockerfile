@@ -35,7 +35,8 @@ RUN groupadd -g 999 docker || true && \
 COPY worker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Don't set USER here - entrypoint will handle user switching
+# Security: process runs as non-root user "worker" via entrypoint (gosu).
+# USER is not set so entrypoint can run as root to set docker group and UID/GID, then exec gosu worker.
 WORKDIR /app
 
 # Env defaults

@@ -10,13 +10,22 @@ def trivy_summary(trivy_json):
     vulns = []
     if trivy_json and 'Results' in trivy_json:
         for result in trivy_json['Results']:
+            target = result.get('Target', '')
             for v in result.get('Vulnerabilities', []):
+                pkg = v.get('PkgName', '')
+                title = v.get('Title', '') or v.get('Description', '')
+                vuln_id = v.get('VulnerabilityID', '')
                 vulns.append({
-                    'PkgName': v.get('PkgName', ''),
+                    'PkgName': pkg,
                     'Severity': v.get('Severity', ''),
-                    'VulnerabilityID': v.get('VulnerabilityID', ''),
-                    'Title': v.get('Title', ''),
-                    'Description': v.get('Description', '')
+                    'VulnerabilityID': vuln_id,
+                    'Title': title,
+                    'Description': v.get('Description', ''),
+                    # Explicit keys for report table / UI so File and Rule/Message are never empty
+                    'path': f"{target} | {pkg}" if target else pkg,
+                    'file': pkg,
+                    'message': title,
+                    'rule_id': vuln_id,
                 })
     else:
         debug("No Trivy results found in JSON.")

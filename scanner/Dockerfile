@@ -55,8 +55,8 @@ ENV XDG_CONFIG_HOME=/tmp/scanner/.config
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Don't set USER here - entrypoint will handle user switching
-# Entrypoint runs as root, then switches to scanner user
+# Security: process runs as non-root user "scanner" via entrypoint (gosu).
+# USER is not set so entrypoint can run as root to set volume permissions and UID/GID, then exec gosu scanner.
 
 # Ensure scanner modules are importable regardless of working directory
 ENV PYTHONPATH=/app

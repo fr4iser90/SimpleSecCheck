@@ -599,11 +599,12 @@ Example: ssc_abc123_4f8a9b2c3d4e5f6a7b8c9d0e1f2a3b4c
 
 **Usage**:
 ```bash
-curl -H "Authorization: Bearer ssc_abc123_..." \
+curl -H "Authorization: Bearer YOUR_API_KEY" \
      -H "Content-Type: application/json" \
      -X POST https://your-domain.com/api/scans \
      -d '{"target": "https://github.com/user/repo", "scan_type": "code"}'
 ```
+Replace `YOUR_API_KEY` with your actual API key (e.g. from Setup or API keys page).
 
 ### Webhook Endpoints
 

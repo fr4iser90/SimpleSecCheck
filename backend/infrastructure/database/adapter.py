@@ -161,9 +161,23 @@ class DatabaseAdapter:
                     ("scanner_metadata", "JSONB DEFAULT '{}'::jsonb NOT NULL", "scanners"),
                 ]
                 
+                # Predefined ALTER statements (no dynamic SQL) to satisfy security audit
+                _alter_scans = {
+                    "scheduled_at": text("ALTER TABLE scans ADD COLUMN scheduled_at TIMESTAMP WITHOUT TIME ZONE"),
+                    "total_vulnerabilities": text("ALTER TABLE scans ADD COLUMN total_vulnerabilities INTEGER DEFAULT 0 NOT NULL"),
+                    "critical_vulnerabilities": text("ALTER TABLE scans ADD COLUMN critical_vulnerabilities INTEGER DEFAULT 0 NOT NULL"),
+                    "high_vulnerabilities": text("ALTER TABLE scans ADD COLUMN high_vulnerabilities INTEGER DEFAULT 0 NOT NULL"),
+                    "medium_vulnerabilities": text("ALTER TABLE scans ADD COLUMN medium_vulnerabilities INTEGER DEFAULT 0 NOT NULL"),
+                    "low_vulnerabilities": text("ALTER TABLE scans ADD COLUMN low_vulnerabilities INTEGER DEFAULT 0 NOT NULL"),
+                    "info_vulnerabilities": text("ALTER TABLE scans ADD COLUMN info_vulnerabilities INTEGER DEFAULT 0 NOT NULL"),
+                    "priority": text("ALTER TABLE scans ADD COLUMN priority INTEGER DEFAULT 0 NOT NULL"),
+                }
+                _alter_scanners = {
+                    "scanner_metadata": text("ALTER TABLE scanners ADD COLUMN scanner_metadata JSONB DEFAULT '{}'::jsonb NOT NULL"),
+                }
+
                 # Migrate scans table
-                for column_name, column_type, table_name in scan_columns_to_add:
-                    # Check if column exists
+                for column_name, _column_type, table_name in scan_columns_to_add:
                     result = await session.execute(
                         text("""
                             SELECT column_name 
@@ -173,20 +187,16 @@ class DatabaseAdapter:
                         {"table_name": table_name, "column_name": column_name}
                     )
                     column_exists = result.scalar() is not None
-                    
-                    if not column_exists:
+                    if not column_exists and table_name == "scans" and column_name in _alter_scans:
                         logger.info(f"Adding {column_name} column to {table_name} table")
-                        await session.execute(
-                            text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
-                        )
+                        await session.execute(_alter_scans[column_name])
                         await session.commit()
                         logger.info(f"Successfully added {column_name} column to {table_name}")
-                    else:
+                    elif column_exists:
                         logger.debug(f"Column {column_name} already exists in {table_name}")
-                
+
                 # Migrate scanners table
-                for column_name, column_type, table_name in scanner_columns_to_add:
-                    # Check if column exists
+                for column_name, _column_type, table_name in scanner_columns_to_add:
                     result = await session.execute(
                         text("""
                             SELECT column_name 
@@ -196,15 +206,12 @@ class DatabaseAdapter:
                         {"table_name": table_name, "column_name": column_name}
                     )
                     column_exists = result.scalar() is not None
-                    
-                    if not column_exists:
+                    if not column_exists and table_name == "scanners" and column_name in _alter_scanners:
                         logger.info(f"Adding {column_name} column to {table_name} table")
-                        await session.execute(
-                            text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
-                        )
+                        await session.execute(_alter_scanners[column_name])
                         await session.commit()
                         logger.info(f"Successfully added {column_name} column to {table_name}")
-                    else:
+                    elif column_exists:
                         logger.debug(f"Column {column_name} already exists in {table_name}")
                 
                 # Migrate old vulnerabilities_count to total_vulnerabilities if needed

@@ -22,6 +22,18 @@
                 "path_regex": ".*/scanner/backend/app/database/postgresql_database\\.py$",
                 "message_regex": "Avoiding SQL string concatenation",
                 "reason": "postgresql_database.py uses asyncpg, not SQLAlchemy. The rule is a false positive for this adapter."
+            },
+            {
+                "rule_id": "dockerfile.security.missing-user-entrypoint.missing-user-entrypoint",
+                "path_regex": ".*/(scanner|worker)/Dockerfile$",
+                "message_regex": "By not specifying a USER",
+                "reason": "USER is intentionally not set so the entrypoint runs as root for one-time setup (chown, usermod, groupadd). The process then drops to non-root (scanner/worker) via gosu. Industry-standard pattern for images that need runtime permission and UID/GID setup."
+            },
+            {
+                "rule_id": "dockerfile.security.missing-user.missing-user",
+                "path_regex": ".*/(scanner|worker)/Dockerfile$",
+                "message_regex": "By not specifying a USER",
+                "reason": "USER is intentionally not set so the entrypoint runs as root for one-time setup (chown, usermod, groupadd). The process then drops to non-root (scanner/worker) via gosu. Industry-standard pattern for images that need runtime permission and UID/GID setup."
             }
         ]
     },
