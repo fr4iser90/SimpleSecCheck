@@ -11,7 +11,11 @@ interface PromptData {
 let aiPromptModal: HTMLDivElement | null = null;
 let currentPrompt: string = '';
 let currentLanguage: Language = 'english';
-let currentPolicyPath: string = 'config/finding-policy.json';
+const DEFAULT_POLICY_PATH = '.scanning/finding-policy.json';
+let currentPolicyPath: string = DEFAULT_POLICY_PATH;
+let currentIncludePRWorkflow: boolean = true;
+let currentOnlyCriticalHigh: boolean = false;
+let currentMaxFindings: number = 100;
 
 // Helper function to safely set text content (prevents XSS)
 function setTextContent(element: HTMLElement, text: string): void {
@@ -75,7 +79,7 @@ function openAIPromptModal(): void {
     
     const title = document.createElement('h2');
     title.style.margin = '0';
-    setTextContent(title, '🤖 AI Prompt Generator');
+    setTextContent(title, '🤖 AI Prompt für Findings');
     
     const closeBtn = document.createElement('button');
     closeBtn.style.cssText = `
@@ -110,7 +114,7 @@ function openAIPromptModal(): void {
     
     const previewLabel = document.createElement('label');
     previewLabel.style.cssText = 'margin-bottom: 0.5rem; font-weight: 600; color: var(--text-primary);';
-    setTextContent(previewLabel, '📋 Prompt Preview:');
+    setTextContent(previewLabel, '📋 Prompt Preview');
     
     const loadingDiv = document.createElement('div');
     loadingDiv.id = 'ai-prompt-loading';
@@ -176,7 +180,7 @@ function openAIPromptModal(): void {
     
     const settingsTitle = document.createElement('div');
     settingsTitle.style.cssText = 'margin-bottom: 1rem; font-weight: 600; color: var(--text-primary);';
-    setTextContent(settingsTitle, '⚙️ Settings:');
+    setTextContent(settingsTitle, '⚙️ Einstellungen');
     
     const settingsContent = document.createElement('div');
     settingsContent.style.cssText = 'display: flex; flex-direction: column; gap: 1rem;';
@@ -185,15 +189,15 @@ function openAIPromptModal(): void {
     const languageSection = document.createElement('div');
     const languageLabel = document.createElement('label');
     languageLabel.style.cssText = 'margin-bottom: 0.5rem; display: block; color: var(--text-secondary);';
-    setTextContent(languageLabel, 'Language:');
+    setTextContent(languageLabel, 'Sprache / Language');
     
     const languageButtons = document.createElement('div');
     languageButtons.style.cssText = 'display: flex; gap: 0.5rem; flex-wrap: wrap;';
     
     const languages: { id: string; label: string; lang: Language }[] = [
-      { id: 'lang-english', label: '🇬🇧 English', lang: 'english' },
-      { id: 'lang-chinese', label: '🇨🇳 中文', lang: 'chinese' },
-      { id: 'lang-german', label: '🇩🇪 Deutsch', lang: 'german' }
+      { id: 'lang-english', label: 'English', lang: 'english' },
+      { id: 'lang-chinese', label: '中文', lang: 'chinese' },
+      { id: 'lang-german', label: 'Deutsch', lang: 'german' }
     ];
     
     languages.forEach(({ id, label, lang }) => {
@@ -219,7 +223,7 @@ function openAIPromptModal(): void {
     const policySection = document.createElement('div');
     const policyLabel = document.createElement('label');
     policyLabel.style.cssText = 'margin-bottom: 0.5rem; display: block; color: var(--text-secondary);';
-    setTextContent(policyLabel, 'Policy Path:');
+    setTextContent(policyLabel, 'Policy path');
     
     const policyInput = document.createElement('input');
     policyInput.id = 'ai-prompt-policy-path';
@@ -233,18 +237,94 @@ function openAIPromptModal(): void {
       color: var(--text-primary);
       box-sizing: border-box;
     `;
-    setAttribute(policyInput, 'placeholder', 'config/finding-policy.json');
+    setAttribute(policyInput, 'placeholder', DEFAULT_POLICY_PATH);
     policyInput.value = currentPolicyPath;
-    policyInput.addEventListener('change', (e) => {
-      const target = e.target as HTMLInputElement;
-      updateAIPromptPolicyPath(target.value);
+    policyInput.addEventListener('input', () => {
+      currentPolicyPath = policyInput.value.trim() || DEFAULT_POLICY_PATH;
+      loadAIPrompt();
     });
+    policyInput.addEventListener('change', () => {
+      currentPolicyPath = policyInput.value.trim() || DEFAULT_POLICY_PATH;
+      loadAIPrompt();
+    });
+    
+    const policyHint = document.createElement('div');
+    policyHint.style.cssText = 'margin-top: 0.35rem; font-size: 0.8rem; color: var(--text-secondary); opacity: 0.9;';
+    setTextContent(policyHint, `Default: ${DEFAULT_POLICY_PATH} · Override: FINDING_POLICY_FILE`);
     
     policySection.appendChild(policyLabel);
     policySection.appendChild(policyInput);
+    policySection.appendChild(policyHint);
+    
+    // Include Pull Request workflow
+    const prSection = document.createElement('div');
+    prSection.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+    const prCheck = document.createElement('input');
+    prCheck.id = 'ai-prompt-include-pr';
+    prCheck.type = 'checkbox';
+    prCheck.checked = currentIncludePRWorkflow;
+    prCheck.addEventListener('change', () => {
+      currentIncludePRWorkflow = (prCheck as HTMLInputElement).checked;
+      loadAIPrompt();
+    });
+    const prLabel = document.createElement('label');
+    prLabel.htmlFor = 'ai-prompt-include-pr';
+    setTextContent(prLabel, 'Include Pull Request workflow');
+    prSection.appendChild(prCheck);
+    prSection.appendChild(prLabel);
+    
+    // Only Critical / High findings
+    const severitySection = document.createElement('div');
+    severitySection.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+    const severityCheck = document.createElement('input');
+    severityCheck.id = 'ai-prompt-only-critical-high';
+    severityCheck.type = 'checkbox';
+    severityCheck.checked = currentOnlyCriticalHigh;
+    severityCheck.addEventListener('change', () => {
+      currentOnlyCriticalHigh = (severityCheck as HTMLInputElement).checked;
+      loadAIPrompt();
+    });
+    const severityLabel = document.createElement('label');
+    severityLabel.htmlFor = 'ai-prompt-only-critical-high';
+    setTextContent(severityLabel, 'Only Critical / High findings');
+    severitySection.appendChild(severityCheck);
+    severitySection.appendChild(severityLabel);
+    
+    // Max findings in prompt
+    const maxSection = document.createElement('div');
+    const maxLabel = document.createElement('label');
+    maxLabel.style.cssText = 'margin-bottom: 0.35rem; display: block; color: var(--text-secondary);';
+    maxLabel.htmlFor = 'ai-prompt-max-findings';
+    setTextContent(maxLabel, 'Max findings in prompt');
+    const maxInput = document.createElement('input');
+    maxInput.id = 'ai-prompt-max-findings';
+    maxInput.type = 'number';
+    maxInput.min = '1';
+    maxInput.value = String(currentMaxFindings);
+    maxInput.style.cssText = `
+      width: 6rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--glass-bg-dark);
+      border: 1px solid var(--glass-border-dark);
+      border-radius: 8px;
+      color: var(--text-primary);
+      box-sizing: border-box;
+    `;
+    maxInput.addEventListener('change', () => {
+      const n = parseInt(maxInput.value, 10);
+      if (!isNaN(n) && n >= 1) {
+        currentMaxFindings = n;
+        loadAIPrompt();
+      }
+    });
+    maxSection.appendChild(maxLabel);
+    maxSection.appendChild(maxInput);
     
     settingsContent.appendChild(languageSection);
     settingsContent.appendChild(policySection);
+    settingsContent.appendChild(prSection);
+    settingsContent.appendChild(severitySection);
+    settingsContent.appendChild(maxSection);
     
     settingsSection.appendChild(settingsTitle);
     settingsSection.appendChild(settingsContent);
@@ -289,11 +369,26 @@ function openAIPromptModal(): void {
       cursor: pointer;
       font-weight: 600;
     `;
-    setTextContent(copyBtn, '📋 Copy');
+    setTextContent(copyBtn, '📋 Copy Prompt');
     copyBtn.addEventListener('click', copyAIPrompt);
+    
+    const newTabBtn = document.createElement('button');
+    newTabBtn.id = 'ai-prompt-new-tab-btn';
+    newTabBtn.style.cssText = `
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      background: var(--glass-bg-dark);
+      border: 1px solid var(--glass-border-dark);
+      color: var(--text-primary);
+      cursor: pointer;
+      font-weight: 600;
+    `;
+    setTextContent(newTabBtn, '📄 In neuem Tab');
+    newTabBtn.addEventListener('click', openAIPromptInNewTab);
     
     footer.appendChild(cancelBtn);
     footer.appendChild(copyBtn);
+    footer.appendChild(newTabBtn);
     
     // Assemble main content
     mainContent.appendChild(previewSection);
@@ -318,10 +413,23 @@ function openAIPromptModal(): void {
   }
   if (aiPromptModal) {
     aiPromptModal.style.display = 'flex';
-    // Update input field with current value
+    // Pre-fill from scan metadata (script id="scan-ai-prompt-defaults")
+    try {
+      const defaultsEl = document.getElementById('scan-ai-prompt-defaults') as HTMLScriptElement | null;
+      if (defaultsEl && defaultsEl.textContent) {
+        const defaults = JSON.parse(defaultsEl.textContent) as { policy_path?: string };
+        if (defaults.policy_path && defaults.policy_path.trim()) {
+          currentPolicyPath = defaults.policy_path.trim();
+        }
+      }
+    } catch (_) { /* ignore */ }
     const input = document.getElementById('ai-prompt-policy-path') as HTMLInputElement | null;
     if (input) {
       input.value = currentPolicyPath;
+    }
+    const maxInput = document.getElementById('ai-prompt-max-findings') as HTMLInputElement | null;
+    if (maxInput) {
+      maxInput.value = String(currentMaxFindings);
     }
   }
   loadAIPrompt();
@@ -355,31 +463,62 @@ function setAIPromptLanguage(lang: Language): void {
 }
 
 function updateAIPromptPolicyPath(path: string): void {
-  currentPolicyPath = path;
-  // Update input field to reflect the change
+  currentPolicyPath = path.trim() || DEFAULT_POLICY_PATH;
   const input = document.getElementById('ai-prompt-policy-path') as HTMLInputElement | null;
   if (input) {
-    input.value = path;
+    input.value = currentPolicyPath;
   }
   loadAIPrompt();
 }
 
+function openAIPromptInNewTab(): void {
+  const textarea = document.getElementById('ai-prompt-textarea') as HTMLTextAreaElement | null;
+  if (!textarea || !textarea.value) return;
+  const w = window.open('', '_blank');
+  if (w) {
+    w.document.write(
+      '<!DOCTYPE html><html><head><meta charset="utf-8"><title>AI Prompt</title></head><body>' +
+      '<pre style="white-space: pre-wrap; word-wrap: break-word; font-family: monospace; padding: 1rem; font-size: 14px;">' +
+      textarea.value.replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+      '</pre></body></html>'
+    );
+    w.document.close();
+  }
+}
+
 // Generate prompt locally from findings (same logic as backend)
-function generatePromptLocally(findings: any[], language: Language, policyPath: string, maxFindingsPerPrompt: number = 50): string {
-  // Split findings if too many
-  if (findings.length > maxFindingsPerPrompt) {
-    return generateSplitPrompt(findings, language, policyPath, maxFindingsPerPrompt);
+function generatePromptLocally(
+  findings: any[],
+  language: Language,
+  policyPath: string,
+  maxFindingsPerPrompt: number,
+  onlyCriticalHigh: boolean,
+  includePRWorkflow: boolean
+): string {
+  let list = findings;
+  if (onlyCriticalHigh) {
+    list = list.filter((f: any) => {
+      const sev = String(f.severity || '').toUpperCase();
+      return sev === 'CRITICAL' || sev === 'HIGH' || sev.indexOf('CRIT') !== -1 || sev === 'ERROR';
+    });
+  }
+  list = list.slice(0, maxFindingsPerPrompt);
+  if (list.length === 0 && findings.length > 0) {
+    list = findings.slice(0, maxFindingsPerPrompt);
   }
   
-  // Group by tool
   const byTool: { [key: string]: any[] } = {};
-  for (const f of findings) {
+  for (const f of list) {
     const tool = f.tool || 'Unknown';
     if (!byTool[tool]) {
       byTool[tool] = [];
     }
     byTool[tool].push(f);
   }
+  
+  const prWorkflowEn = "\n\n## Pull Request workflow\nIf you need to apply fixes in a repository: clone the repo if needed, apply fixes per finding or per file, commit with clear messages, and open a Pull Request. Re-run the scan with FINDING_POLICY_FILE set to verify.\n";
+  const prWorkflowZh = "\n\n## 提交流程\n如需在仓库中应用修复：如需要请先克隆仓库，按发现或按文件修复，用清晰消息提交，并提交 Pull Request。使用 FINDING_POLICY_FILE 重新运行扫描以验证。\n";
+  const prWorkflowDe = "\n\n## Pull-Request-Workflow\nWenn Sie Fixes im Repository anwenden müssen: Repo ggf. klonen, Fixes pro Finding oder pro Datei anwenden, mit klaren Commit-Messages committen und einen Pull Request öffnen. Scan mit gesetztem FINDING_POLICY_FILE erneut ausführen.\n";
   
   if (language === 'chinese') {
     const parts: string[] = [
@@ -390,7 +529,7 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
       "3. 如果无法/不适合更改代码，生成finding policy JSON条目\n",
       `4. 提供包含所有误报的完整${policyPath.split('/').pop() || 'finding-policy.json'}结构\n\n`,
       "## 发现摘要\n",
-      `总发现数: ${findings.length}\n`,
+      `总发现数: ${list.length}\n`,
       `工具: ${Object.keys(byTool).join(', ')}\n\n`
     ];
     
@@ -418,7 +557,9 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
     parts.push(`   - 放置在\`${policyPath}\`\n`);
     parts.push("   - 使用适当的正则表达式进行路径/消息匹配\n");
     parts.push("   - 为每个接受的发现包含清晰的原因\n");
-    
+    if (includePRWorkflow) {
+      parts.push(prWorkflowZh);
+    }
     return parts.join('');
   } else if (language === 'german') {
     const parts: string[] = [
@@ -430,7 +571,7 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
       "3. Wenn Code-Änderungen nicht möglich/angemessen sind, generieren Sie einen finding policy JSON-Eintrag\n",
       `4. Stellen Sie die vollständige ${policyPath.split('/').pop() || 'finding-policy.json'}-Struktur mit allen False Positives bereit\n\n`,
       "## Funde-Zusammenfassung\n",
-      `Gesamtanzahl Funde: ${findings.length}\n`,
+      `Gesamtanzahl Funde: ${list.length}\n`,
       `Tools: ${Object.keys(byTool).join(', ')}\n\n`
     ];
     
@@ -458,7 +599,9 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
     parts.push(`   - Platzieren in \`${policyPath}\`\n`);
     parts.push("   - Verwenden Sie geeignete Regex-Muster für Pfad/Nachricht-Matching\n");
     parts.push("   - Enthalten Sie klare Gründe für jeden akzeptierten Fund\n");
-    
+    if (includePRWorkflow) {
+      parts.push(prWorkflowDe);
+    }
     return parts.join('');
   } else {
     // English (default)
@@ -471,7 +614,7 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
       "3. If code changes are not possible/appropriate, generate a finding policy JSON entry\n",
       `4. Provide the complete ${policyPath.split('/').pop() || 'finding-policy.json'} structure with all false positives\n\n`,
       "## Findings Summary\n",
-      `Total findings: ${findings.length}\n`,
+      `Total findings: ${list.length}\n`,
       `Tools: ${Object.keys(byTool).join(', ')}\n\n`
     ];
     
@@ -499,13 +642,15 @@ function generatePromptLocally(findings: any[], language: Language, policyPath: 
     parts.push(`   - Place in \`${policyPath}\`\n`);
     parts.push("   - Use proper regex patterns for path/message matching\n");
     parts.push("   - Include clear reasons for each accepted finding\n");
-    
+    if (includePRWorkflow) {
+      parts.push(prWorkflowEn);
+    }
     return parts.join('');
   }
 }
 
 // Generate split prompt for large projects
-function generateSplitPrompt(findings: any[], language: Language, policyPath: string, maxFindings: number): string {
+function generateSplitPrompt(findings: any[], language: Language, policyPath: string, maxFindings: number, includePRWorkflow: boolean = true): string {
   // Group by tool first
   const byTool: { [key: string]: any[] } = {};
   for (const f of findings) {
@@ -744,14 +889,19 @@ async function loadAIPrompt(): Promise<void> {
         
         if (jsonText.trim()) {
           const findings = JSON.parse(jsonText);
-          const prompt = generatePromptLocally(findings, currentLanguage, currentPolicyPath);
+          const includePR = (document.getElementById('ai-prompt-include-pr') as HTMLInputElement | null)?.checked ?? currentIncludePRWorkflow;
+          const onlyCH = (document.getElementById('ai-prompt-only-critical-high') as HTMLInputElement | null)?.checked ?? currentOnlyCriticalHigh;
+          const maxF = parseInt((document.getElementById('ai-prompt-max-findings') as HTMLInputElement | null)?.value || String(currentMaxFindings), 10) || currentMaxFindings;
+          const prompt = generatePromptLocally(findings, currentLanguage, currentPolicyPath, maxF, onlyCH, includePR);
           currentPrompt = prompt;
           textarea.value = prompt;
           textarea.style.display = 'block';
           loading.style.display = 'none';
-          
-          const tokens = Math.ceil(prompt.length / (currentLanguage === 'chinese' ? 2 : 4));
-          stats.textContent = `📊 ${findings.length} findings | ~${tokens.toLocaleString()} tokens`;
+          const n = onlyCH
+            ? Math.min(findings.filter((f: any) => /^(CRITICAL|HIGH|ERROR)$/i.test(String(f.severity || ''))).length, maxF)
+            : Math.min(findings.length, maxF);
+          const charK = Math.round(prompt.length / 1000);
+          stats.textContent = `📊 ${n} findings · ~${charK}k characters`;
           stats.style.display = 'block';
           return;
         }
@@ -779,7 +929,7 @@ async function copyAIPrompt(): Promise<void> {
     await navigator.clipboard.writeText(textarea.value);
     btn.textContent = '✓ Copied!';
     setTimeout(() => {
-      btn.textContent = '📋 Copy';
+      btn.textContent = '📋 Copy Prompt';
     }, 2000);
   } catch (err) {
     alert('Failed to copy to clipboard');
@@ -805,4 +955,5 @@ function generateAIPrompt(): void {
 (window as any).setAIPromptLanguage = setAIPromptLanguage;
 (window as any).updateAIPromptPolicyPath = updateAIPromptPolicyPath;
 (window as any).copyAIPrompt = copyAIPrompt;
+(window as any).openAIPromptInNewTab = openAIPromptInNewTab;
 (window as any).generateAIPrompt = generateAIPrompt;

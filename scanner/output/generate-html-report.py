@@ -773,6 +773,11 @@ def main():
         # Report findings for filter/sort/export (flat list)
         report_findings = build_report_findings(all_findings)
         embedded_scripts += f'<script type="application/json" id="report-findings-data">{json.dumps(report_findings)}</script>\n'
+        # Pre-fill AI prompt modal: policy path from scan (or default)
+        display_policy_path = (policy_path or ".scanning/finding-policy.json").replace("/target/", "").strip()
+        if not display_policy_path:
+            display_policy_path = ".scanning/finding-policy.json"
+        embedded_scripts += f'<script type="application/json" id="scan-ai-prompt-defaults">{json.dumps({"policy_path": display_policy_path})}</script>\n'
         embedded_scripts += _report_features_script()
 
         # Overall status for header badge: Critical | High | OK
