@@ -1,0 +1,31 @@
+services:
+  # ---------------------------------------------------------------------------
+  # SimpleSecCheck Scanner (Standalone)
+  #
+  # Runs the security scanner CLI without the full platform stack.
+  # Useful for:
+  # - local scans
+  # - CI/CD pipelines
+  # - manual security analysis
+  #
+  # Example:
+  # docker compose run scanner
+  #
+  # Results will be written to ./results
+  # ---------------------------------------------------------------------------
+
+  scanner:
+    image: simpleseccheck/scanner:latest
+
+    volumes:
+      - ./results:/app/results
+      - .:/target:ro
+
+    environment:
+      SCAN_TARGET: /target
+      RESULTS_DIR_IN_CONTAINER: /app/results
+      NVD_API_KEY: ${NVD_API_KEY:-}
+      SNYK_TOKEN: ${SNYK_TOKEN:-}
+
+    stdin_open: true
+    tty: true
