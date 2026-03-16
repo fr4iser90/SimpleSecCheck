@@ -14,6 +14,7 @@ def html_header(title, embedded_scripts="", ai_prompt_disabled=False, overall_st
     return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>{title}</title>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<link rel="icon" type="image/png" href="assets/transparent.png">\n<style>\n
 /* ============================================
    GLASSMORPHISM MODERN DESIGN
+   (Frosted glass: backdrop-blur + semi-transparent surfaces)
    ============================================ */
 
 :root {{
@@ -37,6 +38,13 @@ def html_header(title, embedded_scripts="", ai_prompt_disabled=False, overall_st
   --glass-bg-dark: rgba(0,0,0,0.25);
   --glass-border: rgba(255,255,255,0.18);
   --glass-border-dark: rgba(255,255,255,0.1);
+  /* Modal (AI Prompt): readable, not too transparent */
+  --modal-overlay: rgba(0, 0, 0, 0.75);
+  --modal-content-bg: #1a1a2e;
+  --modal-content-border: rgba(255, 255, 255, 0.12);
+  --color-critical-bg: rgba(220, 53, 69, 0.2);
+  --btn-primary: #667eea;
+  --btn-primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }}
 
 
@@ -60,6 +68,8 @@ body.dark {{
   color: var(--text-dark);
   --text-primary: #f0f0f0;
   --text-secondary: #b0b0b0;
+  --modal-content-bg: #1a1a2e;
+  --modal-content-border: rgba(255, 255, 255, 0.12);
 }}
 
 /* Glassmorphism effect */
@@ -191,6 +201,7 @@ body.dark .summary-card {{
   font-weight: 700;
   line-height: 1;
   margin-bottom: 0.5rem;
+  color: inherit;
 }}
 
 .summary-card .label {{
@@ -198,7 +209,8 @@ body.dark .summary-card {{
   font-size: 0.9rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  opacity: 0.8;
+  opacity: 0.85;
+  color: inherit;
 }}
 
 /* Domain scores row */
@@ -255,11 +267,13 @@ body.dark .tool-status-section {{
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem;
+  padding: 0.5rem 0.75rem;
   background: var(--glass-bg-dark);
   border-radius: 8px;
   font-size: 0.85rem;
   border: 1px solid var(--glass-border);
+  min-width: 0;
+  overflow: hidden;
 }}
 
 body.dark .tool-status-item {{
@@ -272,6 +286,33 @@ body.dark .tool-status-item {{
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+}}
+
+.tool-status-item .tool-status-text {{
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow: hidden;
+}}
+
+.tool-status-item .tool-name {{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 0 1 auto;
+}}
+
+.tool-status-item .tool-msg {{
+  font-size: 0.8rem;
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 0;
 }}
 
 .tool-status-item.status-complete .status-icon {{
@@ -706,7 +747,7 @@ body.dark .all-clear {{
   }}
 }}
 
-/* Severity badge in header */
+/* Severity badge in header – always high contrast (white text on colored bg) */
 .severity-badge {{
   display: inline-block;
   margin-left: 0.75rem;
@@ -717,18 +758,18 @@ body.dark .all-clear {{
   text-transform: uppercase;
   letter-spacing: 0.5px;
   vertical-align: middle;
+  color: #fff !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }}
 .severity-badge-critical {{
   background: var(--color-critical);
-  color: #fff;
 }}
 .severity-badge-high {{
-  background: var(--color-high);
-  color: #fff;
+  background: #e8590c;
+  border: 1px solid rgba(255,255,255,0.2);
 }}
 .severity-badge-ok {{
   background: var(--color-pass);
-  color: #fff;
 }}
 .repo-link {{
   text-decoration: none;
@@ -803,7 +844,7 @@ window.onload = function() {{
     <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">\n
       {repo_link_html}\n
       <button class="toggle-btn" onclick="toggleDarkMode()">🌙/☀️ Toggle Dark/Light</button>\n
-      <div id="ai-prompt-container" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; padding: 0.5rem; background: var(--glass-bg); border-radius: 8px; border: 1px solid var(--glass-border);">\n
+      <div id="ai-prompt-container" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; padding: 0.5rem; background: rgba(255,255,255,0.12); border-radius: 8px; border: 1px solid var(--glass-border);">\n
         <button id="ai-prompt-btn" class="toggle-btn" onclick="generateAIPrompt()" style="background: linear-gradient(135deg, #6c757d, #495057);" {"disabled" if ai_prompt_disabled else ""} title="{ 'No findings available for AI prompt.' if ai_prompt_disabled else '' }">🤖 AI Prompt</button>\n
         {"<span style='opacity: 0.7; font-size: 0.85rem;'>No findings available</span>" if ai_prompt_disabled else ""}\n
       </div>\n
@@ -882,9 +923,9 @@ def _weighted_penalty(critical, high, medium, low, info):
     return min(total, PENALTY_CAP)
 
 
-def generate_executive_summary(all_findings, domain_scores=None):
+def generate_executive_summary(all_findings, domain_scores=None, executed_tools=None):
     """Generate executive dashboard with key metrics. Score = 100 - min(weighted_penalty, 60), floor 10. Enterprise bands for label.
-    domain_scores: optional dict of domain_label -> score (0-100), from report generator using registry scan_type only; no hardcoded tools."""
+    domain_scores: optional dict of domain_label -> score (0-100). executed_tools: optional dict tool -> {status, message}; when given, tools_executed/tools_passed are derived from it (passed = status 'complete') so the card matches the Scans Executed list."""
     critical_count = 0
     high_count = 0
     medium_count = 0
@@ -893,17 +934,27 @@ def generate_executive_summary(all_findings, domain_scores=None):
     tools_executed = 0
     tools_passed = 0
 
+    # When executed_tools is provided, use it for tool counts so "X/Y Tools Complete" matches the list (green = complete)
+    if executed_tools:
+        tools_executed = len(executed_tools)
+        tools_passed = sum(
+            1 for s in executed_tools.values()
+            if isinstance(s, dict) and s.get("status") == "complete"
+        )
+
     for tool, findings in all_findings.items():
         if findings is None:
-            tools_executed += 1
-            tools_passed += 1
+            if not executed_tools:
+                tools_executed += 1
+                tools_passed += 1
             continue
 
         findings_list = _findings_as_list(findings)
-        tools_executed += 1
-        if len(findings_list) == 0:
-            tools_passed += 1
-        else:
+        if not executed_tools:
+            tools_executed += 1
+            if len(findings_list) == 0:
+                tools_passed += 1
+        if len(findings_list) > 0:
             for finding in findings_list:
                 if isinstance(finding, str):
                     medium_count += 1
@@ -967,7 +1018,7 @@ def generate_executive_summary(all_findings, domain_scores=None):
       </div>
       <div class="summary-card passed">
         <span class="number">{tools_passed}/{tools_executed}</span>
-        <span class="label">Tools Passed</span>
+        <span class="label">Tools Complete</span>
       </div>
       <div class="summary-card" style="grid-column: 1/-1; text-align: center; border-left: 4px solid {score_color};">
         <div style="font-size: 2rem; font-weight: 700; color: {score_color};">{security_score} <span style="font-size: 1rem; font-weight: 400; opacity: 0.85;">/ 100</span></div>
@@ -998,8 +1049,10 @@ def generate_tool_status_section(executed_tools):
         tool_items.append(f'''
           <div class="tool-status-item {status_class}"{title_attr}>
             <span class="status-icon"></span>
-            <span>{html_module.escape(tool)}</span>
-            {f'<span style="font-size:0.8rem;opacity:0.9;margin-left:0.25rem;">({msg_short})</span>' if msg else ''}
+            <div class="tool-status-text">
+              <span class="tool-name" title="{html_module.escape(tool)}">{html_module.escape(tool)}</span>
+              {f'<span class="tool-msg">({msg_short})</span>' if msg else ''}
+            </div>
           </div>
         ''')
     

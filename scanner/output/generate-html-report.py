@@ -810,7 +810,7 @@ def main():
 
                 # Executive Summary Dashboard (domain_scores from registry ScanType only, no hardcoded tools)
                 domain_scores = _compute_domain_scores(all_findings)
-                f.write(generate_executive_summary(all_findings, domain_scores=domain_scores))
+                f.write(generate_executive_summary(all_findings, domain_scores=domain_scores, executed_tools=executed_tools))
 
                 # Tool execution status
                 f.write(generate_tool_status_section(executed_tools))

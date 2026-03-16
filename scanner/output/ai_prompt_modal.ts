@@ -34,8 +34,8 @@ function openAIPromptModal(): void {
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(5px);
+      background: var(--modal-overlay);
+      backdrop-filter: blur(8px);
       display: none;
       align-items: center;
       justify-content: center;
@@ -44,33 +44,33 @@ function openAIPromptModal(): void {
       overflow-y: auto;
     `;
     
-    // Create content container
     const contentContainer = document.createElement('div');
     contentContainer.style.cssText = `
       max-width: 900px;
       width: 100%;
       max-height: 90vh;
-      background: var(--glass-bg-dark);
-      backdrop-filter: blur(20px);
+      background: var(--modal-content-bg);
       border-radius: 16px;
-      border: 1px solid var(--glass-border-dark);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--modal-content-border);
+      box-shadow: var(--shadow-dark);
       display: flex;
       flex-direction: column;
       overflow: hidden;
       position: relative;
       z-index: 1000000;
       margin: auto;
+      color: var(--text-primary);
     `;
     
     // Create header
     const header = document.createElement('div');
     header.style.cssText = `
       padding: 1.5rem;
-      border-bottom: 1px solid var(--glass-border-dark);
+      border-bottom: 1px solid var(--modal-content-border);
       display: flex;
       justify-content: space-between;
       align-items: center;
+      color: var(--text-primary);
     `;
     
     const title = document.createElement('h2');
@@ -83,7 +83,7 @@ function openAIPromptModal(): void {
       border: none;
       font-size: 1.5rem;
       cursor: pointer;
-      color: var(--text-dark);
+      color: var(--text-primary);
       padding: 0.25rem 0.5rem;
       line-height: 1;
     `;
@@ -93,23 +93,23 @@ function openAIPromptModal(): void {
     header.appendChild(title);
     header.appendChild(closeBtn);
     
-    // Create main content area
+    // Main content: scrollable so long prompt doesn't overflow
     const mainContent = document.createElement('div');
     mainContent.style.cssText = `
       flex: 1;
-      overflow: hidden;
+      min-height: 0;
+      overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: 1.5rem;
       padding: 1.5rem;
     `;
     
-    // Create prompt preview section
     const previewSection = document.createElement('div');
-    previewSection.style.cssText = 'flex: 1; display: flex; flex-direction: column; min-height: 0;';
+    previewSection.style.cssText = 'flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;';
     
     const previewLabel = document.createElement('label');
-    previewLabel.style.cssText = 'margin-bottom: 0.5rem; font-weight: 600;';
+    previewLabel.style.cssText = 'margin-bottom: 0.5rem; font-weight: 600; color: var(--text-primary);';
     setTextContent(previewLabel, '📋 Prompt Preview:');
     
     const loadingDiv = document.createElement('div');
@@ -123,6 +123,7 @@ function openAIPromptModal(): void {
       background: var(--glass-bg-dark);
       border-radius: 8px;
       border: 1px solid var(--glass-border-dark);
+      color: var(--text-primary);
     `;
     const loadingText = document.createElement('div');
     loadingText.style.opacity = '0.7';
@@ -134,10 +135,10 @@ function openAIPromptModal(): void {
     errorDiv.style.cssText = `
       display: none;
       padding: 1rem;
-      background: rgba(220, 53, 69, 0.2);
-      border: 1px solid #dc3545;
+      background: var(--color-critical-bg);
+      border: 1px solid var(--color-critical);
       border-radius: 8px;
-      color: #dc3545;
+      color: var(--color-critical);
     `;
     
     const textarea = document.createElement('textarea');
@@ -145,11 +146,11 @@ function openAIPromptModal(): void {
     textarea.style.cssText = `
       flex: 1;
       min-height: 400px;
-      background: #000;
+      background: var(--glass-bg-dark);
       border: 1px solid var(--glass-border-dark);
       border-radius: 8px;
       padding: 1rem;
-      color: #f8f9fa;
+      color: var(--text-dark);
       font-family: 'Courier New', monospace;
       font-size: 0.9rem;
       resize: vertical;
@@ -164,17 +165,17 @@ function openAIPromptModal(): void {
     previewSection.appendChild(errorDiv);
     previewSection.appendChild(textarea);
     
-    // Create settings section
     const settingsSection = document.createElement('div');
     settingsSection.style.cssText = `
       background: var(--glass-bg-dark);
       border: 1px solid var(--glass-border-dark);
       border-radius: 8px;
       padding: 1rem;
+      color: var(--text-primary);
     `;
     
     const settingsTitle = document.createElement('div');
-    settingsTitle.style.cssText = 'margin-bottom: 1rem; font-weight: 600;';
+    settingsTitle.style.cssText = 'margin-bottom: 1rem; font-weight: 600; color: var(--text-primary);';
     setTextContent(settingsTitle, '⚙️ Settings:');
     
     const settingsContent = document.createElement('div');
@@ -183,7 +184,7 @@ function openAIPromptModal(): void {
     // Language section
     const languageSection = document.createElement('div');
     const languageLabel = document.createElement('label');
-    languageLabel.style.cssText = 'margin-bottom: 0.5rem; display: block;';
+    languageLabel.style.cssText = 'margin-bottom: 0.5rem; display: block; color: var(--text-secondary);';
     setTextContent(languageLabel, 'Language:');
     
     const languageButtons = document.createElement('div');
@@ -204,7 +205,7 @@ function openAIPromptModal(): void {
         cursor: pointer;
         border: 1px solid var(--glass-border-dark);
         background: var(--glass-bg-dark);
-        color: var(--text-dark);
+        color: var(--text-primary);
       `;
       setTextContent(btn, label);
       btn.addEventListener('click', () => setAIPromptLanguage(lang));
@@ -217,7 +218,7 @@ function openAIPromptModal(): void {
     // Policy path section
     const policySection = document.createElement('div');
     const policyLabel = document.createElement('label');
-    policyLabel.style.cssText = 'margin-bottom: 0.5rem; display: block;';
+    policyLabel.style.cssText = 'margin-bottom: 0.5rem; display: block; color: var(--text-secondary);';
     setTextContent(policyLabel, 'Policy Path:');
     
     const policyInput = document.createElement('input');
@@ -229,7 +230,8 @@ function openAIPromptModal(): void {
       background: var(--glass-bg-dark);
       border: 1px solid var(--glass-border-dark);
       border-radius: 8px;
-      color: var(--text-dark);
+      color: var(--text-primary);
+      box-sizing: border-box;
     `;
     setAttribute(policyInput, 'placeholder', 'config/finding-policy.json');
     policyInput.value = currentPolicyPath;
@@ -257,7 +259,7 @@ function openAIPromptModal(): void {
       border: 1px solid var(--glass-border-dark);
       border-radius: 8px;
       font-size: 0.9rem;
-      opacity: 0.8;
+      color: var(--text-secondary);
     `;
     
     // Footer buttons
@@ -270,7 +272,7 @@ function openAIPromptModal(): void {
       border: 1px solid var(--glass-border-dark);
       padding: 0.75rem 1.5rem;
       border-radius: 8px;
-      color: var(--text-dark);
+      color: var(--text-primary);
       cursor: pointer;
     `;
     setTextContent(cancelBtn, '❌ Cancel');
@@ -281,9 +283,9 @@ function openAIPromptModal(): void {
     copyBtn.style.cssText = `
       padding: 0.75rem 1.5rem;
       border-radius: 8px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: var(--btn-primary-gradient);
       border: none;
-      color: white;
+      color: var(--text-dark);
       cursor: pointer;
       font-weight: 600;
     `;
@@ -339,8 +341,8 @@ function setAIPromptLanguage(lang: Language): void {
     const btn = document.getElementById(`lang-${l}`);
     if (btn) {
       if (l === lang) {
-        btn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-        btn.style.borderColor = '#667eea';
+        btn.style.background = 'var(--btn-primary-gradient)';
+        btn.style.borderColor = 'var(--btn-primary)';
         btn.style.fontWeight = '600';
       } else {
         btn.style.background = 'var(--glass-bg-dark)';
