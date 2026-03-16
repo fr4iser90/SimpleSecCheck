@@ -231,25 +231,25 @@
         "accepted_findings": [
             {
                 "rule_id": "py/stack-trace-exposure",
-                "path_regex": ".*/(backend/api/health\\.py|backend/api/middleware/setup_middleware\\.py)$",
+                "path_regex": "(.*/)?(backend/api/health\\.py|backend/api/middleware/setup_middleware\\.py)$",
                 "message_regex": "Stack trace.*may be exposed",
                 "reason": "Only exception message str(e) is included in HTTPException detail, not full stack trace. Acceptable for health/setup error responses."
             },
             {
                 "rule_id": "py/weak-sensitive-data-hashing",
-                "path_regex": ".*/(backend/domain/entities/user\\.py|backend/api/routes/user\\.py)$",
+                "path_regex": "(.*/)?(backend/domain/entities/user\\.py|backend/api/routes/user\\.py)$",
                 "message_regex": "SHA256.*insecure for password hashing",
                 "reason": "Domain entity uses SHA256 as placeholder (comment notes production should use bcrypt). API key hashing for storage; production should use stronger hashing. Accepted as known technical debt."
             },
             {
                 "rule_id": "py/incomplete-url-substring-sanitization",
-                "path_regex": ".*/(backend/api/routes/queue\\.py|backend/api/routes/user\\.py)$",
+                "path_regex": "(.*/)?(backend/api/routes/queue\\.py|backend/api/routes/user\\.py)$",
                 "message_regex": "github\\.com|gitlab\\.com.*arbitrary position",
                 "reason": "Substring checks used for display name extraction from repo URLs, not security boundary. Allowlist context only."
             },
             {
                 "rule_id": "py/path-injection",
-                "path_regex": ".*/backend/api/routes/scans\\.py$",
+                "path_regex": "(.*/)?backend/api/routes/scans\\.py$",
                 "message_regex": "path depends on.*user-provided",
                 "reason": "scan_id is server-issued (UUID from scan creation); path is under results_dir and validated by scan service. No arbitrary path traversal."
             }
