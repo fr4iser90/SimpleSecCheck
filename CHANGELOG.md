@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-03-16
+
+### Summary
+
+Major release: scanner fully rewritten in Python with a plug-and-play plugin system. Standalone CLI and Docker image remain the primary way to run scans; no breaking changes to how you run the scanner (e.g. `docker compose run scanner` or worker-started containers).
+
+### Added
+- **Plugin system (plug-and-play)** – All scanners are plugins under `scanner/plugins/<name>/` (scanner.py, processor.py, optional manifest.yaml). No central scanner list in core; new plugin = new folder.
+- **Manifest-driven metadata** – Per-plugin `manifest.yaml`: display_name, version, languages, severity_supported, severity_map, timeout, category, homepage, documentation. No plugin-specific paths or names in core.
+- **Generic scan target** – `scan_target` used across orchestrator and plugins (ZAP, Burp, Nuclei, Nikto, Wapiti); "ZAP" only appears in the ZAP plugin.
+- **Single source for plugin identity** – Plugin name from module (e.g. `__name__.split(".")[2]`); display name only from manifest.
+- **AI Prompt modal (report)** – Policy path from metadata, default `.scanning/finding-policy.json`, options: Include PR workflow, Only Critical/High, Max findings, language (EN/中文/Deutsch). Copy Prompt / Open in new tab.
+- **Executive summary alignment** – "Tools Complete" count and list both use `executed_tools` (steps.log) so the X/Y card matches the green list.
+
+### Changed
+- **Core no longer knows plugin names** – path_setup, orchestrator, scanner_registry use generic helpers (e.g. `get_plugin_data_dir(plugin_name)`); no "owasp" or other names in core.
+- **Backend scanner config** – Removed `scanner_config.yaml`; backend uses `scanner_config.py` (empty/from DB or worker), no hardcoded tool list.
+- **Report UI** – Glassmorphism styling; severity badge contrast; tool cards overflow/truncation fixes; modal uses CSS variables only.
+- **Finding policy default** – Default path `.scanning/finding-policy.json` in report and AI modal.
+
+### Technical
+- Scanner container version set to 2.0.0 (Dockerfile ARG, docker-compose build args).
+- Standalone: run with `python3 -m scanner.core.orchestrator` or `docker compose run scanner`; CLI and behaviour unchanged from 1.4 for end users.
+
+---
+
 ## [1.4.0] - 2026-02-17
 
 ### Added

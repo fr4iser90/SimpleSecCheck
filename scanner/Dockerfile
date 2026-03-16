@@ -2,7 +2,7 @@
 FROM ubuntu:22.04
 
 # Version information
-ARG VERSION=1.4.0
+ARG VERSION=2.0.0
 LABEL version=$VERSION
 LABEL maintainer="fr4iser"
 

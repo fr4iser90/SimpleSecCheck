@@ -209,7 +209,7 @@ services:
       context: .
       dockerfile: ./scanner/Dockerfile
       args:
-        VERSION: 1.4.0
+        VERSION: 2.0.0
     image: simpleseccheck-scanner:local
     container_name: SimpleSecCheck_scanner
     command: ["sleep", "infinity"]
