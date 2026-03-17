@@ -22,6 +22,7 @@ from api.schemas.scan_schemas import (
     ScanUpdateSchema,
     ScanFilterSchema,
     ScanStatisticsSchema,
+    ScannerDurationStatSchema,
     CancelScanSchema,
     BatchScanSchema,
     ScanStatusResponseSchema,
@@ -672,6 +673,17 @@ async def get_scan_statistics(
             average_scan_duration=statistics_dto.average_scan_duration,
             longest_scan_duration=statistics_dto.longest_scan_duration,
             shortest_scan_duration=statistics_dto.shortest_scan_duration,
+            scanner_duration_stats=[
+                ScannerDurationStatSchema(
+                    scanner_name=s["scanner_name"],
+                    avg_duration_seconds=s["avg_duration_seconds"],
+                    min_duration_seconds=s.get("min_duration_seconds"),
+                    max_duration_seconds=s.get("max_duration_seconds"),
+                    sample_count=s["sample_count"],
+                    last_updated=s.get("last_updated"),
+                )
+                for s in statistics_dto.scanner_duration_stats
+            ],
         )
 
     except ScanException as e:

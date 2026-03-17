@@ -250,6 +250,16 @@ class ScanFilterSchema(BaseModel):
         return v
 
 
+class ScannerDurationStatSchema(BaseModel):
+    """Schema for one scanner's duration stats (per-tool)."""
+    scanner_name: str = Field(description="Scanner/tool name")
+    avg_duration_seconds: int = Field(ge=0, description="Average duration in seconds")
+    min_duration_seconds: Optional[int] = Field(None, ge=0, description="Min duration in seconds")
+    max_duration_seconds: Optional[int] = Field(None, ge=0, description="Max duration in seconds")
+    sample_count: int = Field(ge=0, description="Number of runs")
+    last_updated: Optional[str] = Field(None, description="ISO timestamp of last update")
+
+
 class ScanStatisticsSchema(BaseModel):
     """Schema for scan statistics."""
     
@@ -275,6 +285,10 @@ class ScanStatisticsSchema(BaseModel):
     average_scan_duration: float = Field(ge=0, description="Average scan duration in seconds")
     longest_scan_duration: float = Field(ge=0, description="Longest scan duration in seconds")
     shortest_scan_duration: float = Field(ge=0, description="Shortest scan duration in seconds")
+    scanner_duration_stats: List[ScannerDurationStatSchema] = Field(
+        default_factory=list,
+        description="Per-scanner duration stats (avg/min/max/sample_count)",
+    )
 
 
 class CancelScanSchema(BaseModel):

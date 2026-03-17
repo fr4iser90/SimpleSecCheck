@@ -26,6 +26,10 @@ interface QueueStatus {
   position?: number
   created_at: string
   scan_id?: string
+  /** Estimated duration of this scan (from its tools), in seconds */
+  estimated_time_seconds?: number | null
+  /** Estimated wait until this scan starts (sum of tool-based durations of scans before this one), in seconds */
+  estimated_wait_seconds?: number | null
 }
 
 interface SubStep {
@@ -99,13 +103,14 @@ export default function ScanView() {
             if (data.status === 'running') {
               setStatus(prev => ({ ...prev, status: 'running' }))
             } else if (data.status === 'completed') {
-              // Queue uses 'completed', but we need 'done' for scan system
+              // Queue uses 'completed'; set 'done' and results_dir so we auto-switch to report view
+              // Backend does not return results_dir – results live under directory named by scan_id
               if (data.scan_id) {
                 setStatus(prev => ({
                   ...prev,
                   status: 'done',
                   scan_id: data.scan_id,
-                  results_dir: data.results_dir || prev.results_dir,
+                  results_dir: data.results_dir || data.scan_id || prev.results_dir || prev.scan_id,
                 }))
               } else {
                 setStatus(prev => ({ ...prev, status: 'completed' }))
@@ -244,8 +249,14 @@ export default function ScanView() {
 
   // Show queue waiting state (Backend queue status: 'pending')
   if (status.status === 'pending') {
-    const estimatedWaitMinutes = queueStatus?.position ? Math.ceil(queueStatus.position * 2) : 0 // Rough estimate: 2 min per scan
-    
+    const estimatedWaitSeconds = queueStatus?.estimated_wait_seconds ?? null
+    const formatWait = (sec: number): string => {
+      if (sec < 60) return `${sec}s`
+      const m = Math.floor(sec / 60)
+      const s = Math.round(sec % 60)
+      return s ? `${m}m ${s}s` : `${m}m`
+    }
+
     return (
       <div style={{ 
         height: 'calc(100vh - 80px)',
@@ -277,10 +288,16 @@ export default function ScanView() {
                   <span style={{ opacity: 0.8 }}>Position in Queue:</span>
                   <strong style={{ fontSize: '1.5rem' }}>#{queueStatus.position || '?'}</strong>
                 </div>
-                {estimatedWaitMinutes > 0 && (
+                {estimatedWaitSeconds != null && estimatedWaitSeconds > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                     <span style={{ opacity: 0.8 }}>Estimated Wait:</span>
-                    <strong>{estimatedWaitMinutes} minutes</strong>
+                    <strong>{formatWait(estimatedWaitSeconds)}</strong>
+                  </div>
+                )}
+                {estimatedWaitSeconds === 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                    <span style={{ opacity: 0.8 }}>Estimated Wait:</span>
+                    <strong>Next in line</strong>
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>

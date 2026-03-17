@@ -16,8 +16,6 @@ logger = logging.getLogger(__name__)
 
 # Maximum number of samples to keep for rolling average
 MAX_SAMPLES = 100
-# Default duration if no stats available (2 minutes)
-DEFAULT_DURATION_SECONDS = 120
 
 
 class ScannerDurationService:
@@ -138,16 +136,13 @@ class ScannerDurationService:
                     
                     if stats and stats.sample_count > 0:
                         total_seconds += stats.avg_duration_seconds
-                    else:
-                        # Use default if no stats available
-                        total_seconds += DEFAULT_DURATION_SECONDS
+                    # No stats: do not add any fake duration (only real data)
                 
                 return total_seconds
                 
         except Exception as e:
             logger.error(f"Failed to get estimated time: {e}", exc_info=True)
-            # Fallback: return default * number of scanners
-            return len(scanners) * DEFAULT_DURATION_SECONDS
+            return 0.0
     
     @staticmethod
     async def get_scanner_stats(scanner_name: str) -> Optional[Dict[str, Any]]:

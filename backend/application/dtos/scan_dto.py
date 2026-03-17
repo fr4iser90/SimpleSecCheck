@@ -238,7 +238,9 @@ class ScanStatisticsDTO:
     average_scan_duration: float = 0.0  # in seconds
     longest_scan_duration: float = 0.0
     shortest_scan_duration: float = 0.0
-    
+    # Per-tool duration stats (from ScannerDurationStats)
+    scanner_duration_stats: List[Dict[str, Any]] = field(default_factory=list)
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -261,4 +263,5 @@ class ScanStatisticsDTO:
             'average_scan_duration': self.average_scan_duration,
             'longest_scan_duration': self.longest_scan_duration,
             'shortest_scan_duration': self.shortest_scan_duration,
+            'scanner_duration_stats': self.scanner_duration_stats,
         }

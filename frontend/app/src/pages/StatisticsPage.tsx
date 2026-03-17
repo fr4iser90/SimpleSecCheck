@@ -22,6 +22,14 @@ interface Statistics {
   average_scan_duration: number
   longest_scan_duration: number
   shortest_scan_duration: number
+  scanner_duration_stats?: Array<{
+    scanner_name: string
+    avg_duration_seconds: number
+    min_duration_seconds: number | null
+    max_duration_seconds: number | null
+    sample_count: number
+    last_updated: string | null
+  }>
 }
 
 const STATS_API = '/api/v1/scans/statistics'
@@ -176,9 +184,37 @@ export default function StatisticsPage() {
               </div>
             </section>
 
-            {/* Duration */}
+            {/* Duration by tool (per-scanner) */}
+            {statistics.scanner_duration_stats && statistics.scanner_duration_stats.length > 0 && (
+              <section className="statistics-section">
+                <h3 className="statistics-section-title">Duration by tool</h3>
+                <div className="statistics-grid statistics-grid--duration">
+                  {statistics.scanner_duration_stats.map((s) => (
+                    <div key={s.scanner_name} className="stat-card stat-card--neutral">
+                      <span className="stat-value">{formatDuration(s.avg_duration_seconds)}</span>
+                      <span className="stat-label">{s.scanner_name}</span>
+                      {(s.min_duration_seconds != null || s.max_duration_seconds != null) && (
+                        <span className="stat-sublabel" style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                          {s.min_duration_seconds != null && formatDuration(s.min_duration_seconds)}
+                          {s.min_duration_seconds != null && s.max_duration_seconds != null && ' – '}
+                          {s.max_duration_seconds != null && formatDuration(s.max_duration_seconds)}
+                          {s.sample_count > 0 && ` (${s.sample_count} runs)`}
+                        </span>
+                      )}
+                      {s.min_duration_seconds == null && s.max_duration_seconds == null && s.sample_count > 0 && (
+                        <span className="stat-sublabel" style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                          {s.sample_count} runs
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Duration (whole-scan aggregates; optional) */}
             <section className="statistics-section">
-              <h3 className="statistics-section-title">Scan Duration</h3>
+              <h3 className="statistics-section-title">Scan duration (all scans)</h3>
               <div className="statistics-grid statistics-grid--duration">
                 <div className="stat-card stat-card--neutral">
                   <span className="stat-value">{formatDuration(statistics.average_scan_duration)}</span>

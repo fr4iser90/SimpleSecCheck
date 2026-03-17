@@ -449,7 +449,38 @@ async def get_scan_queue_status(
                 "cancelled": "failed",
             }
             queue_status = status_map.get(scan.status.lower(), scan.status.lower())
-            
+
+            # Estimated duration of THIS scan (from its tools)
+            estimated_time_seconds = None
+            if queue_status in ["pending", "running"] and scan.scanners:
+                estimated_time_seconds = await ScannerDurationService.get_estimated_time(scan.scanners)
+
+            # Estimated wait = sum of estimated durations of all scans BEFORE this one in queue (by tools, not average)
+            estimated_wait_seconds = None
+            if queue_status in ["pending", "running"] and position and position > 1:
+                # Scans before this one: higher priority, or same priority and older created_at
+                before_query = (
+                    select(Scan)
+                    .where(Scan.status.in_(["pending", "running"]))
+                    .where(
+                        or_(
+                            Scan.priority > scan.priority,
+                            and_(
+                                Scan.priority == scan.priority,
+                                Scan.created_at < scan.created_at,
+                            ),
+                        )
+                    )
+                    .order_by(Scan.priority.desc(), Scan.created_at.asc())
+                )
+                before_result = await session.execute(before_query)
+                scans_before = before_result.scalars().all()
+                wait_total = 0.0
+                for s in scans_before:
+                    if s.scanners:
+                        wait_total += await ScannerDurationService.get_estimated_time(s.scanners)
+                estimated_wait_seconds = int(wait_total) if wait_total else 0
+
             return {
                 "queue_id": str(scan.id),
                 "scan_id": str(scan.id),
@@ -460,6 +491,8 @@ async def get_scan_queue_status(
                 "started_at": scan.started_at.isoformat() if scan.started_at else None,
                 "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
                 "scanners": scan.scanners if scan.scanners else [],
+                "estimated_time_seconds": estimated_time_seconds,
+                "estimated_wait_seconds": estimated_wait_seconds,
             }
             
     except HTTPException:

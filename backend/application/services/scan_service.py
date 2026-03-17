@@ -10,6 +10,7 @@ from datetime import datetime
 from domain.entities.scan import Scan, ScanStatus, ScanType
 from domain.value_objects.scan_config import ScanConfig
 from domain.domain_services.scan_validation_service import ScanValidationService
+from domain.services.scanner_duration_service import ScannerDurationService
 from domain.exceptions.scan_exceptions import (
     ScanException,
     ScanNotFoundException,
@@ -202,7 +203,10 @@ class ScanService:
             statistics_dto.average_scan_duration = stats.get('average_scan_duration', 0.0)
             statistics_dto.longest_scan_duration = stats.get('longest_scan_duration', 0.0)
             statistics_dto.shortest_scan_duration = stats.get('shortest_scan_duration', 0.0)
-            
+
+            scanner_stats = await ScannerDurationService.get_all_stats()
+            statistics_dto.scanner_duration_stats = scanner_stats
+
             return statistics_dto
         except Exception as e:
             raise ScanValidationException(f"Failed to get scan statistics: {str(e)}")
