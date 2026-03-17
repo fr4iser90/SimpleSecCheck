@@ -91,7 +91,18 @@ class TrivyScanner(BaseScanner):
         if not self.check_tool_installed("trivy"):
             self.log("trivy not found in PATH", "ERROR")
             return False
-        
+
+        # Use cache path from manifest (asset id=cache) so Trivy DB is on results volume, not /tmp
+        if not os.environ.get("TRIVY_CACHE_DIR"):
+            try:
+                from scanner.core.scanner_assets.manager import ScannerAssetsManager
+                manager = ScannerAssetsManager(Path("/app/scanner/plugins"))
+                asset = manager.get_asset("trivy", "cache")
+                if asset and asset.mount.container_path:
+                    os.environ["TRIVY_CACHE_DIR"] = asset.mount.container_path
+            except Exception:
+                pass
+
         self.log(f"Running DEEP {self.scan_type} scan on {self.target_path}...")
         
         json_output = self.results_dir / "report.json"

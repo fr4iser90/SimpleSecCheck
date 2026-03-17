@@ -21,9 +21,10 @@ assets:
     mount:
       host_subpath: scanner/plugins/trivy/config/config.yaml
       container_path: /app/scanner/plugins/trivy/config/config.yaml
+  # Cache in plugin dir (like OWASP); avoid container_path under /tmp to prevent "no space left on device".
   - id: cache
     type: data
     description: Trivy vulnerability database cache
     mount:
       host_subpath: scanner/plugins/trivy/cache
-      container_path: /tmp/scanner/.cache/trivy
+      container_path: /app/scanner/plugins/trivy/cache
