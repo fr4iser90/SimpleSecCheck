@@ -78,6 +78,13 @@ class ActorContextDependency:
             except jwt.PyJWTError:
                 # JWT is invalid, continue to session check
                 pass
+
+        # Try refresh_token cookie (for /auth/refresh and page reload session restore)
+        refresh_token = request.cookies.get("refresh_token")
+        if refresh_token:
+            context = self.get_context_from_refresh_token(refresh_token)
+            if context:
+                return context
         
         # Try to get context from session cookie
         session_id = request.cookies.get("session_id")

@@ -157,18 +157,25 @@ async def login(
             name = user.username or email.split('@')[0].title()
             role = user.role.value if user.role else "user"  # Get role value from enum
         
-        # Create JWT token
+        # Create JWT and refresh token
         access_token = actor_context_dependency.create_jwt_token(
             user_id=user_id,
             email=email,
             name=name,
             role=role
         )
-        
+        refresh_token = actor_context_dependency.create_refresh_token(
+            user_id=user_id,
+            email=email,
+            name=name,
+            role=role
+        )
+        actor_context_dependency.set_refresh_cookie(response, refresh_token)
+
         # Clear any existing guest session
         if not actor_context.is_authenticated and actor_context.session_id:
             actor_context_dependency.clear_session_cookie(response)
-        
+
         return LoginResponse(
             access_token=access_token,
             token_type="bearer",
@@ -206,9 +213,9 @@ async def logout(
     - **actor_context_dependency**: Actor context dependency for cookie management
     """
     try:
-        # Clear session cookie
         actor_context_dependency.clear_session_cookie(response)
-        
+        actor_context_dependency.clear_refresh_cookie(response)
+
         # Note: JWT tokens are stateless, so we can't invalidate them server-side
         # The client should discard the token
         # For enhanced security, you could implement a token blacklist in Redis
