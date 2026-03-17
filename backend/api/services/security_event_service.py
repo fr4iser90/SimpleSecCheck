@@ -71,7 +71,7 @@ class SecurityEventService:
             "event_type": event_type,
             "severity": severity,
             "source": "setup_wizard",
-            "security_mode": settings.SECURITY_MODE,
+            "use_case": settings.USE_CASE,
             "details": details,
             "version": "1.0.0"
         }

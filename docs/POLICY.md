@@ -19,58 +19,50 @@ The policy service prevents scattered production checks by centralizing:
 
 ## Core Concepts
 
-### Environment
-
-Set via:
-
-```bash
-ENVIRONMENT=dev|prod
-```
-
 ### Target Types
 
 **Code Targets:**
-- `LOCAL_MOUNT`: local filesystem path mounted into container (dev only)
-- `GIT_REPO`: git clone (dev + prod)
-- `UPLOADED_CODE`: uploaded ZIP file extracted and mounted (dev + prod)
+- `LOCAL_MOUNT`: local filesystem path mounted into container (permissive only)
+- `GIT_REPO`: git clone (all modes)
+- `UPLOADED_CODE`: uploaded ZIP file extracted and mounted (all modes)
 
 **Container Targets:**
-- `CONTAINER_REGISTRY`: Container registry image (docker.io, ghcr.io, gcr.io, ECR, etc.) (dev + prod, prod: docker.io only)
+- `CONTAINER_REGISTRY`: Container registry image (docker.io, ghcr.io, etc.; restricted: docker.io only)
 
 **Application Targets:**
-- `WEBSITE`: website URL scan (dev only, disabled in prod)
-- `API_ENDPOINT`: REST/GraphQL API endpoint scan (dev only, disabled in prod)
+- `WEBSITE`: website URL scan (permissive only; disabled in restricted)
+- `API_ENDPOINT`: REST/GraphQL API endpoint scan (permissive only; disabled in restricted)
 
 **Infrastructure Targets:**
-- `NETWORK_HOST`: network host/IP scan (dev only, disabled in prod)
-- `KUBERNETES_CLUSTER`: live Kubernetes cluster scan (dev only, disabled in prod)
+- `NETWORK_HOST`: network host/IP scan (permissive only; disabled in restricted)
+- `KUBERNETES_CLUSTER`: live Kubernetes cluster scan (permissive only; disabled in restricted)
 
 **Mobile Targets:**
-- `APK`: Android APK file (dev + prod)
-- `IPA`: iOS IPA file (dev + prod)
+- `APK`: Android APK file (all modes)
+- `IPA`: iOS IPA file (all modes)
 
 **Spec Targets:**
-- `OPENAPI_SPEC`: OpenAPI/Swagger spec file for API fuzzing (dev + prod)
+- `OPENAPI_SPEC`: OpenAPI/Swagger spec file for API fuzzing (all modes)
 
-## Dev vs Prod Rules
+## Security modes (permissive vs restricted)
 
-### Dev (default)
+### Permissive (e.g. solo / self-hosted)
 
 - ✅ Local paths allowed
 - ✅ Git repos allowed
 - ✅ Docker images allowed
 - ✅ Website/Network scans allowed
 - ✅ Bulk scan enabled
-- ✅ Session management **off** by default
+- ✅ Session management configurable
 - ✅ Metadata collection **optional**
 
-### Prod
+### Restricted (e.g. public or enterprise)
 
-- ❌ Local paths **disabled**
+- ❌ Local paths **disabled** (admin can enable for self)
 - ✅ Git repos allowed
-- ✅ Docker images allowed **(Docker Hub only)**
-- ❌ Website/Network scans disabled
-- ❌ Bulk scan disabled
+- ✅ Docker images allowed **(Docker Hub only** in strict setups)
+- ❌ Website/Network scans disabled (admin can enable for self)
+- ❌ Bulk scan disabled (configurable)
 - ✅ Session management **on**
 - ✅ Queue required
 - ✅ Metadata collection **always**
@@ -108,5 +100,5 @@ The policy service exposes:
 
 ## Notes
 
-- Adjust `ONLY_GIT_SCANS`, `ZIP_UPLOAD_ENABLED`, or other env vars to refine prod rules.
-- For stricter prod enforcement, extend `validate_scan_request()`.
+- Adjust feature flags or USE_CASE (solo, network_intern, public_web, enterprise) to refine rules.
+- For stricter enforcement, choose a restricted use case and extend `validate_scan_request()`.

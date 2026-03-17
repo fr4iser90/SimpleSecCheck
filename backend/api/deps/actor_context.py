@@ -54,13 +54,11 @@ class ActorContextDependency:
         jwt_secret_key: str = "",  # Must be set via constructor (e.g. from settings); empty = fail-safe
         jwt_algorithm: str = "HS256",
         jwt_expiration_minutes: int = 30,
-        environment: str = "permissive"  # SECURITY_MODE value
     ):
         self.security = HTTPBearer(auto_error=False)
         self.jwt_secret_key = jwt_secret_key
         self.jwt_algorithm = jwt_algorithm
         self.jwt_expiration_minutes = jwt_expiration_minutes
-        self.environment = environment
         self.logger = logging.getLogger("api.deps.actor_context")
     
     async def __call__(
@@ -138,7 +136,7 @@ class ActorContextDependency:
             key="session_id",
             value=session_id,
             httponly=True,
-            secure=self.environment == "production",
+            secure=self._cookie_secure(),
             samesite="lax",
             max_age=86400 * 30  # 30 days
         )
@@ -150,10 +148,9 @@ class ActorContextDependency:
         )
     
     def create_jwt_token(self, user_id: str, email: str, name: str, role: Optional[str] = None) -> str:
-        """Create JWT token for authenticated user."""
+        """Create JWT access token for authenticated user."""
         expires_delta = timedelta(minutes=self.jwt_expiration_minutes)
         expire = datetime.utcnow() + expires_delta
-        
         payload = {
             "sub": user_id,
             "email": email,
@@ -162,16 +159,77 @@ class ActorContextDependency:
             "exp": expire,
             "iat": datetime.utcnow(),
         }
-        
         return jwt.encode(payload, self.jwt_secret_key, algorithm=self.jwt_algorithm)
-    
+
+    # Refresh token: longer-lived, stored in HttpOnly cookie only (not sent to JS)
+    REFRESH_TOKEN_DAYS = 7
+
+    def create_refresh_token(self, user_id: str, email: str, name: str, role: Optional[str] = None) -> str:
+        """Create JWT refresh token (for HttpOnly cookie). Same claims, longer expiry."""
+        expires_delta = timedelta(days=self.REFRESH_TOKEN_DAYS)
+        expire = datetime.utcnow() + expires_delta
+        payload = {
+            "sub": user_id,
+            "email": email,
+            "name": name,
+            "role": role,
+            "exp": expire,
+            "iat": datetime.utcnow(),
+            "type": "refresh",
+        }
+        return jwt.encode(payload, self.jwt_secret_key, algorithm=self.jwt_algorithm)
+
+    def get_context_from_refresh_token(self, token: str) -> Optional[ActorContext]:
+        """Decode refresh token and return ActorContext. Returns None if invalid."""
+        try:
+            payload = jwt.decode(token, self.jwt_secret_key, algorithms=[self.jwt_algorithm])
+            if payload.get("type") != "refresh":
+                return None
+            return ActorContext(
+                user_id=payload.get("sub"),
+                session_id=None,
+                is_authenticated=True,
+                email=payload.get("email"),
+                name=payload.get("name"),
+                role=payload.get("role"),
+            )
+        except jwt.PyJWTError:
+            return None
+
+    def _cookie_secure(self) -> bool:
+        """Secure flag for cookies: True when APP_URL is HTTPS (always secure when using HTTPS)."""
+        url = (getattr(settings, "APP_URL", "") or "").strip().lower()
+        return url.startswith("https://")
+
+    def set_refresh_cookie(self, response: Response, refresh_token: str) -> None:
+        """Set HttpOnly cookie with refresh token (Secure when HTTPS, SameSite=Strict)."""
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=self._cookie_secure(),
+            samesite="strict",
+            max_age=self.REFRESH_TOKEN_DAYS * 86400,
+            path="/",
+        )
+
+    def clear_refresh_cookie(self, response: Response) -> None:
+        """Clear refresh token cookie."""
+        response.delete_cookie(
+            key="refresh_token",
+            httponly=True,
+            secure=self._cookie_secure(),
+            samesite="strict",
+            path="/",
+        )
+
     def create_session_cookie(self, session_id: str, response: Response) -> None:
         """Create session cookie for guest user."""
         response.set_cookie(
             key="session_id",
             value=session_id,
             httponly=True,
-            secure=self.environment == "production",
+            secure=self._cookie_secure(),
             samesite="lax",
             max_age=86400 * 30  # 30 days
         )
@@ -181,8 +239,9 @@ class ActorContextDependency:
         response.delete_cookie(
             key="session_id",
             httponly=True,
-            secure=self.environment == "production",
-            samesite="lax"
+            secure=self._cookie_secure(),
+            samesite="lax",
+            path="/",
         )
 
 

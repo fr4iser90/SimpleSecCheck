@@ -239,27 +239,34 @@ class QueueService:
         except Exception as e:
             logger.error(f"Failed to remove scan {scan_id} from queue: {e}")
             return False
-    
+
+    async def signal_worker_cancel(self, scan_id: str) -> None:
+        """Signal the worker to stop the running container for this scan_id. No-op if worker unreachable."""
+        try:
+            import httpx
+            worker_url = os.getenv("WORKER_API_URL", "http://worker:8081")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(f"{worker_url}/api/jobs/cancel/{scan_id}")
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("stopped"):
+                        logger.info(f"Worker stopped container for scan {scan_id}")
+                else:
+                    logger.warning(
+                        f"Worker cancel returned {response.status_code} for scan {scan_id}: {response.text}"
+                    )
+        except Exception as e:
+            logger.warning(f"Could not signal worker to cancel scan {scan_id}: {e}")
+
     async def cancel_scan(self, scan_id: str) -> bool:
         """
-        Cancel a scan - removes from queue if pending, signals worker if running.
-        
-        Args:
-            scan_id: ID of the scan to cancel
-            
-        Returns:
-            True if cancellation was successful
+        Cancel a scan - removes from queue if pending, signals worker to stop container if running.
         """
         try:
-            # Remove from queue if pending
             await self.remove_scan_from_queue(scan_id)
-            
-            # TODO: Signal worker to stop if running
-            # This would require worker API call or Redis pub/sub
-            
+            await self.signal_worker_cancel(scan_id)
             logger.info(f"Cancelled scan {scan_id}")
             return True
-            
         except Exception as e:
             logger.error(f"Failed to cancel scan {scan_id}: {e}")
             return False

@@ -234,10 +234,8 @@ async def get_queue(
             if status_filter:
                 query = query.where(Scan.status.ilike(f"%{status_filter}%"))
             else:
-                # Default: show pending, running, completed, failed
-                query = query.where(
-                    Scan.status.in_(["pending", "running", "completed", "failed", "cancelled"])
-                )
+                # Default: show only active queue (pending + running)
+                query = query.where(Scan.status.in_(["pending", "running"]))
             
             # Order by priority (higher first), then created_at (oldest first)
             query = query.order_by(Scan.priority.desc(), Scan.created_at.asc())
@@ -562,8 +560,8 @@ async def delete_scan_from_queue(
             queue_service = QueueService()
             removed_from_queue = await queue_service.remove_scan_from_queue(scan_id)
             
-            # If scan is running, cancel it first
             if scan.status.lower() == "running":
+                await queue_service.signal_worker_cancel(scan_id)
                 orchestration_service = ScanOrchestrationService()
                 await orchestration_service.cancel_scan(scan_id)
             

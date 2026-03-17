@@ -302,6 +302,28 @@ class JobOrchestrationService:
         except Exception as e:
             self.logger.error(f"Error stopping job execution {job_id}: {e}")
             return False
+
+    async def stop_job_by_scan_id(self, scan_id: str) -> bool:
+        """Stop the active job for the given scan_id, if any.
+        
+        Args:
+            scan_id: Scan ID (string UUID)
+            
+        Returns:
+            True if a job was found and stopped, False otherwise
+        """
+        try:
+            scan_uuid = UUID(scan_id)
+            for job_id, job_execution in list(self.active_jobs.items()):
+                if job_execution.scan_id == scan_uuid:
+                    return await self.stop_job_execution(job_id)
+            return False
+        except (ValueError, TypeError) as e:
+            self.logger.warning(f"Invalid scan_id for stop_job_by_scan_id: {scan_id} ({e})")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error stopping job by scan_id {scan_id}: {e}")
+            return False
     
     async def get_job_status(self, job_id: UUID) -> Optional[Dict[str, Any]]:
         """Get job execution status.

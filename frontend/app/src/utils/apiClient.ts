@@ -1,112 +1,94 @@
 /**
- * API Client with automatic Authorization header and token refresh
- * 
- * Automatically adds Authorization header to all requests if token is available.
- * Handles token refresh on 401 errors.
+ * API Client: access token in memory only, refresh via HttpOnly cookie.
+ * - All requests send credentials so the refresh_token cookie is sent when needed.
+ * - On 401 we call /refresh (cookie only); backend returns new access_token in body.
  */
 
-const TOKEN_STORAGE_KEY = 'auth_token'
-const USER_STORAGE_KEY = 'auth_user'
+let tokenGetter: (() => string | null) | null = null
+let onTokenRefreshed: ((newToken: string, user?: { user_id: string; email: string; name?: string; role?: string }) => void) | null = null
+let onUnauthorized: (() => void) | null = null
+
+export function setTokenGetter(getter: () => string | null): void {
+  tokenGetter = getter
+}
+
+export function setOnTokenRefreshed(cb: (newToken: string, user?: { user_id: string; email: string; name?: string; role?: string }) => void): void {
+  onTokenRefreshed = cb
+}
+
+export function setOnUnauthorized(cb: () => void): void {
+  onUnauthorized = cb
+}
 
 let refreshPromise: Promise<string | null> | null = null
 
+/** Refresh using HttpOnly cookie only (no Bearer). Returns new access_token or null. */
 async function refreshToken(): Promise<string | null> {
-  // If refresh is already in progress, wait for it
-  if (refreshPromise) {
-    return refreshPromise
-  }
-
+  if (refreshPromise) return refreshPromise
   refreshPromise = (async () => {
     try {
-      const token = localStorage.getItem(TOKEN_STORAGE_KEY)
-      if (!token) {
-        return null
-      }
-
       const response = await fetch('/api/v1/auth/refresh', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include',
       })
-
       if (response.ok) {
         const data = await response.json()
         const newToken = data.access_token
-        
-        // Update token in storage
-        localStorage.setItem(TOKEN_STORAGE_KEY, newToken)
-        
-        // Update user info if provided
-        if (data.user_id && data.email) {
-          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify({
+        if (onTokenRefreshed && newToken) {
+          onTokenRefreshed(newToken, {
             user_id: data.user_id,
             email: data.email,
-            name: data.name
-          }))
+            name: data.name,
+            role: data.role
+          })
         }
-        
         return newToken
-      } else {
-        // Refresh failed, clear token
-        localStorage.removeItem(TOKEN_STORAGE_KEY)
-        localStorage.removeItem(USER_STORAGE_KEY)
-        return null
       }
+      onUnauthorized?.()
+      return null
     } catch (error) {
       console.error('Token refresh failed:', error)
-      localStorage.removeItem(TOKEN_STORAGE_KEY)
-      localStorage.removeItem(USER_STORAGE_KEY)
+      onUnauthorized?.()
       return null
     } finally {
       refreshPromise = null
     }
   })()
-
   return refreshPromise
 }
+
+const defaultCredentials: RequestCredentials = 'include'
 
 export async function apiFetch(
   url: string,
   options: RequestInit = {},
   retryOn401: boolean = true
 ): Promise<Response> {
-  // Get token from storage
-  let token = localStorage.getItem(TOKEN_STORAGE_KEY)
-  
-  // Add Authorization header if token exists
+  const token = tokenGetter?.() ?? null
   const headers = new Headers(options.headers)
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
-  
-  // Merge with existing headers
-  const mergedOptions: RequestInit = {
+  let response = await fetch(url, {
     ...options,
-    headers
-  }
-  
-  let response = await fetch(url, mergedOptions)
-  
-  // If 401 and retry enabled, try to refresh token
-  if (response.status === 401 && retryOn401 && token) {
+    headers,
+    credentials: options.credentials ?? defaultCredentials,
+  })
+
+  if (response.status === 401 && retryOn401) {
     const newToken = await refreshToken()
-    
     if (newToken) {
-      // Retry request with new token
       headers.set('Authorization', `Bearer ${newToken}`)
-      const retryOptions: RequestInit = {
+      response = await fetch(url, {
         ...options,
-        headers
-      }
-      response = await fetch(url, retryOptions)
+        headers,
+        credentials: options.credentials ?? defaultCredentials,
+      })
     } else {
-      // Refresh failed, redirect to login if we're not already there
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login'
       }
     }
   }
-  
   return response
 }

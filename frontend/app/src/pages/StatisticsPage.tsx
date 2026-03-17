@@ -127,6 +127,10 @@ export default function StatisticsPage() {
                   <span className="stat-value">{statistics.pending_scans + statistics.running_scans}</span>
                   <span className="stat-label">Pending / Running</span>
                 </div>
+                <div className="stat-card stat-card--neutral">
+                  <span className="stat-value">{statistics.cancelled_scans}</span>
+                  <span className="stat-label">Cancelled</span>
+                </div>
               </div>
             </section>
 

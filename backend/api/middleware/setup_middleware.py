@@ -29,21 +29,9 @@ class SetupMiddleware(BaseHTTPMiddleware):
     - Blocks access to main application until setup is complete
     """
     
-    def __init__(
-        self,
-        app,
-        environment: str,  # SECURITY_MODE value
-    ):
-        """
-        Initialize setup middleware.
-        
-        Args:
-            app: FastAPI application instance
-            environment: Application environment (development/production)
-        """
+    def __init__(self, app):
+        """Initialize setup middleware."""
         super().__init__(app)
-        self.environment = environment
-        self.setup_required = None  # Cache setup status
     
     async def dispatch(
         self,
@@ -104,7 +92,6 @@ class SetupMiddleware(BaseHTTPMiddleware):
             "/api/setup/status",
             "/api/setup/initialize",
             "/api/setup/health",
-            "/api/setup/skip",
             "/api/config",  # Frontend config needed during setup
         ]
         return any(path.startswith(setup_path) for setup_path in setup_paths)
@@ -124,39 +111,18 @@ class SetupMiddleware(BaseHTTPMiddleware):
     
     async def _is_setup_required(self) -> bool:
         """
-        Check if setup is required.
-        
-        Returns:
-            True if setup is required, False otherwise
+        Check if setup is required (reads from DB every request).
+        When USE_CASE is solo and DB is not connected, allow skip so UI can load.
         """
-        # Return cached result if available
-        if self.setup_required is not None:
-            return self.setup_required
-        
         try:
-            # Check actual system state instead of just Redis
             setup_status = await check_setup_status()
-            
-            # If setup is complete, cache and return
             if setup_status.get("setup_complete", False):
-                self.setup_required = False
                 return False
-            
-            # In development, allow skipping setup if no tables exist
-            if self.environment == "development":
-                # Only skip setup if database is completely uninitialized
-                if not setup_status.get("database_connected", False):
-                    self.setup_required = False
-                    return False
-            
-            # Setup is required
-            self.setup_required = True
+            if settings.USE_CASE == "solo" and not setup_status.get("database_connected", False):
+                return False
             return True
-            
         except Exception as e:
             logger.error(f"Failed to check setup status: {str(e)}")
-            # If we can't check setup status, assume setup is required
-            self.setup_required = True
             return True
 
 

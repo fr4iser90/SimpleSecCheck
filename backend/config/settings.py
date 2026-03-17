@@ -15,9 +15,16 @@ class Settings(BaseSettings):
     
     # Application
     DEBUG: bool = Field(default=False, description="Enable debug mode")
-    SECURITY_MODE: str = Field(default="permissive", description="Security mode: restricted|permissive (loaded from database after setup)")
+    USE_CASE: str = Field(default="solo", description="Use case: solo|network_intern|public_web|enterprise (loaded from database after setup)")
     SECRET_KEY: str = Field(default="your-secret-key-here", description="JWT secret key")
     ALLOWED_HOSTS: List[str] = Field(default=["*"], description="Allowed host origins")
+    # CORS: comma-separated origins (no * when using credentials). Set in compose via CORS_ORIGINS or APP_URL.
+    CORS_ORIGINS: str = Field(
+        default="http://localhost,http://localhost:80,http://127.0.0.1,http://127.0.0.1:80",
+        description="Comma-separated CORS allowed origins (required when allow_credentials=True; set APP_URL on server)"
+    )
+    # Optional: single app URL (e.g. from compose). If set, appended to CORS_ORIGINS when not already present.
+    APP_URL: str = Field(default="", description="Public app URL (e.g. https://scan.example.com); added to CORS origins when set")
     
     # Database
     DATABASE_URL: str = Field(
@@ -60,7 +67,7 @@ class Settings(BaseSettings):
     # Auth config block (registration)
     ALLOW_SELF_REGISTRATION: bool = Field(default=False, description="Allow users to self-register (sign up)")
     
-    # Feature Flags (granular control, can override SECURITY_MODE defaults).
+    # Feature Flags (granular control, set from use case or overridden in admin).
     # Keys must match domain.services.target_permission_policy.ALL_SCAN_FEATURE_FLAG_KEYS (single source of truth).
     ALLOW_LOCAL_PATHS: bool = Field(default=True, description="Allow local file system paths as scan targets")
     # Network-related: one flag per target type (clear separation)
@@ -146,9 +153,9 @@ async def load_settings_from_database(settings_instance: Settings) -> None:
             if system_state and system_state.config:
                 config = system_state.config
                 
-                # Load SECURITY_MODE, AUTH_MODE, ACCESS_MODE from database
-                if "SECURITY_MODE" in config:
-                    settings_instance.SECURITY_MODE = config["SECURITY_MODE"]
+                # Load USE_CASE, AUTH_MODE, ACCESS_MODE from database
+                if "use_case" in config:
+                    settings_instance.USE_CASE = config["use_case"]
                 if "AUTH_MODE" in config:
                     settings_instance.AUTH_MODE = config["AUTH_MODE"]
                 auth_cfg = config.get("auth") or {}

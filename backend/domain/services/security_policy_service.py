@@ -1,10 +1,9 @@
 """
 Security Policy Service
 
-This service provides intelligent defaults for security settings based on
-SECURITY_MODE and AUTH_MODE combinations, with granular feature flags as overrides.
+Use case + feature flags. No security mode; use case determines AUTH_MODE and feature flag defaults.
 
-Local / restricted features (only on by default in Solo; off in public use cases):
+Feature flags (only on by default in Solo; off in public use cases):
 - Local paths, Local containers, Network scans.
 - In Public Web these are OFF; admin can still use them (admin override for self).
 - In Network Intern / Enterprise they can be ON so (authenticated) users can use them;
@@ -36,10 +35,9 @@ LOCAL_RESTRICTED_FEATURE_LABELS: List[str] = [
 class SecurityPolicyService:
     """Service for managing security policies and feature flags."""
     
-    # Single source: use case → SECURITY_MODE, AUTH_MODE, feature_flags. UI "✓/✗" and apply_use_case_config use this.
+    # Single source: use case → AUTH_MODE, feature_flags.
     USE_CASE_MAP: Dict[str, Dict[str, Any]] = {
         "solo": {
-            "SECURITY_MODE": "permissive",
             "AUTH_MODE": "free",
             "feature_flags": {
                 "ALLOW_LOCAL_PATHS": True,
@@ -54,7 +52,6 @@ class SecurityPolicyService:
             },
         },
         "network_intern": {
-            "SECURITY_MODE": "restricted",
             "AUTH_MODE": "basic",
             "feature_flags": {
                 "ALLOW_LOCAL_PATHS": False,
@@ -69,7 +66,6 @@ class SecurityPolicyService:
             },
         },
         "public_web": {
-            "SECURITY_MODE": "restricted",
             "AUTH_MODE": "free",
             "feature_flags": {
                 "ALLOW_LOCAL_PATHS": False,
@@ -84,7 +80,6 @@ class SecurityPolicyService:
             },
         },
         "enterprise": {
-            "SECURITY_MODE": "restricted",
             "AUTH_MODE": "jwt",
             "feature_flags": {
                 "ALLOW_LOCAL_PATHS": False,
@@ -126,33 +121,8 @@ class SecurityPolicyService:
     
     @staticmethod
     def detect_use_case() -> str:
-        """
-        Detect use case from SECURITY_MODE and AUTH_MODE.
-        
-        Returns:
-            Use case identifier
-        """
-        security_mode = settings.SECURITY_MODE.lower()
-        auth_mode = settings.AUTH_MODE.lower()
-        
-        # Solo: permissive + free
-        if security_mode == "permissive" and auth_mode == "free":
-            return "solo"
-        
-        # Network Intern: restricted + (basic or jwt)
-        if security_mode == "restricted" and auth_mode in ["basic", "jwt"]:
-            return "network_intern"
-        
-        # Public Web: restricted + free
-        if security_mode == "restricted" and auth_mode == "free":
-            return "public_web"
-        
-        # Enterprise: restricted + jwt
-        if security_mode == "restricted" and auth_mode == "jwt":
-            return "enterprise"
-        
-        # Default: treat as solo
-        return "solo"
+        """Return current use case from settings (solo|network_intern|public_web|enterprise)."""
+        return getattr(settings, "USE_CASE", "solo") or "solo"
     
     @staticmethod
     def get_rate_limits(use_case: str = None) -> Dict[str, Dict[str, int]]:
@@ -187,27 +157,6 @@ class SecurityPolicyService:
         # Return current settings (single source: get_allow_flags_from_settings uses ALL_SCAN_FEATURE_FLAG_KEYS)
         return get_allow_flags_from_settings(settings)
     
-    # Security mode explanations for UI (single source; no hardcoded text in frontend).
-    SECURITY_MODES_EXPLAINED: Dict[str, Dict[str, Any]] = {
-        "permissive": {
-            "name": "Permissive",
-            "description": "Allows access to host filesystem (local paths).",
-            "allowed": ["Can scan local directories on the server"],
-            "warning": "Only safe for single-user deployments",
-        },
-        "restricted": {
-            "name": "Restricted",
-            "description": "No access to host filesystem. Only external targets allowed.",
-            "allowed": ["Allowed targets (Git, ZIP, containers, network) depend on use case — see cards below"],
-            "disallowed": ["No local file paths"],
-        },
-    }
-
-    @staticmethod
-    def get_security_modes_explained() -> Dict[str, Dict[str, Any]]:
-        """Return security mode explanations for frontend (Permissive / Restricted)."""
-        return dict(SecurityPolicyService.SECURITY_MODES_EXPLAINED)
-
     @staticmethod
     def apply_use_case_config(use_case: str) -> Dict[str, Any]:
         """
@@ -217,7 +166,7 @@ class SecurityPolicyService:
             use_case: Use case identifier
             
         Returns:
-            Dictionary with SECURITY_MODE, AUTH_MODE, feature flags, and rate limits
+            Dictionary with AUTH_MODE, feature flags, and rate limits
         """
         entry = SecurityPolicyService.USE_CASE_MAP.get(use_case, SecurityPolicyService.USE_CASE_MAP["solo"])
         config = dict(entry)
@@ -234,7 +183,6 @@ class SecurityPolicyService:
             - id: Use case identifier
             - name: Display name
             - description: Short description
-            - security_mode: Security mode (permissive/restricted)
             - auth_mode: Authentication mode (free/basic/jwt)
             - auth_mode_options: Available auth mode options for this use case
             - features: List of enabled/disabled features with descriptions
@@ -290,7 +238,7 @@ class SecurityPolicyService:
                 })
             return features
         
-        def add_use_case(uid: str, name: str, description: str, security_mode: str, auth_mode: str, auth_mode_options: list) -> None:
+        def add_use_case(uid: str, name: str, description: str, auth_mode: str, auth_mode_options: list) -> None:
             flags = SecurityPolicyService.USE_CASE_MAP.get(uid, SecurityPolicyService.USE_CASE_MAP["solo"]).get("feature_flags", {})
             network_any = (
                 flags.get("ALLOW_WEBSITE_SCANS", False)
@@ -307,7 +255,6 @@ class SecurityPolicyService:
                 "id": uid,
                 "name": name,
                 "description": description,
-                "security_mode": security_mode,
                 "auth_mode": auth_mode,
                 "auth_mode_options": auth_mode_options,
                 "features": build_features(uid),
@@ -316,16 +263,9 @@ class SecurityPolicyService:
                 "admin_can_override": True,
             }
         
-        # Solo: local/restricted on by default (self-hosted only)
-        add_use_case("solo", "Solo", "Single user, self-hosted. All features enabled, no restrictions.", "permissive", "free", ["free"])
-        
-        # Network Intern: local/restricted on so (authenticated) users can use; future: admin can grant per-user
-        add_use_case("network_intern", "Network Intern", "Multiple users, internal network. User authentication required. Local/restricted features on for authenticated users.", "restricted", "basic", ["basic", "jwt"])
-        
-        # Public Web: local/restricted off; admin can still use for self
-        add_use_case("public_web", "Public Web", "Public web access, many users. Restricted security, rate limited. Local/restricted off; admin can enable for self.", "restricted", "free", ["free"])
-        
-        # Enterprise: local/restricted on; future: admin can grant permissions to users
-        add_use_case("enterprise", "Enterprise", "Enterprise deployment with SSO. Restricted security, JWT authentication. Local/restricted on; admin can grant permissions to users.", "restricted", "jwt", ["jwt"])
+        add_use_case("solo", "Solo", "Single user, self-hosted. All features enabled, no restrictions.", "free", ["free"])
+        add_use_case("network_intern", "Network Intern", "Multiple users, internal network. User authentication required. Local/restricted features on for authenticated users.", "basic", ["basic", "jwt"])
+        add_use_case("public_web", "Public Web", "Public web access, many users. Rate limited. Local/restricted off; admin can enable for self.", "free", ["free"])
+        add_use_case("enterprise", "Enterprise", "Enterprise deployment with SSO. JWT authentication. Local/restricted on; admin can grant permissions to users.", "jwt", ["jwt"])
         
         return use_cases

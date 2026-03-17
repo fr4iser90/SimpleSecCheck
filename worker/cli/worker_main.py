@@ -82,27 +82,41 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def start_api_server(database_adapter):
-    """Start HTTP API server for scanner discovery."""
+async def start_api_server(database_adapter, job_orchestration_service=None):
+    """Start HTTP API server for scanner discovery and jobs (cancel)."""
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
     import uvicorn
     from worker.api.scanner_api import init_router
+    from worker.api.jobs_api import init_jobs_router
     
     app = FastAPI(title="SimpleSecCheck Worker API")
-    
-    # CORS middleware
+
+    # CORS: same as backend – list origins (no * with credentials). Env CORS_ORIGINS or APP_URL (e.g. from compose).
+    _cors_default = "http://localhost,http://localhost:80,http://127.0.0.1,http://127.0.0.1:80"
+    _cors_str = os.environ.get("CORS_ORIGINS", _cors_default)
+    _cors_origins = [o.strip() for o in _cors_str.split(",") if o.strip()]
+    _app_url = os.environ.get("APP_URL", "").strip().rstrip("/")
+    if _app_url and _app_url not in _cors_origins:
+        _cors_origins.append(_app_url)
+    if not _cors_origins:
+        _cors_origins = ["http://localhost", "http://localhost:80", "http://127.0.0.1", "http://127.0.0.1:80"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=_cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
     
-    # Initialize router with database adapter
+    # Scanner discovery router
     router = init_router(database_adapter)
     app.include_router(router)
+    
+    # Jobs router (cancel by scan_id)
+    if job_orchestration_service:
+        jobs_router = init_jobs_router(job_orchestration_service)
+        app.include_router(jobs_router)
     
     # Run API server
     config = uvicorn.Config(app, host="0.0.0.0", port=8081, log_level="warning")
@@ -244,7 +258,7 @@ async def main():
         # Start worker and API server in parallel
         await asyncio.gather(
             job_orchestration_service.start_worker(),
-            start_api_server(database_adapter)
+            start_api_server(database_adapter, job_orchestration_service)
         )
             
     except KeyboardInterrupt:

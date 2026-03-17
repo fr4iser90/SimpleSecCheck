@@ -15,7 +15,6 @@ fi
 
 # Parse arguments
 CLEANUP=false
-MODE="dev"
 TEST_NAME=""
 
 while [[ $# -gt 0 ]]; do
@@ -24,17 +23,13 @@ while [[ $# -gt 0 ]]; do
             CLEANUP=true
             shift
             ;;
-        --prod)
-            MODE="prod"
-            shift
-            ;;
         --test)
             TEST_NAME="$2"
             shift 2
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: $0 [--cleanup] [--prod] [--test TEST_NAME]"
+            echo "Usage: $0 [--cleanup] [--test TEST_NAME]"
             exit 1
             ;;
     esac
@@ -43,12 +38,12 @@ done
 # Cleanup before if requested
 if [ "$CLEANUP" = true ]; then
     echo "🧹 Cleaning up Docker Compose..."
-    docker compose --profile "$MODE" down -v 2>/dev/null || true
+    docker compose down -v 2>/dev/null || true
     sleep 2
 fi
 
 # Run tests
-echo "🚀 Running setup wizard tests (mode: $MODE)..."
+echo "🚀 Running setup wizard tests..."
 echo ""
 
 if [ -n "$TEST_NAME" ]; then
@@ -63,7 +58,7 @@ EXIT_CODE=$?
 if [ "$CLEANUP" = true ]; then
     echo ""
     echo "🧹 Cleaning up Docker Compose..."
-    docker compose --profile "$MODE" down -v 2>/dev/null || true
+    docker compose down -v 2>/dev/null || true
 fi
 
 exit $EXIT_CODE

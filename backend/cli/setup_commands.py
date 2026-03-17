@@ -107,7 +107,7 @@ def lock_setup(reason: Optional[str]):
 @click.option('--force', is_flag=True, help="Force reset even in production")
 def reset_setup(confirm: bool, force: bool):
     """Reset setup to initial state (development/testing only)."""
-    if settings.SECURITY_MODE.lower() != "permissive" and not force:
+    if settings.USE_CASE != "solo" and not force:
         click.echo("❌ Setup reset is only allowed in development environment")
         click.echo("Use --force to override (NOT RECOMMENDED)")
         sys.exit(1)

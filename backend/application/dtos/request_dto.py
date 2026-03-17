@@ -286,6 +286,7 @@ class CancelScanRequestDTO:
     scan_id: str
     reason: Optional[str] = None
     force: bool = False
+    cancelled_by: Optional[str] = None
     
     def validate(self) -> None:
         """Validate the cancellation request data."""

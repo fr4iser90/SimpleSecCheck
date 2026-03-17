@@ -7,15 +7,10 @@ Tests the complete setup flow:
 3. Verify setup token
 4. Create admin user
 5. Complete setup
-6. Test in different modes (dev, prod)
 
 Usage:
     pytest tests/integration/test_setup_wizard.py -v -s
-    
-    # Test specific mode
-    pytest tests/integration/test_setup_wizard.py::test_setup_flow_dev -v -s
-    
-    # With cleanup
+    pytest tests/integration/test_setup_wizard.py::test_setup_flow -v -s
     pytest tests/integration/test_setup_wizard.py --cleanup -v -s
 """
 import asyncio
@@ -41,13 +36,10 @@ MAX_WAIT_TIME = 120  # Max time to wait for services to be ready
 class DockerComposeManager:
     """Manages Docker Compose lifecycle for tests."""
     
-    def __init__(self, compose_file: str = "docker-compose.yml", profile: str = "dev"):
+    def __init__(self, compose_file: str = "docker-compose.yml"):
         self.compose_file = compose_file
-        self.profile = profile
         self.project_dir = Path(__file__).parent.parent.parent
         self.compose_cmd = ["docker", "compose", "-f", str(self.project_dir / compose_file)]
-        if profile:
-            self.compose_cmd.extend(["--profile", profile])
     
     def _run_compose(self, command: list, check: bool = True) -> subprocess.CompletedProcess:
         """Run docker compose command."""
@@ -612,6 +604,67 @@ async def test_setup_without_session(api_client, docker_compose):
     
     assert response.status_code == 401, "Setup without session should be rejected"
     print("✅ Setup without session correctly rejected!")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("docker_compose", ["dev"], indirect=True)
+async def test_setup_then_login_and_cookies(api_client, docker_compose):
+    """
+    E2E: Server up → complete setup → login → check logged in, cookies, and setup status cache.
+    Ensures no 503 after setup, refresh_token cookie is set, and /api/setup/status reports setup_complete.
+    """
+    admin_email = "admin@test.example"
+    admin_password = "TestPass123!"
+    tester = SetupWizardTester(api_client, docker_compose)
+
+    # 1. Complete setup (server already up via fixture)
+    await tester.complete_setup_flow(
+        admin_username="testadmin",
+        admin_email=admin_email,
+        admin_password=admin_password,
+        system_config={"auth_mode": "free", "scanner_timeout": 300, "max_concurrent_scans": 3},
+    )
+    print("✅ Setup completed")
+
+    # 2. Login must succeed (no 503 "Setup required" – middleware cache fixed)
+    login_resp = await api_client.post(
+        "/api/v1/auth/login",
+        json={"email": admin_email, "password": admin_password},
+    )
+    assert login_resp.status_code == 200, (
+        f"Login should succeed after setup, got {login_resp.status_code}: {login_resp.text}"
+    )
+    login_data = login_resp.json()
+    assert "access_token" in login_data
+    assert login_data.get("email") == admin_email
+    print("✅ Login OK, access_token received")
+
+    # 3. Refresh token cookie must be set (HttpOnly cookie from backend)
+    refresh_cookie = login_resp.cookies.get("refresh_token")
+    assert refresh_cookie is not None and len(refresh_cookie) > 0, (
+        "refresh_token cookie should be set on login"
+    )
+    print("✅ refresh_token cookie present")
+
+    # 4. Setup status must report complete (cache/DB correct)
+    status_resp = await api_client.get("/api/setup/status")
+    assert status_resp.status_code == 200
+    status_data = status_resp.json()
+    assert status_data.get("setup_complete") is True, (
+        f"setup_complete should be True after setup, got {status_data}"
+    )
+    print("✅ /api/setup/status reports setup_complete=True")
+
+    # 5. Refresh endpoint with cookie must return new access token (same client sends cookie)
+    refresh_resp = await api_client.post("/api/v1/auth/refresh")
+    assert refresh_resp.status_code == 200, (
+        f"Refresh with cookie should succeed, got {refresh_resp.status_code}: {refresh_resp.text}"
+    )
+    refresh_data = refresh_resp.json()
+    assert "access_token" in refresh_data
+    print("✅ /api/v1/auth/refresh with cookie OK")
+
+    print("✅ E2E setup→login→cookies→cache check passed!")
 
 
 # pytest_addoption is defined in tests/conftest.py

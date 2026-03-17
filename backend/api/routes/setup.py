@@ -113,21 +113,10 @@ async def get_use_cases() -> Dict[str, Any]:
     
     Returns use cases with their configuration including:
     - Display name and description
-    - Security mode (permissive/restricted)
     - Auth mode and available options
     - Feature flags and allowed features
     """
     return SecurityPolicyService.get_all_use_cases()
-
-
-@router.get(
-    "/security-modes",
-    summary="Get security mode explanations",
-    description="Get Permissive vs Restricted mode descriptions for UI display.",
-)
-async def get_security_modes() -> Dict[str, Any]:
-    """Return security mode explanations (permissive, restricted) for frontend."""
-    return SecurityPolicyService.get_security_modes_explained()
 
 
 @router.get(
@@ -726,11 +715,11 @@ async def skip_setup(
     In production, setup should always be performed through the wizard.
     """
     try:
-        # Check SECURITY_MODE (must be permissive for development skip)
-        if settings.SECURITY_MODE.lower() not in ["permissive"]:
+        # Setup skip only allowed for solo use case
+        if getattr(settings, "USE_CASE", "solo") != "solo":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Setup skip is only allowed in development environment"
+                detail="Setup skip is only allowed for solo use case"
             )
         
         # Mark setup as completed without creating actual content
@@ -859,20 +848,17 @@ async def _create_system_state(config: Dict[str, Any]):
         use_case = config.get("use_case")
         if use_case:
             use_case_config = SecurityPolicyService.apply_use_case_config(use_case)
-            # Merge use case config into config dict
             config.update({
-                "SECURITY_MODE": use_case_config["SECURITY_MODE"],
+                "use_case": use_case,
                 "AUTH_MODE": use_case_config["AUTH_MODE"],
                 "feature_flags": use_case_config["feature_flags"],
                 "rate_limits": use_case_config["rate_limits"],
             })
-            # Update settings if use case is provided (for runtime)
-            # Note: This won't persist to .env file, but will work for current session
-            if hasattr(settings, 'SECURITY_MODE'):
-                settings.SECURITY_MODE = use_case_config["SECURITY_MODE"]
-            if hasattr(settings, 'AUTH_MODE'):
+            # Update settings for runtime
+            if hasattr(settings, "USE_CASE"):
+                settings.USE_CASE = use_case
+            if hasattr(settings, "AUTH_MODE"):
                 settings.AUTH_MODE = use_case_config["AUTH_MODE"]
-            # Set feature flags
             for flag_name, flag_value in use_case_config["feature_flags"].items():
                 if hasattr(settings, flag_name):
                     setattr(settings, flag_name, flag_value)

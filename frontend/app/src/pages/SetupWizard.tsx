@@ -56,7 +56,6 @@ export default function SetupWizard() {
   
   const [useCase, setUseCase] = useState<string>('')
   const [useCases, setUseCases] = useState<Record<string, any>>({})
-  const [securityModes, setSecurityModes] = useState<Record<string, { name: string; description: string; allowed?: string[]; disallowed?: string[]; warning?: string }>>({})
   const [systemConfig, setSystemConfig] = useState<SystemConfig>({
     auth_mode: 'free',
     scanner_timeout: 3600,
@@ -77,21 +76,8 @@ export default function SetupWizard() {
   useEffect(() => {
     checkSetupStatus()
     loadUseCases()
-    loadSecurityModes()
   }, [])
 
-  const loadSecurityModes = async () => {
-    try {
-      const res = await fetch('/api/setup/security-modes')
-      if (res.ok) {
-        const data = await res.json()
-        setSecurityModes(data)
-      }
-    } catch (err) {
-      console.error('Failed to load security modes:', err)
-    }
-  }
-  
   const loadUseCases = async () => {
     try {
       const response = await fetch('/api/setup/use-cases')
@@ -392,27 +378,22 @@ export default function SetupWizard() {
         // Auto-login if enabled (default for all modes, user can disable)
         if (autoLogin) {
           try {
-            await login(adminUser.email, adminUser.password, true) // rememberMe = true
-            // Navigate to home page after successful login
-            window.location.href = '/' // Use window.location to avoid React Router loops
+            await login(adminUser.email, adminUser.password, true)
+            // Brief delay so browser commits refresh_token cookie before full reload
+            await new Promise((r) => setTimeout(r, 150))
+            window.location.href = '/'
           } catch (loginError) {
-            // Login failed, but setup was successful - redirect to login page or home
             console.error('Auto-login after setup failed:', loginError)
             if (systemConfig.auth_mode !== 'free') {
-              // Auth required - redirect to login
               window.location.href = '/login'
             } else {
-              // Free mode - go to home, user can login manually later
               window.location.href = '/'
             }
           }
         } else {
-          // Auto-login disabled - redirect based on auth mode
           if (systemConfig.auth_mode !== 'free') {
-            // Auth required - redirect to login
             window.location.href = '/login'
           } else {
-            // Free mode - no login required, go to home
             window.location.href = '/'
           }
         }
@@ -480,34 +461,6 @@ export default function SetupWizard() {
       )}
       
       {/* Security Mode Explanation (from backend) */}
-      <div style={{ 
-        marginBottom: '1.5rem', 
-        padding: '1rem', 
-        backgroundColor: 'var(--glass-bg-light)', 
-        borderRadius: '8px',
-        border: '1px solid var(--glass-border-dark)'
-      }}>
-        <h4 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem' }}>Security Modes Explained:</h4>
-        <div style={{ display: 'grid', gap: '0.75rem', fontSize: '0.9rem' }}>
-          {Object.keys(securityModes).length === 0 ? (
-            <span style={{ color: 'var(--text-secondary)' }}>Loading...</span>
-          ) : (
-            Object.entries(securityModes).map(([key, mode]) => (
-              <div key={key}>
-                <strong style={{ color: 'var(--accent)' }}>{mode.name}:</strong> {mode.description}
-                <span style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
-                  {[
-                    mode.allowed?.length ? `✅ ${mode.allowed.join(', ')}` : null,
-                    mode.warning ? `⚠️ ${mode.warning}` : null,
-                    mode.disallowed?.length ? `❌ ${mode.disallowed.join(', ')}` : null,
-                  ].filter(Boolean).join(' | ')}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-      
       <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
         {Object.values(useCases).length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
@@ -515,7 +468,6 @@ export default function SetupWizard() {
           </div>
         ) : (
           Object.values(useCases).map((uc: any) => {
-            const securityModeLabel = uc.security_mode === 'permissive' ? 'Permissive' : 'Restricted'
             const authModeLabel = uc.auth_mode === 'free' ? 'Free' : uc.auth_mode === 'basic' ? 'Basic/JWT' : 'JWT (SSO)'
             const featuresText = uc.features.map((f: any) => {
               const prefix = f.type === 'allowed' ? '✓' : f.type === 'info' ? 'ℹ' : '✗'
@@ -530,7 +482,7 @@ export default function SetupWizard() {
               >
                 <h4>{uc.name}</h4>
                 <p>{uc.description}</p>
-                <small>Security: {securityModeLabel} | Auth: {authModeLabel}</small>
+                <small>Auth: {authModeLabel}</small>
                 <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                   {featuresText}
                 </div>
@@ -798,12 +750,6 @@ export default function SetupWizard() {
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--text-secondary)' }}>Use Case:</span>
             <strong>{useCases[useCase]?.name || useCase}</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>Security Mode:</span>
-            <strong style={{ color: useCases[useCase]?.security_mode === 'permissive' ? 'var(--warning)' : 'var(--accent)' }}>
-              {useCases[useCase]?.security_mode === 'permissive' ? 'Permissive' : 'Restricted'}
-            </strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--text-secondary)' }}>Auth Mode:</span>

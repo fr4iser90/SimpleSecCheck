@@ -76,7 +76,6 @@ def create_app() -> FastAPI:
         jwt_secret_key=settings.jwt_secret_key,
         jwt_algorithm=settings.jwt_algorithm,
         jwt_expiration_minutes=settings.jwt_expiration_minutes,
-        environment=settings.SECURITY_MODE,
     )
     
     # Configure middleware stack in correct order
@@ -86,10 +85,17 @@ def create_app() -> FastAPI:
         allowed_hosts=["*"]
     )
     
-    # 2. CORS (security)
+    # 2. CORS (security) – with credentials we must list origins
+    _cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+    if settings.APP_URL and settings.APP_URL.strip():
+        _url = settings.APP_URL.strip().rstrip("/")
+        if _url not in _cors_origins:
+            _cors_origins.append(_url)
+    if not _cors_origins:
+        _cors_origins = ["http://localhost", "http://localhost:80", "http://127.0.0.1", "http://127.0.0.1:80"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=_cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
         allow_headers=["*"],
@@ -99,10 +105,10 @@ def create_app() -> FastAPI:
     app.add_middleware(LoggingMiddleware)
     
     # 4. Security Headers (security)
-    app.add_middleware(SecurityHeadersMiddleware, environment=settings.SECURITY_MODE)
-    
+    app.add_middleware(SecurityHeadersMiddleware)
+
     # 5. Setup (security)
-    app.add_middleware(SetupMiddleware, environment=settings.SECURITY_MODE)
+    app.add_middleware(SetupMiddleware)
     
     # 6. Auth (security)
     # ACCESS_MODE = who may use the system (public | mixed | private). Middleware reads settings.ACCESS_MODE per request.
@@ -134,7 +140,6 @@ def create_app() -> FastAPI:
         admin_paths=[
             "/api/v1/auth/admin",
         ],
-        environment=settings.SECURITY_MODE,
     )
         
     

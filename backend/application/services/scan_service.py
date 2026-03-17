@@ -139,18 +139,24 @@ class ScanService:
             raise e
     
     async def cancel_scan(self, request: CancelScanRequestDTO) -> ScanDTO:
-        """Cancel a running scan."""
+        """Cancel a pending or running scan: load scan, set status cancelled, update DB, notify queue."""
         try:
-            # Execute cancel scan use case
-            scan_dto = self.cancel_scan_use_case.execute(request)
-            
-            # Update scan in repository
-            scan_entity = await self._convert_dto_to_entity(scan_dto)
-            updated_scan = await self.scan_repository.update(scan_entity)
-            
-            # Notify queue service to stop processing
+            request.validate()
+            scan = await self.scan_repository.get_by_id(request.scan_id)
+            if not scan:
+                raise ScanNotFoundException(request.scan_id)
+            try:
+                scan.cancel()
+            except ValueError as e:
+                raise ScanValidationException(str(e))
+            if request.cancelled_by:
+                scan.scan_metadata = scan.scan_metadata or {}
+                scan.scan_metadata["cancelled_at"] = datetime.utcnow().isoformat()
+                scan.scan_metadata["cancelled_by"] = request.cancelled_by
+                if request.reason:
+                    scan.scan_metadata["cancellation_reason"] = request.reason
+            updated_scan = await self.scan_repository.update(scan)
             await self.queue_service.cancel_scan(request.scan_id)
-            
             return ScanDTO.from_entity(updated_scan)
         except ScanException as e:
             raise e

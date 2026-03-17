@@ -36,25 +36,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         protected_paths: Optional[list] = None,
         public_paths: Optional[list] = None,
         admin_paths: Optional[list] = None,
-        environment: str = "permissive",  # SECURITY_MODE value (default for first start, overwritten from DB after setup)
     ):
-        """
-        Initialize authentication middleware.
-
-        Args:
-            app: FastAPI application instance
-            actor_context_dependency: Actor context dependency instance
-            protected_paths: Paths that require auth when ACCESS_MODE=private (middleware reads settings.ACCESS_MODE per request)
-            public_paths: List of paths that are always publicly accessible
-            admin_paths: List of paths that require admin privileges
-            environment: Application environment (development/production)
-        """
+        """Initialize authentication middleware."""
         super().__init__(app)
         self.actor_context_dependency = actor_context_dependency
         self.protected_paths = protected_paths or []
         self.public_paths = public_paths or []
         self.admin_paths = admin_paths or []
-        self.environment = environment
     
     async def dispatch(
         self,
@@ -72,9 +60,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             HTTP response
         """
         try:
-            # Debug: Log that middleware is being called
             logger.debug(f"AuthMiddleware dispatch called for path: {request.url.path}")
-            logger.debug(f"Environment: {self.environment}")
             access_mode = getattr(settings, "ACCESS_MODE", "public")
             logger.debug(f"Access mode: {access_mode}, Auth mode: {settings.AUTH_MODE}")
             logger.debug(f"Protected paths: {self.protected_paths}")
@@ -108,16 +94,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 actor_context = await self._get_or_create_context(request)
                 request.state.actor_context = actor_context
             
-            # Process request
             response = await call_next(request)
-            
-            # Add context to response headers for debugging
-            if self.environment == "development" and request.url.path not in ["/api/v1/health", "/api/v1/docs", "/api/v1/metrics"]:
-                try:
-                    response.headers["X-Actor-Context"] = str(actor_context.to_dict())
-                except Exception:
-                    pass  # Don't fail if context serialization fails
-            
             return response
             
         except HTTPException:
@@ -383,17 +360,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     - Strict-Transport-Security
     """
     
-    def __init__(self, app, environment: str):
-        """
-        Initialize security headers middleware.
-        
-        Args:
-            app: FastAPI application instance
-            environment: Application environment (development/production)
-        """
+    def __init__(self, app):
+        """Initialize security headers middleware."""
         super().__init__(app)
-        self.environment = environment
-    
+
     async def dispatch(
         self,
         request: Request,
@@ -429,8 +399,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
         response.headers["Content-Security-Policy"] = csp_policy
         
-        # Add HSTS header in production
-        if self.environment == "production":
+        # HSTS when app is served over HTTPS (from APP_URL)
+        if settings.APP_URL and str(settings.APP_URL).lower().startswith("https"):
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         
         return response

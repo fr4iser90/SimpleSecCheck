@@ -1013,19 +1013,31 @@ async def cancel_scan(
     - **scan_service**: Scan service
     """
     try:
-        # Check permissions
+        # Check permissions: only owner or admin can cancel
         scan_dto = await scan_service.get_scan_by_id(scan_id)
-        if not actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
-            raise HTTPException(
-                status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                detail="Access denied"
-            )
+        is_admin = actor_context.role == "admin"
+        scan_user_id = str(scan_dto.user_id) if scan_dto.user_id else None
+        if not is_admin:
+            if actor_context.is_authenticated:
+                if scan_user_id != actor_context.user_id:
+                    raise HTTPException(
+                        status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                        detail="You can only cancel your own scans"
+                    )
+            else:
+                scan_meta = getattr(scan_dto, "metadata", None) or {}
+                scan_session = scan_meta.get("session_id") if isinstance(scan_meta, dict) else None
+                if not actor_context.session_id or scan_session != actor_context.session_id:
+                    raise HTTPException(
+                        status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                        detail="You can only cancel your own scans"
+                    )
         
-        # Convert to DTO
         cancel_dto = CancelScanRequestDTO(
             scan_id=scan_id,
             reason=cancel_request.reason,
             force=cancel_request.force,
+            cancelled_by=actor_context.get_identifier(),
         )
         
         scan_dto = await scan_service.cancel_scan(cancel_dto)
