@@ -15,6 +15,90 @@ from worker.domain.job_execution.entities.execution_result import ExecutionResul
 from worker.infrastructure.database_adapter import PostgreSQLAdapter
 
 
+def _normalize_severity(severity: Any) -> str:
+    """Map severity string to canonical: critical, high, medium, low, info."""
+    if severity is None:
+        return "info"
+    s = str(severity).strip().upper()
+    if not s:
+        return "info"
+    if s in ("CRITICAL", "CRIT"):
+        return "critical"
+    if s == "HIGH":
+        return "high"
+    if s in ("MEDIUM", "MODERATE"):
+        return "medium"
+    if s == "LOW":
+        return "low"
+    if s in ("INFO", "INFORMATIONAL", "NOTE"):
+        return "info"
+    return "info"
+
+
+def _aggregate_vulnerability_counts(structured_results: Dict[str, Any]) -> Dict[str, int]:
+    """
+    Aggregate total and per-severity counts from all tools in structured_results.
+    Each tool report may have 'vulnerabilities', 'findings', or a list; items have 'severity' or 'Severity'.
+    Returns dict with keys: total_vulnerabilities, critical_vulnerabilities, high_vulnerabilities,
+    medium_vulnerabilities, low_vulnerabilities, info_vulnerabilities.
+    """
+    counts = {
+        "total_vulnerabilities": 0,
+        "critical_vulnerabilities": 0,
+        "high_vulnerabilities": 0,
+        "medium_vulnerabilities": 0,
+        "low_vulnerabilities": 0,
+        "info_vulnerabilities": 0,
+    }
+    if not structured_results:
+        return counts
+
+    for _tool_name, tool_data in structured_results.items():
+        if isinstance(tool_data, list):
+            items = tool_data
+        elif isinstance(tool_data, dict):
+            items = (
+                tool_data.get("vulnerabilities")
+                or tool_data.get("findings")
+                or tool_data.get("results")
+                or []
+            )
+            # Trivy format: {"Results": [{"Vulnerabilities": [...]}]}
+            if not items and "Results" in tool_data:
+                for entry in tool_data.get("Results") or []:
+                    if isinstance(entry, dict):
+                        vulns = entry.get("Vulnerabilities") or entry.get("vulnerabilities") or []
+                        if isinstance(vulns, list):
+                            items = items + vulns
+        else:
+            continue
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            sev = (
+                item.get("severity")
+                or item.get("Severity")
+                or item.get("issue_severity")
+                or (item.get("extra") or {}).get("severity")
+            )
+            canonical = _normalize_severity(sev)
+            counts["total_vulnerabilities"] += 1
+            if canonical == "critical":
+                counts["critical_vulnerabilities"] += 1
+            elif canonical == "high":
+                counts["high_vulnerabilities"] += 1
+            elif canonical == "medium":
+                counts["medium_vulnerabilities"] += 1
+            elif canonical == "low":
+                counts["low_vulnerabilities"] += 1
+            else:
+                counts["info_vulnerabilities"] += 1
+
+    return counts
+
+
 async def update_scan_status_to_running(database_adapter: PostgreSQLAdapter, scan_id: str) -> None:
     """Update scan status to running in database.
     
@@ -205,7 +289,7 @@ class ResultProcessingService:
             raise
     
     async def _update_scan_status(self, result: ExecutionResult) -> None:
-        """Update scan status in database.
+        """Update scan status and vulnerability statistics in database.
         
         Args:
             result: Execution result
@@ -222,15 +306,33 @@ class ResultProcessingService:
             else:
                 status = "failed"
             
-            # Update scan status in database
+            # Use post-policy statistics when available (finding policy respected; false positives not counted)
+            # Otherwise aggregate from raw tool results
+            if result.structured_results.get("_post_policy_statistics"):
+                vuln_counts = dict(result.structured_results["_post_policy_statistics"])
+                for k in ("total_vulnerabilities", "critical_vulnerabilities", "high_vulnerabilities",
+                          "medium_vulnerabilities", "low_vulnerabilities", "info_vulnerabilities"):
+                    if k not in vuln_counts:
+                        vuln_counts[k] = 0
+            else:
+                vuln_counts = _aggregate_vulnerability_counts(result.structured_results)
+            duration_seconds = int(result.execution_time_seconds) if result.execution_time_seconds is not None else None
+            
+            # Update scan status and vulnerability counts in database
             async with self.database_adapter.get_session() as session:
-                # Update status and completed_at timestamp
                 update_query = text("""
                     UPDATE scans 
                     SET status = :status,
                         completed_at = :completed_at,
                         updated_at = :updated_at,
-                        error_message = :error_message
+                        error_message = :error_message,
+                        total_vulnerabilities = :total_vulnerabilities,
+                        critical_vulnerabilities = :critical_vulnerabilities,
+                        high_vulnerabilities = :high_vulnerabilities,
+                        medium_vulnerabilities = :medium_vulnerabilities,
+                        low_vulnerabilities = :low_vulnerabilities,
+                        info_vulnerabilities = :info_vulnerabilities,
+                        duration = :duration
                     WHERE id = :scan_id
                 """)
                 
@@ -241,12 +343,22 @@ class ResultProcessingService:
                         "status": status,
                         "completed_at": datetime.utcnow(),
                         "updated_at": datetime.utcnow(),
-                        "error_message": result.error_message
+                        "error_message": result.error_message,
+                        "total_vulnerabilities": vuln_counts["total_vulnerabilities"],
+                        "critical_vulnerabilities": vuln_counts["critical_vulnerabilities"],
+                        "high_vulnerabilities": vuln_counts["high_vulnerabilities"],
+                        "medium_vulnerabilities": vuln_counts["medium_vulnerabilities"],
+                        "low_vulnerabilities": vuln_counts["low_vulnerabilities"],
+                        "info_vulnerabilities": vuln_counts["info_vulnerabilities"],
+                        "duration": duration_seconds,
                     }
                 )
                 await session.commit()
                 
-                self.logger.info(f"Updated scan {scan_id} status to {status}")
+                self.logger.info(
+                    f"Updated scan {scan_id} status to {status} "
+                    f"(total_vuln={vuln_counts['total_vulnerabilities']}, duration={duration_seconds}s)"
+                )
             
         except Exception as e:
             self.logger.error(f"Error updating scan status: {e}")

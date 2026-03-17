@@ -780,9 +780,32 @@ def main():
         embedded_scripts += f'<script type="application/json" id="scan-ai-prompt-defaults">{json.dumps({"policy_path": display_policy_path})}</script>\n'
         embedded_scripts += _report_features_script()
 
-        # Overall status for header badge: Critical | High | OK
-        critical_count = sum(1 for f in report_findings if f.get("severity") == "CRITICAL")
-        high_count = sum(1 for f in report_findings if f.get("severity") == "HIGH")
+        # Overall status for header badge: Critical | High | OK (counts are post-policy)
+        def _sev(f, s):
+            return 1 if (str(f.get("severity") or "").strip().upper() == s) else 0
+        critical_count = sum(_sev(f, "CRITICAL") for f in report_findings)
+        high_count = sum(_sev(f, "HIGH") for f in report_findings)
+        medium_count = sum(_sev(f, "MEDIUM") for f in report_findings)
+        low_count = sum(_sev(f, "LOW") for f in report_findings)
+        info_count = sum(1 for f in report_findings if (str(f.get("severity") or "").strip().upper() in ("INFO", "INFORMATIONAL", "NOTE")))
+        total_post_policy = len(report_findings)
+        # Write post-policy statistics so worker/backend can store them (no false positives counted)
+        statistics = {
+            "total_vulnerabilities": total_post_policy,
+            "critical_vulnerabilities": critical_count,
+            "high_vulnerabilities": high_count,
+            "medium_vulnerabilities": medium_count,
+            "low_vulnerabilities": low_count,
+            "info_vulnerabilities": info_count,
+        }
+        try:
+            stats_path = Path(OUTPUT_FILE).parent / "statistics.json"
+            with open(stats_path, "w", encoding="utf-8") as sf:
+                json.dump(statistics, sf, indent=2)
+            debug(f"Wrote post-policy statistics to {stats_path}")
+        except Exception as e:
+            debug(f"Warning: Could not write statistics.json: {e}")
+
         overall_status = "Critical" if critical_count > 0 else "High" if high_count > 0 else "OK"
         repo_url = ""
         if scan_metadata:

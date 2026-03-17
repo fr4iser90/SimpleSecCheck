@@ -319,6 +319,17 @@ class DockerJobExecutor:
                     except Exception as e:
                         self.logger.warning(f"Error reading file {report_file}: {e}")
             
+            # Post-policy statistics (written by generate-html-report.py): use for DB so false positives are not counted
+            stats_file = Path(results_dir) / scan_id / "summary" / "statistics.json"
+            if stats_file.exists():
+                try:
+                    stats_content = await asyncio.to_thread(stats_file.read_text, encoding="utf-8")
+                    if stats_content:
+                        structured_results["_post_policy_statistics"] = json.loads(stats_content)
+                        self.logger.debug(f"Using post-policy statistics from {stats_file}")
+                except (json.JSONDecodeError, OSError) as e:
+                    self.logger.warning(f"Could not read post-policy statistics from {stats_file}: {e}")
+            
             return structured_results
             
         except Exception as e:

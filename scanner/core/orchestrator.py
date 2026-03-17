@@ -304,11 +304,12 @@ class ScanOrchestrator:
                 scanner_class = getattr(module, class_name)
                 
                 # Build scanner arguments dynamically using inspect
-                # This allows adding new scanners without modifying the orchestrator!
+                # step_name from registry (manifest = single source) so plugin uses same step as pre-registered
                 scanner_kwargs = {
                     "target_path": str(self.target_path),
-                    "results_dir": str(scanner_dir),  # Scanner-specific directory
-                    "log_file": str(scanner_log_file),  # Scanner-specific log
+                    "results_dir": str(scanner_dir),
+                    "log_file": str(scanner_log_file),
+                    "step_name": scanner.name,
                 }
                 
                 # Get the __init__ signature to see what parameters the scanner accepts

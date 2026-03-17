@@ -36,19 +36,21 @@ class CodeQLScanner(BaseScanner):
         results_dir: str,
         log_file: str,
         config_path: Optional[str] = None,
-        queries_path: Optional[str] = None
+        queries_path: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
         Initialize CodeQL scanner
-        
+
         Args:
             target_path: Path to scan
             results_dir: Results directory
             log_file: Log file path
             config_path: Path to CodeQL config file
             queries_path: Path to CodeQL queries directory
+            step_name: Step name from registry/manifest (single source)
         """
-        super().__init__("CodeQL", target_path, results_dir, log_file, config_path)
+        super().__init__("CodeQL", target_path, results_dir, log_file, config_path, step_name=step_name)
         self.queries_path = Path(queries_path) if queries_path else Path("/app/scanner/plugins/codeql/config/queries")
     
     def detect_languages(self) -> List[str]:

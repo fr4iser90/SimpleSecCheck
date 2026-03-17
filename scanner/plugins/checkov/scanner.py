@@ -33,19 +33,14 @@ class CheckovScanner(BaseScanner):
         results_dir: str,
         log_file: str,
         config_path: Optional[str] = None,
-        exclude_paths: Optional[str] = None
+        exclude_paths: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
-        Initialize Checkov scanner
-        
-        Args:
-            target_path: Path to scan
-            results_dir: Results directory
-            log_file: Log file path
-            config_path: Path to Checkov config file (optional)
-            exclude_paths: Comma-separated paths to exclude
+        Initialize Checkov scanner.
+        step_name: From registry/manifest (single source).
         """
-        super().__init__("Checkov", target_path, results_dir, log_file, config_path)
+        super().__init__("Checkov", target_path, results_dir, log_file, config_path, step_name=step_name)
         self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     def find_infra_files(self) -> List[Path]:

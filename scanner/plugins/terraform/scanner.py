@@ -33,18 +33,14 @@ class TerraformSecurityScanner(BaseScanner):
         target_path: str,
         results_dir: str,
         log_file: str,
-        config_path: Optional[str] = None
+        config_path: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
-        Initialize Terraform Security scanner
-        
-        Args:
-            target_path: Path to scan
-            results_dir: Results directory
-            log_file: Log file path
-            config_path: Path to Terraform Security config file (optional)
+        Initialize Terraform Security scanner.
+        step_name: From registry/manifest (single source).
         """
-        super().__init__("Terraform Security", target_path, results_dir, log_file, config_path)
+        super().__init__("Terraform Security", target_path, results_dir, log_file, config_path, step_name=step_name)
     
     def find_terraform_files(self) -> List[Path]:
         """Find Terraform files"""

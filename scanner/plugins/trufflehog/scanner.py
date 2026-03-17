@@ -33,18 +33,14 @@ class TruffleHogScanner(BaseScanner):
         target_path: str,
         results_dir: str,
         log_file: str,
-        config_path: Optional[str] = None
+        config_path: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
-        Initialize TruffleHog scanner
-        
-        Args:
-            target_path: Path to scan
-            results_dir: Results directory
-            log_file: Log file path
-            config_path: Path to TruffleHog config file (optional, not used to avoid protobuf issues)
+        Initialize TruffleHog scanner.
+        step_name: From registry/manifest (single source).
         """
-        super().__init__("TruffleHog", target_path, results_dir, log_file, config_path)
+        super().__init__("TruffleHog", target_path, results_dir, log_file, config_path, step_name=step_name)
     
     def scan(self) -> bool:
         """Run TruffleHog scan with standardized substeps"""

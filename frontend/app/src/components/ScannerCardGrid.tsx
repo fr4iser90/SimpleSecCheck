@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import ScannerCard from './ScannerCard'
 
 interface Scanner {
@@ -30,6 +31,8 @@ export default function ScannerCardGrid({
   loading,
   error
 }: ScannerCardGridProps) {
+  const [cardsExpanded, setCardsExpanded] = useState(false)
+
   if (loading) {
     return (
       <div className="scanner-grid-loading">
@@ -59,7 +62,7 @@ export default function ScannerCardGrid({
 
   return (
     <div>
-      {/* Action Buttons */}
+      {/* Action Buttons - always visible */}
       <div className="scanner-grid-actions">
         <button
           type="button"
@@ -75,6 +78,14 @@ export default function ScannerCardGrid({
         >
           Deselect All
         </button>
+        <button
+          type="button"
+          onClick={() => setCardsExpanded((e) => !e)}
+          className="scanner-grid-button"
+          title={cardsExpanded ? 'Hide scanner list' : 'Show scanner list'}
+        >
+          {cardsExpanded ? '▼ Hide list' : '▶ Show list'}
+        </button>
         {selectedScanners.length > 0 && (
           <div className="glass scanner-grid-selection-count">
             ✓ {selectedScanners.length} scanner{selectedScanners.length !== 1 ? 's' : ''} selected
@@ -82,23 +93,25 @@ export default function ScannerCardGrid({
         )}
       </div>
 
-      {/* Scanner Cards Grid */}
-      <div className="scanner-grid-cards">
-        {sortedScanners.map(scanner => (
-          <ScannerCard
-            key={scanner.name}
-            name={scanner.name}
-            description={scanner.description || `Security scanner: ${scanner.name}`}
-            categories={scanner.categories || ['Security Scanning']}
-            icon={scanner.icon || '🔧'}
-            priority={scanner.priority}
-            enabled={scanner.enabled}
-            selected={selectedScanners.includes(scanner.name)}
-            requiresCondition={scanner.requires_condition}
-            onToggle={onToggle}
-          />
-        ))}
-      </div>
+      {/* Scanner Cards Grid - collapsed by default */}
+      {cardsExpanded && (
+        <div className="scanner-grid-cards">
+          {sortedScanners.map(scanner => (
+            <ScannerCard
+              key={scanner.name}
+              name={scanner.name}
+              description={scanner.description || `Security scanner: ${scanner.name}`}
+              categories={scanner.categories || ['Security Scanning']}
+              icon={scanner.icon || '🔧'}
+              priority={scanner.priority}
+              enabled={scanner.enabled}
+              selected={selectedScanners.includes(scanner.name)}
+              requiresCondition={scanner.requires_condition}
+              onToggle={onToggle}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Selection Status */}
       {selectedScanners.length === 0 && (

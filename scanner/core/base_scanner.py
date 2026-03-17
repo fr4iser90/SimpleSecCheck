@@ -42,19 +42,22 @@ class BaseScanner(ABC):
         target_path: str,
         results_dir: str,
         log_file: str,
-        config_path: Optional[str] = None
+        config_path: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
-        Initialize scanner
-        
+        Initialize scanner.
+
         Args:
-            name: Scanner name (e.g., "Semgrep")
-            target_path: Path to scan target
-            results_dir: Directory for results
-            log_file: Path to log file
-            config_path: Optional path to config file
+            name: Display name (e.g. "Semgrep") – fallback when step_name not set.
+            target_path: Path to scan target.
+            results_dir: Directory for results.
+            log_file: Path to log file.
+            config_path: Optional path to config file.
+            step_name: Step name from registry/manifest (single source). Used for step/substep
+                registration so the same step number is used as the orchestrator’s pre-registered step.
         """
-        self.name = name
+        self.name = step_name if step_name is not None else name
         self.target_path = Path(target_path)
         self.results_dir = Path(results_dir)
         self.log_file = Path(log_file)

@@ -46,11 +46,12 @@ class OWASPScanner(BaseScanner):
         log_file: str,
         config_path: Optional[str] = None,
         data_dir: Optional[str] = None,
-        exclude_paths: Optional[str] = None
+        exclude_paths: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
         Initialize OWASP Dependency Check scanner
-        
+
         Args:
             target_path: Path to scan
             results_dir: Results directory
@@ -58,9 +59,10 @@ class OWASPScanner(BaseScanner):
             config_path: Path to OWASP config file
             data_dir: Directory for OWASP data and cache
             exclude_paths: Comma-separated paths to exclude
+            step_name: Step name from registry/manifest (single source)
         """
         display_name = get_plugin_display_name(PLUGIN_NAME)
-        super().__init__(display_name, target_path, results_dir, log_file, config_path)
+        super().__init__(display_name, target_path, results_dir, log_file, config_path, step_name=step_name)
         self.data_dir = Path(data_dir) if data_dir else get_plugin_data_dir(PLUGIN_NAME)
         self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     

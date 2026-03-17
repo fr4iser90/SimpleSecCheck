@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useWebSocket } from '../services/websocketService'
+import { SubstepSlot } from './SubstepSlot'
 
 interface StepsSidebarProps {
   isOpen: boolean
@@ -225,43 +226,12 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
                       </div>
                     )}
                     {step.substeps && step.substeps.length > 0 && (
-                      <div style={{
-                        marginTop: '0.75rem',
-                        paddingTop: '0.75rem',
-                        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-                      }}>
-                        {step.substeps.map((substep, idx) => (
-                          <div
-                            key={idx}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              padding: '0.5rem',
-                              marginBottom: '0.25rem',
-                              background: 'rgba(0, 0, 0, 0.2)',
-                              borderRadius: '6px',
-                              fontSize: '0.875rem',
-                            }}
-                          >
-                            <span style={{
-                              color: getSubStepColor(substep.status),
-                              fontWeight: 'bold',
-                              fontSize: '0.75rem',
-                            }}>
-                              {getSubStepIcon(substep.status)}
-                            </span>
-                            <span style={{ flex: 1, opacity: 0.9 }}>
-                              {substep.name}
-                            </span>
-                            {substep.message && (
-                              <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>
-                                {substep.message}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                      <SubstepSlot
+                        current={step.substeps[step.substeps.length - 1]}
+                        typeStyle={{ badge: '⚙️', bgColor: 'rgba(0, 0, 0, 0.2)', borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                        getSubStepColor={(s) => getSubStepColor(s.status)}
+                        getSubStepIcon={(s) => getSubStepIcon(s.status)}
+                      />
                     )}
                   </div>
                 )

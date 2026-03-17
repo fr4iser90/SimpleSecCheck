@@ -34,19 +34,21 @@ class SemgrepScanner(BaseScanner):
         results_dir: str,
         log_file: str,
         rules_path: Optional[str] = None,
-        exclude_paths: Optional[str] = None
+        exclude_paths: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
         Initialize Semgrep scanner
-        
+
         Args:
             target_path: Path to scan
             results_dir: Results directory
             log_file: Log file path
             rules_path: Path to Semgrep rules (directory or file)
             exclude_paths: Comma-separated paths to exclude
+            step_name: Step name from registry/manifest (single source)
         """
-        super().__init__("Semgrep", target_path, results_dir, log_file)
+        super().__init__("Semgrep", target_path, results_dir, log_file, step_name=step_name)
         self.rules_path = Path(rules_path) if rules_path else Path("/app/scanner/plugins/semgrep/rules")
         self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     

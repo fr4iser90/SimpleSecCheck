@@ -32,19 +32,14 @@ class ESLintScanner(BaseScanner):
         results_dir: str,
         log_file: str,
         config_path: Optional[str] = None,
-        exclude_paths: Optional[str] = None
+        exclude_paths: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
-        Initialize ESLint scanner
-        
-        Args:
-            target_path: Path to scan
-            results_dir: Results directory
-            log_file: Log file path
-            config_path: Path to ESLint config file (optional)
-            exclude_paths: Comma-separated paths to exclude
+        Initialize ESLint scanner.
+        step_name: From registry/manifest (single source).
         """
-        super().__init__("ESLint", target_path, results_dir, log_file, config_path)
+        super().__init__("ESLint", target_path, results_dir, log_file, config_path, step_name=step_name)
         self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     
     def find_js_files(self) -> List[Path]:

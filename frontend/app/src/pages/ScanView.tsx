@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import ReportViewer from '../components/ReportViewer'
 import StepsSidebar from '../components/StepsSidebar'
 import AIPromptModal from '../components/AIPromptModal'
+import { SubstepSlot } from '../components/SubstepSlot'
 import { useWebSocket } from '../services/websocketService'
 
 // Backend is the source of truth!
@@ -456,83 +457,21 @@ export default function ScanView() {
                       {step.message}
                     </div>
                   )}
-                  {step.substeps && step.substeps.length > 0 && (
-                    <div style={{
-                      marginTop: '1rem',
-                      paddingTop: '1rem',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-                    }}>
-                      <div style={{ fontSize: '0.75rem', opacity: 0.6, marginBottom: '0.5rem', fontWeight: 600 }}>
-                        SUB-STEPS:
-                      </div>
-                      {step.substeps.map((substep, idx) => {
-                        const getSubStepTypeStyle = () => {
-                          const type = substep.type || 'action'
-                          switch (type) {
-                            case 'phase':
-                              return {
-                                badge: '🔹',
-                                bgColor: 'rgba(59, 130, 246, 0.15)',  // Blue tint
-                                borderColor: 'rgba(59, 130, 246, 0.3)',
-                                label: 'PHASE'
-                              }
-                            case 'output':
-                              return {
-                                badge: '📄',
-                                bgColor: 'rgba(34, 197, 94, 0.15)',  // Green tint
-                                borderColor: 'rgba(34, 197, 94, 0.3)',
-                                label: 'OUTPUT'
-                              }
-                            default: // 'action'
-                              return {
-                                badge: '⚙️',
-                                bgColor: 'rgba(0, 0, 0, 0.2)',
-                                borderColor: 'rgba(255, 255, 255, 0.1)',
-                                label: 'ACTION'
-                              }
-                          }
-                        }
-                        
-                        const typeStyle = getSubStepTypeStyle()
-                        
-                        return (
-                          <div
-                            key={idx}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              padding: '0.5rem',
-                              marginBottom: '0.25rem',
-                              background: typeStyle.bgColor,
-                              border: `1px solid ${typeStyle.borderColor}`,
-                              borderRadius: '6px',
-                              fontSize: '0.875rem',
-                            }}
-                          >
-                            <span style={{
-                              color: getSubStepColor(substep.status),
-                              fontWeight: 'bold',
-                              fontSize: '0.75rem',
-                            }}>
-                              {getSubStepIcon(substep.status)}
-                            </span>
-                            <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>
-                              {typeStyle.badge}
-                            </span>
-                            <span style={{ flex: 1, opacity: 0.9 }}>
-                              {substep.name}
-                            </span>
-                            {substep.message && (
-                              <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>
-                                {substep.message}
-                              </span>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                  {step.substeps && step.substeps.length > 0 && (() => {
+                    const current = step.substeps[step.substeps.length - 1]
+                    const type = current.type || 'action'
+                    const typeStyle = type === 'phase' ? { badge: '🔹', bgColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' }
+                      : type === 'output' ? { badge: '📄', bgColor: 'rgba(34, 197, 94, 0.15)', borderColor: 'rgba(34, 197, 94, 0.3)' }
+                      : { badge: '⚙️', bgColor: 'rgba(0, 0, 0, 0.2)', borderColor: 'rgba(255, 255, 255, 0.1)' }
+                    return (
+                      <SubstepSlot
+                        current={current}
+                        typeStyle={typeStyle}
+                        getSubStepColor={(s) => getSubStepColor(s.status)}
+                        getSubStepIcon={(s) => getSubStepIcon(s.status)}
+                      />
+                    )
+                  })()}
                   {step.status === 'running' && (!step.substeps || step.substeps.length === 0) && (
                     <div style={{
                       width: '100%',

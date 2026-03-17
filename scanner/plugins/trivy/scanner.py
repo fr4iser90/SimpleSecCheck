@@ -47,11 +47,12 @@ class TrivyScanner(BaseScanner):
         log_file: str,
         config_path: Optional[str] = None,
         scan_type: str = "fs",
-        exclude_paths: Optional[str] = None
+        exclude_paths: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
         Initialize Trivy scanner
-        
+
         Args:
             target_path: Path to scan
             results_dir: Results directory
@@ -59,8 +60,9 @@ class TrivyScanner(BaseScanner):
             config_path: Path to Trivy config file
             scan_type: Type of scan ('fs' for filesystem, 'image' for image)
             exclude_paths: Comma-separated paths to exclude
+            step_name: Step name from registry/manifest (single source)
         """
-        super().__init__("Trivy", target_path, results_dir, log_file, config_path)
+        super().__init__("Trivy", target_path, results_dir, log_file, config_path, step_name=step_name)
         self.scan_type = scan_type or os.getenv("TRIVY_SCAN_TYPE", "fs")
         self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
     

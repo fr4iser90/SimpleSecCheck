@@ -36,18 +36,14 @@ class SonarQubeScanner(BaseScanner):
         target_path: str,
         results_dir: str,
         log_file: str,
-        config_path: Optional[str] = None
+        config_path: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
-        Initialize SonarQube scanner
-        
-        Args:
-            target_path: Path to scan
-            results_dir: Results directory
-            log_file: Log file path
-            config_path: Path to SonarQube config file (optional)
+        Initialize SonarQube scanner.
+        step_name: From registry/manifest (single source).
         """
-        super().__init__("SonarQube", target_path, results_dir, log_file, config_path)
+        super().__init__("SonarQube", target_path, results_dir, log_file, config_path, step_name=step_name)
     
     def create_project_properties(self) -> Path:
         """Create sonar-project.properties file"""

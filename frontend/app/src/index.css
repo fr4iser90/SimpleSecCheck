@@ -501,6 +501,21 @@ input:focus, select:focus {
   margin-bottom: 1rem;
 }
 
+.scan-step-collapsible .scan-step-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.scan-step-collapsible .scan-step-header:hover {
+  opacity: 0.9;
+}
+
+.scan-step-chevron {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
 .scan-step-number {
   width: 2rem;
   height: 2rem;
@@ -1539,4 +1554,20 @@ input:focus, select:focus {
   .form-actions button {
     width: 100%;
   }
+}
+
+/* Substep slot: fade out old, fade in new */
+@keyframes substepFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes substepFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.substep-fade-out {
+  animation: substepFadeOut 0.15s ease-out forwards;
+}
+.substep-fade-in {
+  animation: substepFadeIn 0.2s ease-out forwards;
 }

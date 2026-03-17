@@ -696,6 +696,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
         expanded={false}
         completed={false}
         required={false}
+        collapsible
       >
         <div className="form-group">
           <label htmlFor="finding-policy">Finding Policy (optional)</label>

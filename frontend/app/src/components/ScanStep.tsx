@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
 import { useAutoScroll } from '../hooks/useAutoScroll'
 
 interface ScanStepProps {
@@ -10,6 +10,8 @@ interface ScanStepProps {
   expanded?: boolean
   completed?: boolean
   required?: boolean
+  /** When true, step header is clickable to expand/collapse; initial state from `expanded` */
+  collapsible?: boolean
 }
 
 export default function ScanStep({
@@ -20,11 +22,15 @@ export default function ScanStep({
   autoScroll = false,
   expanded = true,
   completed = false,
-  required = false
+  required = false,
+  collapsible = false
 }: ScanStepProps) {
+  const [isExpanded, setIsExpanded] = useState(expanded)
+  const showContent = collapsible ? isExpanded : expanded
+
   const setScrollTarget = useAutoScroll({
     trigger: autoScroll ? trigger : undefined,
-    enabled: autoScroll && expanded,
+    enabled: autoScroll && showContent,
     delay: 400,
     offset: 100
   })
@@ -33,10 +39,18 @@ export default function ScanStep({
     <div
       ref={setScrollTarget}
       id={id}
-      className={`glass scan-step ${completed ? 'completed' : ''}`}
+      className={`glass scan-step ${completed ? 'completed' : ''} ${collapsible ? 'scan-step-collapsible' : ''}`}
     >
       {/* Step Header */}
-      <div className="scan-step-header" style={{ marginBottom: expanded ? '1rem' : 0 }}>
+      <div
+        className="scan-step-header"
+        style={{ marginBottom: showContent ? '1rem' : 0 }}
+        onClick={collapsible ? () => setIsExpanded((e) => !e) : undefined}
+        role={collapsible ? 'button' : undefined}
+        tabIndex={collapsible ? 0 : undefined}
+        onKeyDown={collapsible ? (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setIsExpanded((e) => !e); } } : undefined}
+        aria-expanded={collapsible ? isExpanded : undefined}
+      >
         <div className={`scan-step-number ${completed ? 'completed' : 'pending'}`}>
           {completed ? '✓' : id.split('-')[1] || '•'}
         </div>
@@ -44,6 +58,11 @@ export default function ScanStep({
           {title}
           {required && <span className="scan-step-required">*</span>}
         </h2>
+        {collapsible && (
+          <span className="scan-step-chevron" aria-hidden>
+            {isExpanded ? '▼' : '▶'}
+          </span>
+        )}
         {completed && (
           <span className="scan-step-completed-badge">
             Completed
@@ -52,7 +71,7 @@ export default function ScanStep({
       </div>
 
       {/* Step Content */}
-      {expanded && (
+      {showContent && (
         <div className="scan-step-content">
           {children}
         </div>
