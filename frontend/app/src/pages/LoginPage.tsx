@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useConfig } from '../hooks/useConfig'
-import './LoginPage.css'
 
 export default function LoginPage() {
   const navigate = useNavigate()

@@ -2,6 +2,7 @@
 Queue Service
 
 This module provides Redis-based queue service for scan job management.
+Supports strategies: fifo (default), priority, round_robin.
 """
 import json
 import logging
@@ -11,6 +12,7 @@ from datetime import datetime
 
 from domain.entities.scan import Scan
 from infrastructure.redis.client import redis_client
+from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,11 @@ class QueueService:
     
     QUEUE_KEY = "scan_queue"
     QUEUE_PRIORITY_KEY = "scan_queue:priority"
+    QUEUE_MESSAGE_TTL = 86400  # 24h for scan:{id} in priority mode
+    
+    def _get_strategy(self) -> str:
+        s = getattr(get_settings(), "QUEUE_STRATEGY", "fifo") or "fifo"
+        return s.lower() if s in ("fifo", "priority", "round_robin") else "fifo"
     
     async def enqueue_scan(self, scan: Scan) -> bool:
         """Enqueue a scan for processing by the worker."""
@@ -66,35 +73,45 @@ class QueueService:
             
             queue_message = {
                 "scan_id": scan_id,
-                "job_id": scan_id,  # Use scan_id as job_id if not separate
-                "job_type": "scan",  # Required by worker
-                "target": scan.target_url,  # Worker expects 'target', not 'target_url'
-                "target_url": scan.target_url,  # Keep for compatibility
+                "id": scan_id,  # Worker may expect 'id'
+                "job_id": scan_id,
+                "job_type": "scan",
+                "target": scan.target_url,
+                "target_url": scan.target_url,
                 "target_type": scan.target_type,
                 "target_mount_path": scan.config.get("target_mount_path") if scan.config else None,
                 "scan_type": scan.scan_type.value,
                 "scanners": scan.scanners,
                 "config": scan.config,
                 "image": scan.config.get("image", DEFAULT_SCANNER_IMAGE) if scan.config else DEFAULT_SCANNER_IMAGE,
-                # NO results_dir, NO logs_dir - Worker reads from own environment variables!
                 "finding_policy": scan.config.get("finding_policy") if scan.config else None,
                 "collect_metadata": scan.config.get("collect_metadata", True) if scan.config else True,
                 "exclude_paths": scan.config.get("exclude_paths") if scan.config else None,
                 "git_branch": scan.config.get("git_branch") if scan.config else None,
-                "asset_volumes": asset_volumes,  # Asset volumes from scanner manifests
+                "asset_volumes": asset_volumes,
                 "user_id": scan.user_id,
                 "project_id": scan.project_id,
+                "scan_metadata": getattr(scan, "scan_metadata", None) or {},
                 "scheduled_at": scan.scheduled_at.isoformat() if scan.scheduled_at else None,
                 "enqueued_at": datetime.utcnow().isoformat(),
             }
             
-            # Serialize message
             message_json = json.dumps(queue_message)
+            strategy = self._get_strategy()
             
-            # Add to queue (FIFO - left push, right pop)
             try:
-                queue_length = await redis_client.lpush(self.QUEUE_KEY, message_json)
-                logger.info(f"Enqueued scan {scan.id} to queue (queue length: {queue_length})")
+                if strategy == "priority":
+                    # Store full message at scan:{id}, add scan_id to sorted set (lower score = earlier)
+                    priority = getattr(scan, "priority", 0) or 0
+                    created_ts = (scan.created_at or datetime.utcnow()).timestamp()
+                    score = (1000 - priority) * 1e10 + created_ts
+                    await redis_client.set(f"scan:{scan_id}", message_json, expire=self.QUEUE_MESSAGE_TTL)
+                    await redis_client.zadd(self.QUEUE_PRIORITY_KEY, {scan_id: score})
+                    logger.info(f"Enqueued scan {scan.id} to priority queue (priority={priority})")
+                else:
+                    # fifo or round_robin: same list (worker chooses by strategy)
+                    queue_length = await redis_client.lpush(self.QUEUE_KEY, message_json)
+                    logger.info(f"Enqueued scan {scan.id} to queue (strategy={strategy}, length={queue_length})")
                 return True
             except Exception as e:
                 logger.error(f"Failed to enqueue scan {scan.id} to queue: {e}", exc_info=True)
@@ -125,14 +142,14 @@ class QueueService:
             raise
     
     async def get_queue_length(self) -> int:
-        """Get current queue length."""
+        """Get current queue length (list or priority set)."""
         try:
             if not redis_client.is_connected:
                 await redis_client.connect()
-            
-            length = await redis_client.redis.llen(self.QUEUE_KEY)
-            return length
-            
+            strategy = self._get_strategy()
+            if strategy == "priority":
+                return await redis_client.zcard(self.QUEUE_PRIORITY_KEY)
+            return await redis_client.redis.llen(self.QUEUE_KEY)
         except Exception as e:
             logger.error(f"Failed to get queue length: {e}")
             return 0
@@ -175,39 +192,35 @@ class QueueService:
     
     async def remove_scan_from_queue(self, scan_id: str) -> bool:
         """
-        Remove a specific scan from the Redis queue.
-        
-        Args:
-            scan_id: ID of the scan to remove
-            
-        Returns:
-            True if scan was found and removed, False otherwise
+        Remove a specific scan from the Redis queue (list or priority set).
         """
         try:
             if not redis_client.is_connected:
                 await redis_client.connect()
             
-            # Get all items from queue
-            items = await redis_client.redis.lrange(self.QUEUE_KEY, 0, -1)
-            
-            # Find and remove the scan
             removed = False
-            for item in items:
-                try:
-                    message = json.loads(item)
-                    if message.get("scan_id") == scan_id:
-                        # Remove this item from queue
-                        await redis_client.redis.lrem(self.QUEUE_KEY, 1, item)
-                        logger.info(f"Removed scan {scan_id} from Redis queue")
-                        removed = True
-                        break
-                except json.JSONDecodeError:
-                    logger.warning(f"Failed to parse queue item: {item}")
-                    continue
+            strategy = self._get_strategy()
+            if strategy == "priority":
+                n = await redis_client.zrem(self.QUEUE_PRIORITY_KEY, scan_id)
+                if n:
+                    removed = True
+                    await redis_client.delete(f"scan:{scan_id}")
+                    logger.info(f"Removed scan {scan_id} from priority queue")
+            else:
+                items = await redis_client.lrange(self.QUEUE_KEY, 0, -1)
+                for item in items:
+                    try:
+                        message = json.loads(item)
+                        if message.get("scan_id") == scan_id:
+                            await redis_client.lrem(self.QUEUE_KEY, 1, item)
+                            removed = True
+                            logger.info(f"Removed scan {scan_id} from Redis queue")
+                            break
+                    except json.JSONDecodeError:
+                        continue
             
             if not removed:
                 logger.warning(f"Scan {scan_id} not found in Redis queue")
-            
             return removed
             
         except Exception as e:

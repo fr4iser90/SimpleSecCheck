@@ -40,12 +40,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
     ):
         """
         Initialize authentication middleware.
-        
+
         Args:
             app: FastAPI application instance
             actor_context_dependency: Actor context dependency instance
-            protected_paths: List of paths that require authentication
-            public_paths: List of paths that are publicly accessible
+            protected_paths: Paths that require auth when ACCESS_MODE=private (middleware reads settings.ACCESS_MODE per request)
+            public_paths: List of paths that are always publicly accessible
             admin_paths: List of paths that require admin privileges
             environment: Application environment (development/production)
         """
@@ -75,7 +75,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # Debug: Log that middleware is being called
             logger.debug(f"AuthMiddleware dispatch called for path: {request.url.path}")
             logger.debug(f"Environment: {self.environment}")
-            logger.debug(f"Auth mode: {settings.AUTH_MODE}")
+            access_mode = getattr(settings, "ACCESS_MODE", "public")
+            logger.debug(f"Access mode: {access_mode}, Auth mode: {settings.AUTH_MODE}")
             logger.debug(f"Protected paths: {self.protected_paths}")
             logger.debug(f"Public paths: {self.public_paths}")
             
@@ -90,17 +91,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 logger.debug("Path requires admin privileges")
                 actor_context = await self._get_admin_context(request)
                 request.state.actor_context = actor_context
-            # Check if path requires authentication
+            # Check if path requires authentication when ACCESS_MODE=private
             elif self._is_protected_path(request.url.path):
                 logger.debug(f"Protected path detected: {request.url.path}")
-                
-                # FREE mode: Allow unauthenticated access to scans and other features
-                # BASIC/JWT modes: Require authentication
-                if settings.AUTH_MODE == "free":
-                    logger.debug("FREE mode: Using _get_or_create_context for all paths")
+                access_mode = getattr(settings, "ACCESS_MODE", "public")
+                if access_mode in ("public", "mixed"):
+                    logger.debug(f"Access mode {access_mode}: Using _get_or_create_context")
                     actor_context = await self._get_or_create_context(request)
                 else:
-                    logger.debug(f"{settings.AUTH_MODE} mode: Using _get_authenticated_context")
+                    logger.debug("Access mode private: Using _get_authenticated_context")
                     actor_context = await self._get_authenticated_context(request)
                 request.state.actor_context = actor_context
             # For other paths, create guest context if needed

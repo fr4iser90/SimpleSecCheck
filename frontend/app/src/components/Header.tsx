@@ -291,6 +291,9 @@ export default function Header() {
               <Link to="/admin/settings" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
                 System Settings
               </Link>
+              <Link to="/admin/auth" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                Auth Settings
+              </Link>
               <Link to="/admin/users" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
                 User Management
               </Link>

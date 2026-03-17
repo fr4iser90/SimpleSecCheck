@@ -5,15 +5,26 @@ interface FeatureFlags {
   ALLOW_LOCAL_PATHS: boolean
   ALLOW_NETWORK_SCANS: boolean
   ALLOW_CONTAINER_REGISTRY: boolean
+  ALLOW_LOCAL_CONTAINERS: boolean
   ALLOW_GIT_REPOS: boolean
   ALLOW_ZIP_UPLOAD: boolean
 }
+
+const FEATURE_FLAG_ORDER: (keyof FeatureFlags)[] = [
+  'ALLOW_LOCAL_PATHS',
+  'ALLOW_NETWORK_SCANS',
+  'ALLOW_CONTAINER_REGISTRY',
+  'ALLOW_LOCAL_CONTAINERS',
+  'ALLOW_GIT_REPOS',
+  'ALLOW_ZIP_UPLOAD'
+]
 
 export default function FeatureFlagsPage() {
   const [flags, setFlags] = useState<FeatureFlags>({
     ALLOW_LOCAL_PATHS: true,
     ALLOW_NETWORK_SCANS: true,
     ALLOW_CONTAINER_REGISTRY: true,
+    ALLOW_LOCAL_CONTAINERS: true,
     ALLOW_GIT_REPOS: true,
     ALLOW_ZIP_UPLOAD: true
   })
@@ -27,7 +38,7 @@ export default function FeatureFlagsPage() {
       const response = await apiFetch('/api/admin/feature-flags')
       if (response.ok) {
         const data = await response.json()
-        setFlags(data)
+        setFlags((prev) => ({ ...prev, ...data }))
       }
     } catch (error) {
       console.error('Failed to load feature flags:', error)
@@ -69,26 +80,42 @@ export default function FeatureFlagsPage() {
     setFlags({ ...flags, [key]: !flags[key] })
   }
 
-  const flagDescriptions: Record<keyof FeatureFlags, { name: string, description: string }> = {
+  const flagDescriptions: Record<keyof FeatureFlags, { name: string, description: string; targets?: string; useCaseDefault?: string }> = {
     ALLOW_LOCAL_PATHS: {
       name: 'Local Paths',
-      description: 'Allow local filesystem paths as scan targets. When enabled, only administrators can use local path scanning (dangerous target).'
+      description: 'Allow local filesystem paths as scan targets. When enabled, only administrators can use local path scanning (dangerous target).',
+      targets: 'Targets: host paths (e.g. /path/to/project).',
+      useCaseDefault: 'Default on: Solo. Off: Network Intern, Public Web, Enterprise. Admin-only when on.'
     },
     ALLOW_NETWORK_SCANS: {
       name: 'Network Scans',
-      description: 'Allow network/website scans and external target scanning.'
+      description: 'Allow network/website scans and external target scanning.',
+      targets: 'Targets: website URLs, API endpoints, network hosts.',
+      useCaseDefault: 'Default on: all use cases.'
     },
     ALLOW_CONTAINER_REGISTRY: {
-      name: 'Container Registry',
-      description: 'Allow container registry scans (Docker, OCI images).'
+      name: 'Container Registry (external images)',
+      description: 'Allow scanning images from external registries only (not local Docker).',
+      targets: 'Targets: Docker Hub, ghcr.io, gcr.io, ECR, etc. — i.e. remote image references only.',
+      useCaseDefault: 'Default on: Solo, Network Intern, Enterprise. Off: Public Web.'
+    },
+    ALLOW_LOCAL_CONTAINERS: {
+      name: 'Local Containers (dangerous, admin only)',
+      description: 'Allow scanning images from local Docker or local registry. When enabled, only administrators can use this.',
+      targets: 'Targets: localhost, 127.0.0.1, local/… (local registry or Docker daemon).',
+      useCaseDefault: 'Default on: Solo, Network Intern, Enterprise. Off: Public Web. Admin-only when on.'
     },
     ALLOW_GIT_REPOS: {
       name: 'Git Repositories',
-      description: 'Allow Git repository scans (GitHub, GitLab, etc.).'
+      description: 'Allow Git repository scans (GitHub, GitLab, etc.).',
+      targets: 'Targets: GitHub, GitLab repo URLs.',
+      useCaseDefault: 'Default on: all use cases.'
     },
     ALLOW_ZIP_UPLOAD: {
       name: 'ZIP Upload',
-      description: 'Allow ZIP file uploads as scan targets. Safe for all deployment types.'
+      description: 'Allow ZIP file uploads as scan targets. Safe for all deployment types.',
+      targets: 'Targets: uploaded ZIP archives.',
+      useCaseDefault: 'Default on: all use cases.'
     }
   }
 
@@ -123,7 +150,7 @@ export default function FeatureFlagsPage() {
           borderRadius: '8px',
           border: '1px solid var(--glass-border-dark)'
         }}>
-          {(Object.keys(flags) as Array<keyof FeatureFlags>).map((key) => (
+          {FEATURE_FLAG_ORDER.map((key) => (
             <div
               key={key}
               style={{
@@ -139,17 +166,32 @@ export default function FeatureFlagsPage() {
             >
               <div style={{ flex: 1 }}>
                 <h3 style={{ margin: 0, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  {key === 'ALLOW_LOCAL_PATHS' && (
-                    <span title="Dangerous target – admin only">⚠️</span>
+                  {(key === 'ALLOW_LOCAL_PATHS' || key === 'ALLOW_LOCAL_CONTAINERS') && (
+                    <span title="Admin only when enabled">⚠️</span>
                   )}
                   {flagDescriptions[key].name}
                 </h3>
                 <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
                   {flagDescriptions[key].description}
                 </p>
+                {flagDescriptions[key].targets && (
+                  <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)', opacity: 0.9 }}>
+                    {flagDescriptions[key].targets}
+                  </p>
+                )}
+                {flagDescriptions[key].useCaseDefault && (
+                  <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.75rem', color: 'var(--color-info, #0dcaf0)' }}>
+                    {flagDescriptions[key].useCaseDefault}
+                  </p>
+                )}
                 {key === 'ALLOW_LOCAL_PATHS' && flags.ALLOW_LOCAL_PATHS && (
                   <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.8rem', color: 'var(--color-info, #0dcaf0)' }}>
                     Only admins can start scans with local paths. Other users will get a permission error.
+                  </p>
+                )}
+                {key === 'ALLOW_LOCAL_CONTAINERS' && flags.ALLOW_LOCAL_CONTAINERS && (
+                  <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.8rem', color: 'var(--color-info, #0dcaf0)' }}>
+                    Only admins can scan local images (localhost, 127.0.0.1, local/…). Remote registry (Docker Hub, etc.) is controlled by the toggle above.
                   </p>
                 )}
               </div>

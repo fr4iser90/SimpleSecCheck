@@ -1,4 +1,7 @@
-/* SimpleSecCheck WebUI - Dark Mode First */
+/* SimpleSecCheck WebUI - Dark Mode First
+ * Single source of truth: all colors/layout from :root below.
+ * Do not add white backgrounds, #333, #666, or other light-theme values.
+ */
 
 :root {
   --color-critical: #dc3545;
@@ -10,6 +13,9 @@
   
   --bg-dark: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
   --text-dark: #f8f9fa;
+  --text-secondary: rgba(248, 249, 250, 0.7);
+  --accent: #667eea;
+  --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   --glass-bg-dark: rgba(0, 0, 0, 0.25);
   --glass-border-dark: rgba(255, 255, 255, 0.1);
   --border-radius: 16px;
@@ -992,7 +998,7 @@ input:focus, select:focus {
   box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
 }
 
-/* Error Message in Setup */
+/* Error / Success messages (global, dark) */
 .error-message {
   background: rgba(220, 53, 69, 0.2);
   color: #ff6b7a;
@@ -1001,6 +1007,350 @@ input:focus, select:focus {
   border: 1px solid rgba(220, 53, 69, 0.4);
   margin-bottom: 1.5rem;
   backdrop-filter: blur(10px);
+}
+
+.success-message {
+  background: rgba(40, 167, 69, 0.2);
+  border: 1px solid rgba(40, 167, 69, 0.4);
+  color: var(--color-pass);
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+}
+
+/* ----- Auth & page-specific (all use :root variables, dark only) ----- */
+
+/* Login page */
+.login-page,
+.password-reset-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: var(--accent-gradient);
+  padding: 1.25rem;
+}
+
+.login-container,
+.password-reset-container {
+  background: var(--glass-bg-dark);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 1px solid var(--glass-border-dark);
+  box-shadow: var(--shadow-dark);
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 400px;
+}
+
+.login-header,
+.password-reset-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.login-header h1,
+.password-reset-header h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.75rem;
+  color: var(--text-dark);
+}
+
+.login-header p,
+.password-reset-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.login-form,
+.password-reset-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.login-button,
+.reset-button {
+  padding: 0.75rem 1.5rem;
+  background: var(--accent-gradient);
+  color: var(--text-dark);
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  margin-top: 0.5rem;
+}
+
+.login-button:hover:not(:disabled),
+.reset-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.login-button:disabled,
+.reset-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.info-message {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba(102, 126, 234, 0.15);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.info-message p {
+  margin: 0.25rem 0;
+}
+
+.back-link,
+.login-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: color 0.2s;
+}
+
+.back-link:hover,
+.login-link:hover {
+  color: var(--text-dark);
+  text-decoration: underline;
+}
+
+/* Setup page (container/card/header; progress & steps already in index) */
+.setup-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: var(--bg-dark);
+  background-attachment: fixed;
+  padding: 1.25rem;
+}
+
+.setup-card {
+  background: var(--glass-bg-dark);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--glass-border-dark);
+  box-shadow: var(--shadow-dark);
+  width: 100%;
+  max-width: 800px;
+  padding: 2.5rem;
+}
+
+.setup-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.setup-header h1 {
+  color: var(--text-dark);
+  margin: 0 0 0.5rem 0;
+  font-size: 1.75rem;
+}
+
+.setup-header p {
+  color: var(--text-secondary);
+  margin: 0;
+  font-size: 1rem;
+}
+
+/* Admin Settings page */
+.admin-settings-page {
+  padding: 2.5rem 1.25rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.admin-settings-container {
+  background: var(--glass-bg-dark);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 1px solid var(--glass-border-dark);
+  padding: 2rem;
+}
+
+.admin-settings-container h2 {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.75rem;
+  color: var(--text-dark);
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.settings-section h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--text-dark);
+}
+
+.section-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.btn-primary {
+  padding: 0.75rem 1.5rem;
+  background: var(--accent-gradient);
+  color: var(--text-dark);
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  padding: 0.75rem 1.5rem;
+  background: var(--glass-bg-dark);
+  color: var(--text-dark);
+  border: 1px solid var(--glass-border-dark);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.loading {
+  text-align: center;
+  padding: 2.5rem;
+  color: var(--text-secondary);
+}
+
+/* Admin Dashboard page */
+.admin-dashboard-page {
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.admin-dashboard-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.admin-dashboard-header {
+  margin-bottom: 2rem;
+}
+
+.admin-dashboard-header h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.75rem;
+  color: var(--text-dark);
+}
+
+.admin-dashboard-subtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+.admin-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.admin-dashboard-card {
+  display: block;
+  padding: 1.5rem;
+  background: var(--glass-bg-dark);
+  border: 1px solid var(--glass-border-dark);
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s, background 0.2s;
+  position: relative;
+}
+
+.admin-dashboard-card:hover:not(.admin-dashboard-card--disabled) {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.admin-dashboard-card--disabled {
+  opacity: 0.75;
+}
+
+.admin-dashboard-card-icon {
+  font-size: 1.75rem;
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+.admin-dashboard-card-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.admin-dashboard-card-description {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.admin-dashboard-card-badge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  background: rgba(255, 193, 7, 0.25);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  font-weight: 500;
 }
 
 /* Responsive */
@@ -1045,6 +1395,23 @@ input:focus, select:focus {
   }
   
   .step-actions button {
+    width: 100%;
+  }
+
+  .login-container,
+  .password-reset-container {
+    padding: 1.5rem;
+  }
+
+  .setup-card {
+    padding: 1.5rem;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .form-actions button {
     width: 100%;
   }
 }

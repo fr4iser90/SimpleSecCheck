@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import '../Setup.css';
 
 interface SystemCheck {
   name: string;

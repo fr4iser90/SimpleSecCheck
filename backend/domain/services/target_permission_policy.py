@@ -70,9 +70,25 @@ FEATURE_FLAG_FOR_TARGET: Dict[str, str] = {
 }
 
 # Targets that imply host/network access or high risk. Default: admin-only when RBAC is enforced.
+# local_container = container_registry + local reference (localhost, 127.0.0.1, local/); checked via is_local_container_reference()
 DANGEROUS_TARGETS: Set[str] = {
     "local_mount",
+    "local_container",
 }
+
+# Image reference is considered "local" (local Docker or local registry) if host is localhost/127.0.0.1 or prefix "local/"
+def is_local_container_reference(target_url: str) -> bool:
+    """True if the container image reference points to local Docker or a local registry."""
+    if not target_url or not target_url.strip():
+        return False
+    s = target_url.strip().lower()
+    if s.startswith("local/"):
+        return True
+    if s.startswith("localhost/") or s.startswith("localhost:"):
+        return True
+    if s.startswith("127.0.0.1/") or s.startswith("127.0.0.1:"):
+        return True
+    return False
 
 # Optional: security level for UI/policy (safe | restricted | dangerous)
 TARGET_SECURITY_LEVEL: Dict[str, str] = {
@@ -117,11 +133,14 @@ def check_can_scan_target(
     allow_git_repos: bool,
     allow_zip_upload: bool,
     allow_container_registry: bool,
+    allow_local_containers: bool,
     allow_network_scans: bool,
     is_admin: bool,
+    target_url: Optional[str] = None,
 ) -> None:
     """
     Validate that the current actor may scan this target type.
+    For container_registry, target_url is used to distinguish local vs remote (Docker Hub, etc.).
     Raises FeatureDisabledException if the feature flag is off.
     Raises TargetPermissionDeniedException if the target is dangerous and actor is not admin.
     """
@@ -134,8 +153,18 @@ def check_can_scan_target(
         raise FeatureDisabledException(target_type, flag_key)
     if flag_key == "ALLOW_ZIP_UPLOAD" and not allow_zip_upload:
         raise FeatureDisabledException(target_type, flag_key)
-    if flag_key == "ALLOW_CONTAINER_REGISTRY" and not allow_container_registry:
-        raise FeatureDisabledException(target_type, flag_key)
+    if flag_key == "ALLOW_CONTAINER_REGISTRY":
+        if target_url and is_local_container_reference(target_url):
+            if not allow_local_containers:
+                raise FeatureDisabledException("local_container", "ALLOW_LOCAL_CONTAINERS")
+            if not is_admin:
+                raise TargetPermissionDeniedException(
+                    "container_registry",
+                    reason="Local container scanning (localhost / local registry) requires admin privileges.",
+                )
+        else:
+            if not allow_container_registry:
+                raise FeatureDisabledException(target_type, flag_key)
     if flag_key == "ALLOW_NETWORK_SCANS" and not allow_network_scans:
         raise FeatureDisabledException(target_type, flag_key)
 

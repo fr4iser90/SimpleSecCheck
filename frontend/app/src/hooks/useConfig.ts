@@ -4,6 +4,8 @@ export interface FrontendConfig {
   environment: string
   is_production: boolean
   auth_mode: 'free' | 'basic' | 'jwt'
+  /** Who may use the system: public (all open) | mixed (public scan/queue, login for dashboard) | private (login required) */
+  access_mode: 'public' | 'mixed' | 'private'
   login_required: boolean
   features: {
     scan_types: {
@@ -15,6 +17,10 @@ export interface FrontendConfig {
       }
     }
     bulk_scan: boolean
+    /** If true, guests may use bulk scan (admin override). Default: only logged-in users. */
+    bulk_scan_allow_guests?: boolean
+    /** Queue strategy: fifo | priority | round_robin */
+    queue_strategy?: string
     local_paths: boolean
     git_only: boolean
     queue_enabled: boolean
@@ -27,6 +33,7 @@ export interface FrontendConfig {
     dangerous_targets?: string[]
     target_security_level?: Record<string, string>
     target_permission_map?: Record<string, string>
+    allow_local_containers?: boolean
   }
   queue: {
     max_length: number

@@ -7,7 +7,7 @@ after setup is completed.
 """
 from typing import List, Optional
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, model_validator
 
 
 class Settings(BaseSettings):
@@ -52,17 +52,29 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", description="JWT signing algorithm")
     jwt_expiration_minutes: int = Field(default=1440, description="JWT token expiration in minutes")
     
-    # Authentication Modes
-    AUTH_MODE: str = Field(default="free", description="Authentication mode: free|basic|jwt")
-    LOGIN_REQUIRED: bool = Field(default=False, description="Whether login is required")
+    # Authentication: AUTH_MODE = how to log in; ACCESS_MODE = who may use the system
+    AUTH_MODE: str = Field(default="free", description="Authentication mode (login mechanism): free|basic|jwt")
+    ACCESS_MODE: str = Field(default="public", description="Who may use the system: public (all open) | mixed (public scan/queue, login for dashboard) | private (login required for all)")
+    LOGIN_REQUIRED: bool = Field(default=False, description="Derived: True when ACCESS_MODE=private")
     SESSION_SECRET: str = Field(default="your-session-secret-here", description="Session secret key")
+    # Auth config block (registration)
+    ALLOW_SELF_REGISTRATION: bool = Field(default=False, description="Allow users to self-register (sign up)")
     
     # Feature Flags (granular control, can override SECURITY_MODE defaults)
     ALLOW_LOCAL_PATHS: bool = Field(default=True, description="Allow local file system paths as scan targets")
     ALLOW_NETWORK_SCANS: bool = Field(default=True, description="Allow network/website scans")
-    ALLOW_CONTAINER_REGISTRY: bool = Field(default=True, description="Allow container registry scans")
+    ALLOW_CONTAINER_REGISTRY: bool = Field(default=True, description="Allow remote container registry scans (Docker Hub, ghcr.io, etc.)")
+    ALLOW_LOCAL_CONTAINERS: bool = Field(default=True, description="Allow scanning images from local Docker / local registry (localhost, 127.0.0.1). Admin-only when enabled.")
     ALLOW_GIT_REPOS: bool = Field(default=True, description="Allow Git repository scans")
     ALLOW_ZIP_UPLOAD: bool = Field(default=True, description="Allow ZIP file uploads as scan targets")
+    # Bulk scan: default only for logged-in users; admin can override to allow guests
+    BULK_SCAN_ALLOW_GUESTS: bool = Field(default=False, description="If True, guests may use bulk scan (admin override). Default: only logged-in users.")
+    
+    # Queue strategy: fifo | priority | round_robin (admin can change in Admin → Queue/System)
+    QUEUE_STRATEGY: str = Field(default="fifo", description="Queue strategy: fifo (default), priority, round_robin")
+    QUEUE_PRIORITY_ADMIN: int = Field(default=10, description="Default priority for admin scans (higher = earlier)")
+    QUEUE_PRIORITY_USER: int = Field(default=5, description="Default priority for logged-in user scans")
+    QUEUE_PRIORITY_GUEST: int = Field(default=1, description="Default priority for guest scans")
     
     # External Services
     GITHUB_API_URL: str = Field(default="https://api.github.com", description="GitHub API base URL")
@@ -90,8 +102,12 @@ class Settings(BaseSettings):
     
     # Password Reset
     PASSWORD_RESET_TOKEN_EXPIRY_HOURS: int = Field(default=1, description="Password reset token expiry in hours")
-    
 
+    @model_validator(mode="after")
+    def set_login_required_from_access_mode(self) -> "Settings":
+        """Keep LOGIN_REQUIRED in sync with ACCESS_MODE."""
+        self.LOGIN_REQUIRED = self.ACCESS_MODE == "private"
+        return self
 
 def get_settings() -> Settings:
     """Get application settings instance."""
@@ -115,11 +131,34 @@ async def load_settings_from_database(settings_instance: Settings) -> None:
             if system_state and system_state.config:
                 config = system_state.config
                 
-                # Load SECURITY_MODE and AUTH_MODE from database
+                # Load SECURITY_MODE, AUTH_MODE, ACCESS_MODE from database
                 if "SECURITY_MODE" in config:
                     settings_instance.SECURITY_MODE = config["SECURITY_MODE"]
                 if "AUTH_MODE" in config:
                     settings_instance.AUTH_MODE = config["AUTH_MODE"]
+                auth_cfg = config.get("auth") or {}
+                if isinstance(auth_cfg, dict):
+                    if "access_mode" in auth_cfg:
+                        settings_instance.ACCESS_MODE = auth_cfg["access_mode"]
+                    else:
+                        # Backward compat: derive from AUTH_MODE
+                        settings_instance.ACCESS_MODE = "public" if (config.get("AUTH_MODE") or settings_instance.AUTH_MODE) == "free" else "private"
+                    if "allow_self_registration" in auth_cfg:
+                        settings_instance.ALLOW_SELF_REGISTRATION = auth_cfg["allow_self_registration"]
+                    if "bulk_scan_allow_guests" in auth_cfg:
+                        settings_instance.BULK_SCAN_ALLOW_GUESTS = auth_cfg["bulk_scan_allow_guests"]
+                # Queue config (strategy and default priorities)
+                queue_cfg = config.get("queue") or {}
+                if isinstance(queue_cfg, dict):
+                    if "queue_strategy" in queue_cfg and queue_cfg["queue_strategy"] in ("fifo", "priority", "round_robin"):
+                        settings_instance.QUEUE_STRATEGY = queue_cfg["queue_strategy"]
+                    if "priority_admin" in queue_cfg:
+                        settings_instance.QUEUE_PRIORITY_ADMIN = int(queue_cfg["priority_admin"])
+                    if "priority_user" in queue_cfg:
+                        settings_instance.QUEUE_PRIORITY_USER = int(queue_cfg["priority_user"])
+                    if "priority_guest" in queue_cfg:
+                        settings_instance.QUEUE_PRIORITY_GUEST = int(queue_cfg["priority_guest"])
+                settings_instance.LOGIN_REQUIRED = settings_instance.ACCESS_MODE == "private"
                 
                 # Load feature flags from database
                 if "feature_flags" in config:
@@ -131,6 +170,8 @@ async def load_settings_from_database(settings_instance: Settings) -> None:
                             settings_instance.ALLOW_NETWORK_SCANS = feature_flags["ALLOW_NETWORK_SCANS"]
                         if "ALLOW_CONTAINER_REGISTRY" in feature_flags:
                             settings_instance.ALLOW_CONTAINER_REGISTRY = feature_flags["ALLOW_CONTAINER_REGISTRY"]
+                        if "ALLOW_LOCAL_CONTAINERS" in feature_flags:
+                            settings_instance.ALLOW_LOCAL_CONTAINERS = feature_flags["ALLOW_LOCAL_CONTAINERS"]
                         if "ALLOW_GIT_REPOS" in feature_flags:
                             settings_instance.ALLOW_GIT_REPOS = feature_flags["ALLOW_GIT_REPOS"]
                         if "ALLOW_ZIP_UPLOAD" in feature_flags:

@@ -17,6 +17,8 @@ import AdminSettingsPage from './pages/AdminSettingsPage'
 import AuditLogPage from './pages/AuditLogPage'
 import UserManagementPage from './pages/UserManagementPage'
 import FeatureFlagsPage from './pages/FeatureFlagsPage'
+import AuthSettingsPage from './pages/AuthSettingsPage'
+import QueueSettingsPage from './pages/QueueSettingsPage'
 import IPControlPage from './pages/IPControlPage'
 import ScannerManagementPage from './pages/ScannerManagementPage'
 import ProfilePage from './pages/ProfilePage'
@@ -153,6 +155,18 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
         <ProtectedRoute>
           <Header />
           <FeatureFlagsPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/auth" element={
+        <ProtectedRoute>
+          <Header />
+          <AuthSettingsPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/queue" element={
+        <ProtectedRoute>
+          <Header />
+          <QueueSettingsPage />
         </ProtectedRoute>
       } />
       <Route path="/admin/security" element={

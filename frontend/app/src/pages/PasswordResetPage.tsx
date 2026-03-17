@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import './PasswordResetPage.css'
 
 export default function PasswordResetPage() {
   const [searchParams] = useSearchParams()

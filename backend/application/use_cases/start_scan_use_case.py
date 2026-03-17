@@ -68,6 +68,7 @@ class StartScanUseCase:
     
     def _create_scan_entity(self, request: ScanRequestDTO, config: Optional[ScanConfig]) -> Scan:
         """Create a Scan entity from request data."""
+        priority = request.priority if request.priority is not None else 0
         return Scan(
             name=request.name,
             description=request.description,
@@ -80,6 +81,7 @@ class StartScanUseCase:
             scanners=request.scanners,
             tags=request.tags,
             scan_metadata=request.metadata or {},
+            priority=priority,
         )
     
     def validate_concurrent_scans(self, user_id: str, max_concurrent: int = 5) -> None:

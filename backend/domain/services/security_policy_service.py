@@ -51,6 +51,7 @@ class SecurityPolicyService:
             "ALLOW_LOCAL_PATHS": True,
             "ALLOW_NETWORK_SCANS": True,
             "ALLOW_CONTAINER_REGISTRY": True,
+            "ALLOW_LOCAL_CONTAINERS": True,
             "ALLOW_GIT_REPOS": True,
             "ALLOW_ZIP_UPLOAD": True,
         },
@@ -58,13 +59,15 @@ class SecurityPolicyService:
             "ALLOW_LOCAL_PATHS": False,  # Security: No host filesystem access for multiple users
             "ALLOW_NETWORK_SCANS": True,  # External network scans allowed
             "ALLOW_CONTAINER_REGISTRY": True,
+            "ALLOW_LOCAL_CONTAINERS": True,
             "ALLOW_GIT_REPOS": True,
             "ALLOW_ZIP_UPLOAD": True,
         },
         "public_web": {
             "ALLOW_LOCAL_PATHS": False,  # Security risk
             "ALLOW_NETWORK_SCANS": True,  # Website scans allowed
-            "ALLOW_CONTAINER_REGISTRY": False,  # Security risk
+            "ALLOW_CONTAINER_REGISTRY": False,  # Security risk (remote registries)
+            "ALLOW_LOCAL_CONTAINERS": False,  # Security risk; enable for admin homelab only
             "ALLOW_GIT_REPOS": True,  # Public repos OK
             "ALLOW_ZIP_UPLOAD": True,
         },
@@ -72,6 +75,7 @@ class SecurityPolicyService:
             "ALLOW_LOCAL_PATHS": False,  # Security risk
             "ALLOW_NETWORK_SCANS": True,  # Website scans allowed
             "ALLOW_CONTAINER_REGISTRY": True,  # Enterprise might need this
+            "ALLOW_LOCAL_CONTAINERS": True,  # Admin can scan local registries
             "ALLOW_GIT_REPOS": True,
             "ALLOW_ZIP_UPLOAD": True,
         },
@@ -144,6 +148,7 @@ class SecurityPolicyService:
             "ALLOW_LOCAL_PATHS": settings.ALLOW_LOCAL_PATHS,
             "ALLOW_NETWORK_SCANS": settings.ALLOW_NETWORK_SCANS,
             "ALLOW_CONTAINER_REGISTRY": settings.ALLOW_CONTAINER_REGISTRY,
+            "ALLOW_LOCAL_CONTAINERS": getattr(settings, "ALLOW_LOCAL_CONTAINERS", True),
             "ALLOW_GIT_REPOS": settings.ALLOW_GIT_REPOS,
             "ALLOW_ZIP_UPLOAD": settings.ALLOW_ZIP_UPLOAD,
         }

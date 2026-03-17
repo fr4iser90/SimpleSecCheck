@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import './AdminDashboardPage.css'
 
 interface CardItem {
   to: string
@@ -11,7 +10,9 @@ interface CardItem {
 }
 
 const adminSections: CardItem[] = [
-  { to: '/admin/settings', title: 'System Settings', description: 'SMTP, security mode, auth mode, scanner config', icon: '⚙️' },
+  { to: '/admin/settings', title: 'System Settings', description: 'SMTP, security mode, scanner config', icon: '⚙️' },
+  { to: '/admin/auth', title: 'Auth Settings', description: 'Auth mode, guest access, self-registration', icon: '🔐' },
+  { to: '/admin/queue', title: 'Queue & Scan Order', description: 'Queue strategy: FIFO, priority, or round-robin', icon: '📊' },
   { to: '/admin/users', title: 'User Management', description: 'Users, roles, create, edit, delete', icon: '👥' },
   { to: '/admin/feature-flags', title: 'Feature Flags', description: 'Allow local paths, Git, ZIP, container, network scans', icon: '🚩' },
   { to: '/admin/security', title: 'Security Policies', description: 'Use cases, rate limits', icon: '🔒', comingSoon: true },

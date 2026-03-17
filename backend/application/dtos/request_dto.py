@@ -39,6 +39,9 @@ class ScanRequestDTO:
     tags: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     
+    # Queue priority (optional; if None, backend can set from role: admin=10, user=5, guest=1)
+    priority: Optional[int] = None
+    
     def validate(self) -> None:
         """Validate the scan request data."""
         if not self.name or not self.name.strip():

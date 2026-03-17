@@ -104,18 +104,12 @@ def create_app() -> FastAPI:
     app.add_middleware(SetupMiddleware, environment=settings.SECURITY_MODE)
     
     # 6. Auth (security)
-    # Configure protected paths based on authentication mode
-    if settings.AUTH_MODE == "free":
-        # FREE mode: Only admin paths require authentication
-        protected_paths = []
-    else:
-        # BASIC/JWT modes: Scans and other features require authentication
-        protected_paths = [
-            "/api/v1/scans",
-            "/api/v1/queue",
-            "/api/v1/stats",
-        ]
-    
+    # ACCESS_MODE = who may use the system (public | mixed | private). Middleware reads settings.ACCESS_MODE per request.
+    protected_paths = [
+        "/api/v1/scans",
+        "/api/v1/queue",
+        "/api/v1/stats",
+    ]
     app.add_middleware(
         AuthMiddleware,
         actor_context_dependency=actor_context_dependency,

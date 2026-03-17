@@ -121,6 +121,79 @@ class RedisClient:
         except RedisError as e:
             logger.error(f"Redis RPOP error for key {key}: {e}")
             return None
+
+    async def brpop(self, key: str, timeout: int = 1) -> Optional[tuple]:
+        """Blocking pop from right of list. Returns (key, value) or None on timeout."""
+        if not self.is_connected:
+            await self.connect()
+        try:
+            result = await self.redis.brpop(key, timeout=timeout)
+            return result
+        except RedisError as e:
+            logger.error(f"Redis BRPOP error for key {key}: {e}")
+            return None
+
+    async def lrange(self, key: str, start: int, end: int) -> List[str]:
+        """Get list slice. end=-1 means to the end."""
+        if not self.is_connected:
+            await self.connect()
+        try:
+            return await self.redis.lrange(key, start, end)
+        except RedisError as e:
+            logger.error(f"Redis LRANGE error for key {key}: {e}")
+            return []
+
+    async def lrem(self, key: str, count: int, value: str) -> int:
+        """Remove first `count` occurrences of value from list. Returns number removed."""
+        if not self.is_connected:
+            await self.connect()
+        try:
+            return await self.redis.lrem(key, count, value)
+        except RedisError as e:
+            logger.error(f"Redis LREM error for key {key}: {e}")
+            return 0
+
+    async def zadd(self, key: str, mapping: Dict[str, float], nx: bool = False) -> int:
+        """Add members to sorted set. mapping: {member: score}. Returns number of new elements."""
+        if not self.is_connected:
+            await self.connect()
+        try:
+            if nx:
+                return await self.redis.zadd(key, mapping, nx=True)
+            return await self.redis.zadd(key, mapping)
+        except RedisError as e:
+            logger.error(f"Redis ZADD error for key {key}: {e}")
+            raise
+
+    async def zrange(self, key: str, start: int, end: int) -> List[str]:
+        """Get sorted set range by index (ascending). end=-1 means to the end."""
+        if not self.is_connected:
+            await self.connect()
+        try:
+            return await self.redis.zrange(key, start, end)
+        except RedisError as e:
+            logger.error(f"Redis ZRANGE error for key {key}: {e}")
+            return []
+
+    async def zrem(self, key: str, *members: str) -> int:
+        """Remove members from sorted set. Returns number removed."""
+        if not self.is_connected:
+            await self.connect()
+        try:
+            return await self.redis.zrem(key, *members)
+        except RedisError as e:
+            logger.error(f"Redis ZREM error for key {key}: {e}")
+            return 0
+
+    async def zcard(self, key: str) -> int:
+        """Get sorted set cardinality."""
+        if not self.is_connected:
+            await self.connect()
+        try:
+            return await self.redis.zcard(key)
+        except RedisError as e:
+            logger.error(f"Redis ZCARD error for key {key}: {e}")
+            return 0
     
     async def sadd(self, key: str, value: str):
         """Add value to set."""

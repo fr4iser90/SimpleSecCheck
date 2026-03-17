@@ -313,18 +313,27 @@ async def create_scan(
             target_type = _determine_target_type(scan_request.scan_type, scan_request.target_url)
         
         # Feature flag + permission check (local/dangerous targets require admin)
-        settings = get_settings()
         is_admin = actor_context.role == "admin"
+        settings = get_settings()
         check_can_scan_target(
             target_type,
             allow_local_paths=settings.ALLOW_LOCAL_PATHS,
             allow_git_repos=settings.ALLOW_GIT_REPOS,
             allow_zip_upload=settings.ALLOW_ZIP_UPLOAD,
             allow_container_registry=settings.ALLOW_CONTAINER_REGISTRY,
+            allow_local_containers=getattr(settings, "ALLOW_LOCAL_CONTAINERS", True),
             allow_network_scans=settings.ALLOW_NETWORK_SCANS,
             is_admin=is_admin,
+            target_url=scan_request.target_url,
         )
         
+        # Default priority by role (admin > user > guest) when queue strategy uses priority
+        if actor_context.role == "admin":
+            default_priority = getattr(settings, "QUEUE_PRIORITY_ADMIN", 10)
+        elif actor_context.is_authenticated:
+            default_priority = getattr(settings, "QUEUE_PRIORITY_USER", 5)
+        else:
+            default_priority = getattr(settings, "QUEUE_PRIORITY_GUEST", 1)
         # Convert request schema to DTO
         request_dto = ScanRequestDTO(
             name=scan_request.name,
@@ -339,6 +348,7 @@ async def create_scan(
             scheduled_at=scan_request.scheduled_at,
             tags=scan_request.tags,
             metadata=metadata,
+            priority=default_priority,
         )
         
         # Create scan via service
@@ -1237,6 +1247,14 @@ async def create_batch_scans(
     - **actor_context**: Resolved user/session context
     - **scan_service**: Scan service
     """
+    # Bulk scan: only for logged-in users unless admin enabled guest access (BULK_SCAN_ALLOW_GUESTS)
+    if not actor_context.is_authenticated:
+        settings = get_settings()
+        if not getattr(settings, "BULK_SCAN_ALLOW_GUESTS", False):
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                detail="Bulk scan is only available for logged-in users. An admin can allow guest bulk scan in Auth Settings.",
+            )
     try:
         # This would typically create multiple scans in a batch
         # For now, return a placeholder

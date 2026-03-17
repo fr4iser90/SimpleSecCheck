@@ -4,6 +4,7 @@ import ScanForm from '../components/ScanForm'
 import BulkScanForm from '../components/BulkScanForm'
 import ScannerDataUpdate from '../components/ScannerDataUpdate'
 import { useConfig } from '../hooks/useConfig'
+import { useAuth } from '../hooks/useAuth'
 
 interface ScanStatusData {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -17,10 +18,11 @@ interface ScanStatusData {
 export default function HomePage() {
   const navigate = useNavigate()
   const { config, loading } = useConfig()
+  const { token } = useAuth()
   const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single')
-  
-  // Only show bulk scan tab if enabled
-  const showBulkScan = config?.features.bulk_scan ?? true
+  const isAuthenticated = !!token
+  // Bulk scan: logged-in users always see tab when feature is on; guests only when admin enabled bulk_scan_allow_guests
+  const showBulkScan = (config?.features.bulk_scan ?? true) && (isAuthenticated || (config?.features.bulk_scan_allow_guests ?? false))
 
   const handleScanStart = (scanStatus: ScanStatusData) => {
     navigate('/scan', { state: scanStatus })

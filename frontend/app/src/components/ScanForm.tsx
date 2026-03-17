@@ -42,6 +42,16 @@ const isDockerHubImage = (value: string): boolean => {
   return first === 'docker.io'  // Explicit docker.io = Docker Hub
 }
 
+/** True if container image reference is local (local Docker or local registry). Must match backend is_local_container_reference. */
+function isLocalContainerReference(targetUrl: string): boolean {
+  if (!targetUrl || !targetUrl.trim()) return false
+  const s = targetUrl.trim().toLowerCase()
+  if (s.startsWith('local/')) return true
+  if (s.startsWith('localhost/') || s.startsWith('localhost:')) return true
+  if (s.startsWith('127.0.0.1/') || s.startsWith('127.0.0.1:')) return true
+  return false
+}
+
 function isGitUrl(url: string): boolean {
   if (!url || !url.trim()) return false
   return GIT_URL_PATTERNS.some(pattern => pattern.test(url.trim()))
@@ -57,6 +67,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const localPathsAllowed = config?.features.local_paths ?? true
   const metadataCollection = config?.features.metadata_collection ?? 'optional'
   const dangerousTargets = config?.features.dangerous_targets ?? []
+  const allowLocalContainers = config?.features.allow_local_containers ?? true
 
   // No default scan type - will be auto-detected from target
   const [scanType, setScanType] = useState<string>('')
@@ -175,9 +186,12 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const isImageTarget = targetTypeInfo?.target_type === 'container_registry'
   const isLocalPath = targetTypeInfo?.target_type === 'local_mount'
   const isLocalPathRestrictedByRole = isLocalPath && localPathsAllowed && !isAdmin && dangerousTargets.includes('local_mount')
-  const isScanDisabled = loading || selectedScanners.length === 0 || isLocalPathRestrictedByRole
+  const isLocalContainerRestrictedByRole = isImageTarget && isLocalContainerReference(target) && allowLocalContainers && !isAdmin
+  const isScanDisabled = loading || selectedScanners.length === 0 || isLocalPathRestrictedByRole || isLocalContainerRestrictedByRole
   const scanDisabledReason = isLocalPathRestrictedByRole
     ? 'Local path scanning requires admin privileges.'
+    : isLocalContainerRestrictedByRole
+    ? 'Local container scanning (localhost / local registry) requires admin privileges.'
     : selectedScanners.length === 0
     ? 'Bitte wähle mindestens einen Scanner aus.'
     : undefined
@@ -418,7 +432,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
             placeholder="https://github.com/user/repo, nginx:latest, /path/to/project, https://example.com, or 192.168.1.1"
             required
             style={{ fontSize: '1.1rem', padding: '1rem' }}
-            className={isGitRepo || isImageTarget ? 'input-border-success' : (isLocalPath && !localPathsAllowed) || isLocalPathRestrictedByRole ? 'input-border-error' : ''}
+            className={isGitRepo || isImageTarget ? 'input-border-success' : (isLocalPath && !localPathsAllowed) || isLocalPathRestrictedByRole || isLocalContainerRestrictedByRole ? 'input-border-error' : ''}
           />
           {loadingTargetType && target.trim() && (
             <div className="glass form-info-box loading" style={{ marginTop: '0.75rem' }}>
@@ -509,6 +523,11 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
         {isLocalPathRestrictedByRole && (
           <small className="form-help-text error">
             ⚠️ Local path scanning requires admin privileges. Please log in as an administrator or use a Git repository URL / container image.
+          </small>
+        )}
+        {isLocalContainerRestrictedByRole && (
+          <small className="form-help-text error">
+            ⚠️ Local container scanning (localhost, 127.0.0.1, local/…) requires admin privileges. Use a remote image (e.g. Docker Hub) or log in as administrator.
           </small>
         )}
         {isImageTarget && gitOnly && !isDockerHubImage(target) && (

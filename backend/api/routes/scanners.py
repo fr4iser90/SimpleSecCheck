@@ -58,8 +58,9 @@ class UpdateStatusResponse(BaseModel):
 class FrontendConfigResponse(BaseModel):
     environment: str
     is_production: bool
-    auth_mode: str  # "free" | "basic" | "jwt"
-    login_required: bool
+    auth_mode: str  # "free" | "basic" | "jwt" (login mechanism)
+    access_mode: str  # "public" | "mixed" | "private" (who may use the system)
+    login_required: bool  # True when access_mode=private
     features: Dict[str, Any]
     queue: Optional[Dict[str, Any]] = None
     rate_limits: Optional[Dict[str, Any]] = None
@@ -390,7 +391,10 @@ async def get_frontend_config():
         features = {
             "scan_types": scan_types_config,
             "bulk_scan": True,  # TODO: Add setting
+            "bulk_scan_allow_guests": getattr(settings, "BULK_SCAN_ALLOW_GUESTS", False),
+            "queue_strategy": getattr(settings, "QUEUE_STRATEGY", "fifo"),
             "local_paths": settings.ALLOW_LOCAL_PATHS,
+            "allow_local_containers": getattr(settings, "ALLOW_LOCAL_CONTAINERS", True),
             "git_only": not settings.ALLOW_LOCAL_PATHS,
             "queue_enabled": True,  # Always enabled
             "session_management": True,  # Always enabled
@@ -418,11 +422,13 @@ async def get_frontend_config():
             "requests_per_session": 100,  # TODO: Add setting
         }
         
+        access_mode = getattr(settings, "ACCESS_MODE", "public")
         return FrontendConfigResponse(
             environment=settings.SECURITY_MODE,
             is_production=is_production,
             auth_mode=settings.AUTH_MODE.lower(),
-            login_required=settings.LOGIN_REQUIRED,
+            access_mode=access_mode,
+            login_required=access_mode == "private",
             features=features,
             queue=queue,
             rate_limits=rate_limits

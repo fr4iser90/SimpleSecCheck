@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { apiFetch } from '../utils/apiClient'
-import './AdminSettingsPage.css'
 
 interface SMTPConfig {
   enabled: boolean

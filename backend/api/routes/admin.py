@@ -60,6 +60,38 @@ class SystemConfigResponse(BaseModel):
     smtp: Optional[Dict[str, Any]] = None
 
 
+class AuthConfigResponse(BaseModel):
+    """Auth config: AUTH_MODE = login mechanism; ACCESS_MODE = who may use the system; allow_self_registration; bulk_scan_allow_guests."""
+    auth_mode: str = Field(description="Authentication mode (login mechanism): free | basic | jwt")
+    access_mode: str = Field(description="Who may use the system: public | mixed | private")
+    allow_self_registration: bool = Field(description="Allow users to self-register (sign up)")
+    bulk_scan_allow_guests: bool = Field(default=False, description="Allow guests to use bulk scan (admin override). Default: only logged-in users.")
+
+
+class AuthConfigRequest(BaseModel):
+    """Request to update auth configuration."""
+    auth_mode: Optional[str] = Field(None, description="free | basic | jwt")
+    access_mode: Optional[str] = Field(None, description="public | mixed | private")
+    allow_self_registration: Optional[bool] = None
+    bulk_scan_allow_guests: Optional[bool] = Field(None, description="Allow guests to use bulk scan (admin override)")
+
+
+class QueueConfigResponse(BaseModel):
+    """Queue strategy and default priorities."""
+    queue_strategy: str = Field(description="fifo | priority | round_robin")
+    priority_admin: int = Field(default=10, description="Default priority for admin scans")
+    priority_user: int = Field(default=5, description="Default priority for user scans")
+    priority_guest: int = Field(default=1, description="Default priority for guest scans")
+
+
+class QueueConfigRequest(BaseModel):
+    """Request to update queue config."""
+    queue_strategy: Optional[str] = Field(None, description="fifo | priority | round_robin")
+    priority_admin: Optional[int] = None
+    priority_user: Optional[int] = None
+    priority_guest: Optional[int] = None
+
+
 @router.get("/config", response_model=SystemConfigResponse)
 async def get_system_config(
     actor_context: ActorContext = Depends(get_admin_user),
@@ -102,6 +134,172 @@ async def get_system_config(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get system config: {str(e)}"
         )
+
+
+@router.get("/config/auth", response_model=AuthConfigResponse)
+async def get_auth_config(
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> AuthConfigResponse:
+    """
+    Get auth configuration (who may access, registration).
+    Requires admin privileges.
+    """
+    try:
+        async with db_adapter.async_session() as session:
+            result = await session.execute(select(SystemState).limit(1))
+            system_state = result.scalar_one_or_none()
+            if not system_state:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="System state not found"
+                )
+            config = system_state.config or {}
+            auth_cfg = config.get("auth") or {}
+            if not isinstance(auth_cfg, dict):
+                auth_cfg = {}
+            return AuthConfigResponse(
+                auth_mode=getattr(system_state, "auth_mode", None) or config.get("AUTH_MODE", "free"),
+                access_mode=auth_cfg.get("access_mode") or ("public" if (getattr(system_state, "auth_mode", None) or config.get("AUTH_MODE")) == "free" else "private"),
+                allow_self_registration=auth_cfg.get("allow_self_registration", False),
+                bulk_scan_allow_guests=auth_cfg.get("bulk_scan_allow_guests", False),
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get auth config: {str(e)}"
+        )
+
+
+@router.put("/config/auth", response_model=AuthConfigResponse)
+async def update_auth_config(
+    request: Request,
+    body: AuthConfigRequest,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> AuthConfigResponse:
+    """
+    Update auth configuration.
+    Requires admin privileges.
+    """
+    try:
+        async with db_adapter.async_session() as session:
+            result = await session.execute(select(SystemState).limit(1))
+            system_state = result.scalar_one_or_none()
+            if not system_state:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="System state not found"
+                )
+            config = system_state.config or {}
+            if "auth" not in config:
+                config["auth"] = {}
+            auth_cfg = config["auth"]
+            if body.auth_mode is not None:
+                system_state.auth_mode = body.auth_mode
+                config["AUTH_MODE"] = body.auth_mode
+            if body.access_mode is not None:
+                auth_cfg["access_mode"] = body.access_mode
+            if body.allow_self_registration is not None:
+                auth_cfg["allow_self_registration"] = body.allow_self_registration
+            if body.bulk_scan_allow_guests is not None:
+                auth_cfg["bulk_scan_allow_guests"] = body.bulk_scan_allow_guests
+            config["auth"] = auth_cfg
+            system_state.config = config
+            system_state.updated_at = datetime.utcnow()
+            await session.commit()
+            from config.settings import load_settings_from_database, settings as app_settings
+            await load_settings_from_database(app_settings)
+            await AuditLogService.log_event(
+                user_id=actor_context.user_id,
+                user_email=actor_context.email,
+                action_type="AUTH_CONFIG_CHANGED",
+                target="auth_config",
+                details={"access_mode": auth_cfg.get("access_mode"), "allow_self_registration": auth_cfg.get("allow_self_registration"), "bulk_scan_allow_guests": auth_cfg.get("bulk_scan_allow_guests"), "auth_mode": system_state.auth_mode},
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("User-Agent")
+            )
+            return AuthConfigResponse(
+                auth_mode=system_state.auth_mode,
+                access_mode=auth_cfg.get("access_mode") or ("public" if system_state.auth_mode == "free" else "private"),
+                allow_self_registration=auth_cfg.get("allow_self_registration", False),
+                bulk_scan_allow_guests=auth_cfg.get("bulk_scan_allow_guests", False),
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update auth config: {str(e)}"
+        )
+
+
+@router.get("/config/queue", response_model=QueueConfigResponse)
+async def get_queue_config(
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> QueueConfigResponse:
+    """Get queue strategy and priority defaults. Requires admin."""
+    try:
+        async with db_adapter.async_session() as session:
+            result = await session.execute(select(SystemState).limit(1))
+            system_state = result.scalar_one_or_none()
+            if not system_state:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System state not found")
+            config = system_state.config or {}
+            queue_cfg = config.get("queue") or {}
+            from config.settings import get_settings
+            s = get_settings()
+            return QueueConfigResponse(
+                queue_strategy=queue_cfg.get("queue_strategy") or getattr(s, "QUEUE_STRATEGY", "fifo"),
+                priority_admin=int(queue_cfg.get("priority_admin", getattr(s, "QUEUE_PRIORITY_ADMIN", 10))),
+                priority_user=int(queue_cfg.get("priority_user", getattr(s, "QUEUE_PRIORITY_USER", 5))),
+                priority_guest=int(queue_cfg.get("priority_guest", getattr(s, "QUEUE_PRIORITY_GUEST", 1))),
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.put("/config/queue", response_model=QueueConfigResponse)
+async def update_queue_config(
+    body: QueueConfigRequest,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> QueueConfigResponse:
+    """Update queue strategy and priority defaults. Requires admin."""
+    try:
+        async with db_adapter.async_session() as session:
+            result = await session.execute(select(SystemState).limit(1))
+            system_state = result.scalar_one_or_none()
+            if not system_state:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System state not found")
+            config = system_state.config or {}
+            if "queue" not in config:
+                config["queue"] = {}
+            q = config["queue"]
+            if body.queue_strategy is not None and body.queue_strategy in ("fifo", "priority", "round_robin"):
+                q["queue_strategy"] = body.queue_strategy
+            if body.priority_admin is not None:
+                q["priority_admin"] = body.priority_admin
+            if body.priority_user is not None:
+                q["priority_user"] = body.priority_user
+            if body.priority_guest is not None:
+                q["priority_guest"] = body.priority_guest
+            system_state.config = config
+            system_state.updated_at = datetime.utcnow()
+            await session.commit()
+            from config.settings import load_settings_from_database, get_settings
+            await load_settings_from_database(get_settings())
+            return QueueConfigResponse(
+                queue_strategy=q.get("queue_strategy", "fifo"),
+                priority_admin=int(q.get("priority_admin", 10)),
+                priority_user=int(q.get("priority_user", 5)),
+                priority_guest=int(q.get("priority_guest", 1)),
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.put("/config/smtp", response_model=SMTPConfigResponse)
@@ -627,6 +825,7 @@ async def get_feature_flags(
                 "ALLOW_LOCAL_PATHS": feature_flags.get("ALLOW_LOCAL_PATHS", True),
                 "ALLOW_NETWORK_SCANS": feature_flags.get("ALLOW_NETWORK_SCANS", True),
                 "ALLOW_CONTAINER_REGISTRY": feature_flags.get("ALLOW_CONTAINER_REGISTRY", True),
+                "ALLOW_LOCAL_CONTAINERS": feature_flags.get("ALLOW_LOCAL_CONTAINERS", True),
                 "ALLOW_GIT_REPOS": feature_flags.get("ALLOW_GIT_REPOS", True),
                 "ALLOW_ZIP_UPLOAD": feature_flags.get("ALLOW_ZIP_UPLOAD", True),
             }

@@ -2,13 +2,15 @@
 Scanner Worker
 
 This module contains the scanner worker that processes scan jobs from the queue.
-The worker runs as a separate container and executes scanner jobs.
+Supports queue strategies: fifo (default), priority, round_robin.
 """
 import asyncio
+import json
 import logging
 import os
 import signal
 import sys
+import time
 from typing import Dict, Any, Optional
 
 from infrastructure.redis.client import redis_client
@@ -17,10 +19,18 @@ from infrastructure.logging_config import setup_logging
 from config.settings import get_settings
 
 settings = get_settings()
+QUEUE_KEY = "scan_queue"
+QUEUE_PRIORITY_KEY = "scan_queue:priority"
+LAST_RUN_KEY_PREFIX = "scan_queue:last_run:"
 
 # Setup logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
+
+def _get_strategy() -> str:
+    s = getattr(get_settings(), "QUEUE_STRATEGY", "fifo") or "fifo"
+    return s.lower() if s in ("fifo", "priority", "round_robin") else "fifo"
 
 
 class ScannerWorker:
@@ -32,7 +42,7 @@ class ScannerWorker:
         
     async def start(self):
         """Start the scanner worker."""
-        logger.info("Starting scanner worker")
+        logger.info("Starting scanner worker (queue strategy: %s)", _get_strategy())
         
         # Initialize connections
         await redis_client.connect()
@@ -57,34 +67,96 @@ class ScannerWorker:
         """Process scan jobs from the queue."""
         while self.running:
             try:
-                # Wait for a job from the queue
-                job_data = await redis_client.brpop("scan_queue", timeout=1)
-                
-                if job_data:
-                    scan_id = job_data[1]  # brpop returns (key, value)
-                    logger.info(f"Processing scan job: {scan_id}")
-                    
-                    # Process the job
-                    await self._process_scan_job(scan_id)
-                
+                scan_data = await self._get_next_job()
+                if scan_data:
+                    scan_id = scan_data.get("scan_id") or scan_data.get("id")
+                    logger.info("Processing scan job: %s", scan_id)
+                    await self._execute_scan(scan_data)
+                    if _get_strategy() == "round_robin" and scan_data.get("user_id"):
+                        await redis_client.set(
+                            f"{LAST_RUN_KEY_PREFIX}{scan_data['user_id']}", str(time.time()), expire=86400
+                        )
+                    session_id = (scan_data.get("scan_metadata") or {}).get("session_id")
+                    if _get_strategy() == "round_robin" and session_id and not scan_data.get("user_id"):
+                        await redis_client.set(
+                            f"{LAST_RUN_KEY_PREFIX}session:{session_id}", str(time.time()), expire=86400
+                        )
+                else:
+                    await asyncio.sleep(0.5)
             except Exception as e:
-                logger.error(f"Error processing job: {e}")
-                await asyncio.sleep(1)  # Wait before retrying
+                logger.error("Error processing job: %s", e)
+                await asyncio.sleep(1)
     
-    async def _process_scan_job(self, scan_id: str):
-        """Process a single scan job."""
+    async def _get_next_job(self) -> Optional[Dict[str, Any]]:
+        """Get next job according to queue strategy. Returns parsed scan_data dict or None."""
+        strategy = _get_strategy()
+        if strategy == "priority":
+            ids = await redis_client.zrange(QUEUE_PRIORITY_KEY, 0, 0)
+            if not ids:
+                return None
+            scan_id = ids[0]
+            await redis_client.zrem(QUEUE_PRIORITY_KEY, scan_id)
+            raw = await redis_client.get(f"scan:{scan_id}")
+            if not raw:
+                return None
+            try:
+                return json.loads(raw) if isinstance(raw, str) else raw
+            except json.JSONDecodeError:
+                return None
+        if strategy == "round_robin":
+            items = await redis_client.lrange(QUEUE_KEY, 0, -1)
+            if not items:
+                return None
+            messages = []
+            for item in items:
+                try:
+                    messages.append(json.loads(item))
+                except json.JSONDecodeError:
+                    continue
+            if not messages:
+                return None
+            # Pick user/session with smallest last_run (oldest last run)
+            best_msg = None
+            best_ts = float("inf")
+            for msg in messages:
+                user_key = msg.get("user_id") or ("session:" + str((msg.get("scan_metadata") or {}).get("session_id", "")))
+                if not user_key or user_key == "session:":
+                    user_key = "guest"
+                last_run = await redis_client.get(f"{LAST_RUN_KEY_PREFIX}{user_key}")
+                ts = float(last_run) if last_run else 0.0
+                if ts < best_ts:
+                    best_ts = ts
+                    best_msg = msg
+            if not best_msg:
+                best_msg = messages[0]
+            # Remove this exact message from the list
+            for item in items:
+                try:
+                    m = json.loads(item)
+                    if (m.get("scan_id") or m.get("id")) == (best_msg.get("scan_id") or best_msg.get("id")):
+                        await redis_client.lrem(QUEUE_KEY, 1, item)
+                        break
+                except json.JSONDecodeError:
+                    continue
+            return best_msg
+        # fifo: brpop (right = oldest)
+        job_data = await redis_client.brpop(QUEUE_KEY, timeout=1)
+        if not job_data:
+            return None
+        value = job_data[1]
+        if isinstance(value, str) and value.strip().startswith("{"):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                pass
+        # Fallback: value is scan_id, load from Redis
+        raw = await redis_client.get(f"scan:{value}")
+        if not raw:
+            return None
         try:
-            # Get scan details from Redis
-            scan_data = await redis_client.get(f"scan:{scan_id}")
-            if not scan_data:
-                logger.error(f"Scan {scan_id} not found")
-                return
-            
-            # Execute the scan
-            await self._execute_scan(scan_data)
-            
-        except Exception as e:
-            logger.error(f"Failed to process scan {scan_id}: {e}")
+            return json.loads(raw) if isinstance(raw, str) else raw
+        except json.JSONDecodeError:
+            return None
     
     async def _execute_scan(self, scan_data: Dict[str, Any]):
         """Execute a scan."""
