@@ -61,14 +61,15 @@ def create_app() -> FastAPI:
     )
     
     # Instrument the app for metrics FIRST (before adding custom middleware)
-    instrumentator = Instrumentator(
-        should_group_status_codes=True,
-        should_ignore_untemplated=True,
-        should_instrument_requests_inprogress=True,
-        excluded_handlers=["/metrics"],
-    )
-    
-    instrumentator.instrument(app).expose(app, endpoint="/metrics")
+    # Skip in test to avoid Duplicated timeseries when creating multiple app instances
+    if os.environ.get("ENVIRONMENT") != "test":
+        instrumentator = Instrumentator(
+            should_group_status_codes=True,
+            should_ignore_untemplated=True,
+            should_instrument_requests_inprogress=True,
+            excluded_handlers=["/metrics"],
+        )
+        instrumentator.instrument(app).expose(app, endpoint="/metrics")
     
     # Initialize actor context dependency
     actor_context_dependency = ActorContextDependency(
