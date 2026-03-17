@@ -252,8 +252,9 @@ class ActorContextDependency:
         )
 
 
-# Global instance
-actor_context_dependency = ActorContextDependency()
+def get_actor_context_dependency(request: Request) -> ActorContextDependency:
+    """Return the app's ActorContextDependency (with JWT key). Routes must use Depends(get_actor_context_dependency)."""
+    return request.app.state.actor_context_dependency
 
 
 # Dependency function for FastAPI
@@ -263,7 +264,7 @@ async def get_actor_context(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))
 ) -> ActorContext:
     """FastAPI dependency to get actor context."""
-    return await actor_context_dependency(request, response, credentials)
+    return await request.app.state.actor_context_dependency(request, response, credentials)
 
 
 # Dependency for authenticated users only

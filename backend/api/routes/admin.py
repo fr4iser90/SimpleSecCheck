@@ -11,6 +11,7 @@ from api.deps.actor_context import get_admin_user, ActorContext
 from infrastructure.database.adapter import db_adapter
 from infrastructure.database.models import SystemState
 from domain.services.audit_log_service import AuditLogService
+from domain.services.scanner_duration_service import ScannerDurationService
 from domain.services.target_permission_policy import ALL_SCAN_FEATURE_FLAG_KEYS
 from sqlalchemy import select
 from datetime import datetime
@@ -1291,4 +1292,22 @@ async def resume_scanning(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to resume scanning: {str(e)}"
+        )
+
+
+@router.get("/scanner-duration-stats")
+async def get_scanner_duration_stats(
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, Any]:
+    """
+    Get exact duration statistics per scanner/tool (admin only).
+    Used for queue estimates; only real data, no fake defaults.
+    """
+    try:
+        stats = await ScannerDurationService.get_all_stats()
+        return {"scanner_duration_stats": stats}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get scanner duration stats: {str(e)}"
         )

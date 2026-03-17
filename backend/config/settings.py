@@ -55,9 +55,9 @@ class Settings(BaseSettings):
     LOG_FORMAT: str = Field(default="json", description="Log format (json or text)")
     
     # Security
-    jwt_secret_key: str = Field(default="your-secret-key-here", description="JWT secret key")
-    jwt_algorithm: str = Field(default="HS256", description="JWT signing algorithm")
-    jwt_expiration_minutes: int = Field(default=1440, description="JWT token expiration in minutes")
+    JWT_SECRET_KEY: str = Field(description="JWT secret key (set JWT_SECRET_KEY in env)")
+    JWT_ALGORITHM: str = Field(default="HS256", description="JWT signing algorithm")
+    JWT_EXPIRATION_MINUTES: int = Field(default=1440, description="JWT token expiration in minutes")
     
     # Authentication: AUTH_MODE = how to log in; ACCESS_MODE = who may use the system
     AUTH_MODE: str = Field(default="free", description="Authentication mode (login mechanism): free|basic|jwt")

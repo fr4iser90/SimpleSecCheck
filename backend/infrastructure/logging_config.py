@@ -48,6 +48,9 @@ def setup_logging():
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # Silence HTTP client debug logs (httpx/httpcore)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     
     # Apply clean format to all backend loggers
     for name in logging.root.manager.loggerDict.keys():

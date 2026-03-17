@@ -329,6 +329,26 @@ class DockerJobExecutor:
                         self.logger.debug(f"Using post-policy statistics from {stats_file}")
                 except (json.JSONDecodeError, OSError) as e:
                     self.logger.warning(f"Could not read post-policy statistics from {stats_file}: {e}")
+
+            # steps.log (JSON Lines): one line per step with name, started_at, completed_at -> used for per-tool duration stats
+            steps_log = Path(results_dir) / scan_id / "logs" / "steps.log"
+            if steps_log.exists():
+                try:
+                    lines = await asyncio.to_thread(steps_log.read_text, encoding="utf-8")
+                    steps = []
+                    for line in lines.strip().splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            steps.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+                    if steps:
+                        structured_results["_steps"] = steps
+                        self.logger.debug(f"Loaded {len(steps)} steps from steps.log for per-tool duration")
+                except (OSError, Exception) as e:
+                    self.logger.warning(f"Could not read steps.log: {e}")
             
             return structured_results
             

@@ -60,37 +60,25 @@ class AuthMiddleware(BaseHTTPMiddleware):
             HTTP response
         """
         try:
-            logger.debug(f"AuthMiddleware dispatch called for path: {request.url.path}")
-            access_mode = getattr(settings, "ACCESS_MODE", "public")
-            logger.debug(f"Access mode: {access_mode}, Auth mode: {settings.AUTH_MODE}")
-            logger.debug(f"Protected paths: {self.protected_paths}")
-            logger.debug(f"Public paths: {self.public_paths}")
-            
             # Check if path is public (skip authentication)
             if self._is_public_path(request.url.path):
-                logger.debug("Path is public, skipping authentication")
                 response = await call_next(request)
                 return response
-            
+
             # Check if path requires admin privileges
             if self._is_admin_path(request.url.path):
-                logger.debug("Path requires admin privileges")
                 actor_context = await self._get_admin_context(request)
                 request.state.actor_context = actor_context
             # Check if path requires authentication when ACCESS_MODE=private
             elif self._is_protected_path(request.url.path):
-                logger.debug(f"Protected path detected: {request.url.path}")
                 access_mode = getattr(settings, "ACCESS_MODE", "public")
                 if access_mode in ("public", "mixed"):
-                    logger.debug(f"Access mode {access_mode}: Using _get_or_create_context")
                     actor_context = await self._get_or_create_context(request)
                 else:
-                    logger.debug("Access mode private: Using _get_authenticated_context")
                     actor_context = await self._get_authenticated_context(request)
                 request.state.actor_context = actor_context
             # For other paths, create guest context if needed
             else:
-                logger.debug("Using _get_or_create_context for other paths")
                 actor_context = await self._get_or_create_context(request)
                 request.state.actor_context = actor_context
             
@@ -130,41 +118,30 @@ class AuthMiddleware(BaseHTTPMiddleware):
     
     async def _get_or_create_context(self, request: Request) -> ActorContext:
         """Get existing context or create new guest session."""
-        logger.debug("_get_or_create_context called")
-        
         # Try to get context from JWT token
         credentials = await self._get_credentials(request)
         if credentials:
-            logger.debug("Found JWT credentials, trying to get context from JWT")
             try:
                 context = await self.actor_context_dependency._get_context_from_jwt(credentials.credentials)
                 if context:
-                    logger.debug("Successfully got context from JWT")
                     return context
-            except Exception as e:
-                logger.debug(f"Failed to get context from JWT: {e}")
+            except Exception:
                 pass
-        
+
         # Try to get context from session cookie
         session_id = request.cookies.get("session_id")
-        logger.debug(f"Session ID from cookies: {session_id}")
         if session_id:
-            logger.debug("Found session ID, trying to get context from session")
             try:
                 context = await self.actor_context_dependency._get_context_from_session(session_id)
                 if context:
-                    logger.debug("Successfully got context from session")
                     return context
-            except Exception as e:
-                logger.debug(f"Failed to get context from session: {e}")
-        
+            except Exception:
+                pass
+
         # Create new guest session
-        logger.debug("Creating new guest session")
         response = JSONResponse(content={})  # Dummy response for session creation
         try:
-            context = await self.actor_context_dependency._create_guest_session(response)
-            logger.debug("Successfully created guest session")
-            return context
+            return await self.actor_context_dependency._create_guest_session(response)
         except Exception as e:
             logger.error(f"Failed to create guest session: {e}")
             raise

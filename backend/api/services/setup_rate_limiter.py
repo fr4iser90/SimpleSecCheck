@@ -42,38 +42,24 @@ class SetupRateLimiter:
         Returns:
             True if allowed, False if rate limited
         """
-        # Check if IP is currently banned
         is_banned = await self.is_banned(ip)
-        print(f"[DEBUG rate_limiter] IP {ip}: is_banned={is_banned}")
         if is_banned:
-            print(f"[DEBUG rate_limiter] IP {ip} is banned, returning False")
             return False
-        
-        # Check minute window
+
         minute_key = f"{self.minute_key_prefix}{ip}"
         minute_count = await self._get_counter(minute_key)
-        print(f"[DEBUG rate_limiter] IP {ip}: minute_count={minute_count}, minute_limit={self.minute_limit}")
-        
         if minute_count is not None and minute_count >= self.minute_limit:
-            print(f"[DEBUG rate_limiter] IP {ip}: Minute limit exceeded, banning")
             await self.ban_ip(ip)
             return False
-        
-        # Check hour window
+
         hour_key = f"{self.hour_key_prefix}{ip}"
         hour_count = await self._get_counter(hour_key)
-        print(f"[DEBUG rate_limiter] IP {ip}: hour_count={hour_count}, hour_limit={self.hour_limit}")
-        
         if hour_count is not None and hour_count >= self.hour_limit:
-            print(f"[DEBUG rate_limiter] IP {ip}: Hour limit exceeded, banning")
             await self.ban_ip(ip)
             return False
-        
-        # Increment counters
-        await self._increment_counter(minute_key, 60)  # 1 minute TTL
-        await self._increment_counter(hour_key, 3600)  # 1 hour TTL
-        print(f"[DEBUG rate_limiter] IP {ip}: Counters incremented, returning True")
-        
+
+        await self._increment_counter(minute_key, 60)
+        await self._increment_counter(hour_key, 3600)
         return True
     
     async def ban_ip(self, ip: str):

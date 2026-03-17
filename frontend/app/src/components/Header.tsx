@@ -308,6 +308,9 @@ export default function Header() {
               <Link to="/admin/scanner" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
                 Scan Engine Management
               </Link>
+              <Link to="/admin/tool-duration" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                Tool duration (exact per scanner)
+              </Link>
               <Link to="/admin/vulnerabilities" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
                 Vulnerability Database
               </Link>

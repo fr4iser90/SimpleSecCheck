@@ -71,13 +71,15 @@ def create_app() -> FastAPI:
         )
         instrumentator.instrument(app).expose(app, endpoint="/metrics")
     
-    # Initialize actor context dependency
+    # Initialize actor context dependency (read JWT key from env so it is never empty when env is set)
+    _jwt_key = os.environ.get("JWT_SECRET_KEY") or settings.JWT_SECRET_KEY
     actor_context_dependency = ActorContextDependency(
-        jwt_secret_key=settings.jwt_secret_key,
-        jwt_algorithm=settings.jwt_algorithm,
-        jwt_expiration_minutes=settings.jwt_expiration_minutes,
+        jwt_secret_key=_jwt_key,
+        jwt_algorithm=settings.JWT_ALGORITHM,
+        jwt_expiration_minutes=settings.JWT_EXPIRATION_MINUTES,
     )
-    
+    app.state.actor_context_dependency = actor_context_dependency
+
     # Configure middleware stack in correct order
     # 1. Trusted Host (security)
     app.add_middleware(

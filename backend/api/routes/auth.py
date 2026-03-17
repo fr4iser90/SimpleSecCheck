@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 
 from api.deps.actor_context import (
-    get_actor_context, get_authenticated_user, get_admin_user,
+    get_actor_context, get_actor_context_dependency, get_authenticated_user, get_admin_user,
     ActorContext, ActorContextDependency
 )
 from config.settings import settings
@@ -95,7 +95,7 @@ async def login(
     login_request: LoginRequest,
     response: Response,
     actor_context: ActorContext = Depends(get_actor_context),
-    actor_context_dependency: ActorContextDependency = Depends(),
+    actor_context_dependency: ActorContextDependency = Depends(get_actor_context_dependency),
 ) -> LoginResponse:
     """
     User login endpoint.
@@ -179,7 +179,7 @@ async def login(
         return LoginResponse(
             access_token=access_token,
             token_type="bearer",
-            expires_in=settings.jwt_expiration_minutes * 60,
+            expires_in=settings.JWT_EXPIRATION_MINUTES * 60,
             user_id=user_id,
             email=email,
             name=name,
@@ -203,7 +203,7 @@ async def login(
 async def logout(
     response: Response,
     actor_context: ActorContext = Depends(get_actor_context),
-    actor_context_dependency: ActorContextDependency = Depends(),
+    actor_context_dependency: ActorContextDependency = Depends(get_actor_context_dependency),
 ) -> LogoutResponse:
     """
     User logout endpoint.
@@ -275,7 +275,7 @@ async def get_session_info(
 async def refresh_token(
     response: Response,
     actor_context: ActorContext = Depends(get_authenticated_user),
-    actor_context_dependency: ActorContextDependency = Depends(),
+    actor_context_dependency: ActorContextDependency = Depends(get_actor_context_dependency),
 ) -> LoginResponse:
     """
     Refresh JWT token.
@@ -324,7 +324,7 @@ async def refresh_token(
         return LoginResponse(
             access_token=access_token,
             token_type="bearer",
-            expires_in=settings.jwt_expiration_minutes * 60,
+            expires_in=settings.JWT_EXPIRATION_MINUTES * 60,
             user_id=actor_context.user_id,
             email=actor_context.email,
             name=actor_context.name,
@@ -387,7 +387,7 @@ async def get_current_user(
         return LoginResponse(
             access_token="",  # Token not included in response for security
             token_type="bearer",
-            expires_in=settings.jwt_expiration_minutes * 60,
+            expires_in=settings.JWT_EXPIRATION_MINUTES * 60,
             user_id=actor_context.user_id,
             email=actor_context.email,
             name=actor_context.name,
@@ -454,7 +454,7 @@ async def list_users(
 async def create_guest_session(
     response: Response,
     actor_context: ActorContext = Depends(get_actor_context),
-    actor_context_dependency: ActorContextDependency = Depends(),
+    actor_context_dependency: ActorContextDependency = Depends(get_actor_context_dependency),
 ) -> SessionInfo:
     """
     Create a new guest session.
@@ -507,7 +507,7 @@ async def create_guest_session(
 async def delete_session(
     session_id: str,
     actor_context: ActorContext = Depends(get_admin_user),
-    actor_context_dependency: ActorContextDependency = Depends(),
+    actor_context_dependency: ActorContextDependency = Depends(get_actor_context_dependency),
 ) -> LogoutResponse:
     """
     Delete a specific session (admin only).

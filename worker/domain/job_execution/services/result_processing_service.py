@@ -35,6 +35,50 @@ def _normalize_severity(severity: Any) -> str:
     return "info"
 
 
+def _build_scan_results_for_duration_stats(structured_results: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Build list of {scanner, duration} for DB results and scanner_duration_stats.
+    Uses _steps from steps.log (started_at/completed_at) when present; else tries duration from tool reports.
+    """
+    out: List[Dict[str, Any]] = []
+    # Prefer steps.log: one JSON object per step with name, started_at, completed_at
+    steps = structured_results.get("_steps") or []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        name = step.get("name")
+        started = step.get("started_at")
+        completed = step.get("completed_at")
+        if not name or not started or not completed:
+            continue
+        try:
+            start_dt = datetime.fromisoformat(started.replace("Z", "+00:00")) if isinstance(started, str) else None
+            end_dt = datetime.fromisoformat(completed.replace("Z", "+00:00")) if isinstance(completed, str) else None
+            if start_dt and end_dt and end_dt >= start_dt:
+                sec = int((end_dt - start_dt).total_seconds())
+                if sec > 0:
+                    out.append({"scanner": name, "duration": sec})
+        except Exception:
+            continue
+    if out:
+        return out
+    # Fallback: tool report may have "duration" or "execution_time_seconds"
+    for key, value in structured_results.items():
+        if key.startswith("_"):
+            continue
+        if not isinstance(value, dict):
+            continue
+        duration = value.get("duration") or value.get("execution_time_seconds")
+        if duration is not None:
+            try:
+                sec = int(float(duration))
+                if sec > 0:
+                    out.append({"scanner": key, "duration": sec})
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
 def _aggregate_vulnerability_counts(structured_results: Dict[str, Any]) -> Dict[str, int]:
     """
     Aggregate total and per-severity counts from all tools in structured_results.
@@ -317,8 +361,12 @@ class ResultProcessingService:
             else:
                 vuln_counts = _aggregate_vulnerability_counts(result.structured_results)
             duration_seconds = int(result.execution_time_seconds) if result.execution_time_seconds is not None else None
+
+            # Build per-tool results for results column and scanner_duration_stats (from steps.log or tool reports)
+            scan_results = _build_scan_results_for_duration_stats(result.structured_results)
+            results_json = json.dumps(scan_results) if scan_results else None
             
-            # Update scan status and vulnerability counts in database
+            # Update scan status, vulnerability counts, and results in database
             async with self.database_adapter.get_session() as session:
                 update_query = text("""
                     UPDATE scans 
@@ -332,7 +380,8 @@ class ResultProcessingService:
                         medium_vulnerabilities = :medium_vulnerabilities,
                         low_vulnerabilities = :low_vulnerabilities,
                         info_vulnerabilities = :info_vulnerabilities,
-                        duration = :duration
+                        duration = :duration,
+                        results = CAST(:results AS jsonb)
                     WHERE id = :scan_id
                 """)
                 
@@ -351,9 +400,43 @@ class ResultProcessingService:
                         "low_vulnerabilities": vuln_counts["low_vulnerabilities"],
                         "info_vulnerabilities": vuln_counts["info_vulnerabilities"],
                         "duration": duration_seconds,
+                        "results": results_json,
                     }
                 )
                 await session.commit()
+
+                # Update scanner_duration_stats (per-tool) so admin "Tool duration" and queue estimates get real data
+                if scan_results:
+                    try:
+                        now = datetime.utcnow()
+                        for item in scan_results:
+                            scanner_name = item.get("scanner")
+                            duration_sec = item.get("duration")
+                            if not scanner_name or not duration_sec or duration_sec <= 0:
+                                continue
+                            upsert_sql = text("""
+                                INSERT INTO scanner_duration_stats
+                                    (scanner_name, avg_duration_seconds, min_duration_seconds, max_duration_seconds, sample_count, last_updated)
+                                VALUES (:scanner_name, :duration_seconds, :duration_seconds, :duration_seconds, 1, :last_updated)
+                                ON CONFLICT (scanner_name) DO UPDATE SET
+                                    avg_duration_seconds = (scanner_duration_stats.avg_duration_seconds * scanner_duration_stats.sample_count + :duration_seconds) / (scanner_duration_stats.sample_count + 1),
+                                    sample_count = scanner_duration_stats.sample_count + 1,
+                                    min_duration_seconds = LEAST(COALESCE(scanner_duration_stats.min_duration_seconds, 999999), :duration_seconds),
+                                    max_duration_seconds = GREATEST(COALESCE(scanner_duration_stats.max_duration_seconds, 0), :duration_seconds),
+                                    last_updated = :last_updated
+                            """)
+                            await session.execute(
+                                upsert_sql,
+                                {
+                                    "scanner_name": scanner_name,
+                                    "duration_seconds": duration_sec,
+                                    "last_updated": now,
+                                }
+                            )
+                        await session.commit()
+                        self.logger.info(f"Updated scanner_duration_stats for {len(scan_results)} tool(s) from scan {scan_id}")
+                    except Exception as stats_err:
+                        self.logger.warning(f"Failed to update scanner_duration_stats: {stats_err}")
                 
                 self.logger.info(
                     f"Updated scan {scan_id} status to {status} "

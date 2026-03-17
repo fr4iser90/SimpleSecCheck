@@ -62,24 +62,18 @@ class SetupTokenService:
         Returns:
             True if token is valid, False otherwise
         """
-        print(f"[DEBUG verify_token_secure] token_hash is None: {token_hash is None}, token_created_at is None: {token_created_at is None}")
         if not token_hash or not token_created_at:
-            print(f"[DEBUG verify_token_secure] Early return False: token_hash={bool(token_hash)}, token_created_at={bool(token_created_at)}")
             return False
-        
+
         # Check TTL using token_created_at (not last_attempt)
         expiry = token_created_at + timedelta(hours=self.ttl_hours)
         now = datetime.utcnow()
-        print(f"[DEBUG verify_token_secure] TTL check: created_at={token_created_at}, expiry={expiry}, now={now}, expired={now > expiry}")
         if now > expiry:
-            print(f"[DEBUG verify_token_secure] Token expired")
             return False
-        
+
         # Constant-time comparison to prevent timing attacks
         computed_hash = hashlib.sha256(token.encode()).hexdigest()
-        hash_match = hmac.compare_digest(computed_hash, token_hash)
-        print(f"[DEBUG verify_token_secure] Hash comparison: computed_hash[:16]={computed_hash[:16]}..., stored_hash[:16]={token_hash[:16]}..., match={hash_match}")
-        return hash_match
+        return hmac.compare_digest(computed_hash, token_hash)
     
     async def store_setup_token(self, token_hash: str, created_at: datetime) -> bool:
         """
@@ -122,14 +116,11 @@ class SetupTokenService:
                     system_state.updated_at = datetime.utcnow()
                 
                 await session.commit()
-                print(f"[DEBUG store_setup_token] Token stored successfully: hash[:16]={token_hash[:16]}..., created_at={created_at}, system_state.id={system_state.id if hasattr(system_state, 'id') else 'N/A'}")
                 return True
-                
+
         except Exception as e:
-            # Only log if it's not a "table does not exist" error
             if "does not exist" not in str(e) and "relation" not in str(e).lower():
                 print(f"Error storing setup token: {e}")
-            print(f"[DEBUG store_setup_token] Failed to store token: {e}")
             return False
     
     async def invalidate_setup_token(self) -> bool:
@@ -175,25 +166,16 @@ class SetupTokenService:
                     select(SystemState).limit(1)
                 )
                 system_state = result.scalar_one_or_none()
-                
-                print(f"[DEBUG get_setup_token_info] system_state exists: {system_state is not None}")
-                if system_state:
-                    print(f"[DEBUG get_setup_token_info] setup_token_hash exists: {system_state.setup_token_hash is not None}, created_at: {system_state.setup_token_created_at}")
-                
+
                 if system_state and system_state.setup_token_hash:
-                    result_dict = {
+                    return {
                         "token_hash": system_state.setup_token_hash,
                         "created_at": system_state.setup_token_created_at
                     }
-                    print(f"[DEBUG get_setup_token_info] Returning token info: hash[:16]={result_dict['token_hash'][:16]}..., created_at={result_dict['created_at']}")
-                    return result_dict
-                
-                print(f"[DEBUG get_setup_token_info] Returning None (no token found)")
                 return None
-                
+
         except Exception as e:
             print(f"Error getting setup token info: {e}")
-            print(f"[DEBUG get_setup_token_info] Exception: {e}")
             return None
     
     async def is_token_expired(self, token_created_at: datetime) -> bool:

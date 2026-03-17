@@ -9,6 +9,7 @@ from .deps.actor_context import (
     ActorContext,
     ActorContextDependency,
     get_actor_context,
+    get_actor_context_dependency,
     get_authenticated_user,
     get_admin_user,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "ActorContext",
     "ActorContextDependency",
     "get_actor_context",
+    "get_actor_context_dependency",
     "get_authenticated_user",
     "get_admin_user",
     
