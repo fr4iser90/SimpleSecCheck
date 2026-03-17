@@ -69,6 +69,9 @@ class ScanValidationService:
         if target_type not in self._allowed_target_types:
             raise InvalidScanTargetException(f"Invalid target type: {target_type}")
         
+        # Validate target URL format for the given target type (e.g. uploaded_code requires upload_id)
+        self.validate_target_url(target_url.strip(), target_type)
+        
         # Validate scanners
         if not scanners:
             raise InvalidScanConfigException("At least one scanner must be specified")
@@ -115,6 +118,8 @@ class ScanValidationService:
         
         if target_type == TargetType.GIT_REPO.value:
             self._validate_repository_url(target_url)
+        elif target_type == TargetType.UPLOADED_CODE.value:
+            self._validate_uploaded_code_reference(target_url)
         elif target_type == 'container':
             self._validate_container_url(target_url)
         elif target_type == 'web_application':
@@ -186,6 +191,28 @@ class ScanValidationService:
         if not url.startswith(('http://', 'https://')):
             raise InvalidScanTargetException("Web application URL must start with http:// or https://")
     
+    def _validate_uploaded_code_reference(self, target_url: str) -> None:
+        """Validate target_url for uploaded_code: must be an upload reference (e.g. upload_id from upload API)."""
+        import re
+        # Accept UUID (with or without hyphens) or "upload:" prefix + id
+        uuid_pattern = re.compile(
+            r"^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$"
+        )
+        if target_url.startswith("upload:"):
+            ref = target_url[7:].strip()
+            if not ref:
+                raise InvalidScanTargetException(
+                    "For ZIP upload (uploaded_code), target must be a valid upload reference (e.g. upload_id from upload)."
+                )
+            if not uuid_pattern.match(ref) and not ref.replace("-", "").isalnum():
+                raise InvalidScanTargetException(
+                    "Upload reference must be a valid identifier (e.g. UUID)."
+                )
+        elif not uuid_pattern.match(target_url.strip()):
+            raise InvalidScanTargetException(
+                "For ZIP upload (uploaded_code), target must be the upload ID (UUID) returned by the upload API."
+            )
+
     def _validate_infrastructure_target(self, target: str) -> None:
         """Validate infrastructure target format."""
         # Infrastructure targets can be IPs, hostnames, or CIDR ranges

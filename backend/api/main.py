@@ -14,7 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import logging
 import time
 
-from api.routes import scans, auth, setup, scanners, admin, queue, git
+from api.routes import scans, auth, setup, scanners, admin, queue, git, uploads
 from api import health as health_module
 from api.middleware.auth_middleware import (
     AuthMiddleware, SecurityHeadersMiddleware
@@ -110,6 +110,7 @@ def create_app() -> FastAPI:
         "/api/v1/scans",
         "/api/v1/queue",
         "/api/v1/stats",
+        "/api/v1/uploads",
     ]
     app.add_middleware(
         AuthMiddleware,
@@ -145,6 +146,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(queue.router)
     app.include_router(git.router)
+    app.include_router(uploads.router)
     app.include_router(health_module.router)
     app.include_router(health_module.shutdown_router)
     

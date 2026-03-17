@@ -33,15 +33,6 @@ const isContainerRegistry = (value: string): boolean => {
   return CONTAINER_REGISTRY_PATTERN.test(value.trim())
 }
 
-const isDockerHubImage = (value: string): boolean => {
-  const trimmed = value.trim()
-  if (!trimmed.includes('/')) return true  // Unqualified = Docker Hub
-  const first = trimmed.split('/')[0]
-  const hasRegistry = first.includes('.') || first.includes(':')
-  if (!hasRegistry) return true  // Unqualified = Docker Hub
-  return first === 'docker.io'  // Explicit docker.io = Docker Hub
-}
-
 /** True if container image reference is local (local Docker or local registry). Must match backend is_local_container_reference. */
 function isLocalContainerReference(targetUrl: string): boolean {
   if (!targetUrl || !targetUrl.trim()) return false
@@ -57,17 +48,32 @@ function isGitUrl(url: string): boolean {
   return GIT_URL_PATTERNS.some(pattern => pattern.test(url.trim()))
 }
 
+/** True if value looks like an upload ID (for target_type === 'uploaded_code'). Must match backend _validate_uploaded_code_reference. */
+function isUploadId(value: string): boolean {
+  if (!value || !value.trim()) return false
+  const s = value.trim()
+  if (s.startsWith('upload:')) {
+    const ref = s.slice(7).trim()
+    return ref.length > 0 && /^[0-9a-zA-Z\-]+$/.test(ref)
+  }
+  return /^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$/.test(s)
+}
+
 export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
 
-  // Get available scan types from config (backend-driven!)
-  const scanTypesConfig = config?.features.scan_types ?? {}
-  const gitOnly = config?.features.git_only ?? false
-  const localPathsAllowed = config?.features.local_paths ?? true
-  const metadataCollection = config?.features.metadata_collection ?? 'optional'
-  const dangerousTargets = config?.features.dangerous_targets ?? []
-  const allowLocalContainers = config?.features.allow_local_containers ?? true
+  // Config: scan_types catalog, allowed_targets (capabilities), permissions (RBAC)
+  const scanTypesConfig = config?.scan_types ?? {}
+  const allowed = config?.allowed_targets
+  const localPathsAllowed = allowed?.local_paths ?? true
+  const gitReposAllowed = allowed?.git_repos ?? true
+  const zipUploadAllowed = allowed?.zip_upload ?? true
+  const containerRegistryAllowed = allowed?.container_registry ?? true
+  const allowLocalContainers = allowed?.local_containers ?? true
+  const networkAllowed = allowed?.network ?? true
+  const metadataCollection = config?.features?.metadata_collection ?? 'optional'
+  const dangerousTargets = config?.permissions?.dangerous_targets ?? []
 
   // No default scan type - will be auto-detected from target
   const [scanType, setScanType] = useState<string>('')
@@ -96,6 +102,8 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const [scannerError, setScannerError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [uploadingZip, setUploadingZip] = useState(false)
+  const [zipUploadError, setZipUploadError] = useState<string | null>(null)
   
   // Auto-detect scan type and target type from target input
   useEffect(() => {
@@ -187,11 +195,14 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const isLocalPath = targetTypeInfo?.target_type === 'local_mount'
   const isLocalPathRestrictedByRole = isLocalPath && localPathsAllowed && !isAdmin && dangerousTargets.includes('local_mount')
   const isLocalContainerRestrictedByRole = isImageTarget && isLocalContainerReference(target) && allowLocalContainers && !isAdmin
-  const isScanDisabled = loading || selectedScanners.length === 0 || isLocalPathRestrictedByRole || isLocalContainerRestrictedByRole
+  const isNetworkDisallowed = scanType === 'network' && !networkAllowed
+  const isScanDisabled = loading || selectedScanners.length === 0 || isLocalPathRestrictedByRole || isLocalContainerRestrictedByRole || isNetworkDisallowed
   const scanDisabledReason = isLocalPathRestrictedByRole
     ? 'Local path scanning requires admin privileges.'
     : isLocalContainerRestrictedByRole
     ? 'Local container scanning (localhost / local registry) requires admin privileges.'
+    : isNetworkDisallowed
+    ? 'Network scans are not allowed. Enable "Network" in allowed targets.'
     : selectedScanners.length === 0
     ? 'Bitte wähle mindestens einen Scanner aus.'
     : undefined
@@ -290,18 +301,36 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
       const cleanGitBranch = gitBranch.trim() || null
       const cleanFindingPolicy = findingPolicy.trim() || null
       
-      // Validate: In production (git_only), only Git URLs are allowed
-      if (gitOnly && scanType === 'code' && !isGitUrl(cleanTarget) && !isContainerRegistry(cleanTarget)) {
-        throw new Error('Production Mode: Only Git repository URLs or Docker Hub images are allowed. Local paths are not permitted.')
+      // Validate: target type must be in allowed_targets
+      if (scanType === 'code' && isGitUrl(cleanTarget) && !gitReposAllowed) {
+        throw new Error('Git repository URLs are not allowed. Enable "Git repos" in allowed targets.')
+      }
+      if ((scanType === 'code' || scanType === 'image') && isContainerRegistry(cleanTarget)) {
+        if (!containerRegistryAllowed) throw new Error('Container images are not allowed. Enable "Container registry" in allowed targets.')
+        if (isLocalContainerReference(cleanTarget) && !allowLocalContainers) {
+          throw new Error('Local container images (localhost, local/) are not allowed. Use a remote image (e.g. Docker Hub) or enable "Local containers".')
+        }
       }
 
-      if (gitOnly && (scanType === 'code' || scanType === 'image') && isContainerRegistry(cleanTarget) && !isDockerHubImage(cleanTarget)) {
-        throw new Error('Production Mode: Only Docker Hub images are allowed (use docker.io/... or unqualified image names).')
-      }
-      
       // Validate: Local paths not allowed if disabled
       if (!localPathsAllowed && targetTypeInfo?.target_type === 'local_mount') {
-        throw new Error('Local paths are not allowed. Please use a Git repository URL or container registry image.')
+        throw new Error('Local paths are not allowed. Enable "Local paths" in allowed targets.')
+      }
+      // Validate: Network scans not allowed if disabled
+      if (!networkAllowed && (scanType === 'network' || targetTypeInfo?.target_type === 'network_host')) {
+        throw new Error('Network scans are not allowed. Enable "Network" in allowed targets.')
+      }
+      // Validate: ZIP / uploaded code not allowed if disabled
+      if (!zipUploadAllowed && targetTypeInfo?.target_type === 'uploaded_code') {
+        throw new Error('ZIP upload / uploaded code is not allowed. Enable "ZIP upload" in allowed targets.')
+      }
+      // Validate: when target_type is uploaded_code, target must be a valid upload ID (from upload step)
+      if (targetTypeInfo?.target_type === 'uploaded_code') {
+        if (!isUploadId(cleanTarget)) {
+          throw new Error(
+            'For ZIP upload, the target must be the upload ID (e.g. from the upload step). Please upload a ZIP first and use the returned ID.'
+          )
+        }
       }
 
       // Generate scan name from target
@@ -429,11 +458,56 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
               setScanTypeDetected(false) // Reset detection flag when user types
             }}
             onBlur={(e) => setTarget(e.target.value.trim())}
-            placeholder="https://github.com/user/repo, nginx:latest, /path/to/project, https://example.com, or 192.168.1.1"
+            placeholder="https://github.com/user/repo, nginx:latest, /path/to/project, https://example.com, or 192.168.1.1, or upload a ZIP below"
             required
             style={{ fontSize: '1.1rem', padding: '1rem' }}
             className={isGitRepo || isImageTarget ? 'input-border-success' : (isLocalPath && !localPathsAllowed) || isLocalPathRestrictedByRole || isLocalContainerRestrictedByRole ? 'input-border-error' : ''}
           />
+          {scanType === 'code' && zipUploadAllowed && (
+            <div className="form-group" style={{ marginTop: '0.75rem' }}>
+              <label htmlFor="zip-upload" style={{ display: 'block', marginBottom: '0.5rem' }}>
+                Or upload a ZIP file
+              </label>
+              <input
+                id="zip-upload"
+                type="file"
+                accept=".zip"
+                disabled={uploadingZip}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  setZipUploadError(null)
+                  setUploadingZip(true)
+                  try {
+                    const { apiFetch } = await import('../utils/apiClient')
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    const res = await apiFetch('/api/v1/uploads/', {
+                      method: 'POST',
+                      body: formData,
+                    })
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({ detail: res.statusText }))
+                      throw new Error(err.detail || 'Upload failed')
+                    }
+                    const data = await res.json()
+                    const uploadId = data.upload_id
+                    if (uploadId) {
+                      setTarget(uploadId)
+                      setScanTypeDetected(false)
+                    }
+                  } catch (err) {
+                    setZipUploadError(err instanceof Error ? err.message : 'Upload failed')
+                  } finally {
+                    setUploadingZip(false)
+                    e.target.value = ''
+                  }
+                }}
+              />
+              {uploadingZip && <span style={{ marginLeft: '0.5rem', color: 'var(--color-info)' }}>Uploading…</span>}
+              {zipUploadError && <div className="form-error" style={{ marginTop: '0.5rem' }}>{zipUploadError}</div>}
+            </div>
+          )}
           {loadingTargetType && target.trim() && (
             <div className="glass form-info-box loading" style={{ marginTop: '0.75rem' }}>
               <div className="form-info-box-header">
@@ -491,9 +565,9 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
                   </label>
                 ))}
             </div>
-            {gitOnly && (
-              <small className="form-help-text warning">
-                ⚠️ Production Mode: Only Git repositories or Docker Hub container images are allowed
+            {Array.isArray(config?.allowed_targets_display) && (
+              <small className="form-help-text info">
+                Allowed targets: {config.allowed_targets_display.join(', ') || 'none'}
               </small>
             )}
           </div>
@@ -517,7 +591,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
 
         {isLocalPath && !localPathsAllowed && (
           <small className="form-help-text error">
-            ❌ Local paths are not allowed in Production Mode. Please use a Git repository URL (GitHub/GitLab) or a container registry image.
+            ❌ Local paths are not allowed. Enable "Local paths" in allowed targets or use a Git URL / container image.
           </small>
         )}
         {isLocalPathRestrictedByRole && (
@@ -530,9 +604,14 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
             ⚠️ Local container scanning (localhost, 127.0.0.1, local/…) requires admin privileges. Use a remote image (e.g. Docker Hub) or log in as administrator.
           </small>
         )}
-        {isImageTarget && gitOnly && !isDockerHubImage(target) && (
+        {isImageTarget && isLocalContainerReference(target) && !allowLocalContainers && (
           <small className="form-help-text error">
-            ❌ Production Mode: Only Docker Hub images are allowed (docker.io/... or unqualified image names).
+            ❌ Local container images (localhost, 127.0.0.1, local/) are not allowed. Use a remote image (e.g. docker.io/...) or enable "Local containers" in allowed targets.
+          </small>
+        )}
+        {scanType === 'network' && !networkAllowed && (
+          <small className="form-help-text error">
+            ❌ Network scans are not allowed. Enable "Network" in allowed targets.
           </small>
         )}
 

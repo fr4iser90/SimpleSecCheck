@@ -46,7 +46,7 @@ export default function ReportViewer({ scanId }: ReportViewerProps = {}) {
         URL.revokeObjectURL(reportUrl)
       }
     }
-  }, [scanId, config?.is_production, config?.features.session_management])
+  }, [scanId, config?.features.session_management])
 
   if (!reportUrl) {
     return (

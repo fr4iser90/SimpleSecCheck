@@ -44,7 +44,7 @@ from domain.exceptions.scan_exceptions import (
     TargetPermissionDeniedException,
 )
 from domain.entities.scan import ScanType
-from domain.services.target_permission_policy import check_can_scan_target
+from domain.services.target_permission_policy import check_can_scan_target, get_allow_flags_from_settings
 from config.settings import get_settings
 from typing import Annotated
 import re
@@ -317,12 +317,7 @@ async def create_scan(
         settings = get_settings()
         check_can_scan_target(
             target_type,
-            allow_local_paths=settings.ALLOW_LOCAL_PATHS,
-            allow_git_repos=settings.ALLOW_GIT_REPOS,
-            allow_zip_upload=settings.ALLOW_ZIP_UPLOAD,
-            allow_container_registry=settings.ALLOW_CONTAINER_REGISTRY,
-            allow_local_containers=getattr(settings, "ALLOW_LOCAL_CONTAINERS", True),
-            allow_network_scans=settings.ALLOW_NETWORK_SCANS,
+            allow_flags=get_allow_flags_from_settings(settings),
             is_admin=is_admin,
             target_url=scan_request.target_url,
         )
@@ -619,6 +614,70 @@ async def detect_target_type(
         raise HTTPException(
             status_code=fastapi_status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to detect target type: {str(e)}"
+        )
+
+
+@router.get(
+    "/statistics",
+    response_model=ScanStatisticsSchema,
+    summary="Get scan statistics",
+    description="Get statistics about scans for the current user or all users (admin only).",
+    response_description="Scan statistics",
+)
+async def get_scan_statistics(
+    user_id: Optional[str] = Query(None, description="Get stats for specific user (admin only)"),
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> ScanStatisticsSchema:
+    """
+    Get scan statistics.
+
+    - **user_id**: Optional user ID to get stats for (admin only)
+    - **actor_context**: Resolved user/session context
+    - **scan_service**: Scan service
+    """
+    try:
+        # Non-admin users can only get their own stats
+        stats_user_id = None
+        if user_id:
+            if not actor_context.is_authenticated:
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_403_FORBIDDEN,
+                    detail="Admin access required"
+                )
+            stats_user_id = user_id
+        else:
+            if actor_context.is_authenticated:
+                stats_user_id = actor_context.user_id
+
+        statistics_dto = await scan_service.get_scan_statistics(stats_user_id)
+
+        return ScanStatisticsSchema(
+            total_scans=statistics_dto.total_scans,
+            pending_scans=statistics_dto.pending_scans,
+            running_scans=statistics_dto.running_scans,
+            completed_scans=statistics_dto.completed_scans,
+            failed_scans=statistics_dto.failed_scans,
+            cancelled_scans=statistics_dto.cancelled_scans,
+            total_vulnerabilities=statistics_dto.total_vulnerabilities,
+            critical_vulnerabilities=statistics_dto.critical_vulnerabilities,
+            high_vulnerabilities=statistics_dto.high_vulnerabilities,
+            medium_vulnerabilities=statistics_dto.medium_vulnerabilities,
+            low_vulnerabilities=statistics_dto.low_vulnerabilities,
+            info_vulnerabilities=statistics_dto.info_vulnerabilities,
+            repository_scans=statistics_dto.repository_scans,
+            container_scans=statistics_dto.container_scans,
+            infrastructure_scans=statistics_dto.infrastructure_scans,
+            web_application_scans=statistics_dto.web_application_scans,
+            average_scan_duration=statistics_dto.average_scan_duration,
+            longest_scan_duration=statistics_dto.longest_scan_duration,
+            shortest_scan_duration=statistics_dto.shortest_scan_duration,
+        )
+
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
         )
 
 
@@ -1107,70 +1166,6 @@ async def get_scan_results(
             status_code=fastapi_status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
-    except ScanException as e:
-        raise HTTPException(
-            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.get(
-    "/statistics",
-    response_model=ScanStatisticsSchema,
-    summary="Get scan statistics",
-    description="Get statistics about scans for the current user or all users (admin only).",
-    response_description="Scan statistics",
-)
-async def get_scan_statistics(
-    user_id: Optional[str] = Query(None, description="Get stats for specific user (admin only)"),
-    actor_context: ActorContext = Depends(get_actor_context),
-    scan_service: ScanService = Depends(get_scan_service_dependency),
-) -> ScanStatisticsSchema:
-    """
-    Get scan statistics.
-    
-    - **user_id**: Optional user ID to get stats for (admin only)
-    - **actor_context**: Resolved user/session context
-    - **scan_service**: Scan service
-    """
-    try:
-        # Non-admin users can only get their own stats
-        stats_user_id = None
-        if user_id:
-            if not actor_context.is_authenticated:
-                raise HTTPException(
-                    status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                    detail="Admin access required"
-                )
-            stats_user_id = user_id
-        else:
-            if actor_context.is_authenticated:
-                stats_user_id = actor_context.user_id
-        
-        statistics_dto = await scan_service.get_scan_statistics(stats_user_id)
-        
-        return ScanStatisticsSchema(
-            total_scans=statistics_dto.total_scans,
-            pending_scans=statistics_dto.pending_scans,
-            running_scans=statistics_dto.running_scans,
-            completed_scans=statistics_dto.completed_scans,
-            failed_scans=statistics_dto.failed_scans,
-            cancelled_scans=statistics_dto.cancelled_scans,
-            total_vulnerabilities=statistics_dto.total_vulnerabilities,
-            critical_vulnerabilities=statistics_dto.critical_vulnerabilities,
-            high_vulnerabilities=statistics_dto.high_vulnerabilities,
-            medium_vulnerabilities=statistics_dto.medium_vulnerabilities,
-            low_vulnerabilities=statistics_dto.low_vulnerabilities,
-            info_vulnerabilities=statistics_dto.info_vulnerabilities,
-            repository_scans=statistics_dto.repository_scans,
-            container_scans=statistics_dto.container_scans,
-            infrastructure_scans=statistics_dto.infrastructure_scans,
-            web_application_scans=statistics_dto.web_application_scans,
-            average_scan_duration=statistics_dto.average_scan_duration,
-            longest_scan_duration=statistics_dto.longest_scan_duration,
-            shortest_scan_duration=statistics_dto.shortest_scan_duration,
-        )
-        
     except ScanException as e:
         raise HTTPException(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -9,7 +9,14 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     git \
+    clamav \
+    clamav-freshclam \
     && rm -rf /var/lib/apt/lists/*
+
+# Download ClamAV virus DB at build
+RUN mkdir -p /var/lib/clamav \
+    && freshclam --quiet || true \
+    && chmod -R 755 /var/lib/clamav
 
 # Copy requirements and install Python dependencies
 COPY backend/requirements.txt .

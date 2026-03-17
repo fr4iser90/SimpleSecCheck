@@ -44,7 +44,7 @@ Current flags (from settings / use case):
 - `ALLOW_LOCAL_PATHS`
 - `ALLOW_GIT_REPOS`
 - `ALLOW_ZIP_UPLOAD`
-- `ALLOW_CONTAINER_REGISTRY`
+- `ALLOW_REMOTE_CONTAINERS`
 - `ALLOW_NETWORK_SCANS`
 
 Rule: **Feature Flags stay global.** They answer: “Is this capability enabled in this deployment?”

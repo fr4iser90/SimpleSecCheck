@@ -11,6 +11,7 @@ from api.deps.actor_context import get_admin_user, ActorContext
 from infrastructure.database.adapter import db_adapter
 from infrastructure.database.models import SystemState
 from domain.services.audit_log_service import AuditLogService
+from domain.services.target_permission_policy import ALL_SCAN_FEATURE_FLAG_KEYS
 from sqlalchemy import select
 from datetime import datetime
 
@@ -820,15 +821,7 @@ async def get_feature_flags(
             
             config = system_state.config or {}
             feature_flags = config.get("feature_flags", {})
-            
-            return {
-                "ALLOW_LOCAL_PATHS": feature_flags.get("ALLOW_LOCAL_PATHS", True),
-                "ALLOW_NETWORK_SCANS": feature_flags.get("ALLOW_NETWORK_SCANS", True),
-                "ALLOW_CONTAINER_REGISTRY": feature_flags.get("ALLOW_CONTAINER_REGISTRY", True),
-                "ALLOW_LOCAL_CONTAINERS": feature_flags.get("ALLOW_LOCAL_CONTAINERS", True),
-                "ALLOW_GIT_REPOS": feature_flags.get("ALLOW_GIT_REPOS", True),
-                "ALLOW_ZIP_UPLOAD": feature_flags.get("ALLOW_ZIP_UPLOAD", True),
-            }
+            return {key: feature_flags.get(key, True) for key in ALL_SCAN_FEATURE_FLAG_KEYS}
     except HTTPException:
         raise
     except Exception as e:
@@ -863,17 +856,17 @@ async def update_feature_flags(
             config = system_state.config or {}
             if "feature_flags" not in config:
                 config["feature_flags"] = {}
-            
-            # Update feature flags
+            # Only accept keys from single source (ALL_SCAN_FEATURE_FLAG_KEYS)
+            allowed = {k: bool(v) for k, v in feature_flags.items() if k in ALL_SCAN_FEATURE_FLAG_KEYS}
             old_flags = config["feature_flags"].copy()
-            config["feature_flags"].update(feature_flags)
+            config["feature_flags"].update(allowed)
             
             system_state.config = config
             system_state.updated_at = datetime.utcnow()
             await session.commit()
             
             # Log audit event
-            changes = {k: v for k, v in feature_flags.items() if old_flags.get(k) != v}
+            changes = {k: v for k, v in allowed.items() if old_flags.get(k) != v}
             await AuditLogService.log_event(
                 user_id=actor_context.user_id,
                 user_email=actor_context.email,
@@ -884,7 +877,7 @@ async def update_feature_flags(
                 user_agent=request.headers.get("User-Agent")
             )
             
-            return config["feature_flags"]
+            return {key: config["feature_flags"].get(key, True) for key in ALL_SCAN_FEATURE_FLAG_KEYS}
     except HTTPException:
         raise
     except Exception as e:

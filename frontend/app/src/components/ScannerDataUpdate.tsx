@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useConfig } from '../hooks/useConfig'
+import { useAuth } from '../hooks/useAuth'
 
 interface UpdateStatus {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -33,6 +34,8 @@ interface ScannerAssetItem {
 
 export default function ScannerDataUpdate() {
   const { config } = useConfig()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [status, setStatus] = useState<UpdateStatus>({
     status: 'idle',
     started_at: null,
@@ -42,12 +45,12 @@ export default function ScannerDataUpdate() {
   const [selectedAssetKey, setSelectedAssetKey] = useState<string>('')
   const [isUpdating, setIsUpdating] = useState(false)
   
-  // In production: Show status, but hide button if auto-update is enabled
-  // In dev: Always show everything (manual control)
-  const shouldShowButton = !config?.is_production || !config?.features?.owasp_auto_update_enabled
+  // Only admins may see and trigger scanner updates; show manual button when global auto-update is disabled
+  const shouldShowButton = isAdmin && !config?.features?.scanner_assets_auto_update_enabled
 
-  // Fetch assets list
+  // Fetch assets list (admin only)
   useEffect(() => {
+    if (!isAdmin) return
     const fetchAssets = async () => {
       try {
         const response = await fetch('/api/scanners/assets')
@@ -70,7 +73,7 @@ export default function ScannerDataUpdate() {
     }
 
     fetchAssets()
-  }, [selectedAssetKey])
+  }, [isAdmin, selectedAssetKey])
 
   const selectedAsset = useMemo(() => {
     if (!selectedAssetKey) {
@@ -90,8 +93,9 @@ export default function ScannerDataUpdate() {
     }
   }, [selectedAsset])
 
-  // Poll for status
+  // Poll for status (admin only)
   useEffect(() => {
+    if (!isAdmin) return
     let pollInterval: number | null = null
 
     const fetchStatus = async () => {
@@ -109,20 +113,13 @@ export default function ScannerDataUpdate() {
       }
     }
 
-    // Fetch immediately
     fetchStatus()
-
-    // Poll every 500ms for real-time updates
-    pollInterval = window.setInterval(() => {
-      fetchStatus()
-    }, 500)
+    pollInterval = window.setInterval(() => { fetchStatus() }, 500)
 
     return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval)
-      }
+      if (pollInterval) clearInterval(pollInterval)
     }
-  }, [isUpdating])
+  }, [isAdmin, isUpdating])
 
   const handleStartUpdate = async () => {
     if (!selectedAssetKey) {
@@ -212,7 +209,10 @@ export default function ScannerDataUpdate() {
     }
   }
 
-  // Always show status, but conditionally show button
+  // Only admins see this card; guests and users see nothing
+  if (!isAdmin) {
+    return null
+  }
 
   const updatableAssets = assets.filter(item => item.asset?.update?.enabled)
 
@@ -280,7 +280,7 @@ export default function ScannerDataUpdate() {
             )}
           </div>
         )}
-        {!shouldShowButton && config?.is_production && (
+        {!shouldShowButton && (
           <div style={{ opacity: 0.7, fontSize: '0.9rem' }}>
             Auto-update enabled
           </div>

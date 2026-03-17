@@ -1,35 +1,54 @@
 import { useState, useEffect } from 'react'
-import { useConfig } from '../hooks/useConfig'
+import { apiFetch } from '../utils/apiClient'
 
+/** Matches backend ScanStatisticsSchema (/api/v1/scans/statistics) */
 interface Statistics {
   total_scans: number
-  total_findings: number
-  findings_by_severity: {
-    critical: number
-    high: number
-    medium: number
-    low: number
-    info: number
-  }
-  findings_by_tool: Record<string, number>
-  false_positive_count: number
+  pending_scans: number
+  running_scans: number
+  completed_scans: number
+  failed_scans: number
+  cancelled_scans: number
+  total_vulnerabilities: number
+  critical_vulnerabilities: number
+  high_vulnerabilities: number
+  medium_vulnerabilities: number
+  low_vulnerabilities: number
+  info_vulnerabilities: number
+  repository_scans: number
+  container_scans: number
+  infrastructure_scans: number
+  web_application_scans: number
+  average_scan_duration: number
+  longest_scan_duration: number
+  shortest_scan_duration: number
+}
+
+const STATS_API = '/api/v1/scans/statistics'
+
+function formatDuration(seconds: number): string {
+  if (seconds <= 0 || !Number.isFinite(seconds)) return '—'
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const m = Math.floor(seconds / 60)
+  const s = Math.round(seconds % 60)
+  return s ? `${m}m ${s}s` : `${m}m`
 }
 
 export default function StatisticsPage() {
-  const { config } = useConfig()
   const [statistics, setStatistics] = useState<Statistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchStatistics = async () => {
-      if (!config?.is_production) {
-        setLoading(false)
-        return
-      }
-
       try {
-        const response = await fetch('/api/statistics')
+        const response = await apiFetch(STATS_API)
+        if (response.status === 404) {
+          // No stats yet (e.g. route not mounted or no data) — show empty state, not error
+          setStatistics(null)
+          setError(null)
+          return
+        }
         if (!response.ok) {
           throw new Error('Failed to fetch statistics')
         }
@@ -44,195 +63,141 @@ export default function StatisticsPage() {
     }
 
     fetchStatistics()
-  }, [config?.is_production])
+  }, [])
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity.toLowerCase()) {
-      case 'critical':
-        return '#dc3545' // Red
-      case 'high':
-        return '#fd7e14' // Orange
-      case 'medium':
-        return '#ffc107' // Yellow
-      case 'low':
-        return '#17a2b8' // Cyan
-      case 'info':
-        return '#6c757d' // Gray
-      default:
-        return '#6c757d'
+  const severityEntries = statistics
+    ? [
+        { label: 'Critical', value: statistics.critical_vulnerabilities, key: 'critical' },
+        { label: 'High', value: statistics.high_vulnerabilities, key: 'high' },
+        { label: 'Medium', value: statistics.medium_vulnerabilities, key: 'medium' },
+        { label: 'Low', value: statistics.low_vulnerabilities, key: 'low' },
+        { label: 'Info', value: statistics.info_vulnerabilities, key: 'info' },
+      ]
+    : []
+
+  const getSeverityColor = (key: string) => {
+    switch (key) {
+      case 'critical': return 'var(--color-critical)'
+      case 'high': return 'var(--color-high)'
+      case 'medium': return 'var(--color-medium)'
+      case 'low': return 'var(--color-low)'
+      default: return 'var(--color-info)'
     }
   }
 
-  if (!config?.is_production) {
-    return (
-      <div className="container">
-        <div className="card">
-          <h2>Statistics</h2>
-          <p style={{ color: '#6c757d' }}>
-            Statistics are only available in Production Mode.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="container">
-      <div className="card">
-        <h2>Statistics</h2>
-        <p style={{ marginTop: '0.5rem', opacity: 0.8, fontSize: '0.9rem', marginBottom: '2rem' }}>
-          Aggregated statistics from all scans
-        </p>
+    <div className="container statistics-page">
+      <div className="card statistics-card">
+        <header className="statistics-header">
+          <h2>Statistics</h2>
+          <p className="statistics-subtitle">
+            Aggregated statistics from all scans
+          </p>
+        </header>
 
         {error && (
-          <div style={{
-            background: 'rgba(220, 53, 69, 0.2)',
-            border: '1px solid #dc3545',
-            borderRadius: '8px',
-            padding: '1rem',
-            marginBottom: '1rem',
-            color: '#dc3545'
-          }}>
+          <div className="statistics-error">
             {error}
           </div>
         )}
 
         {loading ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>
-            Loading statistics...
+          <div className="statistics-loading">
+            Loading statistics…
           </div>
         ) : statistics ? (
           <>
-            {/* Overview Cards */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: '1rem',
-              marginBottom: '2rem'
-            }}>
-              <div style={{
-                padding: '1.5rem',
-                background: 'rgba(0, 123, 255, 0.1)',
-                borderRadius: '8px',
-                border: '1px solid rgba(0, 123, 255, 0.3)'
-              }}>
-                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--primary)' }}>
-                  {statistics.total_scans}
+            {/* Overview: scans & findings */}
+            <section className="statistics-section">
+              <h3 className="statistics-section-title">Overview</h3>
+              <div className="statistics-grid statistics-grid--overview">
+                <div className="stat-card stat-card--primary">
+                  <span className="stat-value">{statistics.total_scans}</span>
+                  <span className="stat-label">Total Scans</span>
                 </div>
-                <div style={{ color: '#6c757d', fontSize: '0.9rem', marginTop: '0.5rem' }}>
-                  Total Scans
+                <div className="stat-card stat-card--danger">
+                  <span className="stat-value">{statistics.total_vulnerabilities}</span>
+                  <span className="stat-label">Total Findings</span>
                 </div>
-              </div>
-              <div style={{
-                padding: '1.5rem',
-                background: 'rgba(220, 53, 69, 0.1)',
-                borderRadius: '8px',
-                border: '1px solid rgba(220, 53, 69, 0.3)'
-              }}>
-                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#dc3545' }}>
-                  {statistics.total_findings}
+                <div className="stat-card stat-card--success">
+                  <span className="stat-value">{statistics.completed_scans}</span>
+                  <span className="stat-label">Completed</span>
                 </div>
-                <div style={{ color: '#6c757d', fontSize: '0.9rem', marginTop: '0.5rem' }}>
-                  Total Findings
+                <div className="stat-card stat-card--neutral">
+                  <span className="stat-value">{statistics.pending_scans + statistics.running_scans}</span>
+                  <span className="stat-label">Pending / Running</span>
                 </div>
               </div>
-              <div style={{
-                padding: '1.5rem',
-                background: 'rgba(255, 193, 7, 0.1)',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 193, 7, 0.3)'
-              }}>
-                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#ffc107' }}>
-                  {statistics.false_positive_count}
-                </div>
-                <div style={{ color: '#6c757d', fontSize: '0.9rem', marginTop: '0.5rem' }}>
-                  False Positives
-                </div>
-              </div>
-            </div>
+            </section>
 
-            {/* Findings by Severity */}
-            <div style={{ marginBottom: '2rem' }}>
-              <h3 style={{ marginBottom: '1rem' }}>Findings by Severity</h3>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                gap: '1rem'
-              }}>
-                {Object.entries(statistics.findings_by_severity).map(([severity, count]) => (
+            {/* Findings by severity */}
+            <section className="statistics-section">
+              <h3 className="statistics-section-title">Findings by Severity</h3>
+              <div className="statistics-grid statistics-grid--severity">
+                {severityEntries.map(({ label, value, key }) => (
                   <div
-                    key={severity}
+                    key={key}
+                    className="stat-card stat-card--severity"
                     style={{
-                      padding: '1rem',
-                      background: getSeverityColor(severity) + '20',
-                      borderRadius: '8px',
-                      border: `1px solid ${getSeverityColor(severity)}`
+                      ['--severity-color' as string]: getSeverityColor(key),
                     }}
                   >
-                    <div style={{
-                      fontSize: '1.5rem',
-                      fontWeight: 'bold',
-                      color: getSeverityColor(severity),
-                      textTransform: 'capitalize'
-                    }}>
-                      {count}
-                    </div>
-                    <div style={{ color: '#6c757d', fontSize: '0.9rem', marginTop: '0.25rem', textTransform: 'capitalize' }}>
-                      {severity}
-                    </div>
+                    <span className="stat-value">{value}</span>
+                    <span className="stat-label">{label}</span>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
 
-            {/* Findings by Tool */}
-            {Object.keys(statistics.findings_by_tool).length > 0 && (
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem' }}>Findings by Tool</h3>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '2px solid #e9ecef' }}>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Tool</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 'bold' }}>Findings</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(statistics.findings_by_tool)
-                        .sort(([, a], [, b]) => b - a)
-                        .map(([tool, count]) => (
-                          <tr key={tool} style={{ borderBottom: '1px solid #e9ecef' }}>
-                            <td style={{ padding: '0.75rem', fontFamily: 'monospace', fontSize: '0.9rem' }}>
-                              {tool}
-                            </td>
-                            <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 'bold' }}>
-                              {count}
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
+            {/* Scan types */}
+            <section className="statistics-section">
+              <h3 className="statistics-section-title">Scans by Type</h3>
+              <div className="statistics-grid statistics-grid--types">
+                <div className="stat-card stat-card--type">
+                  <span className="stat-value">{statistics.repository_scans}</span>
+                  <span className="stat-label">Repository</span>
+                </div>
+                <div className="stat-card stat-card--type">
+                  <span className="stat-value">{statistics.container_scans}</span>
+                  <span className="stat-label">Container</span>
+                </div>
+                <div className="stat-card stat-card--type">
+                  <span className="stat-value">{statistics.infrastructure_scans}</span>
+                  <span className="stat-label">Infrastructure</span>
+                </div>
+                <div className="stat-card stat-card--type">
+                  <span className="stat-value">{statistics.web_application_scans}</span>
+                  <span className="stat-label">Web App</span>
                 </div>
               </div>
-            )}
+            </section>
 
-            {/* Note about false positives */}
-            <div style={{
-              marginTop: '2rem',
-              padding: '1rem',
-              background: 'rgba(255, 193, 7, 0.1)',
-              borderRadius: '8px',
-              border: '1px solid rgba(255, 193, 7, 0.3)',
-              fontSize: '0.875rem',
-              color: '#856404'
-            }}>
-              <strong>Note:</strong> These statistics include all findings, including false positives. 
-              The false positive count represents findings that have been manually marked as false positives.
-            </div>
+            {/* Duration */}
+            <section className="statistics-section">
+              <h3 className="statistics-section-title">Scan Duration</h3>
+              <div className="statistics-grid statistics-grid--duration">
+                <div className="stat-card stat-card--neutral">
+                  <span className="stat-value">{formatDuration(statistics.average_scan_duration)}</span>
+                  <span className="stat-label">Average</span>
+                </div>
+                <div className="stat-card stat-card--neutral">
+                  <span className="stat-value">{formatDuration(statistics.shortest_scan_duration)}</span>
+                  <span className="stat-label">Shortest</span>
+                </div>
+                <div className="stat-card stat-card--neutral">
+                  <span className="stat-value">{formatDuration(statistics.longest_scan_duration)}</span>
+                  <span className="stat-label">Longest</span>
+                </div>
+              </div>
+            </section>
+
+            <p className="statistics-note">
+              Counts reflect scans and findings stored in the system. Failed/cancelled scans are included in totals.
+            </p>
           </>
         ) : (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>
-            No statistics available yet.
+          <div className="statistics-empty">
+            No statistics available yet. Run some scans to see data here.
           </div>
         )}
       </div>

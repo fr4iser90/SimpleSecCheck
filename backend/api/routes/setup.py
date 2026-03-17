@@ -121,6 +121,16 @@ async def get_use_cases() -> Dict[str, Any]:
 
 
 @router.get(
+    "/security-modes",
+    summary="Get security mode explanations",
+    description="Get Permissive vs Restricted mode descriptions for UI display.",
+)
+async def get_security_modes() -> Dict[str, Any]:
+    """Return security mode explanations (permissive, restricted) for frontend."""
+    return SecurityPolicyService.get_security_modes_explained()
+
+
+@router.get(
     "/status",
     response_model=SetupStatusResponse,
     summary="Get setup status",

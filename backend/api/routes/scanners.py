@@ -8,8 +8,9 @@ Scanners are stored in database for faster access.
 import os
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from api.deps.actor_context import get_actor_context, ActorContext
 from sqlalchemy import select
 import httpx
 
@@ -18,6 +19,9 @@ from domain.services.target_permission_policy import (
     DANGEROUS_TARGETS,
     TARGET_SECURITY_LEVEL,
     TARGET_PERMISSION_MAP,
+    get_allow_flags_from_settings,
+    get_allowed_targets_for_frontend,
+    get_allowed_targets_display,
 )
 from infrastructure.logging_config import get_logger
 from infrastructure.database.adapter import db_adapter
@@ -56,12 +60,14 @@ class UpdateStatusResponse(BaseModel):
 
 
 class FrontendConfigResponse(BaseModel):
-    environment: str
-    is_production: bool
-    auth_mode: str  # "free" | "basic" | "jwt" (login mechanism)
-    access_mode: str  # "public" | "mixed" | "private" (who may use the system)
-    login_required: bool  # True when access_mode=private
-    features: Dict[str, Any]
+    auth_mode: str  # "free" | "basic" | "jwt"
+    access_mode: str  # "public" | "mixed" | "private"
+    login_required: bool
+    features: Dict[str, Any]  # Product/UI features only
+    scan_types: Dict[str, Any]  # Catalog of scan types (code, image, ...)
+    allowed_targets: Dict[str, bool]  # What may be scanned (local_paths, git_repos, ...)
+    allowed_targets_display: List[str]  # Human-readable labels for allowed targets (for UI help text)
+    permissions: Dict[str, Any]  # RBAC: dangerous_targets, target_security_level, target_permission_map
     queue: Optional[Dict[str, Any]] = None
     rate_limits: Optional[Dict[str, Any]] = None
 
@@ -236,9 +242,11 @@ async def get_scanners(
 @router.get("/assets", response_model=Dict[str, List[ScannerAssetResponse]])
 async def get_scanner_assets():
     """
-    Get list of all scanner assets from manifests.
+    Get list of all scanner assets from manifests (generic: any scanner with assets, e.g. vuln DBs).
     
     Fetches assets from worker API (worker has access to scanner code).
+    Each asset may expose update.enabled; auto_update is controlled by config (scanner_assets_auto_update_enabled).
+    Future: response could include health/reachability per scanner (e.g. SonarQube server, Docker daemon).
     """
     try:
         # Try to get assets from worker API first
@@ -290,12 +298,21 @@ async def get_update_status():
 
 
 @router.post("/{scanner_name}/assets/{asset_id}/update", response_model=UpdateStatusResponse)
-async def start_asset_update(scanner_name: str, asset_id: str):
+async def start_asset_update(
+    scanner_name: str,
+    asset_id: str,
+    actor_context: ActorContext = Depends(get_actor_context),
+):
     """
-    Start update for a specific scanner asset.
+    Start update for a specific scanner asset. Admin only.
     
     Verifies asset exists via worker API, then queues update job to worker.
     """
+    if actor_context.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators may trigger scanner asset updates",
+        )
     # Verify asset exists via worker API
     worker_url = os.getenv("WORKER_API_URL", "http://worker:8081")
     try:
@@ -356,9 +373,6 @@ async def get_frontend_config():
     try:
         settings = get_settings()
         
-        # Determine environment
-        is_production = settings.SECURITY_MODE.lower() == "restricted"
-        
         # Build scan types with metadata (backend-driven, no hardcoding!)
         scan_types_config = {
             "code": {
@@ -387,49 +401,45 @@ async def get_frontend_config():
             }
         }
         
-        # Build features from settings
+        # Features: product/UI only (no targets, no RBAC)
         features = {
-            "scan_types": scan_types_config,
             "bulk_scan": True,  # TODO: Add setting
             "bulk_scan_allow_guests": getattr(settings, "BULK_SCAN_ALLOW_GUESTS", False),
-            "queue_strategy": getattr(settings, "QUEUE_STRATEGY", "fifo"),
-            "local_paths": settings.ALLOW_LOCAL_PATHS,
-            "allow_local_containers": getattr(settings, "ALLOW_LOCAL_CONTAINERS", True),
-            "git_only": not settings.ALLOW_LOCAL_PATHS,
-            "queue_enabled": True,  # Always enabled
-            "session_management": True,  # Always enabled
-            "metadata_collection": "optional",  # Always optional
+            "session_management": True,
+            "metadata_collection": "optional",
             "auto_shutdown": True,  # TODO: Add setting
-            "zip_upload": True,  # TODO: Add setting
-            "owasp_auto_update_enabled": False,  # TODO: Add setting
-            # RBAC / permission policy: for UI to show warnings and filter options
-            "dangerous_targets": list(DANGEROUS_TARGETS),
-            "target_security_level": TARGET_SECURITY_LEVEL,
-            "target_permission_map": TARGET_PERMISSION_MAP,
+            "zip_upload": settings.ALLOW_ZIP_UPLOAD,
+            "scanner_assets_auto_update_enabled": getattr(settings, "SCANNER_ASSETS_AUTO_UPDATE_ENABLED", False),
         }
-        
-        # Queue config
-        queue = None
-        if features["queue_enabled"]:
-            queue = {
-                "max_length": 100,  # TODO: Add setting
-                "public_view": False,  # TODO: Add setting
-            }
-        
-        # Rate limits
+        # Allowed targets: from single source (target_permission_policy)
+        _allow_flags = get_allow_flags_from_settings(settings)
+        allowed_targets = get_allowed_targets_for_frontend(_allow_flags)
+        allowed_targets_display = get_allowed_targets_display(_allow_flags)
+        # Permissions: RBAC (who may scan what)
+        permissions = {
+            "dangerous_targets": list(DANGEROUS_TARGETS),
+            "target_security_level": dict(TARGET_SECURITY_LEVEL),
+            "target_permission_map": dict(TARGET_PERMISSION_MAP),
+        }
+        queue = {
+            "strategy": getattr(settings, "QUEUE_STRATEGY", "fifo"),
+            "max_length": 100,  # TODO: Add setting
+            "public_view": False,  # TODO: Add setting
+        }
         rate_limits = {
             "scans_per_session": 10,  # TODO: Add setting
             "requests_per_session": 100,  # TODO: Add setting
         }
-        
         access_mode = getattr(settings, "ACCESS_MODE", "public")
         return FrontendConfigResponse(
-            environment=settings.SECURITY_MODE,
-            is_production=is_production,
             auth_mode=settings.AUTH_MODE.lower(),
             access_mode=access_mode,
             login_required=access_mode == "private",
             features=features,
+            scan_types=scan_types_config,
+            allowed_targets=allowed_targets,
+            allowed_targets_display=allowed_targets_display,
+            permissions=permissions,
             queue=queue,
             rate_limits=rate_limits
         )

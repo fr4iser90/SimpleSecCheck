@@ -477,7 +477,7 @@ class DatabaseScanRepository(ScanRepository):
                 raise
     
     async def get_scan_statistics(self, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Get scan statistics."""
+        """Get scan statistics for API (ScanStatisticsSchema)."""
         await self.db_adapter.ensure_initialized()
         
         async with self.db_adapter.async_session() as session:
@@ -489,26 +489,58 @@ class DatabaseScanRepository(ScanRepository):
                 result = await session.execute(query)
                 scans = result.scalars().all()
                 
-                stats = {
-                    "total": len(scans),
-                    "by_status": {},
-                    "by_type": {},
-                    "total_vulnerabilities": 0,
-                }
+                by_status: Dict[str, int] = {}
+                by_type: Dict[str, int] = {}
+                total_vuln = 0
+                critical = high = medium = low = info = 0
+                durations: List[float] = []
+                repo_scans = container_scans = infra_scans = web_scans = 0
                 
                 for scan in scans:
-                    # Count by status
-                    status = scan.status
-                    stats["by_status"][status] = stats["by_status"].get(status, 0) + 1
-                    
-                    # Count by type
-                    scan_type = scan.scan_type
-                    stats["by_type"][scan_type] = stats["by_type"].get(scan_type, 0) + 1
-                    
-                    # Sum vulnerabilities
-                    stats["total_vulnerabilities"] += scan.total_vulnerabilities or 0
+                    status = (scan.status or "pending").lower()
+                    by_status[status] = by_status.get(status, 0) + 1
+                    st = (scan.scan_type or "code").lower()
+                    by_type[st] = by_type.get(st, 0) + 1
+                    total_vuln += scan.total_vulnerabilities or 0
+                    critical += scan.critical_vulnerabilities or 0
+                    high += scan.high_vulnerabilities or 0
+                    medium += scan.medium_vulnerabilities or 0
+                    low += scan.low_vulnerabilities or 0
+                    info += scan.info_vulnerabilities or 0
+                    if getattr(scan, "duration", None) is not None:
+                        durations.append(float(scan.duration))
+                    if st in ("code", "repository", "repo"):
+                        repo_scans += 1
+                    elif st in ("image", "container"):
+                        container_scans += 1
+                    elif st in ("infrastructure", "infra", "terraform"):
+                        infra_scans += 1
+                    elif st in ("web", "web_application"):
+                        web_scans += 1
                 
-                return stats
+                total = len(scans)
+                avg_dur = sum(durations) / len(durations) if durations else 0.0
+                return {
+                    "total_scans": total,
+                    "pending_scans": by_status.get("pending", 0),
+                    "running_scans": by_status.get("running", 0),
+                    "completed_scans": by_status.get("completed", 0),
+                    "failed_scans": by_status.get("failed", 0),
+                    "cancelled_scans": by_status.get("cancelled", 0),
+                    "total_vulnerabilities": total_vuln,
+                    "critical_vulnerabilities": critical,
+                    "high_vulnerabilities": high,
+                    "medium_vulnerabilities": medium,
+                    "low_vulnerabilities": low,
+                    "info_vulnerabilities": info,
+                    "repository_scans": repo_scans,
+                    "container_scans": container_scans,
+                    "infrastructure_scans": infra_scans,
+                    "web_application_scans": web_scans,
+                    "average_scan_duration": avg_dur,
+                    "longest_scan_duration": max(durations) if durations else 0.0,
+                    "shortest_scan_duration": min(durations) if durations else 0.0,
+                }
             except Exception as e:
                 logger.error(f"Failed to get scan statistics: {e}")
                 raise

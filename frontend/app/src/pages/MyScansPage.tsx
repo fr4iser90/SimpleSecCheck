@@ -25,7 +25,7 @@ interface MyScansData {
 }
 
 export default function MyScansPage() {
-  const { config } = useConfig()
+  useConfig()
   const navigate = useNavigate()
   const [scansData, setScansData] = useState<MyScansData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -57,14 +57,14 @@ export default function MyScansPage() {
 
   // Auto-refresh every 3 seconds if enabled
   useEffect(() => {
-    if (!autoRefresh || !config?.features.queue_enabled) return
+    if (!autoRefresh) return
 
     const interval = setInterval(() => {
       fetchMyScans()
     }, 3000)
 
     return () => clearInterval(interval)
-  }, [autoRefresh, config?.features.queue_enabled])
+  }, [autoRefresh])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -97,18 +97,6 @@ export default function MyScansPage() {
   }
 
 
-  if (!config?.features.queue_enabled) {
-    return (
-      <div className="container">
-        <div className="card">
-          <h2>My Scans</h2>
-          <p style={{ color: '#6c757d' }}>
-            Queue system is only available in Production Mode.
-          </p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="container">

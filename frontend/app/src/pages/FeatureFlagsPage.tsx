@@ -3,8 +3,11 @@ import { apiFetch } from '../utils/apiClient'
 
 interface FeatureFlags {
   ALLOW_LOCAL_PATHS: boolean
-  ALLOW_NETWORK_SCANS: boolean
-  ALLOW_CONTAINER_REGISTRY: boolean
+  ALLOW_WEBSITE_SCANS: boolean
+  ALLOW_API_ENDPOINT_SCANS: boolean
+  ALLOW_NETWORK_HOST_SCANS: boolean
+  ALLOW_KUBERNETES_CLUSTER_SCANS: boolean
+  ALLOW_REMOTE_CONTAINERS: boolean
   ALLOW_LOCAL_CONTAINERS: boolean
   ALLOW_GIT_REPOS: boolean
   ALLOW_ZIP_UPLOAD: boolean
@@ -12,8 +15,11 @@ interface FeatureFlags {
 
 const FEATURE_FLAG_ORDER: (keyof FeatureFlags)[] = [
   'ALLOW_LOCAL_PATHS',
-  'ALLOW_NETWORK_SCANS',
-  'ALLOW_CONTAINER_REGISTRY',
+  'ALLOW_WEBSITE_SCANS',
+  'ALLOW_API_ENDPOINT_SCANS',
+  'ALLOW_NETWORK_HOST_SCANS',
+  'ALLOW_KUBERNETES_CLUSTER_SCANS',
+  'ALLOW_REMOTE_CONTAINERS',
   'ALLOW_LOCAL_CONTAINERS',
   'ALLOW_GIT_REPOS',
   'ALLOW_ZIP_UPLOAD'
@@ -22,8 +28,11 @@ const FEATURE_FLAG_ORDER: (keyof FeatureFlags)[] = [
 export default function FeatureFlagsPage() {
   const [flags, setFlags] = useState<FeatureFlags>({
     ALLOW_LOCAL_PATHS: true,
-    ALLOW_NETWORK_SCANS: true,
-    ALLOW_CONTAINER_REGISTRY: true,
+    ALLOW_WEBSITE_SCANS: true,
+    ALLOW_API_ENDPOINT_SCANS: true,
+    ALLOW_NETWORK_HOST_SCANS: true,
+    ALLOW_KUBERNETES_CLUSTER_SCANS: true,
+    ALLOW_REMOTE_CONTAINERS: true,
     ALLOW_LOCAL_CONTAINERS: true,
     ALLOW_GIT_REPOS: true,
     ALLOW_ZIP_UPLOAD: true
@@ -87,13 +96,31 @@ export default function FeatureFlagsPage() {
       targets: 'Targets: host paths (e.g. /path/to/project).',
       useCaseDefault: 'Default on: Solo. Off: Network Intern, Public Web, Enterprise. Admin-only when on.'
     },
-    ALLOW_NETWORK_SCANS: {
-      name: 'Network Scans',
-      description: 'Allow network/website scans and external target scanning.',
-      targets: 'Targets: website URLs, API endpoints, network hosts.',
-      useCaseDefault: 'Default on: all use cases.'
+    ALLOW_WEBSITE_SCANS: {
+      name: 'Website scans',
+      description: 'Allow scanning website URLs (https://…).',
+      targets: 'Targets: website URLs.',
+      useCaseDefault: 'Default on: Solo, Network Intern, Enterprise. Off: Public Web.'
     },
-    ALLOW_CONTAINER_REGISTRY: {
+    ALLOW_API_ENDPOINT_SCANS: {
+      name: 'API endpoint scans',
+      description: 'Allow scanning API endpoints (REST/GraphQL).',
+      targets: 'Targets: API endpoint URLs.',
+      useCaseDefault: 'Default on: Solo, Network Intern, Enterprise. Off: Public Web.'
+    },
+    ALLOW_NETWORK_HOST_SCANS: {
+      name: 'Network host scans',
+      description: 'Allow scanning network hosts (IP/hostname, port checks).',
+      targets: 'Targets: IP addresses, hostnames.',
+      useCaseDefault: 'Default on: Solo, Network Intern, Enterprise. Off: Public Web. Admin-only when on.'
+    },
+    ALLOW_KUBERNETES_CLUSTER_SCANS: {
+      name: 'Kubernetes cluster scans',
+      description: 'Allow scanning live Kubernetes clusters.',
+      targets: 'Targets: Kubernetes API.',
+      useCaseDefault: 'Default on: Solo, Network Intern, Enterprise. Off: Public Web.'
+    },
+    ALLOW_REMOTE_CONTAINERS: {
       name: 'Container Registry (external images)',
       description: 'Allow scanning images from external registries only (not local Docker).',
       targets: 'Targets: Docker Hub, ghcr.io, gcr.io, ECR, etc. — i.e. remote image references only.',

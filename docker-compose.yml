@@ -63,11 +63,13 @@ services:
     
     volumes:
       - ./results:/app/results
+      - ./uploads:/app/uploads
       - .:/project:ro
     env_file:
       - .env
     environment:
       - SIMPLESECCHECK_ROOT=/app
+      - UPLOAD_STORAGE_PATH=/app/uploads
       - PYTHONUNBUFFERED=1
       - SCANNER_WORKER_ENABLED=false  # Worker is now separate service
       - SCANNER_PROXY_MODE=false
@@ -137,6 +139,7 @@ services:
     # This is the standard pattern for containers that need Docker socket access
     volumes:
       - ./results:/app/results
+      - ./uploads:/app/uploads
       - .:/project:ro
       - /var/run/docker.sock:/var/run/docker.sock
     env_file:
@@ -156,6 +159,8 @@ services:
       - RESULTS_DIR_HOST=${PWD}/results
       # Container paths (what Scanner container sees inside)
       - RESULTS_DIR_CONTAINER=/app/results
+      # Uploads: backend extracts ZIPs here; worker mounts same path for uploaded_code scans
+      - UPLOAD_STORAGE_PATH=/app/uploads
     ports:
       - "8081:8081"  # Worker API port for scanner discovery
     networks:

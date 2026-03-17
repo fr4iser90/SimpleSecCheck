@@ -152,12 +152,12 @@ async def test_multiple_repo_scans(client: httpx.AsyncClient, test_repos: List[D
 @pytest.mark.asyncio
 async def test_queue_functionality(client: httpx.AsyncClient, test_repos: List[Dict]):
     """
-    Test queue functionality (production mode).
+    Test queue functionality (requires server with queue enabled).
     Verifies that scans are added to queue and processed correctly.
     """
     server_mode = await get_server_mode(client)
     if server_mode != "production":
-        pytest.skip("Queue functionality test is intended for production mode")
+        pytest.skip("Queue functionality test requires server with queue enabled")
 
     # Get queue status
     queue_response = await client.get("/api/queue")

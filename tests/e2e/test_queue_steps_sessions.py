@@ -73,11 +73,11 @@ async def test_queue_steps_and_session_isolation(client: httpx.AsyncClient, clie
     """
     repo_url = "https://github.com/fr4iser90/PIDEA"
 
-    # Ensure both clients have sessions (production mode)
+    # Ensure both clients have sessions
     session_one = await get_session_id(client)
     session_two = await get_session_id(client_two)
     if not session_one or not session_two:
-        pytest.skip("Session endpoint did not return session IDs; run in production mode")
+        pytest.skip("Session endpoint did not return session IDs; run with session support")
     assert session_one != session_two, "Expected separate sessions for isolation test"
 
     # Start scan (client one)

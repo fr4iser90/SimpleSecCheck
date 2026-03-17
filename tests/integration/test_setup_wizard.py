@@ -516,7 +516,7 @@ async def test_setup_flow_dev(api_client, docker_compose):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("docker_compose", ["prod"], indirect=True)
 async def test_setup_flow_prod(api_client, docker_compose):
-    """Test complete setup flow in production mode."""
+    """Test complete setup flow with prod compose."""
     tester = SetupWizardTester(api_client, docker_compose)
     
     result = await tester.complete_setup_flow(
@@ -532,7 +532,7 @@ async def test_setup_flow_prod(api_client, docker_compose):
     
     assert result["success"] is True
     assert "admin_user_id" in result
-    print("✅ Setup flow completed successfully in production mode!")
+    print("✅ Setup flow completed successfully!")
 
 
 @pytest.mark.asyncio

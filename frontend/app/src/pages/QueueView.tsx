@@ -18,7 +18,7 @@ interface QueueData {
 }
 
 export default function QueueView() {
-  const { config } = useConfig()
+  useConfig()
   const [queueData, setQueueData] = useState<QueueData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -46,14 +46,14 @@ export default function QueueView() {
 
   // Auto-refresh every 5 seconds if enabled
   useEffect(() => {
-    if (!autoRefresh || !config?.features.queue_enabled) return
+    if (!autoRefresh) return
 
     const interval = setInterval(() => {
       fetchQueue()
     }, 5000)
 
     return () => clearInterval(interval)
-  }, [autoRefresh, config?.features.queue_enabled])
+  }, [autoRefresh])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -85,18 +85,6 @@ export default function QueueView() {
     }
   }
 
-  if (!config?.features.queue_enabled) {
-    return (
-      <div className="container">
-        <div className="card">
-          <h2>Queue</h2>
-          <p style={{ color: '#6c757d' }}>
-            Queue system is only available in Production Mode.
-          </p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="container">

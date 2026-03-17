@@ -224,19 +224,18 @@ def test_security_headers_middleware_development_mode():
     print("✓ SecurityHeadersMiddleware works in development mode")
 
 
-def test_security_headers_middleware_production_mode():
+def test_security_headers_middleware_restricted():
     """
-    Test that SecurityHeadersMiddleware works in production mode.
+    Test that SecurityHeadersMiddleware applies security headers.
     """
     client = TestClient(app)
     
     response = client.get("/api/health")
     
-    # Should still apply security headers in production
     assert "X-Content-Type-Options" in response.headers
     assert "X-Frame-Options" in response.headers
     
-    print("✓ SecurityHeadersMiddleware works in production mode")
+    print("✓ SecurityHeadersMiddleware applies security headers")
 
 
 if __name__ == "__main__":

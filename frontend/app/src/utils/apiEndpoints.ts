@@ -1,7 +1,7 @@
 import type { FrontendConfig } from '../hooks/useConfig'
 
 export const shouldUseSessionEndpoints = (config: FrontendConfig | null): boolean => {
-  return Boolean(config?.is_production || config?.features.session_management)
+  return Boolean(config?.features.session_management)
 }
 
 export const getReportEndpoint = (

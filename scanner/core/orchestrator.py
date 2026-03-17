@@ -186,7 +186,7 @@ class ScanOrchestrator:
         conditions = {}
         
         # Check for native mobile apps (only for code scans)
-        if self.target_type in {TargetType.LOCAL_MOUNT, TargetType.GIT_REPO}:
+        if self.target_type in {TargetType.LOCAL_MOUNT, TargetType.GIT_REPO, TargetType.UPLOADED_CODE}:
             try:
                 from scanner.core.project_detector import detect_native_app
                 result = detect_native_app(str(self.target_path))

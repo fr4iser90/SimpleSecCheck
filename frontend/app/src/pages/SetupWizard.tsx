@@ -56,6 +56,7 @@ export default function SetupWizard() {
   
   const [useCase, setUseCase] = useState<string>('')
   const [useCases, setUseCases] = useState<Record<string, any>>({})
+  const [securityModes, setSecurityModes] = useState<Record<string, { name: string; description: string; allowed?: string[]; disallowed?: string[]; warning?: string }>>({})
   const [systemConfig, setSystemConfig] = useState<SystemConfig>({
     auth_mode: 'free',
     scanner_timeout: 3600,
@@ -76,7 +77,20 @@ export default function SetupWizard() {
   useEffect(() => {
     checkSetupStatus()
     loadUseCases()
+    loadSecurityModes()
   }, [])
+
+  const loadSecurityModes = async () => {
+    try {
+      const res = await fetch('/api/setup/security-modes')
+      if (res.ok) {
+        const data = await res.json()
+        setSecurityModes(data)
+      }
+    } catch (err) {
+      console.error('Failed to load security modes:', err)
+    }
+  }
   
   const loadUseCases = async () => {
     try {
@@ -465,7 +479,7 @@ export default function SetupWizard() {
         </div>
       )}
       
-      {/* Security Mode Explanation */}
+      {/* Security Mode Explanation (from backend) */}
       <div style={{ 
         marginBottom: '1.5rem', 
         padding: '1rem', 
@@ -475,18 +489,22 @@ export default function SetupWizard() {
       }}>
         <h4 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem' }}>Security Modes Explained:</h4>
         <div style={{ display: 'grid', gap: '0.75rem', fontSize: '0.9rem' }}>
-          <div>
-            <strong style={{ color: 'var(--accent)' }}>Permissive:</strong> Allows access to host filesystem (local paths). 
-            <span style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
-              ✅ Can scan local directories on the server | ⚠️ Only safe for single-user deployments
-            </span>
-          </div>
-          <div>
-            <strong style={{ color: 'var(--accent)' }}>Restricted:</strong> No access to host filesystem. Only external targets allowed.
-            <span style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
-              ✅ Git repositories, ZIP upload, Container images, Network scans | ❌ No local file paths
-            </span>
-          </div>
+          {Object.keys(securityModes).length === 0 ? (
+            <span style={{ color: 'var(--text-secondary)' }}>Loading...</span>
+          ) : (
+            Object.entries(securityModes).map(([key, mode]) => (
+              <div key={key}>
+                <strong style={{ color: 'var(--accent)' }}>{mode.name}:</strong> {mode.description}
+                <span style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
+                  {[
+                    mode.allowed?.length ? `✅ ${mode.allowed.join(', ')}` : null,
+                    mode.warning ? `⚠️ ${mode.warning}` : null,
+                    mode.disallowed?.length ? `❌ ${mode.disallowed.join(', ')}` : null,
+                  ].filter(Boolean).join(' | ')}
+                </span>
+              </div>
+            ))
+          )}
         </div>
       </div>
       
@@ -500,7 +518,7 @@ export default function SetupWizard() {
             const securityModeLabel = uc.security_mode === 'permissive' ? 'Permissive' : 'Restricted'
             const authModeLabel = uc.auth_mode === 'free' ? 'Free' : uc.auth_mode === 'basic' ? 'Basic/JWT' : 'JWT (SSO)'
             const featuresText = uc.features.map((f: any) => {
-              const prefix = f.type === 'allowed' ? '✓' : '✗'
+              const prefix = f.type === 'allowed' ? '✓' : f.type === 'info' ? 'ℹ' : '✗'
               return `${prefix} ${f.text}`
             }).join(' | ')
             
@@ -799,7 +817,7 @@ export default function SetupWizard() {
             <span style={{ color: 'var(--text-secondary)' }}>Allowed Features:</span>
             <strong style={{ textAlign: 'right', maxWidth: '60%' }}>
               {useCases[useCase]?.features?.map((f: any) => {
-                const prefix = f.type === 'allowed' ? '✓' : '✗'
+                const prefix = f.type === 'allowed' ? '✓' : f.type === 'info' ? 'ℹ' : '✗'
                 return `${prefix} ${f.text}`
               }).join(' | ') || 'N/A'}
             </strong>

@@ -123,7 +123,7 @@ This document describes the admin and user features, GitHub integration, and API
 - **Feature Flag Toggles**:
   - `ALLOW_LOCAL_PATHS`: Allow local filesystem paths as scan targets
   - `ALLOW_NETWORK_SCANS`: Allow network/website scans
-  - `ALLOW_CONTAINER_REGISTRY`: Allow container registry scans
+  - `ALLOW_REMOTE_CONTAINERS`: Allow remote container scans
   - `ALLOW_GIT_REPOS`: Allow Git repository scans
   - `ALLOW_ZIP_UPLOAD`: Allow ZIP file uploads as scan targets
 - **Live Preview**: See how changes affect available scan types

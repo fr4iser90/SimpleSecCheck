@@ -13,6 +13,7 @@ from datetime import datetime
 from domain.entities.scan import Scan
 from infrastructure.redis.client import redis_client
 from config.settings import get_settings
+from application.services.upload_service import resolve_upload_mount_path
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,18 @@ class QueueService:
             except Exception as e:
                 logger.debug(f"Failed to collect asset volumes: {e}")
             
+            # For uploaded_code, resolve upload_id to mount path (worker must have same path mounted)
+            target_mount_path = None
+            if scan.target_type == "uploaded_code":
+                target_mount_path = resolve_upload_mount_path(scan.target_url)
+                if not target_mount_path:
+                    raise ValueError(
+                        f"Upload not found or expired for target '{scan.target_url}'. "
+                        "Please upload the ZIP again and start the scan with the new upload_id."
+                    )
+            else:
+                target_mount_path = (scan.config or {}).get("target_mount_path")
+            
             queue_message = {
                 "scan_id": scan_id,
                 "id": scan_id,  # Worker may expect 'id'
@@ -79,7 +92,7 @@ class QueueService:
                 "target": scan.target_url,
                 "target_url": scan.target_url,
                 "target_type": scan.target_type,
-                "target_mount_path": scan.config.get("target_mount_path") if scan.config else None,
+                "target_mount_path": target_mount_path,
                 "scan_type": scan.scan_type.value,
                 "scanners": scan.scanners,
                 "config": scan.config,

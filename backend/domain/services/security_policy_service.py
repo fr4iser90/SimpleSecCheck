@@ -3,11 +3,18 @@ Security Policy Service
 
 This service provides intelligent defaults for security settings based on
 SECURITY_MODE and AUTH_MODE combinations, with granular feature flags as overrides.
+
+Local / restricted features (only on by default in Solo; off in public use cases):
+- Local paths, Local containers, Network scans.
+- In Public Web these are OFF; admin can still use them (admin override for self).
+- In Network Intern / Enterprise they can be ON so (authenticated) users can use them;
+  future: admin can grant per-user permissions (e.g. allow user X to run network scans).
 """
-from typing import Dict, Any
+from typing import Dict, Any, List
 from enum import Enum
 
 from config.settings import settings
+from domain.services.target_permission_policy import get_allow_flags_from_settings
 
 
 class UseCase(str, Enum):
@@ -18,66 +25,102 @@ class UseCase(str, Enum):
     ENTERPRISE = "enterprise"  # Enterprise with SSO
 
 
+# Local/restricted feature labels (only on by default in Solo; admin can override when off)
+LOCAL_RESTRICTED_FEATURE_LABELS: List[str] = [
+    "Local paths",
+    "Local containers",
+    "Network scans",
+]
+
+
 class SecurityPolicyService:
     """Service for managing security policies and feature flags."""
+    
+    # Single source: use case → SECURITY_MODE, AUTH_MODE, feature_flags. UI "✓/✗" and apply_use_case_config use this.
+    USE_CASE_MAP: Dict[str, Dict[str, Any]] = {
+        "solo": {
+            "SECURITY_MODE": "permissive",
+            "AUTH_MODE": "free",
+            "feature_flags": {
+                "ALLOW_LOCAL_PATHS": True,
+                "ALLOW_WEBSITE_SCANS": True,
+                "ALLOW_API_ENDPOINT_SCANS": True,
+                "ALLOW_NETWORK_HOST_SCANS": True,
+                "ALLOW_KUBERNETES_CLUSTER_SCANS": True,
+                "ALLOW_REMOTE_CONTAINERS": True,
+                "ALLOW_LOCAL_CONTAINERS": True,
+                "ALLOW_GIT_REPOS": True,
+                "ALLOW_ZIP_UPLOAD": True,
+            },
+        },
+        "network_intern": {
+            "SECURITY_MODE": "restricted",
+            "AUTH_MODE": "basic",
+            "feature_flags": {
+                "ALLOW_LOCAL_PATHS": False,
+                "ALLOW_WEBSITE_SCANS": True,
+                "ALLOW_API_ENDPOINT_SCANS": True,
+                "ALLOW_NETWORK_HOST_SCANS": True,
+                "ALLOW_KUBERNETES_CLUSTER_SCANS": True,
+                "ALLOW_REMOTE_CONTAINERS": True,
+                "ALLOW_LOCAL_CONTAINERS": True,
+                "ALLOW_GIT_REPOS": True,
+                "ALLOW_ZIP_UPLOAD": True,
+            },
+        },
+        "public_web": {
+            "SECURITY_MODE": "restricted",
+            "AUTH_MODE": "free",
+            "feature_flags": {
+                "ALLOW_LOCAL_PATHS": False,
+                "ALLOW_WEBSITE_SCANS": False,
+                "ALLOW_API_ENDPOINT_SCANS": False,
+                "ALLOW_NETWORK_HOST_SCANS": False,
+                "ALLOW_KUBERNETES_CLUSTER_SCANS": False,
+                "ALLOW_REMOTE_CONTAINERS": False,
+                "ALLOW_LOCAL_CONTAINERS": False,
+                "ALLOW_GIT_REPOS": True,
+                "ALLOW_ZIP_UPLOAD": True,
+            },
+        },
+        "enterprise": {
+            "SECURITY_MODE": "restricted",
+            "AUTH_MODE": "jwt",
+            "feature_flags": {
+                "ALLOW_LOCAL_PATHS": False,
+                "ALLOW_WEBSITE_SCANS": True,
+                "ALLOW_API_ENDPOINT_SCANS": True,
+                "ALLOW_NETWORK_HOST_SCANS": True,
+                "ALLOW_KUBERNETES_CLUSTER_SCANS": True,
+                "ALLOW_REMOTE_CONTAINERS": True,
+                "ALLOW_LOCAL_CONTAINERS": True,
+                "ALLOW_GIT_REPOS": True,
+                "ALLOW_ZIP_UPLOAD": True,
+            },
+        },
+    }
     
     # Rate limits per use case and user type
     RATE_LIMITS: Dict[str, Dict[str, Dict[str, int]]] = {
         "solo": {
-            "guest": {"requests": 5000, "window": 3600},  # 5000 req/h
+            "guest": {"requests": 5000, "window": 3600},
             "authenticated": {"requests": 5000, "window": 3600},
             "admin": {"requests": 5000, "window": 3600},
         },
         "network_intern": {
-            "guest": {"requests": 100, "window": 3600},  # 100 req/h for guests
-            "authenticated": {"requests": 1000, "window": 3600},  # 1000 req/h per user
+            "guest": {"requests": 100, "window": 3600},
+            "authenticated": {"requests": 1000, "window": 3600},
             "admin": {"requests": 5000, "window": 3600},
         },
         "public_web": {
-            "guest": {"requests": 100, "window": 3600},  # 100 req/h for guests
-            "authenticated": {"requests": 500, "window": 3600},  # 500 req/h per user
+            "guest": {"requests": 100, "window": 3600},
+            "authenticated": {"requests": 500, "window": 3600},
             "admin": {"requests": 2000, "window": 3600},
         },
         "enterprise": {
-            "guest": {"requests": 50, "window": 3600},  # 50 req/h for guests
-            "authenticated": {"requests": 1000, "window": 3600},  # 1000 req/h per user
+            "guest": {"requests": 50, "window": 3600},
+            "authenticated": {"requests": 1000, "window": 3600},
             "admin": {"requests": 5000, "window": 3600},
-        },
-    }
-    
-    # Feature flag defaults per use case
-    FEATURE_DEFAULTS: Dict[str, Dict[str, bool]] = {
-        "solo": {
-            "ALLOW_LOCAL_PATHS": True,
-            "ALLOW_NETWORK_SCANS": True,
-            "ALLOW_CONTAINER_REGISTRY": True,
-            "ALLOW_LOCAL_CONTAINERS": True,
-            "ALLOW_GIT_REPOS": True,
-            "ALLOW_ZIP_UPLOAD": True,
-        },
-        "network_intern": {
-            "ALLOW_LOCAL_PATHS": False,  # Security: No host filesystem access for multiple users
-            "ALLOW_NETWORK_SCANS": True,  # External network scans allowed
-            "ALLOW_CONTAINER_REGISTRY": True,
-            "ALLOW_LOCAL_CONTAINERS": True,
-            "ALLOW_GIT_REPOS": True,
-            "ALLOW_ZIP_UPLOAD": True,
-        },
-        "public_web": {
-            "ALLOW_LOCAL_PATHS": False,  # Security risk
-            "ALLOW_NETWORK_SCANS": True,  # Website scans allowed
-            "ALLOW_CONTAINER_REGISTRY": False,  # Security risk (remote registries)
-            "ALLOW_LOCAL_CONTAINERS": False,  # Security risk; enable for admin homelab only
-            "ALLOW_GIT_REPOS": True,  # Public repos OK
-            "ALLOW_ZIP_UPLOAD": True,
-        },
-        "enterprise": {
-            "ALLOW_LOCAL_PATHS": False,  # Security risk
-            "ALLOW_NETWORK_SCANS": True,  # Website scans allowed
-            "ALLOW_CONTAINER_REGISTRY": True,  # Enterprise might need this
-            "ALLOW_LOCAL_CONTAINERS": True,  # Admin can scan local registries
-            "ALLOW_GIT_REPOS": True,
-            "ALLOW_ZIP_UPLOAD": True,
         },
     }
     
@@ -141,18 +184,30 @@ class SecurityPolicyService:
         if use_case is None:
             use_case = SecurityPolicyService.detect_use_case()
         
-        defaults = SecurityPolicyService.FEATURE_DEFAULTS.get(use_case, SecurityPolicyService.FEATURE_DEFAULTS["solo"])
-        
-        # Use explicit settings (no fallbacks)
-        return {
-            "ALLOW_LOCAL_PATHS": settings.ALLOW_LOCAL_PATHS,
-            "ALLOW_NETWORK_SCANS": settings.ALLOW_NETWORK_SCANS,
-            "ALLOW_CONTAINER_REGISTRY": settings.ALLOW_CONTAINER_REGISTRY,
-            "ALLOW_LOCAL_CONTAINERS": getattr(settings, "ALLOW_LOCAL_CONTAINERS", True),
-            "ALLOW_GIT_REPOS": settings.ALLOW_GIT_REPOS,
-            "ALLOW_ZIP_UPLOAD": settings.ALLOW_ZIP_UPLOAD,
-        }
+        # Return current settings (single source: get_allow_flags_from_settings uses ALL_SCAN_FEATURE_FLAG_KEYS)
+        return get_allow_flags_from_settings(settings)
     
+    # Security mode explanations for UI (single source; no hardcoded text in frontend).
+    SECURITY_MODES_EXPLAINED: Dict[str, Dict[str, Any]] = {
+        "permissive": {
+            "name": "Permissive",
+            "description": "Allows access to host filesystem (local paths).",
+            "allowed": ["Can scan local directories on the server"],
+            "warning": "Only safe for single-user deployments",
+        },
+        "restricted": {
+            "name": "Restricted",
+            "description": "No access to host filesystem. Only external targets allowed.",
+            "allowed": ["Allowed targets (Git, ZIP, containers, network) depend on use case — see cards below"],
+            "disallowed": ["No local file paths"],
+        },
+    }
+
+    @staticmethod
+    def get_security_modes_explained() -> Dict[str, Dict[str, Any]]:
+        """Return security mode explanations for frontend (Permissive / Restricted)."""
+        return dict(SecurityPolicyService.SECURITY_MODES_EXPLAINED)
+
     @staticmethod
     def apply_use_case_config(use_case: str) -> Dict[str, Any]:
         """
@@ -164,29 +219,9 @@ class SecurityPolicyService:
         Returns:
             Dictionary with SECURITY_MODE, AUTH_MODE, feature flags, and rate limits
         """
-        use_case_map = {
-            "solo": {
-                "SECURITY_MODE": "permissive",
-                "AUTH_MODE": "free",
-            },
-            "network_intern": {
-                "SECURITY_MODE": "restricted",  # No host filesystem access for security
-                "AUTH_MODE": "basic",  # Default to basic, can be changed to jwt
-            },
-            "public_web": {
-                "SECURITY_MODE": "restricted",
-                "AUTH_MODE": "free",
-            },
-            "enterprise": {
-                "SECURITY_MODE": "restricted",
-                "AUTH_MODE": "jwt",
-            },
-        }
-        
-        config = use_case_map.get(use_case, use_case_map["solo"])
-        config["feature_flags"] = SecurityPolicyService.FEATURE_DEFAULTS.get(use_case, SecurityPolicyService.FEATURE_DEFAULTS["solo"])
+        entry = SecurityPolicyService.USE_CASE_MAP.get(use_case, SecurityPolicyService.USE_CASE_MAP["solo"])
+        config = dict(entry)
         config["rate_limits"] = SecurityPolicyService.RATE_LIMITS.get(use_case, SecurityPolicyService.RATE_LIMITS["solo"])
-        
         return config
     
     @staticmethod
@@ -209,7 +244,7 @@ class SecurityPolicyService:
         # Helper to build feature descriptions
         def build_features(use_case_id: str) -> list:
             features = []
-            flags = SecurityPolicyService.FEATURE_DEFAULTS.get(use_case_id, {})
+            flags = SecurityPolicyService.USE_CASE_MAP.get(use_case_id, SecurityPolicyService.USE_CASE_MAP["solo"]).get("feature_flags", {})
             
             if flags.get("ALLOW_LOCAL_PATHS", False):
                 features.append({"type": "allowed", "text": "Local paths allowed"})
@@ -219,60 +254,78 @@ class SecurityPolicyService:
             allowed = []
             if flags.get("ALLOW_GIT_REPOS", False):
                 allowed.append("Git repos")
-            if flags.get("ALLOW_CONTAINER_REGISTRY", False):
-                allowed.append("containers")
-            if flags.get("ALLOW_NETWORK_SCANS", False):
-                allowed.append("network scans")
+            if flags.get("ALLOW_REMOTE_CONTAINERS", False):
+                allowed.append("Remote containers")
+            if flags.get("ALLOW_LOCAL_CONTAINERS", False):
+                allowed.append("Local containers")
+            if flags.get("ALLOW_WEBSITE_SCANS", False):
+                allowed.append("Website")
+            if flags.get("ALLOW_API_ENDPOINT_SCANS", False):
+                allowed.append("API endpoint")
+            if flags.get("ALLOW_NETWORK_HOST_SCANS", False):
+                allowed.append("Network host")
+            if flags.get("ALLOW_KUBERNETES_CLUSTER_SCANS", False):
+                allowed.append("Kubernetes")
             if flags.get("ALLOW_ZIP_UPLOAD", False):
                 allowed.append("ZIP upload")
             
             if allowed:
                 features.append({"type": "allowed", "text": ", ".join(allowed)})
-            
+            # When local/restricted are off, note that admin can still use them
+            network_any = (
+                flags.get("ALLOW_WEBSITE_SCANS", False)
+                or flags.get("ALLOW_API_ENDPOINT_SCANS", False)
+                or flags.get("ALLOW_NETWORK_HOST_SCANS", False)
+                or flags.get("ALLOW_KUBERNETES_CLUSTER_SCANS", False)
+            )
+            local_on = (
+                flags.get("ALLOW_LOCAL_PATHS", False)
+                or flags.get("ALLOW_LOCAL_CONTAINERS", False)
+                or network_any
+            )
+            if not local_on:
+                features.append({
+                    "type": "info",
+                    "text": "Local/restricted (paths, local containers, network) off — admin can enable for self",
+                })
             return features
         
-        # Solo
-        use_cases["solo"] = {
-            "id": "solo",
-            "name": "Solo",
-            "description": "Single user, self-hosted. All features enabled, no restrictions.",
-            "security_mode": "permissive",
-            "auth_mode": "free",
-            "auth_mode_options": ["free"],
-            "features": build_features("solo"),
-        }
+        def add_use_case(uid: str, name: str, description: str, security_mode: str, auth_mode: str, auth_mode_options: list) -> None:
+            flags = SecurityPolicyService.USE_CASE_MAP.get(uid, SecurityPolicyService.USE_CASE_MAP["solo"]).get("feature_flags", {})
+            network_any = (
+                flags.get("ALLOW_WEBSITE_SCANS", False)
+                or flags.get("ALLOW_API_ENDPOINT_SCANS", False)
+                or flags.get("ALLOW_NETWORK_HOST_SCANS", False)
+                or flags.get("ALLOW_KUBERNETES_CLUSTER_SCANS", False)
+            )
+            local_restricted_on = (
+                flags.get("ALLOW_LOCAL_PATHS", False)
+                or flags.get("ALLOW_LOCAL_CONTAINERS", False)
+                or network_any
+            )
+            use_cases[uid] = {
+                "id": uid,
+                "name": name,
+                "description": description,
+                "security_mode": security_mode,
+                "auth_mode": auth_mode,
+                "auth_mode_options": auth_mode_options,
+                "features": build_features(uid),
+                "local_restricted_labels": LOCAL_RESTRICTED_FEATURE_LABELS,
+                "local_restricted_on": local_restricted_on,
+                "admin_can_override": True,
+            }
         
-        # Network Intern
-        use_cases["network_intern"] = {
-            "id": "network_intern",
-            "name": "Network Intern",
-            "description": "Multiple users, internal network. User authentication required.",
-            "security_mode": "restricted",
-            "auth_mode": "basic",
-            "auth_mode_options": ["basic", "jwt"],
-            "features": build_features("network_intern"),
-        }
+        # Solo: local/restricted on by default (self-hosted only)
+        add_use_case("solo", "Solo", "Single user, self-hosted. All features enabled, no restrictions.", "permissive", "free", ["free"])
         
-        # Public Web
-        use_cases["public_web"] = {
-            "id": "public_web",
-            "name": "Public Web",
-            "description": "Public web access, many users. Restricted security, rate limited.",
-            "security_mode": "restricted",
-            "auth_mode": "free",
-            "auth_mode_options": ["free"],
-            "features": build_features("public_web"),
-        }
+        # Network Intern: local/restricted on so (authenticated) users can use; future: admin can grant per-user
+        add_use_case("network_intern", "Network Intern", "Multiple users, internal network. User authentication required. Local/restricted features on for authenticated users.", "restricted", "basic", ["basic", "jwt"])
         
-        # Enterprise
-        use_cases["enterprise"] = {
-            "id": "enterprise",
-            "name": "Enterprise",
-            "description": "Enterprise deployment with SSO. Restricted security, JWT authentication.",
-            "security_mode": "restricted",
-            "auth_mode": "jwt",
-            "auth_mode_options": ["jwt"],
-            "features": build_features("enterprise"),
-        }
+        # Public Web: local/restricted off; admin can still use for self
+        add_use_case("public_web", "Public Web", "Public web access, many users. Restricted security, rate limited. Local/restricted off; admin can enable for self.", "restricted", "free", ["free"])
+        
+        # Enterprise: local/restricted on; future: admin can grant permissions to users
+        add_use_case("enterprise", "Enterprise", "Enterprise deployment with SSO. Restricted security, JWT authentication. Local/restricted on; admin can grant permissions to users.", "restricted", "jwt", ["jwt"])
         
         return use_cases

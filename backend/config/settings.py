@@ -60,13 +60,25 @@ class Settings(BaseSettings):
     # Auth config block (registration)
     ALLOW_SELF_REGISTRATION: bool = Field(default=False, description="Allow users to self-register (sign up)")
     
-    # Feature Flags (granular control, can override SECURITY_MODE defaults)
+    # Feature Flags (granular control, can override SECURITY_MODE defaults).
+    # Keys must match domain.services.target_permission_policy.ALL_SCAN_FEATURE_FLAG_KEYS (single source of truth).
     ALLOW_LOCAL_PATHS: bool = Field(default=True, description="Allow local file system paths as scan targets")
-    ALLOW_NETWORK_SCANS: bool = Field(default=True, description="Allow network/website scans")
-    ALLOW_CONTAINER_REGISTRY: bool = Field(default=True, description="Allow remote container registry scans (Docker Hub, ghcr.io, etc.)")
+    # Network-related: one flag per target type (clear separation)
+    ALLOW_WEBSITE_SCANS: bool = Field(default=True, description="Allow website URL scans (https://...)")
+    ALLOW_API_ENDPOINT_SCANS: bool = Field(default=True, description="Allow API endpoint scans")
+    ALLOW_NETWORK_HOST_SCANS: bool = Field(default=True, description="Allow network host/IP scans")
+    ALLOW_KUBERNETES_CLUSTER_SCANS: bool = Field(default=True, description="Allow Kubernetes cluster scans")
+    ALLOW_REMOTE_CONTAINERS: bool = Field(default=True, description="Allow remote container registry scans (Docker Hub, ghcr.io, etc.)")
     ALLOW_LOCAL_CONTAINERS: bool = Field(default=True, description="Allow scanning images from local Docker / local registry (localhost, 127.0.0.1). Admin-only when enabled.")
     ALLOW_GIT_REPOS: bool = Field(default=True, description="Allow Git repository scans")
     ALLOW_ZIP_UPLOAD: bool = Field(default=True, description="Allow ZIP file uploads as scan targets")
+    # ZIP upload limits (used by upload API when implemented)
+    ZIP_UPLOAD_MAX_BYTES: int = Field(default=50 * 1024 * 1024, description="Max ZIP file size in bytes (default 50 MB)")
+    ZIP_UPLOAD_MAX_UNCOMPRESSED_BYTES: int = Field(default=500 * 1024 * 1024, description="Max uncompressed size when extracting (default 500 MB, prevents zip bombs)")
+    ZIP_UPLOAD_MAX_FILES: int = Field(default=10000, description="Max number of files in ZIP (prevents zip bombs)")
+    ZIP_UPLOAD_VIRUS_SCAN_ENABLED: bool = Field(default=True, description="If True, scan uploaded ZIP with ClamAV before accepting (ClamAV is installed in backend Docker image)")
+    # Upload storage: must be same path on backend and worker (shared volume in Docker)
+    UPLOAD_STORAGE_PATH: str = Field(default="/app/uploads", description="Directory for extracted ZIP uploads; worker must have same path mounted")
     # Bulk scan: default only for logged-in users; admin can override to allow guests
     BULK_SCAN_ALLOW_GUESTS: bool = Field(default=False, description="If True, guests may use bulk scan (admin override). Default: only logged-in users.")
     
@@ -75,6 +87,9 @@ class Settings(BaseSettings):
     QUEUE_PRIORITY_ADMIN: int = Field(default=10, description="Default priority for admin scans (higher = earlier)")
     QUEUE_PRIORITY_USER: int = Field(default=5, description="Default priority for logged-in user scans")
     QUEUE_PRIORITY_GUEST: int = Field(default=1, description="Default priority for guest scans")
+    
+    # Scanner assets (DBs, manifests, etc.): global auto-update; can be extended with per-asset or health (SonarQube, Docker) in DB
+    SCANNER_ASSETS_AUTO_UPDATE_ENABLED: bool = Field(default=False, description="If True, scanner assets (e.g. vuln DBs) are auto-updated; else admins trigger updates manually.")
     
     # External Services
     GITHUB_API_URL: str = Field(default="https://api.github.com", description="GitHub API base URL")
@@ -160,28 +175,24 @@ async def load_settings_from_database(settings_instance: Settings) -> None:
                         settings_instance.QUEUE_PRIORITY_GUEST = int(queue_cfg["priority_guest"])
                 settings_instance.LOGIN_REQUIRED = settings_instance.ACCESS_MODE == "private"
                 
-                # Load feature flags from database
+                # Load feature flags from database (single source: ALL_SCAN_FEATURE_FLAG_KEYS)
                 if "feature_flags" in config:
                     feature_flags = config["feature_flags"]
                     if isinstance(feature_flags, dict):
-                        if "ALLOW_LOCAL_PATHS" in feature_flags:
-                            settings_instance.ALLOW_LOCAL_PATHS = feature_flags["ALLOW_LOCAL_PATHS"]
-                        if "ALLOW_NETWORK_SCANS" in feature_flags:
-                            settings_instance.ALLOW_NETWORK_SCANS = feature_flags["ALLOW_NETWORK_SCANS"]
-                        if "ALLOW_CONTAINER_REGISTRY" in feature_flags:
-                            settings_instance.ALLOW_CONTAINER_REGISTRY = feature_flags["ALLOW_CONTAINER_REGISTRY"]
-                        if "ALLOW_LOCAL_CONTAINERS" in feature_flags:
-                            settings_instance.ALLOW_LOCAL_CONTAINERS = feature_flags["ALLOW_LOCAL_CONTAINERS"]
-                        if "ALLOW_GIT_REPOS" in feature_flags:
-                            settings_instance.ALLOW_GIT_REPOS = feature_flags["ALLOW_GIT_REPOS"]
-                        if "ALLOW_ZIP_UPLOAD" in feature_flags:
-                            settings_instance.ALLOW_ZIP_UPLOAD = feature_flags["ALLOW_ZIP_UPLOAD"]
+                        from domain.services.target_permission_policy import ALL_SCAN_FEATURE_FLAG_KEYS
+                        for key in ALL_SCAN_FEATURE_FLAG_KEYS:
+                            if key in feature_flags:
+                                setattr(settings_instance, key, feature_flags[key])
                 
                 # Load scanner timeout and max concurrent scans if in config
                 if "scanner_timeout" in config:
                     settings_instance.SCANNER_TIMEOUT = config["scanner_timeout"]
                 if "max_concurrent_scans" in config:
                     settings_instance.MAX_CONCURRENT_SCANS = config["max_concurrent_scans"]
+                # Scanner assets: auto-update (future: per-asset or health e.g. SonarQube reachable, Docker)
+                scanner_cfg = config.get("scanner") or config.get("scanner_assets") or {}
+                if isinstance(scanner_cfg, dict) and "auto_update_enabled" in scanner_cfg:
+                    settings_instance.SCANNER_ASSETS_AUTO_UPDATE_ENABLED = bool(scanner_cfg["auto_update_enabled"])
                 
     except Exception as e:
         # If database is not available or setup not completed, use ENV defaults

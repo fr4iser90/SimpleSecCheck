@@ -252,11 +252,9 @@ export default function Header() {
         <Link to="/" className="nav-pill nav-pill-primary">
           New Scan
         </Link>
-        {config?.features.queue_enabled && (
-          <Link to="/queue" className="nav-pill">
-            Queue
-          </Link>
-        )}
+        <Link to="/queue" className="nav-pill">
+          Queue
+        </Link>
         {isAuthenticated && (
           <Link to="/my-scans" className="nav-pill">
             My Scans
@@ -267,11 +265,9 @@ export default function Header() {
             My Repos
           </Link>
         )}
-        {config?.is_production && (
-          <Link to="/statistics" className="nav-pill">
-            Statistics
-          </Link>
-        )}
+        <Link to="/statistics" className="nav-pill">
+          Statistics
+        </Link>
         {isAuthenticated && user && isAdmin && (
           <div className="dropdown" ref={adminMenuRef}>
             <button
