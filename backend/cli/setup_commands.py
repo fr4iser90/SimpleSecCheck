@@ -102,13 +102,13 @@ def lock_setup(reason: Optional[str]):
         sys.exit(1)
 
 
-@setup_group.command(name="reset", help="Reset setup (development only)")
+@setup_group.command(name="reset", help="Reset setup (solo default; --force for multi-tenant)")
 @click.option('--confirm', is_flag=True, help="Confirm reset operation")
-@click.option('--force', is_flag=True, help="Force reset even in production")
+@click.option('--force', is_flag=True, help="Force reset when USE_CASE is not solo")
 def reset_setup(confirm: bool, force: bool):
-    """Reset setup to initial state (development/testing only)."""
+    """Reset setup to initial state. Solo by default; use --force outside solo."""
     if settings.USE_CASE != "solo" and not force:
-        click.echo("❌ Setup reset is only allowed in development environment")
+        click.echo("❌ Setup reset requires USE_CASE=solo, or pass --force")
         click.echo("Use --force to override (NOT RECOMMENDED)")
         sys.exit(1)
     

@@ -315,16 +315,16 @@ volumes:
     driver: local
 
 # =============================================================================
-# Environment Variables Documentation
+# Environment variables (reference)
 # =============================================================================
-# Required for all environments:
-# - POSTGRES_PASSWORD: Strong password for PostgreSQL
-# - REDIS_URL: Redis connection string (default: redis://redis:6379)
+# Required:
+# - POSTGRES_PASSWORD: PostgreSQL password
+# - REDIS_URL: default redis://redis:6379 if unset
 #
-# Optional for production:
-# - WORKER_CONCURRENCY: Number of concurrent worker processes (default: 1)
-# - WORKER_MAX_RETRIES: Max retry attempts for failed jobs (default: 3)
-# - API_BASE_URL: Backend API URL for frontend (default: http://backend:8080)
+# Optional tuning:
+# - WORKER_CONCURRENCY (default: 1)
+# - WORKER_MAX_RETRIES (default: 3)
+# - API_BASE_URL (default: http://backend:8080)
 #
 # Scanner resource limits:
 # - SCANNER_CPU_LIMIT: Max CPU for scanner (default: 4.0)

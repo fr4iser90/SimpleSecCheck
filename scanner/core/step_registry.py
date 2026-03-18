@@ -6,7 +6,7 @@ Modern approach: Steps register themselves and communicate directly via WebSocke
 import asyncio
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from enum import Enum
@@ -28,6 +28,47 @@ class SubStepType(Enum):
     OUTPUT = "output"  # Report/artifact generation (e.g., "Generating JSON Report")
 
 
+def _utc_now() -> datetime:
+    """Current instant in UTC (timezone-aware)."""
+    return datetime.now(timezone.utc)
+
+
+def _step_time_to_iso_z(dt: Optional[datetime]) -> Optional[str]:
+    """Serialize step time as ISO-8601 UTC ending with Z (unambiguous for UI/API)."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def _parse_log_time(s: Optional[str]) -> Optional[datetime]:
+    """Parse timestamps from steps.log; naive strings are treated as UTC."""
+    if not s:
+        return None
+    s = str(s).strip()
+    if s.endswith("Z") or s.endswith("z"):
+        s = s[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(s)
+    except (ValueError, AttributeError):
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """PostgreSQL timestamp without time zone: store UTC wall time."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def _substep_type_value(substep) -> str:
     """Return JSON-serializable string for substep type (never pass Enum to json.dumps)."""
     st = getattr(substep, "substep_type", None)
@@ -41,6 +82,8 @@ def _json_serializable(obj: Any) -> Any:
     """Convert enums/datetimes to JSON-serializable values; recurse into dicts/lists."""
     if isinstance(obj, Enum):
         return obj.value if isinstance(obj.value, (str, int, float, bool, type(None))) else str(obj.value)
+    if isinstance(obj, datetime):
+        return _step_time_to_iso_z(obj)
     if hasattr(obj, "isoformat") and callable(getattr(obj, "isoformat")):
         return obj.isoformat()
     if isinstance(obj, dict):
@@ -120,21 +163,22 @@ class StepRegistry:
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.steps_log = self.logs_dir / "steps.log"
 
-        # Production DB support (optional)
-        self.environment = os.getenv("ENVIRONMENT", "dev").lower()
+        # Optional DB mirror when DATABASE_URL is set (no prod/dev gate)
         self.database_url = os.getenv("DATABASE_URL")
         self._db_pool = None
         
         # Initialize steps.log (JSON Lines format - one JSON object per line)
         if not self.steps_log.exists():
             with open(self.steps_log, "w", encoding="utf-8") as f:
-                f.write(f'{{"init": "SimpleSecCheck Steps Log", "timestamp": "{datetime.now().isoformat()}"}}\n')
+                f.write(
+                    f'{{"init": "SimpleSecCheck Steps Log", "timestamp": "{_step_time_to_iso_z(_utc_now())}"}}\n'
+                )
         else:
             # Read existing steps from log (e.g., Git Clone step written before orchestrator starts)
             self._load_existing_steps()
 
     async def _ensure_db_pool(self):
-        if self.environment != "prod" or not self.database_url:
+        if not self.database_url:
             return None
         if self._db_pool is None:
             try:
@@ -163,12 +207,12 @@ class StepRegistry:
                 name=step_name,
                 status=StepStatus.RUNNING,
                 message=message or f"Running {step_name}...",
-                started_at=datetime.now()
+                started_at=_utc_now(),
             )
         
         step = self.steps[step_name]
         step.status = StepStatus.RUNNING
-        step.started_at = datetime.now()
+        step.started_at = _utc_now()
         
         # Write to steps.log (structured JSON format)
         self._write_to_log(step)
@@ -192,7 +236,7 @@ class StepRegistry:
         
         step = self.steps[step_name]
         step.status = StepStatus.COMPLETED
-        step.completed_at = datetime.now()
+        step.completed_at = _utc_now()
         if message:
             step.message = message
         
@@ -216,7 +260,7 @@ class StepRegistry:
         
         step = self.steps[step_name]
         step.status = StepStatus.FAILED
-        step.completed_at = datetime.now()
+        step.completed_at = _utc_now()
         if message:
             step.message = message
         
@@ -241,13 +285,13 @@ class StepRegistry:
                 name=step_name,
                 status=StepStatus.SKIPPED,
                 message=reason or f"{step_name} skipped",
-                started_at=datetime.now(),
-                completed_at=datetime.now()
+                started_at=_utc_now(),
+                completed_at=_utc_now(),
             )
         else:
             step = self.steps[step_name]
             step.status = StepStatus.SKIPPED
-            step.completed_at = datetime.now()
+            step.completed_at = _utc_now()
             if reason:
                 step.message = reason
         
@@ -269,24 +313,32 @@ class StepRegistry:
         for step in sorted(self.steps.values(), key=lambda s: s.number):
             duration_seconds = None
             if step.started_at and step.completed_at:
-                delta = (step.completed_at - step.started_at).total_seconds()
+                sa, sc = step.started_at, step.completed_at
+                if sa.tzinfo is None:
+                    sa = sa.replace(tzinfo=timezone.utc)
+                if sc.tzinfo is None:
+                    sc = sc.replace(tzinfo=timezone.utc)
+                delta = (sc - sa).total_seconds()
                 duration_seconds = max(0, int(delta))
             elif step.started_at and step.status == StepStatus.RUNNING:
-                delta = (datetime.now() - step.started_at).total_seconds()
+                sa = step.started_at
+                if sa.tzinfo is None:
+                    sa = sa.replace(tzinfo=timezone.utc)
+                delta = (_utc_now() - sa).total_seconds()
                 duration_seconds = max(0, int(delta))
             step_dict = {
                 "number": step.number,
                 "name": step.name,
                 "status": step.status.value,
                 "message": step.message,
-                "started_at": step.started_at.isoformat() if step.started_at else None,
+                "started_at": _step_time_to_iso_z(step.started_at),
                 "substeps": [
                     {
                         "name": substep.name,
                         "status": substep.status.value,
                         "message": substep.message,
-                        "started_at": substep.started_at.isoformat() if substep.started_at else None,
-                        "completed_at": substep.completed_at.isoformat() if substep.completed_at else None,
+                        "started_at": _step_time_to_iso_z(substep.started_at),
+                        "completed_at": _step_time_to_iso_z(substep.completed_at),
                     }
                     for substep in step.substeps
                 ],
@@ -351,7 +403,7 @@ class StepRegistry:
         if existing_substep:
             # Update existing substep
             existing_substep.status = StepStatus.RUNNING
-            existing_substep.started_at = datetime.now()
+            existing_substep.started_at = _utc_now()
             existing_substep.substep_type = substep_type
             if message:
                 existing_substep.message = message
@@ -361,8 +413,8 @@ class StepRegistry:
                 name=substep_name,
                 status=StepStatus.RUNNING,
                 message=message or f"Running {substep_name}...",
-                started_at=datetime.now(),
-                substep_type=substep_type
+                started_at=_utc_now(),
+                substep_type=substep_type,
             )
             step.substeps.append(new_substep)
         
@@ -390,7 +442,7 @@ class StepRegistry:
         for substep in step.substeps:
             if substep.name == substep_name:
                 substep.status = StepStatus.COMPLETED
-                substep.completed_at = datetime.now()
+                substep.completed_at = _utc_now()
                 if message:
                     substep.message = message
                 break
@@ -419,7 +471,7 @@ class StepRegistry:
         for substep in step.substeps:
             if substep.name == substep_name:
                 substep.status = StepStatus.FAILED
-                substep.completed_at = datetime.now()
+                substep.completed_at = _utc_now()
                 if message:
                     substep.message = message
                 break
@@ -500,15 +552,9 @@ class StepRegistry:
                         started_at = None
                         completed_at = None
                         if started_at_str:
-                            try:
-                                started_at = datetime.fromisoformat(started_at_str)
-                            except (ValueError, AttributeError):
-                                pass
+                            started_at = _parse_log_time(started_at_str)
                         if completed_at_str:
-                            try:
-                                completed_at = datetime.fromisoformat(completed_at_str)
-                            except (ValueError, AttributeError):
-                                pass
+                            completed_at = _parse_log_time(completed_at_str)
                         
                         # Load substeps if present
                         substeps = []
@@ -519,15 +565,9 @@ class StepRegistry:
                             substep_started_at = None
                             substep_completed_at = None
                             if substep_data.get("started_at"):
-                                try:
-                                    substep_started_at = datetime.fromisoformat(substep_data["started_at"])
-                                except (ValueError, AttributeError):
-                                    pass
+                                substep_started_at = _parse_log_time(substep_data["started_at"])
                             if substep_data.get("completed_at"):
-                                try:
-                                    substep_completed_at = datetime.fromisoformat(substep_data["completed_at"])
-                                except (ValueError, AttributeError):
-                                    pass
+                                substep_completed_at = _parse_log_time(substep_data["completed_at"])
                             substep_type_str = substep_data.get("type", "action")
                             substep_type = SubStepType.ACTION  # Default
                             try:
@@ -588,20 +628,20 @@ class StepRegistry:
                 "name": step.name,
                 "status": step.status.value,
                 "message": step.message,
-                "started_at": step.started_at.isoformat() if step.started_at else None,
-                "completed_at": step.completed_at.isoformat() if step.completed_at else None,
+                "started_at": _step_time_to_iso_z(step.started_at),
+                "completed_at": _step_time_to_iso_z(step.completed_at),
                 "substeps": [
                     {
                         "name": substep.name,
                         "status": substep.status.value,
                         "message": substep.message,
-                        "started_at": substep.started_at.isoformat() if substep.started_at else None,
-                        "completed_at": substep.completed_at.isoformat() if substep.completed_at else None,
+                        "started_at": _step_time_to_iso_z(substep.started_at),
+                        "completed_at": _step_time_to_iso_z(substep.completed_at),
                         "type": _substep_type_value(substep),
                     }
                     for substep in step.substeps
                 ],
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": _step_time_to_iso_z(_utc_now()),
                 "timeout_seconds": getattr(step, "timeout_seconds", None),
             }
             step_dict = _json_serializable(step_dict)
@@ -616,8 +656,8 @@ class StepRegistry:
             import traceback
             traceback.print_exc()
 
-        # In prod, also write directly to DB (non-blocking)
-        if self.environment == "prod" and self.database_url:
+        # Mirror to DB when DATABASE_URL is set (non-blocking)
+        if self.database_url:
             try:
                 asyncio.create_task(self._upsert_step_db(step))
             except RuntimeError:
@@ -649,8 +689,8 @@ class StepRegistry:
                     step.name,
                     step.status.value,
                     step.message,
-                    step.started_at,
-                    step.completed_at,
+                    _to_naive_utc(step.started_at),
+                    _to_naive_utc(step.completed_at),
                 )
         except Exception as e:
             print(f"[Step Registry] DB upsert failed: {e}")

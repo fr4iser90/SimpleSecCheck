@@ -18,7 +18,7 @@ SimpleSecCheck runs a complete security scan in one command using Docker. No per
 - **Single-shot**: run once, get an HTML report.
 - **Different modes**: codebase, website, network or image scan.
 - **Docker-first**: isolated, reproducible scans.
-- **WebUI (optional)**: run scans from a minimal UI in dev.
+- **WebUI (optional)**: run scans from a minimal UI.
 
 ---
 
@@ -31,42 +31,36 @@ git clone https://github.com/fr4iser90/SimpleSecCheck.git
 cd SimpleSecCheck
 ```
 
-### 1) Start the Frontend (nginx) + Backend in dev
+### 1) Start Frontend (nginx) + Backend + stack
 
 ```bash
-docker compose --profile dev up --build
+docker compose up --build
 ```
 
-Open **http://localhost:8080** and start a scan. The Frontend is now **frontend-only** (nginx), and `/api/*` is proxied to the internal backend (worker+scanner).
-
-> **Dev note:** Auto-shutdown is **disabled** in dev for convenience.
+Open **http://localhost:8080** and start a scan. The Frontend is **frontend-only** (nginx); `/api/*` is proxied to the backend (worker+scanner).
 
 ### 2) CLI-only scan (optional)
 
 ```bash
-docker compose --profile dev run --rm scanner
+docker compose run --rm scanner
 ```
 
 ### 3) Website scan
 
 ```bash
-SCAN_TARGET=https://example.com docker compose --profile dev run --rm scanner
+SCAN_TARGET=https://example.com docker compose run --rm scanner
 ```
 
 Results appear in `results/` as a timestamped folder with `security-summary.html`.
 
 ---
 
-## Production Mode (Restricted)
+## Deploy behind Traefik
 
-Production mode is stricter by design.
+For TLS and a reverse proxy, use the Traefik overlay file (see `docker-compose.traefik.yml` and your `DOMAIN` / labels).
 
-```bash
-ENVIRONMENT=prod docker compose --profile prod up --build
-```
-
-- Docker image scans accept **Docker Hub** images only (`nginx:latest` or `docker.io/...`).
-- Intended for controlled environments. Keep **HTTPS** enabled in real deployments.
+- Docker image scans can be restricted to **Docker Hub** only (`nginx:latest` or `docker.io/...`) via app configuration where applicable.
+- Use **HTTPS** on the public edge.
 
 ---
 

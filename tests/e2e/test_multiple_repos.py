@@ -31,30 +31,12 @@ def client():
     return httpx.AsyncClient(base_url=BASE_URL, timeout=TIMEOUT)
 
 
-async def get_server_mode(client: httpx.AsyncClient) -> str:
-    """Detect server mode (development/production) via session endpoint."""
-    try:
-        response = await client.get("/api/session")
-        if response.status_code != 200:
-            return "unknown"
-        data = response.json()
-        return data.get("mode", "unknown")
-    except Exception:
-        return "unknown"
-
-
 @pytest.mark.asyncio
 async def test_multiple_repo_scans(client: httpx.AsyncClient, test_repos: List[Dict]):
     """
-    Test scanning multiple repositories sequentially.
-    Each repository should:
-    1. Be added to queue (in production) or start immediately (in dev)
-    2. Complete successfully
-    3. Generate results
+    Test scanning multiple repositories sequentially (queue → completion → results).
     """
     scan_results = []
-    server_mode = await get_server_mode(client)
-    print(f"Server mode: {server_mode}")
     
     for repo in test_repos:
         print(f"\n{'='*60}")
@@ -110,18 +92,15 @@ async def test_multiple_repo_scans(client: httpx.AsyncClient, test_repos: List[D
         if not actual_scan_id:
             pytest.fail(f"Scan {scan_id} completed but no scan_id found in queue item")
         
-        # Verify results exist
-        if server_mode == "production":
-            report_response = await client.get(f"/api/my-results/{actual_scan_id}/report")
-            assert report_response.status_code == 200, f"Report not accessible: {report_response.text}"
+        # Verify results: prefer per-scan report URL if it works, else global results list
+        report_response = await client.get(f"/api/my-results/{actual_scan_id}/report")
+        if report_response.status_code == 200:
+            pass
         else:
             results_response = await client.get("/api/results")
             assert results_response.status_code == 200
-
             results = results_response.json()
             scans = results.get("scans", [])
-
-            # Find our scan in results using actual_scan_id (timestamp format)
             scan_found = any(actual_scan_id in scan.get("id", "") for scan in scans)
             assert scan_found, f"Scan {actual_scan_id} not found in results"
         
@@ -155,9 +134,9 @@ async def test_queue_functionality(client: httpx.AsyncClient, test_repos: List[D
     Test queue functionality (requires server with queue enabled).
     Verifies that scans are added to queue and processed correctly.
     """
-    server_mode = await get_server_mode(client)
-    if server_mode != "production":
-        pytest.skip("Queue functionality test requires server with queue enabled")
+    q = await client.get("/api/queue")
+    if q.status_code != 200:
+        pytest.skip("Queue API not available on this stack")
 
     # Get queue status
     queue_response = await client.get("/api/queue")

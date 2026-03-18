@@ -196,7 +196,7 @@ SimpleSecCheck Team
         Returns:
             Full URL for password reset
         """
-        # In production, use actual domain from settings
+        # Use configured domain from settings when sending real mail
         # For now, use localhost (will be replaced by frontend URL)
         base_url = "http://localhost:8080"  # TODO: Get from settings
         return f"{base_url}/password-reset?token={token}"

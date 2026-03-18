@@ -24,7 +24,7 @@ export default function ReportViewer({ scanId }: ReportViewerProps = {}) {
           return
         }
 
-        // If production endpoint denies access, fall back to session-safe route
+        // If primary report URL denies access, fall back to session-safe route
         if (response.status === 403 && fallbackEndpoint) {
           console.warn('Report endpoint denied, retrying with session-safe endpoint')
           await fetchReport(fallbackEndpoint)

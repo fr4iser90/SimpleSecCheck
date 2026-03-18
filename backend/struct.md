@@ -194,7 +194,7 @@ backend-refactored/
 - Environment-specific configurations in `config/`
 - Secrets managed through environment variables
 - Docker Compose for local development
-- Kubernetes manifests for production
+- Kubernetes manifests for deployed stacks
 
 ## Migration from Original Backend
 

@@ -1,7 +1,7 @@
 """
 Setup API Routes
 
-This module defines the FastAPI routes for the production setup wizard.
+This module defines the FastAPI routes for the first-run setup wizard.
 Handles initial database setup, admin user creation, and system validation.
 """
 import os
@@ -701,18 +701,15 @@ async def complete_setup(
 
 @router.post(
     "/skip",
-    summary="Skip setup (for development)",
-    description="Skip setup process (development/testing only).",
+    summary="Skip setup (solo / testing only)",
+    description="Skip setup (solo use case or automated tests only).",
     response_description="Skip confirmation",
 )
 async def skip_setup(
     actor_context: ActorContext = Depends(get_actor_context),
 ) -> Dict[str, str]:
     """
-    Skip setup process.
-    
-    This endpoint is intended for development and testing environments only.
-    In production, setup should always be performed through the wizard.
+    Skip setup. Only allowed when USE_CASE=solo. Normal installs should complete the wizard.
     """
     try:
         # Setup skip only allowed for solo use case
@@ -725,7 +722,7 @@ async def skip_setup(
         # Mark setup as completed without creating actual content
         await _mark_setup_completed()
         
-        return {"message": "Setup skipped for development environment"}
+        return {"message": "Setup skipped (solo use case)"}
         
     except HTTPException:
         raise

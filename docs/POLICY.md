@@ -1,7 +1,7 @@
-# Policy Overview (Dev vs Prod)
+# Policy overview
 
 This document describes the **centralized policy rules** enforced by SimpleSecCheck.
-All environment-specific restrictions are defined in:
+Restrictions by deployment tier are defined in:
 
 - `backend/app/services/policy_service.py`
 
@@ -9,7 +9,7 @@ All environment-specific restrictions are defined in:
 
 ## Why a Central Policy?
 
-The policy service prevents scattered production checks by centralizing:
+The policy service centralizes:
 
 - what scan types are allowed
 - whether local paths are permitted

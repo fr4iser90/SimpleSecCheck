@@ -3,6 +3,17 @@
  */
 
 /**
+ * Parse step timestamps from API: ISO with Z/offset, or naive (treated as UTC, same as scanner).
+ */
+export function parseStepInstantMs(iso: string | null | undefined): number {
+  if (iso == null || String(iso).trim() === '') return NaN
+  const s = String(iso).trim()
+  if (/[zZ]$/.test(s)) return new Date(s).getTime()
+  if (/[+-]\d{2}:\d{2}$/.test(s) || /[+-]\d{4}$/.test(s)) return new Date(s).getTime()
+  return new Date(s + 'Z').getTime()
+}
+
+/**
  * Format estimated time in seconds to a human-readable string.
  * 
  * @param seconds - Time in seconds (can be null/undefined)

@@ -715,7 +715,7 @@ Content-Type: multipart/form-data
 - **My Scans**: View personal scan history
 - **My Repos**: Manage GitHub repositories (if authenticated)
 - **Queue**: View scan queue (if enabled)
-- **Statistics**: View system statistics (if production mode)
+- **Statistics**: View system statistics (when enabled)
 
 **User Menu** (dropdown, authenticated users):
 - Profile
@@ -1100,6 +1100,9 @@ GET    /api/admin/users                    → List all users
 POST   /api/admin/users                    → Create user
 PUT    /api/admin/users/:id                → Update user
 DELETE /api/admin/users/:id                → Delete user
+GET    /api/admin/guest-sessions           → List guest sessions (Redis)
+GET    /api/admin/guest-sessions/:session_id → Guest session detail
+DELETE /api/admin/guest-sessions/:session_id → Revoke guest session (cookie invalid)
 GET    /api/admin/feature-flags            → Get feature flags
 PUT    /api/admin/feature-flags            → Update feature flags
 GET    /api/admin/health                   → System health

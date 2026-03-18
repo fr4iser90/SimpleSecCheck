@@ -110,7 +110,7 @@ class iOSScanner(BaseScanner):
                         "severity": "INFO",
                         "type": "debug_indicators",
                         "description": "Potential debug indicators found in plist.",
-                        "recommendation": "Ensure production builds don't contain debug configurations"
+                        "recommendation": "Strip debug settings from release / App Store builds"
                     })
             
             # Check for URL schemes (security risk if not validated)

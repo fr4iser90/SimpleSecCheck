@@ -69,36 +69,36 @@ pytest tests/integration/test_setup_wizard.py --cleanup -v -s
 ### Wie teste ich verschiedene Modi?
 
 ```bash
-# Dev Mode (Standard)
-pytest tests/integration/test_setup_wizard.py::test_setup_flow_dev -v -s
+# Free auth setup flow
+pytest tests/integration/test_setup_wizard.py::test_setup_flow_free_auth -v -s
 
-# Prod Mode
-pytest tests/integration/test_setup_wizard.py::test_setup_flow_prod -v -s
+# Session auth setup flow
+pytest tests/integration/test_setup_wizard.py::test_setup_flow_session_auth -v -s
 ```
 
 ### Was wenn Tests hängen?
 
 1. **Services starten nicht:**
    ```bash
-   docker compose --profile dev logs
-   docker compose --profile dev ps
+   docker compose logs
+   docker compose ps
    ```
 
 2. **Token wird nicht gefunden:**
    ```bash
-   docker compose --profile dev logs backend | grep "Setup Token"
+   docker compose logs backend | grep "Setup Token"
    ```
 
 3. **Port-Konflikte:**
    ```bash
    lsof -i :8080
-   docker compose --profile dev down
+   docker compose down
    ```
 
 ## Beispiel-Ausgabe
 
 ```
-🚀 Starting Docker Compose (profile: dev)...
+🚀 Starting Docker Compose...
 ⏳ Waiting for services to be ready: backend, worker, redis, postgres...
 ✅ All services are ready!
 📋 Extracting setup token from logs...
@@ -107,7 +107,7 @@ pytest tests/integration/test_setup_wizard.py::test_setup_flow_prod -v -s
 ✅ Token verified, session ID: abc123...
 ⚙️ Initializing setup...
 ✅ Setup initialized, admin user ID: 123e4567-e89b-12d3-a456-426614174000
-✅ Setup flow completed successfully in dev mode!
+✅ Setup flow completed (free auth).
 ```
 
 ## Nächste Schritte

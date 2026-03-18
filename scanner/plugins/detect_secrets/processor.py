@@ -105,7 +105,7 @@ DETECT_SECRETS_POLICY_EXAMPLE = '''  "detect_secrets": {
       {
         "rule_id": "Private Key",
         "path_regex": "tests/fixtures/.*\\.pem$",
-        "reason": "Test fixture keys, not used in production"
+        "reason": "Test fixture keys, not used at runtime"
       }
     ]
   }'''

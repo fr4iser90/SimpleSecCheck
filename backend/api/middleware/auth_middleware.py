@@ -177,7 +177,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         context = await self._get_authenticated_context(request)
         
         # For now, assume all authenticated users are admins
-        # In production, check user roles/permissions
+        # Check user roles/permissions when RBAC is wired
         return context
     
     async def _get_credentials(self, request: Request) -> Optional[HTTPAuthorizationCredentials]:
@@ -216,7 +216,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             from domain.services.security_policy_service import SecurityPolicyService
             rate_limits = SecurityPolicyService.get_rate_limits()
         self.rate_limits = rate_limits
-        self.request_counts = {}  # In-memory storage (use Redis in production)
+        self.request_counts = {}  # In-memory; use Redis for multi-instance rate limits
     
     async def dispatch(
         self,
@@ -268,7 +268,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Determine user type for rate limiting."""
         if not actor_context.is_authenticated:
             return "guest"
-        # In production, check user roles
+        # Check user roles when enforced
         return "authenticated"
     
     async def _is_rate_limited(self, actor_context: ActorContext) -> bool:

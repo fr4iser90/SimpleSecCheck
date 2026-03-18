@@ -12,10 +12,6 @@ _BACKEND = Path(__file__).resolve().parent.parent / "backend"
 if _BACKEND.exists() and str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
-# Set test environment variables
-os.environ.setdefault("ENVIRONMENT", "dev")  # Use dev mode for tests by default
-
-
 def pytest_addoption(parser):
     """Add custom pytest options."""
     parser.addoption(

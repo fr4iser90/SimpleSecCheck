@@ -284,12 +284,12 @@ rules:
     message: >-
       Allowing cleartext traffic in network security configuration. This disables
       Android's cleartext traffic protections. Only enable for development/testing,
-      never for production builds.
+      never in release builds shipped to users.
     languages: [javascript, typescript]
     severity: HIGH
 
   # React Native Debugger Exposure
-  - id: debugger-enabled-in-production
+  - id: debugger-enabled-outside-dev
     patterns:
       - pattern: |
           if (__DEV__) {
@@ -301,8 +301,8 @@ rules:
           }
     message: >-
       Debugger configuration in code. While wrapped in __DEV__, ensure debuggers are
-      completely disabled in production builds. Debugger tools can expose sensitive
-      information and should never be accessible in production apps.
+      fully disabled in release builds. Debugger tools can expose sensitive data and
+      must not be reachable in apps shipped to users.
     languages: [javascript, typescript]
     severity: INFO
 

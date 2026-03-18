@@ -6,7 +6,7 @@ Diese Tests validieren den kompletten Setup-Flow:
 3. Token-Verifikation
 4. Admin-User wird erstellt
 5. Setup wird abgeschlossen
-6. Tests in verschiedenen Modi (dev, prod)
+6. Varianten: z. B. free auth vs. session auth
 
 ## Voraussetzungen
 
@@ -33,11 +33,11 @@ pytest tests/integration/test_setup_wizard.py --cleanup -v -s
 ### Spezifische Tests
 
 ```bash
-# Nur Dev-Mode Test
-pytest tests/integration/test_setup_wizard.py::test_setup_flow_dev -v -s
+# Free-auth setup flow
+pytest tests/integration/test_setup_wizard.py::test_setup_flow_free_auth -v -s
 
-# Nur Prod-Mode Test
-pytest tests/integration/test_setup_wizard.py::test_setup_flow_prod -v -s
+# Session-auth setup flow
+pytest tests/integration/test_setup_wizard.py::test_setup_flow_session_auth -v -s
 
 # Nur Token-Extraktion Test
 pytest tests/integration/test_setup_wizard.py::test_setup_token_extraction -v -s
@@ -83,13 +83,13 @@ pytest tests/integration/test_setup_wizard.py -v -s
 ### 3. **Manuelles Cleanup**
 ```bash
 # Vor Tests
-docker compose --profile dev down -v
+docker compose down -v
 
 # Tests ausführen
 pytest tests/integration/test_setup_wizard.py -v -s
 
 # Nach Tests (optional)
-docker compose --profile dev down -v
+docker compose down -v
 ```
 
 ## Test-Struktur
@@ -108,16 +108,11 @@ docker compose --profile dev down -v
 
 ## Was wird getestet?
 
-### ✅ `test_setup_flow_dev`
-- Kompletter Setup-Flow in Dev-Mode
-- Token-Extraktion
-- Admin-User Erstellung
-- Setup-Abschluss
+### ✅ `test_setup_flow_free_auth`
+- Kompletter Setup-Flow mit `auth_mode: free`
 
-### ✅ `test_setup_flow_prod`
-- Kompletter Setup-Flow in Prod-Mode
-- Andere Konfiguration
-- Session-basierte Auth
+### ✅ `test_setup_flow_session_auth`
+- Setup-Flow mit `auth_mode: session`
 
 ### ✅ `test_setup_token_extraction`
 - Token wird korrekt aus Logs extrahiert
@@ -144,22 +139,22 @@ docker compose --profile dev down -v
 ### Services starten nicht
 ```bash
 # Logs prüfen
-docker compose --profile dev logs
+docker compose logs
 
 # Services manuell starten
-docker compose --profile dev up -d
+docker compose up -d
 
 # Prüfen ob Services laufen
-docker compose --profile dev ps
+docker compose ps
 ```
 
 ### Token wird nicht gefunden
 ```bash
 # Backend Logs prüfen
-docker compose --profile dev logs backend | grep -i "setup token"
+docker compose logs backend | grep -i "setup token"
 
 # Mehr Logs anzeigen
-docker compose --profile dev logs backend --tail 500
+docker compose logs backend --tail 500
 ```
 
 ### Tests hängen
@@ -179,7 +174,7 @@ lsof -i :8080
 lsof -i :8081
 
 # Docker Compose stoppen
-docker compose --profile dev down
+docker compose down
 ```
 
 ## Best Practices
@@ -195,7 +190,6 @@ docker compose --profile dev down
 ### Custom Test-Config
 ```python
 @pytest.mark.asyncio
-@pytest.mark.parametrize("docker_compose", ["dev"], indirect=True)
 async def test_custom_setup(api_client, docker_compose):
     tester = SetupWizardTester(api_client, docker_compose)
     

@@ -13,13 +13,13 @@ Use this when you want to run one scan and exit. It uses the `scanner` service.
 ### Default code scan (auto-detect)
 
 ```bash
-docker compose --profile dev run --rm scanner
+docker compose run --rm scanner
 ```
 
 ### Scan a specific codebase
 
 ```bash
-docker compose --profile dev run --rm \
+docker compose run --rm \
   -v /path/to/project:/target:ro \
   -e TARGET_TYPE=local_mount \
   scanner
@@ -29,28 +29,28 @@ docker compose --profile dev run --rm \
 
 ```bash
 SCAN_TARGET=https://example.com \
-docker compose --profile dev run --rm scanner
+docker compose run --rm scanner
 ```
 
 ### Docker image scan (remote image)
 
 ```bash
 SCAN_TARGET=nginx:latest \
-docker compose --profile dev run --rm scanner
+docker compose run --rm scanner
 ```
 
-### Docker image scan (local image, dev only)
+### Docker image scan (local image)
 
 ```bash
 SCAN_TARGET=local-image:latest \
-docker compose --profile dev run --rm scanner
+docker compose run --rm scanner
 ```
 
 ### Network / Docker Bench scan
 
 ```bash
 TARGET_TYPE=network_host \
-docker compose --profile dev run --rm \
+docker compose run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   scanner
 ```
@@ -62,7 +62,7 @@ docker compose --profile dev run --rm \
 Start the WebUI (nginx) + worker (scanner discovery/asset updates run in the worker):
 
 ```bash
-docker compose --profile dev up --build
+docker compose up --build
 ```
 
 Open **http://localhost:8080** and start a scan from the UI.

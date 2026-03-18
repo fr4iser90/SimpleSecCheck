@@ -6,9 +6,9 @@ from JWT tokens or session cookies, supporting both authenticated and guest user
 """
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
-import secrets
-import uuid
 import logging
+import time
+import uuid
 
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -16,6 +16,16 @@ import jwt
 from pydantic import BaseModel
 
 from config.settings import settings
+
+def _iso_exp(exp_ts: Optional[float]) -> Optional[str]:
+    """JWT exp claim to ISO-8601 UTC string."""
+    if exp_ts is None:
+        return None
+    try:
+        return datetime.utcfromtimestamp(int(exp_ts)).isoformat() + "Z"
+    except (TypeError, ValueError, OSError):
+        return None
+
 
 class ActorContext(BaseModel):
     """Context for the current actor (user or guest session)."""
@@ -26,6 +36,7 @@ class ActorContext(BaseModel):
     email: Optional[str] = None
     name: Optional[str] = None
     role: Optional[str] = None  # 'admin' or 'user'
+    expires_at: Optional[str] = None  # Access/refresh/session expiry (ISO UTC)
     
     def get_identifier(self) -> str:
         """Get the identifier for this actor (user_id or session_id)."""
@@ -119,39 +130,78 @@ class ActorContextDependency:
                 is_authenticated=True,
                 email=email,
                 name=name,
-                role=role
+                role=role,
+                expires_at=_iso_exp(payload.get("exp")),
             )
         except jwt.PyJWTError:
             return None
     
     async def _get_context_from_session(self, session_id: str) -> Optional[ActorContext]:
-        """Get context from session storage."""
-        # This would typically check Redis or database
-        # For now, we'll assume session is valid
+        """Guest session: Redis revoked flag + issued-at for /session expires_at."""
+        if not session_id or len(session_id) > 128:
+            return None
+        guest_exp: Optional[str] = None
+        try:
+            from infrastructure.redis.client import redis_client
+            from infrastructure.redis.guest_session_keys import (
+                issued_key,
+                revoked_key,
+                TTL_SECONDS,
+            )
+
+            if await redis_client.get(revoked_key(session_id)):
+                return None
+            issued_raw = await redis_client.get(issued_key(session_id))
+            if issued_raw:
+                try:
+                    issued = int(issued_raw)
+                    guest_exp = (
+                        datetime.utcfromtimestamp(issued + TTL_SECONDS).isoformat() + "Z"
+                    )
+                except (TypeError, ValueError):
+                    pass
+        except Exception:
+            self.logger.warning(
+                "Guest session Redis lookup failed; treating as unissued guest",
+                exc_info=True,
+            )
         return ActorContext(
             user_id=None,
             session_id=session_id,
-            is_authenticated=False
+            is_authenticated=False,
+            expires_at=guest_exp,
         )
     
     async def _create_guest_session(self, response: Response) -> ActorContext:
-        """Create a new guest session."""
+        """Create guest session: cookie + Redis issued (admin can revoke)."""
         session_id = str(uuid.uuid4())
-        
-        # Set session cookie
+        now = int(time.time())
+        from infrastructure.redis.guest_session_keys import TTL_SECONDS
+
+        try:
+            from infrastructure.redis.client import redis_client
+            from infrastructure.redis.guest_session_keys import issued_key
+
+            await redis_client.set(
+                issued_key(session_id), str(now), expire=TTL_SECONDS
+            )
+        except Exception:
+            self.logger.debug("Guest issued-at not stored in Redis", exc_info=True)
+
+        guest_exp = datetime.utcfromtimestamp(now + TTL_SECONDS).isoformat() + "Z"
         response.set_cookie(
             key="session_id",
             value=session_id,
             httponly=True,
             secure=self._cookie_secure(),
             samesite="lax",
-            max_age=86400 * 30  # 30 days
+            max_age=86400 * 30,
         )
-        
         return ActorContext(
             user_id=None,
             session_id=session_id,
-            is_authenticated=False
+            is_authenticated=False,
+            expires_at=guest_exp,
         )
     
     def create_jwt_token(self, user_id: str, email: str, name: str, role: Optional[str] = None) -> str:
@@ -199,6 +249,7 @@ class ActorContextDependency:
                 email=payload.get("email"),
                 name=payload.get("name"),
                 role=payload.get("role"),
+                expires_at=_iso_exp(payload.get("exp")),
             )
         except jwt.PyJWTError:
             return None

@@ -131,7 +131,6 @@ def create_app() -> FastAPI:
             "/api/v1/auth/session",
             "/api/v1/auth/refresh",
             "/api/v1/auth/me",
-            "/api/v1/auth/admin/users",
             "/api/v1/auth/logout",
             "/api/setup",
             "/api/setup/status",
@@ -139,9 +138,7 @@ def create_app() -> FastAPI:
             "/api/setup/initialize",
             "/api/setup/skip",
         ],
-        admin_paths=[
-            "/api/v1/auth/admin",
-        ],
+        admin_paths=[],
     )
         
     

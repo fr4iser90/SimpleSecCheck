@@ -93,6 +93,21 @@ class RedisClient:
         except RedisError as e:
             logger.error(f"Redis EXISTS error for key {key}: {e}")
             return False
+
+    async def scan_keys(self, pattern: str, limit: int = 500) -> List[str]:
+        """Return up to `limit` keys matching glob pattern (SCAN, production-safe)."""
+        if not self.is_connected:
+            await self.connect()
+        out: List[str] = []
+        try:
+            async for key in self.redis.scan_iter(match=pattern, count=100):
+                out.append(key)
+                if len(out) >= limit:
+                    break
+            return out
+        except RedisError as e:
+            logger.error(f"Redis SCAN error pattern={pattern}: {e}")
+            return []
     
     async def lpush(self, key: str, value: str) -> int:
         """Push value to left of list.

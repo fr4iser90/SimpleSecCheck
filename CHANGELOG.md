@@ -17,6 +17,7 @@ Major release: scanner fully rewritten in Python with a plug-and-play plugin sys
 - **Executive summary alignment** – "Tools Complete" count and list both use `executed_tools` (steps.log) so the X/Y card matches the green list.
 
 ### Changed
+- **Auth API** – Login/401 no longer turned into 500 (HTTPException handling). Guest sessions: Redis `issued` + admin **revoke** under **`GET/DELETE /api/admin/guest-sessions`** (list / inspect / revoke). Session `expires_at` for guests from issued timestamp.
 - **Core no longer knows plugin names** – path_setup, orchestrator, scanner_registry use generic helpers (e.g. `get_plugin_data_dir(plugin_name)`); no "owasp" or other names in core.
 - **Backend scanner config** – Removed `scanner_config.yaml`; backend uses `scanner_config.py` (empty/from DB or worker), no hardcoded tool list.
 - **Report UI** – Glassmorphism styling; severity badge contrast; tool cards overflow/truncation fixes; modal uses CSS variables only.
@@ -36,7 +37,7 @@ Major release: scanner fully rewritten in Python with a plug-and-play plugin sys
   - Live progress and logs during scan execution
   - View HTML reports directly in browser
   - Browse local results with file browser
-- Start with: `docker-compose --profile dev up`
+- Start stack: `docker compose up --build`
   - Follows single-shot principle: no database, no persistent state
   - Auto-shutdown feature for security (configurable idle timeout)
 

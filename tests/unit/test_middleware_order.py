@@ -133,7 +133,7 @@ def test_metrics_endpoint_accessible():
     response = client.get("/metrics")
     
     # Metrics endpoint should return 200 in development mode
-    # In production it might require authentication, but for testing we expect 200
+    # Some stacks require auth here; tests expect 200
     assert response.status_code == 200
     
     # Response should contain Prometheus metrics format

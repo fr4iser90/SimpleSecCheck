@@ -40,13 +40,13 @@ class User:
     
     def set_password(self, password: str):
         """Set user password with hashing."""
-        # In production, use a proper password hashing library like bcrypt
+        # Use a proper password hashing library (e.g. bcrypt) in real code paths
         self.password_hash = hashlib.sha256(password.encode()).hexdigest()
         self.updated_at = datetime.utcnow()
     
     def check_password(self, password: str) -> bool:
         """Check if password matches hash."""
-        # In production, use proper password verification
+        # Use proper password verification
         return self.password_hash == hashlib.sha256(password.encode()).hexdigest()
     
     def activate(self):

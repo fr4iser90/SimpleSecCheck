@@ -155,7 +155,7 @@ CODEQL_POLICY_EXAMPLE = '''  "codeql": {
         "rule_id": "js/sql-injection",
         "path_regex": "tests/.*|fixtures/.*",
         "message_regex": "test.*query",
-        "reason": "Test code using parameterized queries in production"
+        "reason": "Test code using parameterized queries in shipped/runtime paths"
       }
     ]
   }'''

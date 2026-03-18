@@ -5,13 +5,18 @@ This module defines the FastAPI routes for authentication operations.
 Supports both JWT authentication and guest session management.
 """
 from typing import Optional
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import select
 
 from api.deps.actor_context import (
-    get_actor_context, get_actor_context_dependency, get_authenticated_user, get_admin_user,
-    ActorContext, ActorContextDependency
+    get_actor_context,
+    get_actor_context_dependency,
+    get_authenticated_user,
+    ActorContext,
+    ActorContextDependency,
 )
 from config.settings import settings
 
@@ -68,7 +73,7 @@ class SessionInfo(BaseModel):
     is_authenticated: bool = Field(description="Authentication status")
     email: Optional[str] = Field(None, description="User email")
     name: Optional[str] = Field(None, description="User name")
-    expires_at: Optional[str] = Field(None, description="Session expiration time")
+    expires_at: Optional[str] = Field(None, description="Session expiration time (ISO UTC)")
 
 
 router = APIRouter(
@@ -98,81 +103,66 @@ async def login(
     actor_context_dependency: ActorContextDependency = Depends(get_actor_context_dependency),
 ) -> LoginResponse:
     """
-    User login endpoint.
-    
-    - **login_request**: Email and password for authentication
-    - **response**: FastAPI response object for setting cookies
-    - **actor_context**: Current actor context (for guest session cleanup)
-    - **actor_context_dependency**: Actor context dependency for token creation
-    
-    Note: This is a placeholder implementation. In production, you would:
-    - Validate credentials against a database
-    - Hash passwords properly
-    - Implement rate limiting
-    - Add additional security measures
+    Authenticates against the database (bcrypt password hash), issues JWT + refresh cookie,
+    clears guest session cookie when upgrading from guest.
     """
     try:
-        from infrastructure.database.adapter import db_adapter
+        from datetime import datetime
+
         from api.services.password_service import PasswordService
-        from sqlalchemy import select
+        from infrastructure.database.adapter import db_adapter
         from infrastructure.database.models import User
-        
+
         email = login_request.email
         password = login_request.password
-        
+
         if not email or not password:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email and password are required"
+                detail="Email and password are required",
             )
-        
+
         password_service = PasswordService()
-        
-        # Get user from database
+
         async with db_adapter.async_session() as session:
             result = await session.execute(
                 select(User).where(User.email == email, User.is_active == True)
             )
             user = result.scalar_one_or_none()
-            
+
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid email or password"
+                    detail="Invalid email or password",
                 )
-            
-            # Verify password
+
             if not password_service.verify_password(password, user.password_hash):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid email or password"
+                    detail="Invalid email or password",
                 )
-            
-            # Update last login
-            from datetime import datetime
+
             user.last_login = datetime.utcnow()
             await session.commit()
-            
+
             user_id = str(user.id)
-            name = user.username or email.split('@')[0].title()
-            role = user.role.value if user.role else "user"  # Get role value from enum
-        
-        # Create JWT and refresh token
+            name = user.username or email.split("@")[0].title()
+            role = user.role.value if user.role else "user"
+
         access_token = actor_context_dependency.create_jwt_token(
             user_id=user_id,
             email=email,
             name=name,
-            role=role
+            role=role,
         )
         refresh_token = actor_context_dependency.create_refresh_token(
             user_id=user_id,
             email=email,
             name=name,
-            role=role
+            role=role,
         )
         actor_context_dependency.set_refresh_cookie(response, refresh_token)
 
-        # Clear any existing guest session
         if not actor_context.is_authenticated and actor_context.session_id:
             actor_context_dependency.clear_session_cookie(response)
 
@@ -185,11 +175,13 @@ async def login(
             name=name,
             role=role,
         )
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {str(e)}"
+            detail=f"Login failed: {str(e)}",
         )
 
 
@@ -220,14 +212,14 @@ async def logout(
         # The client should discard the token
         # For enhanced security, you could implement a token blacklist in Redis
         
-        return LogoutResponse(
-            message="Successfully logged out"
-        )
-        
+        return LogoutResponse(message="Successfully logged out")
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Logout failed: {str(e)}"
+            detail=f"Logout failed: {str(e)}",
         )
 
 
@@ -255,13 +247,15 @@ async def get_session_info(
             is_authenticated=actor_context.is_authenticated,
             email=actor_context.email,
             name=actor_context.name,
-            expires_at=None,  # Would be calculated based on token/session expiration
+            expires_at=actor_context.expires_at,
         )
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get session info: {str(e)}"
+            detail=f"Failed to get session info: {str(e)}",
         )
 
 
@@ -293,13 +287,10 @@ async def refresh_token(
                 detail="Authentication required"
             )
         
-        # Get user role from database
         from infrastructure.database.adapter import db_adapter
-        from sqlalchemy import select
         from infrastructure.database.models import User
-        from uuid import UUID
-        
-        role = actor_context.role  # Try to get from context first
+
+        role = actor_context.role
         if not role and actor_context.user_id:
             try:
                 async with db_adapter.async_session() as session:
@@ -364,14 +355,11 @@ async def get_current_user(
                 detail="Authentication required"
             )
         
-        # Get user role from database if not in context
         role = actor_context.role
         if not role and actor_context.user_id:
             from infrastructure.database.adapter import db_adapter
-            from sqlalchemy import select
             from infrastructure.database.models import User
-            from uuid import UUID
-            
+
             try:
                 async with db_adapter.async_session() as session:
                     user_uuid = UUID(actor_context.user_id)
@@ -382,10 +370,10 @@ async def get_current_user(
                     if user:
                         role = user.role.value if user.role else "user"
             except Exception:
-                role = "user"  # Default fallback
-        
+                role = "user"
+
         return LoginResponse(
-            access_token="",  # Token not included in response for security
+            access_token="",
             token_type="bearer",
             expires_in=settings.JWT_EXPIRATION_MINUTES * 60,
             user_id=actor_context.user_id,
@@ -400,47 +388,6 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get user info: {str(e)}"
-        )
-
-
-@router.get(
-    "/admin/users",
-    response_model=SessionInfo,
-    summary="Admin: List all users",
-    description="List all authenticated users (admin only).",
-    response_description="List of user sessions",
-)
-async def list_users(
-    actor_context: ActorContext = Depends(get_admin_user),
-) -> SessionInfo:
-    """
-    List all users (admin only).
-    
-    - **actor_context**: Current admin user context
-    
-    Note: This is a placeholder implementation. In production, you would:
-    - Query the database for all users
-    - Implement proper pagination
-    - Add filtering options
-    """
-    try:
-        # Placeholder implementation
-        # In production, this would query the database for all users
-        return SessionInfo(
-            session_id=None,
-            user_id=actor_context.user_id,
-            is_authenticated=True,
-            email=actor_context.email,
-            name=actor_context.name,
-            expires_at=None,
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list users: {str(e)}"
         )
 
 
@@ -475,65 +422,26 @@ async def create_guest_session(
                 is_authenticated=actor_context.is_authenticated,
                 email=actor_context.email,
                 name=actor_context.name,
-                expires_at=None,
+                expires_at=actor_context.expires_at,
             )
-        
-        # Create new guest session
+
         new_context = await actor_context_dependency._create_guest_session(response)
-        
+
         return SessionInfo(
             session_id=new_context.session_id,
             user_id=new_context.user_id,
             is_authenticated=new_context.is_authenticated,
             email=new_context.email,
             name=new_context.name,
-            expires_at=None,
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create guest session: {str(e)}"
+            expires_at=new_context.expires_at,
         )
 
-
-@router.delete(
-    "/session/{session_id}",
-    response_model=LogoutResponse,
-    summary="Admin: Delete session",
-    description="Delete a specific session (admin only).",
-    response_description="Session deletion confirmation",
-)
-async def delete_session(
-    session_id: str,
-    actor_context: ActorContext = Depends(get_admin_user),
-    actor_context_dependency: ActorContextDependency = Depends(get_actor_context_dependency),
-) -> LogoutResponse:
-    """
-    Delete a specific session (admin only).
-    
-    - **session_id**: ID of the session to delete
-    - **actor_context**: Current admin user context
-    - **actor_context_dependency**: Actor context dependency for session management
-    
-    Note: This is a placeholder implementation. In production, you would:
-    - Remove the session from Redis/database
-    - Invalidate any associated tokens
-    """
-    try:
-        # Placeholder implementation
-        # In production, this would remove the session from storage
-        
-        return LogoutResponse(
-            message=f"Session {session_id} deleted successfully"
-        )
-        
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete session: {str(e)}"
+            detail=f"Failed to create guest session: {str(e)}",
         )
 
 

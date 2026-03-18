@@ -328,7 +328,7 @@ fi
 
 echo "Restoring Redis from backup: $BACKUP_NAME"
 
-# Stop Redis (in production, this would be handled by orchestration)
+# Stop Redis (orchestrator manages lifecycle in deploy)
 echo "Stopping Redis service..."
 # systemctl stop redis || true
 
@@ -358,7 +358,7 @@ chmod 644 "$REDIS_DATA_DIR/appendonly.aof" 2>/dev/null || true
 
 echo "Redis data restored from: $BACKUP_PATH"
 
-# Start Redis (in production, this would be handled by orchestration)
+# Start Redis (orchestrator manages lifecycle in deploy)
 echo "Starting Redis service..."
 # systemctl start redis || true
 

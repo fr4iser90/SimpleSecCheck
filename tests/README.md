@@ -20,5 +20,5 @@ pytest tests/e2e -v -s
 
 ## Notes
 
-- `test_multiple_repos.py` runs in dev or prod. In production it validates report access via `/api/my-results/{scan_id}/report`.
-- `test_queue_steps_sessions.py` requires **production mode** with sessions enabled to validate session isolation and report access.
+- `test_multiple_repos.py` checks report access via `/api/my-results/.../report` when available, else `/api/results`.
+- `test_queue_steps_sessions.py` requires **session auth** enabled to validate session isolation and report access.

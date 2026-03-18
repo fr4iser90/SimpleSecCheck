@@ -343,7 +343,7 @@ def get_frontend_static_paths():
 
 def get_docker_compose_file():
     """
-    Get docker-compose file path based on environment.
+    Resolve docker-compose file path.
     Central function - all services should use this!
     
     Returns:
@@ -354,15 +354,7 @@ def get_docker_compose_file():
     if compose_override:
         return compose_override
 
-    # Get environment (default to dev)
-    environment = os.getenv("ENVIRONMENT", "dev").lower()
-    
-    # Determine docker-compose filename based on environment
-    if environment == "prod":
-        # Prefer base compose, optionally allow traefik variant
-        candidates = ["docker-compose.yml", "docker-compose.prod.traefik.yml"]
-    else:
-        candidates = ["docker-compose.yml", "docker-compose.prod.traefik.yml"]
+    candidates = ["docker-compose.yml", "docker-compose.traefik.yml"]
 
     # In containers: /project is always mounted (.:/project:ro)
     for filename in candidates:

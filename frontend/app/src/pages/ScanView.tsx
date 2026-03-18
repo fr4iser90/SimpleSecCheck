@@ -5,7 +5,7 @@ import StepsSidebar from '../components/StepsSidebar'
 import AIPromptModal from '../components/AIPromptModal'
 import { SubstepSlot } from '../components/SubstepSlot'
 import { useWebSocket } from '../services/websocketService'
-import { formatDuration } from '../utils/timeUtils'
+import { formatDuration, parseStepInstantMs } from '../utils/timeUtils'
 
 // Backend is the source of truth!
 // Backend uses TWO status systems:
@@ -280,12 +280,12 @@ export default function ScanView() {
 
   const formatSubstepDuration = (s: SubStep): string => {
     if (s.completed_at && s.started_at) {
-      const a = new Date(s.started_at).getTime()
-      const b = new Date(s.completed_at).getTime()
+      const a = parseStepInstantMs(s.started_at)
+      const b = parseStepInstantMs(s.completed_at)
       if (!Number.isNaN(a) && !Number.isNaN(b) && b >= a) return `${Math.round((b - a) / 1000)}s`
     }
     if (s.status === 'running' && s.started_at) {
-      const a = new Date(s.started_at).getTime()
+      const a = parseStepInstantMs(s.started_at)
       if (!Number.isNaN(a)) return `${Math.max(0, Math.round((Date.now() - a) / 1000))}s`
     }
     return ''
@@ -293,7 +293,7 @@ export default function ScanView() {
 
   const getStepElapsedSeconds = (step: Step): number | null => {
     if (step.status === 'running' && step.started_at) {
-      const t = new Date(step.started_at).getTime()
+      const t = parseStepInstantMs(step.started_at)
       if (!Number.isNaN(t)) return Math.max(0, Math.floor((Date.now() - t) / 1000))
     }
     if (step.duration_seconds != null) return step.duration_seconds

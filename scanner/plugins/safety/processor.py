@@ -113,7 +113,7 @@ SAFETY_POLICY_EXAMPLE = '''  "safety": {
         "rule_id": "12345",
         "path_regex": "dev-dependency|optional",
         "message_regex": "development only",
-        "reason": "Vulnerable package used only in dev, not in production"
+        "reason": "Vulnerable package scoped to dev/tooling, not shipped app code"
       }
     ]
   }'''

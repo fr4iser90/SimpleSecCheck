@@ -707,7 +707,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
       )}
       {metadataCollection === 'always' && (
         <div className="glass form-info-box success">
-          ℹ️ Metadata collection is always enabled in Production Mode for scan deduplication.
+          ℹ️ Metadata collection is always enabled when set to &quot;always&quot; (scan deduplication).
         </div>
         )}
       </ScanStep>

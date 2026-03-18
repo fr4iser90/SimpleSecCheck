@@ -183,9 +183,7 @@ def extract_setup_token_from_logs(logs: str) -> Optional[str]:
 def docker_compose(request):
     """Docker Compose fixture with automatic cleanup."""
     cleanup = request.config.getoption("--cleanup", default=False)
-    profile = getattr(request, "param", "dev")
-    
-    manager = DockerComposeManager(profile=profile)
+    manager = DockerComposeManager()
     
     # Cleanup before test if requested
     if cleanup:
@@ -193,7 +191,7 @@ def docker_compose(request):
         time.sleep(2)
     
     # Start services
-    print(f"\n🚀 Starting Docker Compose (profile: {profile})...")
+    print("\n🚀 Starting Docker Compose...")
     manager.up(build=True, detach=True)
     
     # Wait for services to be ready
@@ -484,11 +482,9 @@ class SetupWizardTester:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("docker_compose", ["dev"], indirect=True)
-async def test_setup_flow_dev(api_client, docker_compose):
-    """Test complete setup flow in dev mode."""
+async def test_setup_flow_free_auth(api_client, docker_compose):
+    """Setup flow with auth_mode free."""
     tester = SetupWizardTester(api_client, docker_compose)
-    
     result = await tester.complete_setup_flow(
         admin_username="testadmin",
         admin_email="admin@test.example",
@@ -497,38 +493,33 @@ async def test_setup_flow_dev(api_client, docker_compose):
             "auth_mode": "free",
             "scanner_timeout": 300,
             "max_concurrent_scans": 3
-        }
+        },
     )
-    
     assert result["success"] is True
     assert "admin_user_id" in result
-    print("✅ Setup flow completed successfully in dev mode!")
+    print("✅ Setup flow completed (free auth).")
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("docker_compose", ["prod"], indirect=True)
-async def test_setup_flow_prod(api_client, docker_compose):
-    """Test complete setup flow with prod compose."""
+async def test_setup_flow_session_auth(api_client, docker_compose):
+    """Setup flow with auth_mode session."""
     tester = SetupWizardTester(api_client, docker_compose)
-    
     result = await tester.complete_setup_flow(
-        admin_username="prodadmin",
-        admin_email="admin@prod.example",
-        admin_password="ProdPass123!",
+        admin_username="sessionadmin",
+        admin_email="admin@session.example",
+        admin_password="SessionPass123!",
         system_config={
             "auth_mode": "session",
             "scanner_timeout": 600,
             "max_concurrent_scans": 5
-        }
+        },
     )
-    
     assert result["success"] is True
     assert "admin_user_id" in result
-    print("✅ Setup flow completed successfully!")
+    print("✅ Setup flow completed (session auth).")
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("docker_compose", ["dev"], indirect=True)
 async def test_setup_token_extraction(api_client, docker_compose):
     """Test setup token extraction from logs."""
     tester = SetupWizardTester(api_client, docker_compose)
@@ -540,7 +531,6 @@ async def test_setup_token_extraction(api_client, docker_compose):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("docker_compose", ["dev"], indirect=True)
 async def test_setup_token_verification(api_client, docker_compose):
     """Test setup token verification."""
     tester = SetupWizardTester(api_client, docker_compose)
@@ -554,7 +544,6 @@ async def test_setup_token_verification(api_client, docker_compose):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("docker_compose", ["dev"], indirect=True)
 async def test_setup_status_check(api_client, docker_compose):
     """Test setup status check."""
     tester = SetupWizardTester(api_client, docker_compose)
@@ -569,7 +558,6 @@ async def test_setup_status_check(api_client, docker_compose):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("docker_compose", ["dev"], indirect=True)
 async def test_invalid_token(api_client, docker_compose):
     """Test that invalid token is rejected."""
     print("🔐 Testing invalid token rejection...")
@@ -585,7 +573,6 @@ async def test_invalid_token(api_client, docker_compose):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("docker_compose", ["dev"], indirect=True)
 async def test_setup_without_session(api_client, docker_compose):
     """Test that setup initialization requires session."""
     print("🔐 Testing setup without session...")
@@ -607,7 +594,6 @@ async def test_setup_without_session(api_client, docker_compose):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("docker_compose", ["dev"], indirect=True)
 async def test_setup_then_login_and_cookies(api_client, docker_compose):
     """
     E2E: Server up → complete setup → login → check logged in, cookies, and setup status cache.

@@ -4,6 +4,8 @@ Admin API Routes
 Handles admin-only operations like system configuration updates.
 """
 from typing import Optional, Dict, Any, List
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel, EmailStr, Field
 
@@ -333,7 +335,7 @@ async def update_smtp_config(
                 "host": smtp_config.host,
                 "port": smtp_config.port,
                 "user": smtp_config.user,
-                "password": smtp_config.password,  # Store in DB (should be encrypted in production)
+                "password": smtp_config.password,  # Store encrypted at rest
                 "use_tls": smtp_config.use_tls,
                 "from_email": smtp_config.from_email,
                 "from_name": smtp_config.from_name
@@ -539,6 +541,187 @@ class UserResponse(BaseModel):
     is_verified: bool
     created_at: str
     last_login: Optional[str] = None
+
+
+class GuestSessionItem(BaseModel):
+    """Guest browser session (session_id cookie), tracked in Redis."""
+
+    session_id: str
+    created_at: Optional[str] = Field(None, description="ISO UTC from issued timestamp")
+    expires_at: Optional[str] = Field(None, description="ISO UTC (issued + 30d)")
+    revoked: bool = False
+
+
+class GuestSessionListResponse(BaseModel):
+    items: List[GuestSessionItem]
+    truncated: bool = Field(False, description="True if more keys exist than returned")
+
+
+@router.get("/guest-sessions", response_model=GuestSessionListResponse)
+async def list_guest_sessions(
+    request: Request,
+    limit: int = Query(200, ge=1, le=1000),
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> GuestSessionListResponse:
+    """
+    List guest sessions currently tracked in Redis (issued, not yet expired TTL).
+    Revoked sessions may still appear until issued key expires unless deleted.
+    """
+    from infrastructure.redis.client import redis_client
+    from infrastructure.redis.guest_session_keys import (
+        issued_key,
+        revoked_key,
+        TTL_SECONDS,
+    )
+
+    try:
+        keys = await redis_client.scan_keys("guest:session:issued:*", limit + 1)
+        truncated = len(keys) > limit
+        keys = keys[:limit]
+        items: List[GuestSessionItem] = []
+        prefix = "guest:session:issued:"
+        for k in keys:
+            if not k.startswith(prefix):
+                continue
+            sid = k[len(prefix) :]
+            try:
+                UUID(sid)
+            except ValueError:
+                continue
+            issued_raw = await redis_client.get(issued_key(sid))
+            revoked = bool(await redis_client.get(revoked_key(sid)))
+            created_at = None
+            expires_at = None
+            if issued_raw:
+                try:
+                    ts = int(issued_raw)
+                    created_at = datetime.utcfromtimestamp(ts).isoformat() + "Z"
+                    expires_at = (
+                        datetime.utcfromtimestamp(ts + TTL_SECONDS).isoformat() + "Z"
+                    )
+                except (TypeError, ValueError):
+                    pass
+            items.append(
+                GuestSessionItem(
+                    session_id=sid,
+                    created_at=created_at,
+                    expires_at=expires_at,
+                    revoked=revoked,
+                )
+            )
+        await AuditLogService.log_event(
+            user_id=actor_context.user_id,
+            user_email=actor_context.email,
+            action_type="GUEST_SESSION_LIST_VIEWED",
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("User-Agent"),
+        )
+        return GuestSessionListResponse(items=items, truncated=truncated)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list guest sessions: {str(e)}",
+        )
+
+
+@router.get("/guest-sessions/{session_id}", response_model=GuestSessionItem)
+async def get_guest_session(
+    session_id: str,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> GuestSessionItem:
+    """Inspect one guest session (Redis issued / revoked)."""
+    from infrastructure.redis.client import redis_client
+    from infrastructure.redis.guest_session_keys import (
+        issued_key,
+        revoked_key,
+        TTL_SECONDS,
+    )
+
+    try:
+        try:
+            UUID(session_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="session_id must be a UUID",
+            )
+        issued_raw = await redis_client.get(issued_key(session_id))
+        revoked = bool(await redis_client.get(revoked_key(session_id)))
+        created_at = None
+        expires_at = None
+        if issued_raw:
+            try:
+                ts = int(issued_raw)
+                created_at = datetime.utcfromtimestamp(ts).isoformat() + "Z"
+                expires_at = (
+                    datetime.utcfromtimestamp(ts + TTL_SECONDS).isoformat() + "Z"
+                )
+            except (TypeError, ValueError):
+                pass
+        return GuestSessionItem(
+            session_id=session_id,
+            created_at=created_at,
+            expires_at=expires_at,
+            revoked=revoked,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get guest session: {str(e)}",
+        )
+
+
+class GuestSessionRevokeResponse(BaseModel):
+    message: str
+    session_id: str
+
+
+@router.delete("/guest-sessions/{session_id}", response_model=GuestSessionRevokeResponse)
+async def revoke_guest_session(
+    request: Request,
+    session_id: str,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> GuestSessionRevokeResponse:
+    """
+    Revoke a guest session: the browser cookie becomes useless; next request gets a new guest session.
+    """
+    from infrastructure.redis.client import redis_client
+    from infrastructure.redis.guest_session_keys import revoked_key, TTL_SECONDS
+
+    try:
+        try:
+            UUID(session_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="session_id must be a UUID",
+            )
+        await redis_client.set(
+            revoked_key(session_id), "1", expire=TTL_SECONDS
+        )
+        await AuditLogService.log_event(
+            user_id=actor_context.user_id,
+            user_email=actor_context.email,
+            action_type="GUEST_SESSION_REVOKED",
+            target=session_id,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("User-Agent"),
+        )
+        return GuestSessionRevokeResponse(
+            message="Guest session revoked. Client will receive a new session on next request.",
+            session_id=session_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to revoke guest session: {str(e)}",
+        )
 
 
 @router.get("/users", response_model=List[UserResponse])

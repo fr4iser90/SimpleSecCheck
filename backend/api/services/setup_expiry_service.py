@@ -2,7 +2,7 @@
 Setup Expiry Service
 
 This service handles automatic setup expiration and disabling after the configured
-time window to prevent unauthorized setup access in production environments.
+time window to prevent unauthorized setup access on deployed instances.
 """
 import asyncio
 from datetime import datetime, timedelta

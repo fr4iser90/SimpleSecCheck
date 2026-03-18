@@ -48,13 +48,8 @@ WebUI Container (nginx)
 ### Start WebUI
 
 ```bash
-# Development mode
-docker compose --profile dev up --build
-
-# Production mode
 docker compose up --build
-
-# Access at http://localhost:8080
+# http://localhost:8080
 ```
 
 ### Development
@@ -67,7 +62,7 @@ npm run dev
 # Vite dev server at http://localhost:5173
 ```
 
-### Production Build
+### Release build
 
 ```bash
 cd frontend/app
@@ -174,4 +169,4 @@ docker compose restart frontend
 * WebUI is **completely optional** – CLI works independently
 * Stateless, single-shot scans
 * Designed **only for scan interaction and results viewing**
-* Production mode: Docker image scans use Docker Hub images
+* Docker image scans can be limited to Docker Hub images (app policy)

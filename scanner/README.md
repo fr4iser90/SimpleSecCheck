@@ -233,7 +233,7 @@ Every scanner plugin must implement:
       "severity": "HIGH",
       "confidence": "HIGH",
       "title": "Use of assert detected",
-      "description": "Assert used in production code",
+      "description": "Assert used in shipped/runtime code",
       "file": "app.py",
       "line": 42,
       "code": "assert condition"

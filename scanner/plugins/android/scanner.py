@@ -108,7 +108,7 @@ class AndroidScanner(BaseScanner):
                         "severity": "MEDIUM",
                         "type": "backup_enabled",
                         "description": "Application backup is enabled. This can lead to data leakage.",
-                        "recommendation": "Set android:allowBackup=false in production builds"
+                        "recommendation": "Set android:allowBackup=false for release builds"
                     })
                 
                 if debug_enabled == 'true':
@@ -116,8 +116,8 @@ class AndroidScanner(BaseScanner):
                     findings["security_issues"].append({
                         "severity": "HIGH",
                         "type": "debug_mode",
-                        "description": "Application is debuggable. This is a security risk in production.",
-                        "recommendation": "Set android:debuggable=false in production builds"
+                        "description": "Application is debuggable — high risk if shipped to users.",
+                        "recommendation": "Set android:debuggable=false for release builds"
                     })
                 
                 # Check for cleartext traffic

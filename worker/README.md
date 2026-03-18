@@ -125,11 +125,11 @@ worker:
 ## Configuration
 
 ### Queue Configuration
-- **Redis**: Production-ready, supports multiple workers
-- **Memory**: Development/testing, single worker only
+- **Redis**: multi-worker queue backend
+- **Memory**: single-process queue (tests / minimal setups)
 
 ### Database Configuration
-- **PostgreSQL**: Recommended for production
+- **PostgreSQL**: recommended for durable jobs
 
 ### Resource Limits
 ```bash
@@ -247,4 +247,4 @@ python worker/cli/worker_main.py \
 - Scanner containers are isolated but monitor resource usage
 - Results directory should have proper permissions
 - Use secrets management for database credentials
-- Enable TLS for production database connections
+- Enable TLS for database connections over untrusted networks

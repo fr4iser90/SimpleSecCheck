@@ -68,12 +68,9 @@ ports:
 
 ## Limitations
 
-- **Docker Socket**: Required for `docker-compose` access. Consider using Docker API with proper authentication in production.
-- **No Authentication**: WebUI has no authentication. For production, add:
-  - Basic Auth
-  - OAuth
-  - API Keys
-- **CORS**: Currently allows all origins. Restrict in production.
+- **Docker Socket**: Required for Compose access. Prefer Docker API with auth when exposing the stack.
+- **No Authentication**: WebUI has no built-in login. Add Basic Auth, OAuth, or API keys before any public exposure.
+- **CORS**: Tighten allowed origins if the UI is not same-origin only.
 - Frontend includes auto-shutdown feature to prevent long-running instances (see below).
 
 ## Auto-Shutdown Feature
@@ -149,7 +146,7 @@ import docker
 
 client = docker.DockerClient(
     base_url='unix://var/run/docker.sock',
-    # With TLS in production:
+    # With TLS when remote:
     # tls=True,
     # tls_ca_cert='ca.pem',
     # tls_cert='cert.pem',
@@ -171,9 +168,9 @@ container = client.containers.run(...)
 - ⚠️ More complex implementation
 - ⚠️ Need to handle container lifecycle manually
 
-## Recommendations for Production
+## Hardening before public exposure
 
-1. **Add Authentication**: Implement Basic Auth or OAuth
+1. **Add Authentication**: Basic Auth or OAuth
 2. **Restrict CORS**: Set specific allowed origins
 3. **HTTPS**: Use reverse proxy (nginx/traefik) with TLS
 4. **Rate Limiting**: Prevent abuse
@@ -200,10 +197,10 @@ This reduces attack surface significantly.
 ### 1. Start Only When Needed
 ```bash
 # Start Frontend only when you need it
-docker-compose --profile dev up
+docker compose up
 
 # Stop after use
-docker-compose --profile dev down
+docker compose down
 ```
 
 ### 2. Use Localhost Binding
@@ -236,10 +233,10 @@ sudo iptables -A INPUT -p tcp --dport 8080 ! -s 127.0.0.1 -j DROP
 docker ps | grep frontend
 
 # Stop if forgotten
-docker-compose --profile dev down
+docker compose down
 ```
 
-### 6. Never in Production Without:
+### 6. Public exposure requires:
 - ✅ Authentication (Basic Auth minimum)
 - ✅ HTTPS/TLS
 - ✅ Reverse Proxy (nginx/traefik)
