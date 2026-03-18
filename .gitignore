@@ -5,9 +5,7 @@ logs/*
 .vscode/
 
 scanner/plugins/*/data/*
-# OWASP Dependency Check DB (large; IDE may still try to include without this)
-*.mv.db
-scanner/plugins/owasp/data/
+scanner/plugins/*/cache/*
 
 # Byte-compiled / optimized / DLL files / optimized / DLL files
 __pycache__/

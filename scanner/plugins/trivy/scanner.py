@@ -125,17 +125,28 @@ class TrivyScanner(BaseScanner):
         except Exception as e:
             self.complete_substep("Environment Check", f"Environment check completed: {e}")
         
-        # PREPARE: Download Vulnerability Database
-        self.substep_prepare("Download Vulnerability Database", "Downloading/updating vulnerability database...")
-        try:
-            result = self.run_command(["trivy", "image", "--download-db-only"], capture_output=True, timeout=300)
-            if result.returncode == 0:
-                self.complete_substep("Download Vulnerability Database", "Vulnerability database ready")
-            else:
-                self.complete_substep("Download Vulnerability Database", "Using existing database")
-        except Exception as e:
-            self.log(f"DB update check failed: {e}", "WARNING")
+        # PREPARE: Download Vulnerability Database (only when not already in cache, like OWASP)
+        self.substep_prepare("Download Vulnerability Database", "Checking/downloading vulnerability database...")
+        cache_dir = os.environ.get("TRIVY_CACHE_DIR")
+        db_exists = False
+        if cache_dir:
+            db_path = Path(cache_dir) / "db"
+            # Trivy stores vuln DB at cache_dir/db/trivy.db (and metadata.json)
+            if db_path.is_dir():
+                db_exists = (db_path / "trivy.db").exists() or (db_path / "metadata.json").exists()
+        if db_exists:
+            self.log("Vulnerability database found in cache, skipping download")
             self.complete_substep("Download Vulnerability Database", "Using existing database")
+        else:
+            try:
+                result = self.run_command(["trivy", "image", "--download-db-only"], capture_output=True, timeout=300)
+                if result.returncode == 0:
+                    self.complete_substep("Download Vulnerability Database", "Vulnerability database ready")
+                else:
+                    self.complete_substep("Download Vulnerability Database", "Using existing database")
+            except Exception as e:
+                self.log(f"DB update check failed: {e}", "WARNING")
+                self.complete_substep("Download Vulnerability Database", "Using existing database")
         
         # PREPARE: Updating DB
         self.start_substep("Updating DB", "Updating vulnerability database...", SubStepType.ACTION)
