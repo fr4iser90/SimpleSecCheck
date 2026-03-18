@@ -72,44 +72,40 @@ class JobOrchestrationService:
                 await asyncio.sleep(5)  # Wait before retrying
     
     async def _process_queue(self) -> None:
-        """Process jobs from the queue."""
+        """Start as many queued jobs as free slots allow (same loop tick, not one per second)."""
         try:
-            # Check if we can start more jobs
-            if len(self.active_jobs) >= self.max_concurrent_jobs:
-                self.logger.debug(f"Max concurrent jobs reached ({len(self.active_jobs)}/{self.max_concurrent_jobs}), skipping queue check")
-                return
-            
-            # Get next job from queue
-            self.logger.debug("Polling queue for jobs...")
-            try:
-                job_data = await self.queue_adapter.pop_job()
-                if not job_data:
-                    self.logger.debug("No job available in queue")
-                    return
-            except Exception as e:
-                self.logger.error(f"Error calling pop_job: {e}", exc_info=True)
-                return
-            
-            self.logger.info(f"Found job in queue: scan_id={job_data.get('scan_id')}")
-            
-            # Create job execution
-            try:
-                job_execution = await self._create_job_execution(job_data)
-                self.logger.info(f"Created job execution: {job_execution.id} for scan {job_execution.scan_id}")
-            except Exception as e:
-                self.logger.error(f"Error creating job execution: {e}", exc_info=True)
-                return
-            
-            # Start job execution
-            try:
-                self.active_jobs[job_execution.id] = job_execution
-                asyncio.create_task(self._execute_job_wrapper(job_execution))
-                self.logger.info(f"Started job execution: {job_execution.id}")
-            except Exception as e:
-                self.logger.error(f"Error starting job execution: {e}", exc_info=True)
-                # Remove from active jobs if we failed to start
-                self.active_jobs.pop(job_execution.id, None)
-            
+            while len(self.active_jobs) < self.max_concurrent_jobs:
+                self.logger.debug(
+                    f"Polling queue (active {len(self.active_jobs)}/{self.max_concurrent_jobs})…"
+                )
+                try:
+                    job_data = await self.queue_adapter.pop_job()
+                    if not job_data:
+                        break
+                except Exception as e:
+                    self.logger.error(f"Error calling pop_job: {e}", exc_info=True)
+                    break
+
+                self.logger.info(f"Found job in queue: scan_id={job_data.get('scan_id')}")
+
+                try:
+                    job_execution = await self._create_job_execution(job_data)
+                    self.logger.info(
+                        f"Created job execution: {job_execution.id} for scan {job_execution.scan_id}"
+                    )
+                except Exception as e:
+                    self.logger.error(f"Error creating job execution: {e}", exc_info=True)
+                    break
+
+                try:
+                    self.active_jobs[job_execution.id] = job_execution
+                    asyncio.create_task(self._execute_job_wrapper(job_execution))
+                    self.logger.info(f"Started job execution: {job_execution.id}")
+                except Exception as e:
+                    self.logger.error(f"Error starting job execution: {e}", exc_info=True)
+                    self.active_jobs.pop(job_execution.id, None)
+                    break
+
         except Exception as e:
             self.logger.error(f"Unexpected error processing queue: {e}", exc_info=True)
     

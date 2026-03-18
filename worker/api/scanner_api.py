@@ -296,33 +296,9 @@ async def _refresh_scanners_from_container() -> None:
         # This ensures scanner container uses correct UID/GID for file permissions
         environment_vars = {"DATABASE_URL": database_url}
         
-        # Check setup status to suppress logs during setup
-        setup_complete = False
-        try:
-            from sqlalchemy import text, select
-            from infrastructure.database.models import SystemState, SetupStatusEnum
-            
-            async with _database_adapter.get_session() as session:
-                result = await session.execute(
-                    text("SELECT to_regclass(:table_name)"),
-                    {"table_name": "public.system_state"}
-                )
-                table_exists = result.scalar() is not None
-                
-                if table_exists:
-                    result = await session.execute(select(SystemState).limit(1))
-                    system_state = result.scalar_one_or_none()
-                    if system_state:
-                        setup_complete = (
-                            (system_state.setup_status == SetupStatusEnum.COMPLETED or
-                             system_state.setup_status == SetupStatusEnum.LOCKED) and
-                            system_state.setup_locked and
-                            system_state.database_initialized and
-                            system_state.admin_user_created and
-                            system_state.system_configured
-                        )
-        except Exception:
-            pass  # If we can't check, assume setup is not complete
+        from worker.infrastructure.system_state_reader import read_worker_system_state
+
+        setup_complete, _ = await read_worker_system_state(_database_adapter)
         
         # During setup, suppress scanner logs (only show errors)
         if not setup_complete:

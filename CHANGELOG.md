@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Worker DB `max_concurrent_jobs`** — The worker image does not ship backend ORM models; importing `infrastructure.database.models` always failed and was ignored, so parallel slots stayed at **1** regardless of admin/DB. Worker now reads `system_state` via raw SQL (`worker/infrastructure/system_state_reader.py`).
+- **Worker queue** — Pro Loop werden alle freien Slots mit Jobs aus der Queue befüllt (nicht nur ein Job pro Sekunde).
+- **Worker parallel jobs** — Only `MAX_CONCURRENT_JOBS` (env override) or DB `max_concurrent_jobs` (admin/setup). Removed `WORKER_CONCURRENCY`. If DB has no value yet, default **1** parallel job. Removed unused `WORKER_MAX_RETRIES` from compose (was never read by code).
+
 ### Changed
 - **Setup wizard** — Removed global “scanner timeout” (per-tool timeouts remain via admin/manifest). Replaced “Max concurrent scans” with **max concurrent scan jobs**: stored in system config and used by the worker as parallel **complete** scans (queue holds the rest). Optional override: env `MAX_CONCURRENT_JOBS`. Admin: `GET/PUT /api/admin/config/worker-jobs`.
 

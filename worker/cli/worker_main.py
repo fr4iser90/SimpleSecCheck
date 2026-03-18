@@ -62,8 +62,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--max-concurrent-jobs",
         type=lambda x: int(x) if x else None,
-        default=os.environ.get("MAX_CONCURRENT_JOBS") or os.environ.get("WORKER_CONCURRENCY"),
-        help="Maximum number of concurrent jobs (from MAX_CONCURRENT_JOBS or WORKER_CONCURRENCY env var)"
+        default=os.environ.get("MAX_CONCURRENT_JOBS"),
+        help="Override concurrent jobs (env MAX_CONCURRENT_JOBS); else DB max_concurrent_jobs, else 1",
     )
     
     parser.add_argument(
@@ -175,70 +175,25 @@ async def main():
     database_adapter = PostgreSQLAdapter(db_url)
     await database_adapter.initialize()
     
-    # Check setup status early to configure logging
-    setup_complete = False
-    db_max_jobs: int | None = None
-    try:
-        from sqlalchemy import text, select
-        from infrastructure.database.models import SystemState, SetupStatusEnum
+    # Check setup status + DB max_concurrent_jobs (raw SQL — backend ORM not in worker image)
+    from worker.infrastructure.system_state_reader import read_worker_system_state
 
-        async with database_adapter.get_session() as session:
-            result = await session.execute(
-                text("SELECT to_regclass(:table_name)"),
-                {"table_name": "public.system_state"},
-            )
-            table_exists = result.scalar() is not None
-
-            if table_exists:
-                result = await session.execute(select(SystemState).limit(1))
-                system_state = result.scalar_one_or_none()
-                if system_state:
-                    setup_complete = (
-                        (
-                            system_state.setup_status == SetupStatusEnum.COMPLETED
-                            or system_state.setup_status == SetupStatusEnum.LOCKED
-                        )
-                        and system_state.setup_locked
-                        and system_state.database_initialized
-                        and system_state.admin_user_created
-                        and system_state.system_configured
-                    )
-                    cfg = system_state.config or {}
-                    if isinstance(cfg, dict):
-                        raw = cfg.get("max_concurrent_jobs")
-                        if raw is None:
-                            raw = cfg.get("max_concurrent_scans")
-                        if raw is not None:
-                            try:
-                                db_max_jobs = max(1, min(50, int(raw)))
-                            except (TypeError, ValueError):
-                                db_max_jobs = None
-    except Exception:
-        pass
+    setup_complete, db_max_jobs = await read_worker_system_state(database_adapter)
 
     def _clamp_jobs(n: int) -> int:
         return max(1, min(50, n))
 
+    # MAX_CONCURRENT_JOBS env wins; else DB max_concurrent_jobs (wizard/admin); else 1.
     env_jobs = os.environ.get("MAX_CONCURRENT_JOBS", "").strip()
     if env_jobs:
         try:
             args.max_concurrent_jobs = _clamp_jobs(int(env_jobs))
         except ValueError:
-            args.max_concurrent_jobs = db_max_jobs or 3
-    elif setup_complete and db_max_jobs is not None:
+            args.max_concurrent_jobs = db_max_jobs if db_max_jobs is not None else 1
+    elif db_max_jobs is not None:
         args.max_concurrent_jobs = db_max_jobs
     else:
-        wc = (
-            os.environ.get("WORKER_CONCURRENCY", "").strip()
-            or (str(args.max_concurrent_jobs) if args.max_concurrent_jobs else "")
-        )
-        if wc:
-            try:
-                args.max_concurrent_jobs = _clamp_jobs(int(wc))
-            except ValueError:
-                args.max_concurrent_jobs = 3
-        else:
-            args.max_concurrent_jobs = 3
+        args.max_concurrent_jobs = 1
     
     # Configure logging based on setup status
     if setup_complete:

@@ -22,3 +22,4 @@ pytest tests/e2e -v -s
 
 - `test_multiple_repos.py` checks report access via `/api/results/{scan_id}/report` (session cookie).
 - `test_queue_steps_sessions.py` requires **session auth** enabled to validate session isolation and report access.
+- `test_worker_parallelism_benchmark.py` — 3× gleiches Git-Repo: nach jedem `max_concurrent_jobs`-Wechsel **automatisch** `docker compose restart worker` (Repo-Root/`SSC_COMPOSE_DIR`). Ohne Neustart nutzt der Worker die alte Slot-Zahl. `SSC_BENCHMARK_AUTO_RESTART=0` zum Abschalten. `MAX_CONCURRENT_JOBS` in Compose überschreibt die DB.

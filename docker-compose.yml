@@ -151,9 +151,7 @@ services:
       - QUEUE_TYPE=redis
       - QUEUE_CONNECTION=${REDIS_URL:-redis://redis:6379}
       - SCANNER_WORKER_ENABLED=true
-      # Parallel complete scans: after setup, DB (wizard) wins unless MAX_CONCURRENT_JOBS is set
-      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-1}
-      - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}
+      # Parallel jobs: DB max_concurrent_jobs (admin/setup); optional MAX_CONCURRENT_JOBS in .env
       # NOTE: Logs are part of Results - Scanner creates results/{scan_id}/logs/ automatically
       # RESULTS_DIR_HOST: Absolute path on HOST (where docker-compose runs) - needed for Worker to mount volumes to Scanner containers
       # Docker API requires absolute paths when creating containers dynamically
@@ -323,8 +321,7 @@ volumes:
 # - REDIS_URL: default redis://redis:6379 if unset
 #
 # Optional tuning:
-# - WORKER_CONCURRENCY (default: 1)
-# - WORKER_MAX_RETRIES (default: 3)
+# - MAX_CONCURRENT_JOBS on worker (overrides DB); else DB max_concurrent_jobs; else 1
 # - API_BASE_URL (default: http://backend:8080)
 #
 # Scanner resource limits:

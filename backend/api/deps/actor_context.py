@@ -336,7 +336,10 @@ async def get_authenticated_user(
 async def get_admin_user(
     actor_context: ActorContext = Depends(get_authenticated_user)
 ) -> ActorContext:
-    """FastAPI dependency that requires admin privileges."""
-    # This would typically check user roles/permissions
-    # For now, we'll assume all authenticated users are admins
+    """FastAPI dependency that requires admin role (role from JWT/session)."""
+    if actor_context.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin role required",
+        )
     return actor_context
