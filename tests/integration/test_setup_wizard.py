@@ -426,8 +426,7 @@ class SetupWizardTester:
         if system_config is None:
             system_config = {
                 "auth_mode": "free",
-                "scanner_timeout": 300,
-                "max_concurrent_scans": 3
+                "max_concurrent_jobs": 3,
             }
         
         response = await self.api_client.post(
@@ -491,8 +490,7 @@ async def test_setup_flow_free_auth(api_client, docker_compose):
         admin_password="TestPass123!",
         system_config={
             "auth_mode": "free",
-            "scanner_timeout": 300,
-            "max_concurrent_scans": 3
+            "max_concurrent_jobs": 3,
         },
     )
     assert result["success"] is True
@@ -510,8 +508,7 @@ async def test_setup_flow_session_auth(api_client, docker_compose):
         admin_password="SessionPass123!",
         system_config={
             "auth_mode": "session",
-            "scanner_timeout": 600,
-            "max_concurrent_scans": 5
+            "max_concurrent_jobs": 5,
         },
     )
     assert result["success"] is True
@@ -608,7 +605,7 @@ async def test_setup_then_login_and_cookies(api_client, docker_compose):
         admin_username="testadmin",
         admin_email=admin_email,
         admin_password=admin_password,
-        system_config={"auth_mode": "free", "scanner_timeout": 300, "max_concurrent_scans": 3},
+        system_config={"auth_mode": "free", "max_concurrent_jobs": 3},
     )
     print("✅ Setup completed")
 

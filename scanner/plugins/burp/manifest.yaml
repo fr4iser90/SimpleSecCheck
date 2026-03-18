@@ -31,3 +31,9 @@ install:
 - - chmod
   - +x
   - /opt/burp/burp-suite.jar
+exit_codes:
+  binary: java
+  note: Burp is launched via JVM — exit codes follow Java/headless Burp driver behavior.
+  codes:
+    0: Process exited normally.
+    1: Error — GUI required, license, or launch failure.

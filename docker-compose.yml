@@ -151,6 +151,7 @@ services:
       - QUEUE_TYPE=redis
       - QUEUE_CONNECTION=${REDIS_URL:-redis://redis:6379}
       - SCANNER_WORKER_ENABLED=true
+      # Parallel complete scans: after setup, DB (wizard) wins unless MAX_CONCURRENT_JOBS is set
       - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-1}
       - WORKER_MAX_RETRIES=${WORKER_MAX_RETRIES:-3}
       # NOTE: Logs are part of Results - Scanner creates results/{scan_id}/logs/ automatically

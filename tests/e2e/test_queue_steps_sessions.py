@@ -99,11 +99,11 @@ async def test_queue_steps_and_session_isolation(client: httpx.AsyncClient, clie
     )
 
     # Verify report access for session one
-    report_response = await client.get(f"/api/my-results/{scan_id}/report")
+    report_response = await client.get(f"/api/results/{scan_id}/report")
     if report_response.status_code == 403:
-        pytest.skip("Report access requires session-scoped /api/my-results")
+        pytest.skip("Report access requires session cookie on /api/results")
     assert report_response.status_code == 200, "Session owner should access report"
 
     # Verify report access is denied for session two (isolation)
-    report_response_two = await client_two.get(f"/api/my-results/{scan_id}/report")
+    report_response_two = await client_two.get(f"/api/results/{scan_id}/report")
     assert report_response_two.status_code in (401, 403), "Other session should not access report"

@@ -14,8 +14,9 @@ from domain.services.scanner_duration_service import ScannerDurationService
 from domain.exceptions.scan_exceptions import (
     ScanException,
     ScanNotFoundException,
-    ScanValidationException
+    ScanValidationException,
 )
+from application.services.scan_enforcement import enforce_scan_creation
 
 from application.use_cases.start_scan_use_case import StartScanUseCase
 from application.use_cases.process_result_use_case import ProcessResultUseCase
@@ -49,9 +50,23 @@ class ScanService:
         self.process_result_use_case = ProcessResultUseCase(validation_service)
         self.cancel_scan_use_case = CancelScanUseCase(validation_service)
     
-    async def create_scan(self, request: ScanRequestDTO) -> ScanDTO:
+    async def create_scan(
+        self,
+        request: ScanRequestDTO,
+        *,
+        actor_role: str = "user",
+        guest_session_id: Optional[str] = None,
+        enforcement_mode: str = "full",
+    ) -> ScanDTO:
         """Create and start a new scan."""
         try:
+            await enforce_scan_creation(
+                self.scan_repository,
+                request,
+                actor_role=actor_role,
+                guest_session_id=guest_session_id,
+                enforcement_mode=enforcement_mode,
+            )
             # Execute start scan use case
             scan_dto = self.start_scan_use_case.execute(request)
             
@@ -106,12 +121,13 @@ class ScanService:
         try:
             scans = await self.scan_repository.list_scans(
                 user_id=filter_dto.user_id,
+                guest_session_id=filter_dto.guest_session_id,
                 project_id=filter_dto.project_id,
                 status=ScanStatus(filter_dto.status) if filter_dto.status else None,
                 scan_type=ScanType(filter_dto.scan_type) if filter_dto.scan_type else None,
                 tags=filter_dto.tags,
                 limit=filter_dto.limit,
-                offset=filter_dto.offset
+                offset=filter_dto.offset,
             )
             
             return [ScanSummaryDTO.from_entity(scan) for scan in scans]
@@ -228,14 +244,29 @@ class ScanService:
             request = self._create_retry_request(scan)
             
             # Create new scan
-            return await self.create_scan(request)
+            return await self.create_scan(
+                request,
+                actor_role="user",
+                guest_session_id=None,
+                enforcement_mode="policies_only",
+            )
         except ScanException as e:
             raise e
     
-    async def get_recent_scans(self, limit: int = 10) -> List[ScanSummaryDTO]:
-        """Get recent scans."""
+    async def get_recent_scans(
+        self,
+        limit: int = 10,
+        *,
+        owner_user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+    ) -> List[ScanSummaryDTO]:
+        """Recent scans for the current owner only."""
         try:
-            scans = await self.scan_repository.get_recent_scans(limit)
+            scans = await self.scan_repository.get_recent_scans(
+                limit,
+                owner_user_id=owner_user_id,
+                guest_session_id=guest_session_id,
+            )
             return [ScanSummaryDTO.from_entity(scan) for scan in scans]
         except Exception as e:
             raise ScanValidationException(f"Failed to get recent scans: {str(e)}")

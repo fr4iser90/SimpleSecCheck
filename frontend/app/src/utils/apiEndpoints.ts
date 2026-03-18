@@ -4,15 +4,13 @@ export const shouldUseSessionEndpoints = (config: FrontendConfig | null): boolea
   return Boolean(config?.features.session_management)
 }
 
+/** Report requires session/JWT or ?share_token=; send cookies. */
 export const getReportEndpoint = (
   scanId: string | null | undefined,
-  config: FrontendConfig | null,
+  _config: FrontendConfig | null,
 ): string => {
   if (!scanId) {
     return '/api/scan/report'
   }
-
-  return shouldUseSessionEndpoints(config)
-    ? `/api/my-results/${scanId}/report`
-    : `/api/results/${scanId}/report`
+  return `/api/results/${scanId}/report`
 }

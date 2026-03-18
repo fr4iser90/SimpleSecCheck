@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from scanner.core.scanner_registry import ScanType, TargetType, ArtifactType, ScannerCapability
 from scanner.core.step_registry import SubStepType
+from scanner.core.manifest_exit_codes import (
+    lookup_exit_description,
+    plugin_manifest_path_from_class,
+)
 from abc import ABC, abstractmethod
 
 # Global StepRegistry instance (set by orchestrator)
@@ -66,7 +70,8 @@ class BaseScanner(ABC):
         # Ensure directories exist
         self.results_dir.mkdir(parents=True, exist_ok=True)
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
-    
+        self._manifest_exit_note_logged = False
+
     def log(self, message: str, level: str = "INFO"):
         """Log message to log file and stdout"""
         prefix = f"[{self.name}]"
@@ -198,7 +203,29 @@ class BaseScanner(ABC):
                 self.log(f"Command completed successfully", "SUCCESS")
             else:
                 self.log(f"Command failed with exit code {result.returncode}", "ERROR")
-            
+                mp = plugin_manifest_path_from_class(type(self))
+                if mp:
+                    desc, note, has_codes = lookup_exit_description(
+                        mp, list(cmd), result.returncode
+                    )
+                    plug = mp.parent.name
+                    if desc:
+                        self.log(
+                            f"[manifest {plug}] exit {result.returncode}: {desc}",
+                            "WARNING",
+                        )
+                    elif has_codes:
+                        self.log(
+                            f"[manifest {plug}] exit {result.returncode} not listed under exit_codes.codes.",
+                            "INFO",
+                        )
+                    elif note and not self._manifest_exit_note_logged:
+                        self.log(
+                            f"[manifest {plug}] exit_codes.note: {note}",
+                            "INFO",
+                        )
+                        self._manifest_exit_note_logged = True
+
             return result
             
         except subprocess.TimeoutExpired:

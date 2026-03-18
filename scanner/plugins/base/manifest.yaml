@@ -36,3 +36,6 @@ install:
   - requests
   - defusedxml
   - asyncpg
+exit_codes:
+  note: Base image manifest only — no scanner CLI. Individual plugins define exit_codes
+    per tool.

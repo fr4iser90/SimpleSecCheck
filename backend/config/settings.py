@@ -46,10 +46,6 @@ class Settings(BaseSettings):
     API_PORT: int = Field(default=8000, description="API port")
     API_WORKERS: int = Field(default=4, description="Number of API workers")
     
-    # Scanner Configuration
-    SCANNER_TIMEOUT: int = Field(default=3600, description="Scanner timeout in seconds")
-    MAX_CONCURRENT_SCANS: int = Field(default=5, description="Maximum concurrent scans")
-    
     # Logging
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
     LOG_FORMAT: str = Field(default="json", description="Log format (json or text)")
@@ -99,7 +95,6 @@ class Settings(BaseSettings):
     
     # Scanner assets (DBs, manifests, etc.): global auto-update; can be extended with per-asset or health (SonarQube, Docker) in DB
     SCANNER_ASSETS_AUTO_UPDATE_ENABLED: bool = Field(default=False, description="If True, scanner assets (e.g. vuln DBs) are auto-updated; else admins trigger updates manually.")
-    
     # External Services
     GITHUB_API_URL: str = Field(default="https://api.github.com", description="GitHub API base URL")
     GITHUB_TOKEN: str = Field(default="", description="GitHub API token")
@@ -193,11 +188,6 @@ async def load_settings_from_database(settings_instance: Settings) -> None:
                             if key in feature_flags:
                                 setattr(settings_instance, key, feature_flags[key])
                 
-                # Load scanner timeout and max concurrent scans if in config
-                if "scanner_timeout" in config:
-                    settings_instance.SCANNER_TIMEOUT = config["scanner_timeout"]
-                if "max_concurrent_scans" in config:
-                    settings_instance.MAX_CONCURRENT_SCANS = config["max_concurrent_scans"]
                 # Scanner assets: auto-update (future: per-asset or health e.g. SonarQube reachable, Docker)
                 scanner_cfg = config.get("scanner") or config.get("scanner_assets") or {}
                 if isinstance(scanner_cfg, dict) and "auto_update_enabled" in scanner_cfg:

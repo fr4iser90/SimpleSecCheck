@@ -27,3 +27,9 @@ assets:
   mount:
     host_subpath: scanner/plugins/clair/config/config.yaml
     container_path: /app/scanner/plugins/clair/config/config.yaml
+exit_codes:
+  binary: clair
+  note: Clair is often API-driven; local CLI exit codes depend on wrapper/client used.
+  codes:
+    0: Command succeeded.
+    1: Generic failure — registry unreachable, bad manifest, or API error.

@@ -20,3 +20,6 @@ install:
 - - pip3
   - install
   - defusedxml
+exit_codes:
+  note: No single upstream CLI — SimpleSecCheck Android scan uses Python; interpret logs
+    in plugin output, not a fixed exit table.

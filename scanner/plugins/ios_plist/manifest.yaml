@@ -19,3 +19,5 @@ install:
 - - pip3
   - install
   - defusedxml
+exit_codes:
+  note: No single upstream CLI — plist analysis via Python; see scan logs for errors.

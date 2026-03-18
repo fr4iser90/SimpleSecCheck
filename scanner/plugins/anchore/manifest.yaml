@@ -31,3 +31,9 @@ assets:
   mount:
     host_subpath: scanner/plugins/anchore/config/config.yaml
     container_path: /app/scanner/plugins/anchore/config/config.yaml
+exit_codes:
+  binary: grype
+  codes:
+    0: Success — no vulnerabilities above threshold.
+    1: Vulnerabilities found matching fail-on criteria.
+    2: User error — bad image ref, DB error, or could not scan.

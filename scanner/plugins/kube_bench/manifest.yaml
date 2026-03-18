@@ -37,3 +37,9 @@ install:
   - -s
   - /opt/kube-bench
   - /usr/local/bin/kube-bench
+exit_codes:
+  binary: kube-bench
+  codes:
+    0: All tests passed (no failed checks).
+    1: One or more tests failed (CIS benchmark violations).
+    2: Fatal error — could not connect to cluster or invalid config.

@@ -153,8 +153,14 @@ class DockerJobExecutor:
                     self._heartbeat_while_running(job_execution.scan_id, stop_hb)
                 )
             try:
+                raw_to = job_execution.execution_metadata.get("container_wait_timeout_seconds")
+                try:
+                    timeout = int(raw_to) if raw_to is not None else 3600
+                except (TypeError, ValueError):
+                    timeout = 3600
+                timeout = max(60, min(86400, timeout))
                 # Wait for container to complete
-                exit_code = await self._wait_for_container(container_id)
+                exit_code = await self._wait_for_container(container_id, timeout=timeout)
             finally:
                 stop_hb.set()
                 if hb_task:

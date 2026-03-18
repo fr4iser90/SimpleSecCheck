@@ -5,14 +5,11 @@ This module provides health check endpoints for monitoring the backend service.
 """
 from fastapi import APIRouter, HTTPException, Response
 from typing import Dict, Any
-import asyncio
 
 from infrastructure.database.adapter import get_database_health
 from infrastructure.redis.client import get_redis_health
-from config.settings import get_settings
 
 router = APIRouter()
-shutdown_router = APIRouter(prefix="/api", tags=["shutdown"])
 
 @router.get("/health")
 async def health():
@@ -98,17 +95,3 @@ async def readiness_check():
 async def liveness_check():
     """Liveness check for Kubernetes."""
     return {"status": "alive", "message": "Service is running"}
-
-@shutdown_router.get("/shutdown/status", response_model=Dict[str, Any])
-async def shutdown_status():
-    """Get shutdown status (for frontend auto-shutdown feature)."""
-    # Return default values - auto-shutdown feature not implemented yet
-    return {
-        "auto_shutdown_enabled": False,
-        "shutdown_after_scan": False,
-        "shutdown_delay": 0,
-        "idle_timeout": 0,
-        "shutdown_scheduled": False,
-        "idle_timeout_remaining": None,
-        "last_activity": 0
-    }

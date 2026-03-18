@@ -32,3 +32,14 @@ install:
   - install
   - brakeman
   - --no-document
+exit_codes:
+  binary: brakeman
+  codes:
+    0: No warnings (or scan completed with no high-severity issues, depending on flags).
+    1: Security warnings found.
+    2: Scan error — invalid path, not a Rails app, or Brakeman crashed.
+    3: File not found or permission error.
+    4: Invalid options.
+    5: Syntax error in Ruby code.
+    6: Plugin load error.
+    255: Unexpected failure.

@@ -6,3 +6,5 @@ categories:
 languages: null
 install: []
 assets: []
+exit_codes:
+  note: Test plugin placeholder — no production CLI exit semantics.

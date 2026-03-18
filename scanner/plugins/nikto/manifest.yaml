@@ -43,3 +43,8 @@ install:
   - /usr/local/bin/nikto
 - - rm
   - /tmp/nikto.zip
+exit_codes:
+  binary: nikto
+  codes:
+    0: Scan completed (Nikto often returns 0 even with findings — read report).
+    1: Error — invalid target, connection failure, or Perl/runtime error.

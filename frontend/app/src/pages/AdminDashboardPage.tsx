@@ -9,22 +9,136 @@ interface CardItem {
   comingSoon?: boolean
 }
 
-const adminSections: CardItem[] = [
-  { to: '/admin/settings', title: 'System Settings', description: 'SMTP, security mode, scanner config', icon: '⚙️' },
-  { to: '/admin/auth', title: 'Auth Settings', description: 'Auth mode, guest access, self-registration', icon: '🔐' },
-  { to: '/admin/queue', title: 'Queue & Scan Order', description: 'Queue strategy: FIFO, priority, or round-robin', icon: '📊' },
-  { to: '/admin/users', title: 'User Management', description: 'Users, roles, create, edit, delete', icon: '👥' },
-  { to: '/admin/feature-flags', title: 'Feature Flags', description: 'Allow local paths, Git, ZIP, container, network scans', icon: '🚩' },
-  { to: '/admin/security', title: 'Security Policies', description: 'Use cases, rate limits', icon: '🔒', comingSoon: true },
-  { to: '/admin/audit-log', title: 'Audit Log', description: 'Security-relevant events and changes', icon: '📋' },
-  { to: '/admin/security/ip-control', title: 'IP & Abuse Protection', description: 'Block IPs, abuse limits', icon: '🛡️' },
-  { to: '/admin/scanner', title: 'Scan Engine Management', description: 'Scanners, assets, updates', icon: '🔧' },
-  { to: '/admin/tool-settings', title: 'Tool settings (DB)', description: 'Manifest + DB: timeouts, SonarQube, tokens', icon: '🧩' },
-  { to: '/admin/tool-duration', title: 'Tool duration (exact per scanner)', description: 'Real run times per tool, used for queue estimates', icon: '⏱️' },
-  { to: '/admin/vulnerabilities', title: 'Vulnerability Database', description: 'CVE data, updates', icon: '📦', comingSoon: true },
-  { to: '/admin/scan-policies', title: 'Scan Policies', description: 'Finding policies, rules', icon: '📜', comingSoon: true },
-  { to: '/admin/notifications', title: 'Notification Management', description: 'Alerts, webhooks', icon: '🔔', comingSoon: true },
-  { to: '/admin/health', title: 'System Health', description: 'Database, Redis, resources, metrics', icon: '❤️', comingSoon: true },
+interface DashboardGroup {
+  id: string
+  title: string
+  emoji: string
+  cards: CardItem[]
+}
+
+/** Grouped admin areas: System, Users, Execution, Scan Engine, Security, Observability */
+const DASHBOARD_GROUPS: DashboardGroup[] = [
+  {
+    id: 'system',
+    title: 'System',
+    emoji: '⚙️',
+    cards: [
+      {
+        to: '/admin/settings',
+        title: 'System Settings',
+        description: 'SMTP and system email',
+        icon: '📧',
+      },
+      {
+        to: '/admin/auth',
+        title: 'Auth Settings',
+        description: 'Auth mode, guest access, self-registration',
+        icon: '🔐',
+      },
+    ],
+  },
+  {
+    id: 'users',
+    title: 'Users',
+    emoji: '👥',
+    cards: [
+      {
+        to: '/admin/users',
+        title: 'User Management',
+        description: 'Users, roles, create, edit, delete',
+        icon: '👤',
+      },
+      {
+        to: '/admin/feature-flags',
+        title: 'Feature Flags',
+        description: 'Local paths, Git, ZIP, container, network scans',
+        icon: '🚩',
+      },
+    ],
+  },
+  {
+    id: 'execution',
+    title: 'Execution',
+    emoji: '🚦',
+    cards: [
+      {
+        to: '/admin/execution',
+        title: 'Queue & parallel scans',
+        description: 'Max concurrent jobs, FIFO / priority / round-robin, role priorities',
+        icon: '📊',
+      },
+      {
+        to: '#',
+        title: 'Rate limits',
+        description: 'Global scan rate limits per tenant (planned)',
+        icon: '⏱️',
+        comingSoon: true,
+      },
+    ],
+  },
+  {
+    id: 'scan-engine',
+    title: 'Scan Engine',
+    emoji: '🔧',
+    cards: [
+      {
+        to: '/admin/scanner',
+        title: 'Scanners & assets',
+        description: 'Registry, worker, OWASP/Trivy caches, asset refresh',
+        icon: '🔩',
+      },
+      {
+        to: '/admin/tool-settings',
+        title: 'Tool settings',
+        description: 'DB + manifest overrides: timeouts, tokens, SonarQube, Snyk',
+        icon: '🧩',
+      },
+      {
+        to: '/admin/tool-duration',
+        title: 'Tool duration',
+        description: 'Measured run times per scanner for queue estimates',
+        icon: '⏱️',
+      },
+    ],
+  },
+  {
+    id: 'security',
+    title: 'Security',
+    emoji: '🔐',
+    cards: [
+      {
+        to: '/admin/policies',
+        title: 'Policies',
+        description: 'Security rules & compliance (staging; enforcement later)',
+        icon: '🔒',
+      },
+      {
+        to: '/admin/security/ip-control',
+        title: 'Abuse protection',
+        description: 'Block IPs, abuse limits',
+        icon: '🛡️',
+      },
+    ],
+  },
+  {
+    id: 'observability',
+    title: 'Observability',
+    emoji: '🔭',
+    cards: [
+      {
+        to: '/admin/audit-log',
+        title: 'Audit Log',
+        description: 'Security-relevant events and admin changes',
+        icon: '📋',
+      },
+      {
+        to: '/admin/health',
+        title: 'System Health',
+        description: 'Database, Redis, worker API status',
+        icon: '❤️',
+      },
+    ],
+  },
 ]
 
 export default function AdminDashboardPage() {
@@ -48,28 +162,38 @@ export default function AdminDashboardPage() {
         <div className="admin-dashboard-header">
           <h1>Admin Dashboard</h1>
           <p className="admin-dashboard-subtitle">
-            System configuration, users, feature flags, and security
+            System, execution, scan engine, security, and observability
           </p>
         </div>
 
-        <div className="admin-dashboard-grid">
-          {adminSections.map((item) => (
-            <Link
-              key={item.to}
-              to={item.comingSoon ? '#' : item.to}
-              className={`admin-dashboard-card ${item.comingSoon ? 'admin-dashboard-card--disabled' : ''}`}
-              onClick={item.comingSoon ? (e) => e.preventDefault() : undefined}
-              style={item.comingSoon ? { cursor: 'default' } : undefined}
-            >
-              <span className="admin-dashboard-card-icon">{item.icon}</span>
-              <h3 className="admin-dashboard-card-title">{item.title}</h3>
-              <p className="admin-dashboard-card-description">{item.description}</p>
-              {item.comingSoon && (
-                <span className="admin-dashboard-card-badge">Coming Soon</span>
-              )}
-            </Link>
-          ))}
-        </div>
+        {DASHBOARD_GROUPS.map((group) => (
+          <section key={group.id} className="admin-dashboard-section" aria-labelledby={`admin-section-${group.id}`}>
+            <h2 id={`admin-section-${group.id}`} className="admin-dashboard-section-title">
+              <span className="admin-dashboard-section-emoji" aria-hidden>
+                {group.emoji}
+              </span>
+              {group.title}
+            </h2>
+            <div className="admin-dashboard-grid">
+              {group.cards.map((item) => (
+                <Link
+                  key={`${group.id}-${item.title}`}
+                  to={item.comingSoon ? '#' : item.to}
+                  className={`admin-dashboard-card ${item.comingSoon ? 'admin-dashboard-card--disabled' : ''}`}
+                  onClick={item.comingSoon ? (e) => e.preventDefault() : undefined}
+                  style={item.comingSoon ? { cursor: 'default' } : undefined}
+                >
+                  <span className="admin-dashboard-card-icon">{item.icon}</span>
+                  <h3 className="admin-dashboard-card-title">{item.title}</h3>
+                  <p className="admin-dashboard-card-description">{item.description}</p>
+                  {item.comingSoon && (
+                    <span className="admin-dashboard-card-badge">Coming Soon</span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   )

@@ -21,3 +21,8 @@ checkpoint:
 homepage: https://docs.npmjs.com/cli/v8/commands/npm-audit
 documentation: https://docs.npmjs.com/cli/v8/commands/npm-audit
 install: []
+exit_codes:
+  binary: npm
+  codes:
+    0: No vulnerabilities found (audit clean).
+    1: Vulnerabilities found above configured level.

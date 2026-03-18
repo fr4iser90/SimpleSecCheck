@@ -22,3 +22,9 @@ install:
 - - pip3
   - install
   - detect-secrets>=1.5.0
+exit_codes:
+  binary: detect-secrets
+  codes:
+    0: Success — no secrets detected (scan mode) or command completed.
+    1: Secrets detected in hook/audit mode, or command failed.
+    2: Invalid usage or configuration error.

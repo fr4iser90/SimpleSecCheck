@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { apiFetch } from '../utils/apiClient'
 
@@ -125,8 +126,18 @@ export default function AdminSettingsPage() {
   return (
     <div className="admin-settings-page">
       <div className="admin-settings-container">
-        <h2>Admin Settings</h2>
-        
+        <h2>System settings</h2>
+        <p className="section-description" style={{ marginBottom: '1.25rem' }}>
+          Email delivery below. Other global controls:{' '}
+          <Link to="/admin/auth">Auth</Link>
+          {' · '}
+          <Link to="/admin/execution">Execution</Link> (parallel scans &amp; queue)
+          {' · '}
+          <Link to="/admin/feature-flags">Feature flags</Link>
+          {' · '}
+          <Link to="/admin/health">System health</Link>.
+        </p>
+
         {error && (
           <div className="error-message" role="alert">
             {error}

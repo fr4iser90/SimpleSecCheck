@@ -34,6 +34,38 @@ export default function MyScansPage() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [flashMessage, setFlashMessage] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [shareCopyingId, setShareCopyingId] = useState<string | null>(null)
+
+  const handleCopyShareLink = async (scanId: string) => {
+    setShareCopyingId(scanId)
+    setError(null)
+    try {
+      const { apiFetch } = await import('../utils/apiClient')
+      const res = await apiFetch(`/api/v1/scans/${scanId}/report-share-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ regenerate: false }),
+      })
+      if (!res.ok) {
+        let msg = `Share link failed (${res.status})`
+        try {
+          const j = await res.json()
+          msg = typeof j.detail === 'string' ? j.detail : msg
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg)
+      }
+      const data = (await res.json()) as { share_path: string }
+      const url = `${window.location.origin}${data.share_path}`
+      await navigator.clipboard.writeText(url)
+      setFlashMessage('Share link copied (anyone with the link can view the report).')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not copy share link')
+    } finally {
+      setShareCopyingId(null)
+    }
+  }
 
   const handleCancelScanRow = async (scanId: string) => {
     if (!window.confirm('Cancel this scan? It will leave the queue or stop if running.')) return
@@ -402,26 +434,50 @@ export default function MyScansPage() {
                             </button>
                           )}
                         {item.status === 'completed' && item.scan_id && (
-                          <a
-                            href={`/api/my-results/${item.scan_id}/report`}
-                            className="action-button action-completed"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              padding: '0.375rem 0.75rem',
-                              background: '#28a745',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontSize: '0.875rem',
-                              fontWeight: '500',
-                              textDecoration: 'none',
-                              display: 'inline-block',
-                            }}
-                          >
-                            View Results
-                          </a>
+                          <>
+                            <a
+                              href={`/api/results/${item.scan_id}/report`}
+                              className="action-button action-completed"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                padding: '0.375rem 0.75rem',
+                                background: '#28a745',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                textDecoration: 'none',
+                                display: 'inline-block',
+                              }}
+                            >
+                              View Results
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyShareLink(item.scan_id!)}
+                              disabled={shareCopyingId === item.scan_id}
+                              style={{
+                                padding: '0.375rem 0.75rem',
+                                background: 'transparent',
+                                color: '#6f42c1',
+                                border: '1px solid rgba(111, 66, 193, 0.45)',
+                                borderRadius: '4px',
+                                cursor:
+                                  shareCopyingId === item.scan_id ? 'wait' : 'pointer',
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                opacity: shareCopyingId === item.scan_id ? 0.7 : 1,
+                              }}
+                              title="Copy a shareable link (token in URL)"
+                            >
+                              {shareCopyingId === item.scan_id
+                                ? 'Copying…'
+                                : 'Copy share link'}
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>

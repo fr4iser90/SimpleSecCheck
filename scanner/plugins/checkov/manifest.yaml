@@ -34,3 +34,9 @@ assets:
   mount:
     host_subpath: scanner/plugins/checkov/config/config.yaml
     container_path: /app/scanner/plugins/checkov/config/config.yaml
+exit_codes:
+  binary: checkov
+  codes:
+    0: Success — no failed checks (or soft-fail policy satisfied).
+    1: One or more checks failed (misconfigurations detected).
+    2: Fatal error — invalid CLI, crash, or could not run.

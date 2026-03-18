@@ -23,3 +23,13 @@ install:
 - - pip3
   - install
   - safety
+exit_codes:
+  binary: safety
+  codes:
+    0: No vulnerabilities reported for scanned dependencies.
+    1: Vulnerabilities found OR CLI/runtime crash (inspect stderr — traceback means broken
+      install/Python deps, not “CVE count”).
+    2: Invalid arguments or missing files.
+    3: Safety DB or authentication error (API key / subscription).
+    64: Deprecated in some versions for auth/DB issues — check Safety CLI docs for your
+      version.

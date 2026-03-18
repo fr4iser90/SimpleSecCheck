@@ -23,3 +23,8 @@ install:
 - - pip3
   - install
   - bandit[toml]
+exit_codes:
+  binary: bandit
+  codes:
+    0: No issues reported (or below configured severity).
+    1: Issues found at or above configured severity level.

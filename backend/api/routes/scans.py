@@ -5,11 +5,13 @@ This module defines the FastAPI routes for scan operations.
 Routes support both authenticated and guest users via ActorContext.
 """
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi import status as fastapi_status
 import asyncio
 import json
+import secrets
+from urllib.parse import quote
 import ipaddress
 import re
 from pathlib import Path
@@ -27,6 +29,8 @@ from api.schemas.scan_schemas import (
     BatchScanSchema,
     ScanStatusResponseSchema,
     AggregatedResultSchema,
+    ReportShareLinkRequestSchema,
+    ReportShareLinkResponseSchema,
 )
 from application.services.scan_service import ScanService
 from application.dtos.scan_dto import ScanDTO
@@ -43,9 +47,12 @@ from domain.exceptions.scan_exceptions import (
     ScanConcurrencyLimitException,
     FeatureDisabledException,
     TargetPermissionDeniedException,
+    ScanExecutionRateLimitException,
+    ScanPolicyBlockedException,
 )
 from domain.entities.scan import ScanType
 from domain.services.target_permission_policy import check_can_scan_target, get_allow_flags_from_settings
+from domain.services.scan_result_access import can_read_scan_results, is_scan_owner
 from config.settings import get_settings
 from typing import Annotated
 import re
@@ -227,6 +234,44 @@ router = APIRouter(
     },
 )
 
+
+def _scan_user_id_str(dto: ScanDTO) -> Optional[str]:
+    if dto.user_id in (None, ""):
+        return None
+    return str(dto.user_id)
+
+
+def _require_scan_read(
+    dto: ScanDTO,
+    actor: ActorContext,
+    share_token: Optional[str] = None,
+) -> None:
+    if not can_read_scan_results(
+        metadata=dto.metadata or {},
+        scan_user_id=_scan_user_id_str(dto),
+        actor_user_id=actor.user_id,
+        actor_session_id=actor.session_id,
+        actor_is_authenticated=bool(actor.is_authenticated),
+        share_token_query=share_token,
+    ):
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+
+
+def _require_scan_owner(dto: ScanDTO, actor: ActorContext) -> None:
+    if not is_scan_owner(
+        metadata=dto.metadata or {},
+        scan_user_id=_scan_user_id_str(dto),
+        actor_user_id=actor.user_id,
+        actor_session_id=actor.session_id,
+        actor_is_authenticated=bool(actor.is_authenticated),
+    ):
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_403_FORBIDDEN,
+            detail="Only the scan owner can do this",
+        )
 
 
 def _read_deduplicated_steps(scan_id: str) -> tuple[List[Dict[str, Any]], int, int]:
@@ -475,7 +520,13 @@ async def create_scan(
         )
         
         # Create scan via service
-        scan_dto = await scan_service.create_scan(request_dto)
+        scan_dto = await scan_service.create_scan(
+            request_dto,
+            actor_role=actor_context.role,
+            guest_session_id=(
+                actor_context.session_id if not actor_context.is_authenticated else None
+            ),
+        )
         
         return ScanResponseSchema(
             id=scan_dto.id,
@@ -505,6 +556,17 @@ async def create_scan(
         raise HTTPException(
             status_code=fastapi_status.HTTP_429_TOO_MANY_REQUESTS,
             detail=str(e)
+        )
+    except ScanExecutionRateLimitException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+            headers={"Retry-After": str(getattr(e, "retry_after_seconds", 3600))},
+        )
+    except ScanPolicyBlockedException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_403_FORBIDDEN,
+            detail=str(e),
         )
     except FeatureDisabledException as e:
         raise HTTPException(
@@ -564,20 +626,34 @@ async def list_scans(
     - **scan_service**: Scan service
     """
     try:
-        # Use actor context to filter scans if not admin
-        filter_user_id = user_id or actor_context.get_identifier()
-        
-        filter_dto = ScanFilterDTO(
-            user_id=filter_user_id,
-            project_id=project_id,
-            status=status,
-            scan_type=scan_type,
-            tags=tags,
-            limit=limit,
-            offset=offset,
-            sort_by=sort_by,
-            sort_order=sort_order,
-        )
+        if actor_context.is_authenticated:
+            filter_dto = ScanFilterDTO(
+                user_id=actor_context.user_id,
+                guest_session_id=None,
+                project_id=project_id,
+                status=status,
+                scan_type=scan_type,
+                tags=tags,
+                limit=limit,
+                offset=offset,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+        else:
+            if not actor_context.session_id:
+                return []
+            filter_dto = ScanFilterDTO(
+                user_id=None,
+                guest_session_id=actor_context.session_id,
+                project_id=project_id,
+                status=status,
+                scan_type=scan_type,
+                tags=tags,
+                limit=limit,
+                offset=offset,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
         
         scan_summaries = await scan_service.list_scans(filter_dto)
         
@@ -841,14 +917,8 @@ async def get_scan(
     """
     try:
         scan_dto = await scan_service.get_scan_by_id(scan_id)
-        
-        # Check permissions (guests can only access their own scans)
-        if not actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
-            raise HTTPException(
-                status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                detail="Access denied"
-            )
-        
+        _require_scan_read(scan_dto, actor_context)
+
         return ScanResponseSchema(
             id=scan_dto.id,
             name=scan_dto.name,
@@ -872,16 +942,16 @@ async def get_scan(
             info_vulnerabilities=scan_dto.info_vulnerabilities,
             metadata=scan_dto.metadata,
         )
-        
+
     except ScanNotFoundException as e:
         raise HTTPException(
             status_code=fastapi_status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail=str(e),
         )
     except ScanException as e:
         raise HTTPException(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=str(e),
         )
 
 
@@ -907,7 +977,9 @@ async def update_scan(
     - **scan_service**: Scan service
     """
     try:
-        # Convert update schema to DTO
+        existing = await scan_service.get_scan_by_id(scan_id)
+        _require_scan_owner(existing, actor_context)
+
         update_dto = ScanUpdateRequestDTO(
             name=update_request.name,
             description=update_request.description,
@@ -916,7 +988,7 @@ async def update_scan(
             tags=update_request.tags,
             metadata=update_request.metadata,
         )
-        
+
         scan_dto = await scan_service.update_scan(scan_id, update_dto)
         
         return ScanResponseSchema(
@@ -980,14 +1052,9 @@ async def delete_scan(
     - **scan_service**: Scan service
     """
     try:
-        # Check permissions
         scan_dto = await scan_service.get_scan_by_id(scan_id)
-        if not actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
-            raise HTTPException(
-                status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                detail="Access denied"
-            )
-        
+        _require_scan_owner(scan_dto, actor_context)
+
         success = await scan_service.delete_scan(scan_id)
         if not success:
             raise HTTPException(
@@ -1027,28 +1094,30 @@ async def get_scan_status(
     - **scan_service**: Scan service
     """
     try:
+        scan_dto = await scan_service.get_scan_by_id(scan_id)
+        _require_scan_read(scan_dto, actor_context)
         status_info = await scan_service.get_scan_status(scan_id)
-        
+
         return ScanStatusResponseSchema(
-            scan_id=status_info['scan_id'],
-            status=status_info['status'],
-            progress=status_info['progress'],
-            started_at=status_info['started_at'],
-            completed_at=status_info['completed_at'],
-            duration=status_info['duration'],
-            vulnerabilities_found=status_info['vulnerabilities_found'],
-            metadata=status_info['metadata'],
+            scan_id=status_info["scan_id"],
+            status=status_info["status"],
+            progress=status_info["progress"],
+            started_at=status_info["started_at"],
+            completed_at=status_info["completed_at"],
+            duration=status_info["duration"],
+            vulnerabilities_found=status_info["vulnerabilities_found"],
+            metadata=status_info["metadata"],
         )
-        
+
     except ScanNotFoundException as e:
         raise HTTPException(
             status_code=fastapi_status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail=str(e),
         )
     except ScanException as e:
         raise HTTPException(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=str(e),
         )
 
 
@@ -1076,13 +1145,8 @@ async def get_scan_steps(
         from pathlib import Path
         from config.settings import settings
         
-        # Check permissions
         scan_dto = await scan_service.get_scan_by_id(scan_id)
-        if actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
-            raise HTTPException(
-                status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                detail="Access denied"
-            )
+        _require_scan_read(scan_dto, actor_context)
 
         db_bundle = await _read_steps_from_database(scan_id)
         if db_bundle is not None:
@@ -1159,26 +1223,9 @@ async def cancel_scan(
     - **scan_service**: Scan service
     """
     try:
-        # Check permissions: only owner or admin can cancel
         scan_dto = await scan_service.get_scan_by_id(scan_id)
-        is_admin = actor_context.role == "admin"
-        scan_user_id = str(scan_dto.user_id) if scan_dto.user_id else None
-        if not is_admin:
-            if actor_context.is_authenticated:
-                if scan_user_id != actor_context.user_id:
-                    raise HTTPException(
-                        status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                        detail="You can only cancel your own scans"
-                    )
-            else:
-                scan_meta = getattr(scan_dto, "metadata", None) or {}
-                scan_session = scan_meta.get("session_id") if isinstance(scan_meta, dict) else None
-                if not actor_context.session_id or scan_session != actor_context.session_id:
-                    raise HTTPException(
-                        status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                        detail="You can only cancel your own scans"
-                    )
-        
+        _require_scan_owner(scan_dto, actor_context)
+
         cancel_dto = CancelScanRequestDTO(
             scan_id=scan_id,
             reason=cancel_request.reason,
@@ -1225,6 +1272,53 @@ async def cancel_scan(
 
 
 @router.post(
+    "/{scan_id}/report-share-link",
+    response_model=ReportShareLinkResponseSchema,
+    summary="Get or create report share link path",
+    description=(
+        "Owner only. Ensures report_share_token exists in scan metadata (or regenerates it), "
+        "returns the path to open the HTML report with ?share_token=."
+    ),
+)
+async def create_report_share_link(
+    scan_id: str,
+    body: Optional[ReportShareLinkRequestSchema] = Body(None),
+    actor_context: ActorContext = Depends(get_actor_context),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> ReportShareLinkResponseSchema:
+    try:
+        regenerate = bool(body.regenerate) if body else False
+        scan_dto = await scan_service.get_scan_by_id(scan_id)
+        _require_scan_owner(scan_dto, actor_context)
+        meta = dict(scan_dto.metadata or {})
+        tok = meta.get("report_share_token")
+        need_new = (
+            regenerate
+            or not isinstance(tok, str)
+            or len(tok.strip()) < 8
+        )
+        if need_new:
+            new_tok = secrets.token_urlsafe(32)
+            await scan_service.update_scan(
+                scan_id,
+                ScanUpdateRequestDTO(metadata={"report_share_token": new_tok}),
+            )
+            tok = new_tok
+        share_path = f"/api/results/{scan_id}/report?share_token={quote(tok, safe='')}"
+        return ReportShareLinkResponseSchema(share_path=share_path)
+    except ScanNotFoundException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ScanException as e:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.post(
     "/{scan_id}/retry",
     response_model=ScanResponseSchema,
     summary="Retry failed scan",
@@ -1244,8 +1338,10 @@ async def retry_scan(
     - **scan_service**: Scan service
     """
     try:
+        existing = await scan_service.get_scan_by_id(scan_id)
+        _require_scan_owner(existing, actor_context)
         scan_dto = await scan_service.retry_scan(scan_id)
-        
+
         return ScanResponseSchema(
             id=scan_dto.id,
             name=scan_dto.name,
@@ -1269,21 +1365,21 @@ async def retry_scan(
             info_vulnerabilities=scan_dto.info_vulnerabilities,
             metadata=scan_dto.metadata,
         )
-        
+
     except ScanNotFoundException as e:
         raise HTTPException(
             status_code=fastapi_status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail=str(e),
         )
     except ScanValidationException as e:
         raise HTTPException(
             status_code=fastapi_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e)
+            detail=str(e),
         )
     except ScanException as e:
         raise HTTPException(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=str(e),
         )
 
 
@@ -1307,16 +1403,9 @@ async def get_scan_results(
     - **scan_service**: Scan service
     """
     try:
-        # Check permissions
         scan_dto = await scan_service.get_scan_by_id(scan_id)
-        if not actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
-            raise HTTPException(
-                status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                detail="Access denied"
-            )
-        
-        # This would typically fetch results from a results service
-        # For now, return a placeholder
+        _require_scan_read(scan_dto, actor_context)
+
         raise NotImplementedError("Results service not yet implemented")
         
     except ScanNotFoundException as e:
@@ -1351,8 +1440,17 @@ async def get_recent_scans(
     - **scan_service**: Scan service
     """
     try:
-        scan_summaries = await scan_service.get_recent_scans(limit)
-        
+        if actor_context.is_authenticated:
+            scan_summaries = await scan_service.get_recent_scans(
+                limit, owner_user_id=actor_context.user_id
+            )
+        else:
+            if not actor_context.session_id:
+                return []
+            scan_summaries = await scan_service.get_recent_scans(
+                limit, guest_session_id=actor_context.session_id
+            )
+
         return [
             ScanSummarySchema(
                 id=summary.id,
@@ -1373,11 +1471,11 @@ async def get_recent_scans(
             )
             for summary in scan_summaries
         ]
-        
+
     except ScanException as e:
         raise HTTPException(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=str(e),
         )
 
 

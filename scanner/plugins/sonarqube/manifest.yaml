@@ -39,3 +39,10 @@ assets:
   mount:
     host_subpath: scanner/plugins/sonarqube/config/config.yaml
     container_path: /app/scanner/plugins/sonarqube/config/config.yaml
+exit_codes:
+  binary: sonar-scanner
+  codes:
+    0: Analysis completed and uploaded successfully.
+    1: Quality gate failed OR scanner error (check logs — server unreachable vs gate).
+    2: User error — invalid project key, missing properties, or CLI misuse.
+    3: Analysis report rejected by server.

@@ -71,50 +71,6 @@ ports:
 - **Docker Socket**: Required for Compose access. Prefer Docker API with auth when exposing the stack.
 - **No Authentication**: WebUI has no built-in login. Add Basic Auth, OAuth, or API keys before any public exposure.
 - **CORS**: Tighten allowed origins if the UI is not same-origin only.
-- Frontend includes auto-shutdown feature to prevent long-running instances (see below).
-
-## Auto-Shutdown Feature
-
-Frontend includes automatic shutdown to prevent long-running instances:
-
-### Configuration (Environment Variables)
-
-```bash
-# Enable auto-shutdown after scan completes (default: true)
-WEBUI_SHUTDOWN_AFTER_SCAN=true
-
-# Shutdown delay after scan (seconds, default: 300 = 5 minutes)
-WEBUI_SHUTDOWN_DELAY=300
-
-# Idle timeout - shutdown if no activity (seconds, default: 1800 = 30 minutes)
-WEBUI_IDLE_TIMEOUT=1800
-
-# Disable auto-shutdown completely (NOT RECOMMENDED)
-WEBUI_AUTO_SHUTDOWN=false
-```
-
-### Behavior
-
-1. **After Scan Completion**: 
-   - Waits `WEBUI_SHUTDOWN_DELAY` seconds after scan finishes
-   - Allows time to view report
-   - Then gracefully shuts down
-
-2. **Idle Timeout**:
-   - Tracks last activity (API calls, scan starts)
-   - If no activity for `WEBUI_IDLE_TIMEOUT`, shuts down
-   - Prevents forgotten instances
-
-3. **Graceful Shutdown**:
-   - Finishes current requests
-   - Stops accepting new connections
-   - Exits cleanly
-
-### Why This Matters
-
-- **Security**: Reduces attack window
-- **Resource Usage**: Prevents forgotten instances
-- **Single-Shot Principle**: WebUI should be temporary
 
 ## Docker Socket vs Docker API
 
@@ -176,10 +132,9 @@ container = client.containers.run(...)
 4. **Rate Limiting**: Prevent abuse
 5. **Input Validation**: Additional validation for scan parameters
 6. **Logging**: Audit log for all scan starts
-7. **Auto-Shutdown**: Always enable (default)
-8. **Localhost Only**: Never expose publicly
-9. **Firewall**: Block port 8080 from external access
-10. **Docker API**: Consider migrating to Docker API with TLS (future)
+7. **Localhost Only**: Never expose publicly
+8. **Firewall**: Block port 8080 from external access
+9. **Docker API**: Consider migrating to Docker API with TLS (future)
 
 ## Single-Shot Principle
 
@@ -188,7 +143,7 @@ WebUI follows single-shot principle:
 - No persistent state
 - Each scan is independent
 - No history tracking
-- **Auto-shutdown** prevents long-running instances
+- Prefer `docker compose down` when the stack is not needed.
 
 This reduces attack surface significantly.
 
@@ -210,15 +165,7 @@ ports:
   - "127.0.0.1:8080:8080"  # Only localhost
 ```
 
-### 3. Enable Auto-Shutdown
-```yaml
-# docker-compose.yml
-environment:
-  - WEBUI_SHUTDOWN_AFTER_SCAN=true
-  - WEBUI_IDLE_TIMEOUT=1800  # 30 minutes
-```
-
-### 4. Use Firewall
+### 3. Use Firewall
 ```bash
 # Block external access (Linux)
 sudo ufw deny 8080/tcp
@@ -227,7 +174,7 @@ sudo ufw deny 8080/tcp
 sudo iptables -A INPUT -p tcp --dport 8080 ! -s 127.0.0.1 -j DROP
 ```
 
-### 5. Monitor Running Instances
+### 4. Monitor Running Instances
 ```bash
 # Check if Frontend is running
 docker ps | grep frontend

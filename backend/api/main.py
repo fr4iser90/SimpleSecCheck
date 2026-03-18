@@ -155,7 +155,6 @@ def create_app() -> FastAPI:
     app.include_router(uploads.router)
     app.include_router(results.router)
     app.include_router(health_module.router)
-    app.include_router(health_module.shutdown_router)
     
     # User routes
     from api.routes import user as user_routes
@@ -198,7 +197,7 @@ async def handle_http_exception(request: Request, exc: StarletteHTTPException):
     logger = get_logger("api.main")
     
     # Suppress 404 logs for known frontend polling endpoints
-    if exc.status_code == 404 and request.url.path in ["/api/shutdown/status", "/api/scan/status"]:
+    if exc.status_code == 404 and request.url.path == "/api/scan/status":
         # Don't log these - they're just frontend polling endpoints that may not exist
         pass
     else:

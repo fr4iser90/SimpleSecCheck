@@ -29,3 +29,9 @@ install:
 - - chmod
   - +x
   - /opt/docker-bench-security/docker-bench-security.sh
+exit_codes:
+  binary: docker-bench-security.sh
+  codes:
+    0: All checks passed.
+    1: One or more benchmark checks failed.
+    2: Script error — Docker socket missing or permission denied.

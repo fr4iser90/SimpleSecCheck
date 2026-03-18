@@ -3,19 +3,23 @@ Admin API Routes
 
 Handles admin-only operations like system configuration updates.
 """
+import os
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel, EmailStr, Field
 
 from api.deps.actor_context import get_admin_user, ActorContext
 from infrastructure.database.adapter import db_adapter
-from infrastructure.database.models import SystemState, Scanner, ScannerToolSettings
+from infrastructure.database.models import SystemState, Scanner, ScannerToolSettings, Scan
+from infrastructure.database.adapter import get_database_health
+from infrastructure.redis.client import get_redis_health
 from domain.services.audit_log_service import AuditLogService
 from domain.services.scanner_duration_service import ScannerDurationService
 from domain.services.target_permission_policy import ALL_SCAN_FEATURE_FLAG_KEYS
-from sqlalchemy import select
+from sqlalchemy import select, func
 from datetime import datetime
 
 router = APIRouter(
@@ -57,11 +61,47 @@ class SMTPConfigResponse(BaseModel):
 
 class SystemConfigResponse(BaseModel):
     """Response for system configuration."""
-    
+
     auth_mode: str
-    scanner_timeout: int
-    max_concurrent_scans: int
+    max_concurrent_jobs: int = Field(
+        ge=1,
+        le=50,
+        description="Worker parallel scan jobs (restart worker after change unless using env override)",
+    )
     smtp: Optional[Dict[str, Any]] = None
+
+
+class WorkerJobsConfigRequest(BaseModel):
+    """Update how many complete scans the worker runs in parallel."""
+
+    max_concurrent_jobs: int = Field(ge=1, le=50)
+
+
+def _default_execution_limits() -> Dict[str, Any]:
+    return {
+        "max_scans_per_hour_global": None,
+        "max_scans_per_hour_per_user": None,
+        "max_scans_per_hour_per_guest_session": None,
+        "max_concurrent_scans_per_user": None,
+        "max_concurrent_scans_per_guest": None,
+        "rate_limit_admins": False,
+        "max_scan_duration_seconds": 3600,
+    }
+
+
+def _default_policies() -> Dict[str, Any]:
+    return {
+        "blocked_target_patterns": [],
+        "blocked_scan_types": [],
+        "require_auth_for_git": False,
+    }
+
+
+class ScanEnforcementUpdate(BaseModel):
+    """Partial update for scan rate limits, max duration, and policies."""
+
+    execution_limits: Optional[Dict[str, Any]] = None
+    policies: Optional[Dict[str, Any]] = None
 
 
 class AuthConfigResponse(BaseModel):
@@ -124,11 +164,17 @@ async def get_system_config(
                 smtp_config = smtp_config.copy()
                 smtp_config["password"] = "***" if smtp_config.get("password") else ""
             
+            mj = config.get("max_concurrent_jobs")
+            if mj is None:
+                mj = config.get("max_concurrent_scans")
+            try:
+                max_jobs = max(1, min(50, int(mj))) if mj is not None else 3
+            except (TypeError, ValueError):
+                max_jobs = 3
             return SystemConfigResponse(
                 auth_mode=system_state.auth_mode,
-                scanner_timeout=config.get("scanner_timeout", 3600),
-                max_concurrent_scans=config.get("max_concurrent_scans", 5),
-                smtp=smtp_config
+                max_concurrent_jobs=max_jobs,
+                smtp=smtp_config,
             )
             
     except HTTPException:
@@ -138,6 +184,293 @@ async def get_system_config(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get system config: {str(e)}"
         )
+
+
+@router.put("/config/worker-jobs", response_model=SystemConfigResponse)
+async def update_worker_jobs_config(
+    body: WorkerJobsConfigRequest,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> SystemConfigResponse:
+    """
+    Set max concurrent scan jobs for the worker (stored in system config).
+    Restart the worker container to apply unless MAX_CONCURRENT_JOBS env overrides.
+    """
+    try:
+        async with db_adapter.async_session() as session:
+            result = await session.execute(select(SystemState).limit(1))
+            system_state = result.scalar_one_or_none()
+            if not system_state:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="System state not found",
+                )
+            config = dict(system_state.config or {})
+            config["max_concurrent_jobs"] = body.max_concurrent_jobs
+            config.pop("max_concurrent_scans", None)
+            config.pop("scanner_timeout", None)
+            system_state.config = config
+            system_state.updated_at = datetime.utcnow()
+            await session.commit()
+            smtp_config = config.get("smtp")
+            if smtp_config and "password" in smtp_config:
+                smtp_config = smtp_config.copy()
+                smtp_config["password"] = "***" if smtp_config.get("password") else ""
+            return SystemConfigResponse(
+                auth_mode=system_state.auth_mode,
+                max_concurrent_jobs=body.max_concurrent_jobs,
+                smtp=smtp_config,
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update worker jobs config: {str(e)}",
+        )
+
+
+@router.get("/config/scan-enforcement")
+async def get_scan_enforcement_config(
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, Any]:
+    """Rate limits, max scan wall time, and submission policies (enforced on scan create)."""
+    try:
+        async with db_adapter.async_session() as session:
+            result = await session.execute(select(SystemState).limit(1))
+            system_state = result.scalar_one_or_none()
+            if not system_state:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="System state not found",
+                )
+            cfg = system_state.config or {}
+            el = dict(_default_execution_limits())
+            el.update(cfg.get("execution_limits") or {})
+            pol = dict(_default_policies())
+            pol.update(cfg.get("policies") or {})
+            return {"execution_limits": el, "policies": pol}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.put("/config/scan-enforcement")
+async def put_scan_enforcement_config(
+    body: ScanEnforcementUpdate,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, Any]:
+    if body.execution_limits is None and body.policies is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide execution_limits and/or policies",
+        )
+    try:
+        async with db_adapter.async_session() as session:
+            result = await session.execute(select(SystemState).limit(1))
+            system_state = result.scalar_one_or_none()
+            if not system_state:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="System state not found",
+                )
+            config = dict(system_state.config or {})
+            if body.execution_limits is not None:
+                merged = dict(_default_execution_limits())
+                merged.update(body.execution_limits)
+                dur = merged.get("max_scan_duration_seconds")
+                if dur is not None:
+                    try:
+                        d = int(dur)
+                        if d < 300 or d > 86400:
+                            raise ValueError()
+                        merged["max_scan_duration_seconds"] = d
+                    except (TypeError, ValueError):
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="max_scan_duration_seconds must be between 300 and 86400",
+                        )
+                for key in (
+                    "max_scans_per_hour_global",
+                    "max_scans_per_hour_per_user",
+                    "max_scans_per_hour_per_guest_session",
+                    "max_concurrent_scans_per_user",
+                    "max_concurrent_scans_per_guest",
+                ):
+                    v = merged.get(key)
+                    if v is not None:
+                        try:
+                            iv = int(v)
+                            if iv < 1:
+                                raise ValueError()
+                            merged[key] = iv
+                        except (TypeError, ValueError):
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f"{key} must be a positive integer or null",
+                            )
+                config["execution_limits"] = merged
+            if body.policies is not None:
+                pol = dict(_default_policies())
+                pol.update(body.policies)
+                if not isinstance(pol.get("blocked_target_patterns"), list):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="blocked_target_patterns must be a list of strings",
+                    )
+                if not isinstance(pol.get("blocked_scan_types"), list):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="blocked_scan_types must be a list of strings",
+                    )
+                pol["blocked_target_patterns"] = [
+                    str(x).strip() for x in pol["blocked_target_patterns"] if str(x).strip()
+                ]
+                pol["blocked_scan_types"] = [
+                    str(x).strip().lower()
+                    for x in pol["blocked_scan_types"]
+                    if str(x).strip()
+                ]
+                pol["require_auth_for_git"] = bool(pol.get("require_auth_for_git"))
+                config["policies"] = pol
+            system_state.config = config
+            system_state.updated_at = datetime.utcnow()
+            await session.commit()
+        return await get_scan_enforcement_config(actor_context=actor_context)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.get("/execution/queue-overview")
+async def get_execution_queue_overview(
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, Any]:
+    """
+    Pending/running counts, Redis job queue length, running scans, and next pending jobs
+    (order: priority desc, created_at asc) with optional duration estimates.
+    """
+    try:
+        from infrastructure.services.queue_service import QueueService
+
+        async with db_adapter.async_session() as session:
+            pending_count = (
+                await session.execute(select(func.count(Scan.id)).where(Scan.status == "pending"))
+            ).scalar() or 0
+            running_count = (
+                await session.execute(select(func.count(Scan.id)).where(Scan.status == "running"))
+            ).scalar() or 0
+
+            running_rows = (
+                await session.execute(
+                    select(Scan)
+                    .where(Scan.status == "running")
+                    .order_by(Scan.started_at.asc())
+                )
+            ).scalars().all()
+
+            pending_rows = (
+                await session.execute(
+                    select(Scan)
+                    .where(Scan.status == "pending")
+                    .order_by(Scan.priority.desc(), Scan.created_at.asc())
+                    .limit(20)
+                )
+            ).scalars().all()
+
+        redis_len = 0
+        try:
+            redis_len = int(await QueueService().get_queue_length())
+        except Exception:
+            pass
+
+        running_out: List[Dict[str, Any]] = []
+        for s in running_rows:
+            running_out.append(
+                {
+                    "scan_id": str(s.id),
+                    "name": s.name or "",
+                    "target": (s.target_url or "")[:200],
+                    "priority": s.priority or 0,
+                    "started_at": s.started_at.isoformat() if s.started_at else None,
+                }
+            )
+
+        next_pending: List[Dict[str, Any]] = []
+        for i, s in enumerate(pending_rows[:15]):
+            est = None
+            if s.scanners:
+                est = await ScannerDurationService.get_estimated_time(s.scanners)
+            next_pending.append(
+                {
+                    "position": i + 1,
+                    "scan_id": str(s.id),
+                    "name": s.name or "",
+                    "target": (s.target_url or "")[:200],
+                    "priority": s.priority or 0,
+                    "created_at": s.created_at.isoformat() if s.created_at else None,
+                    "estimated_time_seconds": est,
+                }
+            )
+
+        return {
+            "pending_count": pending_count,
+            "running_count": running_count,
+            "redis_queue_length": redis_len,
+            "running": running_out,
+            "next_pending": next_pending,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load execution queue overview: {str(e)}",
+        )
+
+
+@router.get("/system-health")
+async def get_admin_system_health(
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, Any]:
+    """Database, Redis, and worker API reachability for admin dashboard."""
+    db_h: Dict[str, Any] = {}
+    redis_h: Dict[str, Any] = {}
+    try:
+        db_h = await get_database_health()
+    except Exception as e:
+        db_h = {"status": False, "error": str(e)[:300]}
+    try:
+        redis_h = await get_redis_health()
+    except Exception as e:
+        redis_h = {"status": False, "error": str(e)[:300]}
+
+    worker_url = (os.getenv("WORKER_API_URL") or "http://worker:8081").rstrip("/")
+    worker: Dict[str, Any] = {"url": worker_url, "reachable": False}
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{worker_url}/api/scanners/")
+            worker["reachable"] = r.status_code < 500
+            worker["http_status"] = r.status_code
+    except Exception as e:
+        worker["error"] = str(e)[:300]
+
+    overall = (
+        "healthy"
+        if db_h.get("status") and redis_h.get("status") and worker.get("reachable")
+        else "degraded"
+    )
+    return {
+        "overall": overall,
+        "database": db_h,
+        "redis": redis_h,
+        "worker": worker,
+    }
 
 
 @router.get("/config/auth", response_model=AuthConfigResponse)

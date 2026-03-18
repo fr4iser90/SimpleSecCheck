@@ -36,3 +36,9 @@ install:
   - -s
   - /opt/nuclei
   - /usr/local/bin/nuclei
+exit_codes:
+  binary: nuclei
+  codes:
+    0: Scan finished — no critical issues per exit-code flags (default behavior).
+    1: Vulnerabilities or matches found when configured to fail on findings.
+    2: Fatal error — bad args, template error, or crash.

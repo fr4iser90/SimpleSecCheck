@@ -20,8 +20,8 @@ interface AdminUser {
 
 interface SystemConfig {
   auth_mode: string
-  scanner_timeout: number
-  max_concurrent_scans: number
+  /** How many complete scans the worker runs in parallel (queue waits beyond this). */
+  max_concurrent_jobs: number
   smtp?: {
     enabled: boolean
     host: string
@@ -58,8 +58,7 @@ export default function SetupWizard() {
   const [useCases, setUseCases] = useState<Record<string, any>>({})
   const [systemConfig, setSystemConfig] = useState<SystemConfig>({
     auth_mode: 'free',
-    scanner_timeout: 3600,
-    max_concurrent_scans: 5,
+    max_concurrent_jobs: 3,
     smtp: {
       enabled: false,
       host: 'smtp.gmail.com',
@@ -615,26 +614,19 @@ export default function SetupWizard() {
         )}
       </div>
       <div className="form-group">
-        <label>Scanner Timeout (seconds)</label>
+        <label>Max concurrent scan jobs (worker)</label>
         <input
           type="number"
-          name="scanner_timeout"
-          value={systemConfig.scanner_timeout}
-          onChange={handleSystemConfigChange}
-          min="60"
-          max="7200"
-        />
-      </div>
-      <div className="form-group">
-        <label>Max Concurrent Scans</label>
-        <input
-          type="number"
-          name="max_concurrent_scans"
-          value={systemConfig.max_concurrent_scans}
+          name="max_concurrent_jobs"
+          value={systemConfig.max_concurrent_jobs}
           onChange={handleSystemConfigChange}
           min="1"
-          max="20"
+          max="50"
         />
+        <small className="form-help-text info" style={{ display: 'block', marginTop: '0.25rem' }}>
+          How many complete scans run at the same time. Additional scans stay in the queue until a slot
+          frees up. Override anytime with env <code>MAX_CONCURRENT_JOBS</code> (worker restart).
+        </small>
       </div>
       
       <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--glass-border-dark)' }}>
@@ -769,12 +761,8 @@ export default function SetupWizard() {
             </strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>Scanner Timeout:</span>
-            <strong>{systemConfig.scanner_timeout}s</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>Max Concurrent Scans:</span>
-            <strong>{systemConfig.max_concurrent_scans}</strong>
+            <span style={{ color: 'var(--text-secondary)' }}>Worker parallel scans:</span>
+            <strong>{systemConfig.max_concurrent_jobs}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--text-secondary)' }}>SMTP Email:</span>

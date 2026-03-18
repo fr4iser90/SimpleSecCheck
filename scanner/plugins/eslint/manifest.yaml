@@ -33,3 +33,9 @@ install:
   - install
   - -g
   - typescript
+exit_codes:
+  binary: eslint
+  codes:
+    0: No lint problems (or max-warnings not exceeded).
+    1: Lint problems found, or ESLint could not run (config/parse error).
+    2: Misconfiguration or internal error.

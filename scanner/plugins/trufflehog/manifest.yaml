@@ -35,3 +35,9 @@ install:
   - -s
   - /opt/trufflehog
   - /usr/local/bin/trufflehog
+exit_codes:
+  binary: trufflehog
+  codes:
+    0: No verified secrets found (or scan completed).
+    183: Verified secrets detected (TruffleHog convention in recent versions).
+    1: Other failure — invalid source, network, or runtime error (verify with stderr).

@@ -299,3 +299,18 @@ class TargetPermissionDeniedException(ScanException):
         self.target_type = target_type
         self.reason = reason
         super().__init__(f"Cannot scan target type '{target_type}': {reason}")
+
+
+class ScanExecutionRateLimitException(ScanException):
+    """Hourly or concurrent scan limits exceeded (enforced from system config)."""
+
+    def __init__(self, message: str, retry_after_seconds: int = 3600):
+        self.retry_after_seconds = max(1, int(retry_after_seconds))
+        super().__init__(message)
+
+
+class ScanPolicyBlockedException(ScanException):
+    """Scan blocked by admin-defined policies (target pattern, scan type, auth rules)."""
+
+    def __init__(self, message: str):
+        super().__init__(message)

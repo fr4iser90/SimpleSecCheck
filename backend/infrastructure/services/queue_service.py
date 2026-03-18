@@ -94,6 +94,13 @@ class QueueService:
             else:
                 target_mount_path = (scan.config or {}).get("target_mount_path")
             
+            try:
+                from application.services.scan_enforcement import get_max_scan_wall_seconds
+
+                max_wall = await get_max_scan_wall_seconds()
+            except Exception:
+                max_wall = 3600
+
             queue_message = {
                 "scan_id": scan_id,
                 "id": scan_id,  # Worker may expect 'id'
@@ -117,6 +124,7 @@ class QueueService:
                 "scan_metadata": getattr(scan, "scan_metadata", None) or {},
                 "scheduled_at": scan.scheduled_at.isoformat() if scan.scheduled_at else None,
                 "enqueued_at": datetime.utcnow().isoformat(),
+                "max_scan_wall_seconds": max_wall,
             }
             # DB overrides merged with manifest (timeouts, env e.g. SONAR_HOST_URL)
             try:

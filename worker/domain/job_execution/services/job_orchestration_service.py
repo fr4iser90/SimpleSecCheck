@@ -231,7 +231,15 @@ class JobOrchestrationService:
                 job_type=job_type,
                 container_spec=container_spec
             )
-            
+            try:
+                mw = job_data.get("max_scan_wall_seconds")
+                if mw is not None:
+                    n = int(mw)
+                    if 60 <= n <= 86400:
+                        job_execution.execution_metadata["container_wait_timeout_seconds"] = n
+            except (TypeError, ValueError):
+                pass
+
             # Save to database
             await self._save_job_execution(job_execution)
             

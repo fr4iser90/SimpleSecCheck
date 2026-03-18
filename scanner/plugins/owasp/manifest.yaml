@@ -56,3 +56,22 @@ assets:
     - --updateonly
     - --data
     - /app/scanner/plugins/owasp/data
+exit_codes:
+  binary: dependency-check
+  codes:
+    0: Completed successfully (warnings may still appear in output).
+    1: General error or invalid arguments.
+    2: Database update or initialization failure.
+    3: Report generation failure.
+    4: Unable to read or analyze one or more inputs.
+    5: Fatal exception during scan.
+    6: One or more analyzers failed.
+    7: Unable to write report output.
+    8: Invalid configuration.
+    9: Dependency bundling or resolution error.
+    10: Archive extraction error.
+    11: Network or download failure (NVD, data feeds).
+    12: H2/database corruption or lock error.
+    13: License or usage restriction.
+    14: OSS Index / Sonatype component-reports failure — API, network, or rate limit.
+    15: One or more suppression or analyzer configuration errors.

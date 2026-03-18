@@ -24,3 +24,10 @@ install:
   - -c
   - curl -s https://static.snyk.io/cli/latest/snyk-linux -o /tmp/snyk && chmod +x
     /tmp/snyk && mv /tmp/snyk /usr/local/bin/snyk
+exit_codes:
+  binary: snyk
+  codes:
+    0: Success — no issues or scan completed per Snyk policy.
+    1: Issues found (vulnerabilities/license) or generic failure.
+    2: Bad arguments or missing token.
+    3: User not authenticated (SNYK_TOKEN missing/invalid).

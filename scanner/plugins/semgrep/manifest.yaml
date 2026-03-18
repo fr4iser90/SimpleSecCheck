@@ -48,3 +48,16 @@ install:
 - - pip3
   - install
   - semgrep
+exit_codes:
+  binary: semgrep
+  codes:
+    0: Scan finished successfully (no runtime failure; findings depend on rules/severity).
+    1: Blocking findings or policy failure (often used when --error or high-severity issues).
+    2: Fatal error — invalid CLI, bad config/rules, or scan could not run.
+    3: Internal engine error.
+    4: Invalid pattern or rule syntax.
+    5: File/IO error.
+    7: Scan timeout.
+    8: Out of memory.
+    13: Interrupted (SIGINT).
+    99: Unexpected error.

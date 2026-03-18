@@ -138,9 +138,6 @@ async def main():
     if not args.db_connection:
         raise ValueError("DATABASE_URL environment variable is required")
     
-    if not args.max_concurrent_jobs:
-        raise ValueError("MAX_CONCURRENT_JOBS or WORKER_CONCURRENCY environment variable is required")
-    
     # Set up logging FIRST with ERROR level (will be adjusted after setup check)
     # This prevents any logs during initialization before we can check setup status
     import structlog
@@ -180,32 +177,68 @@ async def main():
     
     # Check setup status early to configure logging
     setup_complete = False
+    db_max_jobs: int | None = None
     try:
         from sqlalchemy import text, select
         from infrastructure.database.models import SystemState, SetupStatusEnum
-        
+
         async with database_adapter.get_session() as session:
-            # Check if system_state table exists
             result = await session.execute(
                 text("SELECT to_regclass(:table_name)"),
-                {"table_name": "public.system_state"}
+                {"table_name": "public.system_state"},
             )
             table_exists = result.scalar() is not None
-            
+
             if table_exists:
                 result = await session.execute(select(SystemState).limit(1))
                 system_state = result.scalar_one_or_none()
                 if system_state:
                     setup_complete = (
-                        (system_state.setup_status == SetupStatusEnum.COMPLETED or
-                         system_state.setup_status == SetupStatusEnum.LOCKED) and
-                        system_state.setup_locked and
-                        system_state.database_initialized and
-                        system_state.admin_user_created and
-                        system_state.system_configured
+                        (
+                            system_state.setup_status == SetupStatusEnum.COMPLETED
+                            or system_state.setup_status == SetupStatusEnum.LOCKED
+                        )
+                        and system_state.setup_locked
+                        and system_state.database_initialized
+                        and system_state.admin_user_created
+                        and system_state.system_configured
                     )
+                    cfg = system_state.config or {}
+                    if isinstance(cfg, dict):
+                        raw = cfg.get("max_concurrent_jobs")
+                        if raw is None:
+                            raw = cfg.get("max_concurrent_scans")
+                        if raw is not None:
+                            try:
+                                db_max_jobs = max(1, min(50, int(raw)))
+                            except (TypeError, ValueError):
+                                db_max_jobs = None
     except Exception:
-        pass  # If we can't check, assume setup is not complete
+        pass
+
+    def _clamp_jobs(n: int) -> int:
+        return max(1, min(50, n))
+
+    env_jobs = os.environ.get("MAX_CONCURRENT_JOBS", "").strip()
+    if env_jobs:
+        try:
+            args.max_concurrent_jobs = _clamp_jobs(int(env_jobs))
+        except ValueError:
+            args.max_concurrent_jobs = db_max_jobs or 3
+    elif setup_complete and db_max_jobs is not None:
+        args.max_concurrent_jobs = db_max_jobs
+    else:
+        wc = (
+            os.environ.get("WORKER_CONCURRENCY", "").strip()
+            or (str(args.max_concurrent_jobs) if args.max_concurrent_jobs else "")
+        )
+        if wc:
+            try:
+                args.max_concurrent_jobs = _clamp_jobs(int(wc))
+            except ValueError:
+                args.max_concurrent_jobs = 3
+        else:
+            args.max_concurrent_jobs = 3
     
     # Configure logging based on setup status
     if setup_complete:

@@ -530,6 +530,17 @@ def _report_features_script():
     if (btnExpand) btnExpand.addEventListener('click', expandAllSections);
     var btnCollapse = document.getElementById('collapse-all-btn');
     if (btnCollapse) btnCollapse.addEventListener('click', collapseAllSections);
+    var wrap = document.getElementById('copy-share-link-wrap');
+    var btnShare = document.getElementById('copy-share-link-btn');
+    if (wrap && btnShare) {
+      if (window.location.protocol === 'file:' || window.parent === window) {
+        wrap.style.display = 'none';
+      } else {
+        btnShare.addEventListener('click', function() {
+          try { window.parent.postMessage({ type: 'SSC_COPY_SHARE_LINK' }, '*'); } catch (e) {}
+        });
+      }
+    }
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initReportFeatures);
@@ -828,7 +839,11 @@ def main():
                     '<button type="button" class="toggle-btn" id="expand-all-btn">📂 Expand all</button> '
                     '<button type="button" class="toggle-btn" id="collapse-all-btn">📁 Collapse all</button> '
                     '<button type="button" class="toggle-btn" id="export-json-btn">📥 Download JSON</button> '
-                    '<button type="button" class="toggle-btn" id="export-csv-btn">📥 Download CSV</button>'
+                    '<button type="button" class="toggle-btn" id="export-csv-btn">📥 Download CSV</button> '
+                    '<span id="copy-share-link-wrap">'
+                    '<button type="button" class="toggle-btn" id="copy-share-link-btn" '
+                    'title="Copy shareable link (only when report is open inside the app)">🔗 Copy share link</button>'
+                    '</span>'
                     '</div>'
                 )
 

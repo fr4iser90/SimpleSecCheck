@@ -407,7 +407,6 @@ async def get_frontend_config():
             "bulk_scan_allow_guests": getattr(settings, "BULK_SCAN_ALLOW_GUESTS", False),
             "session_management": True,
             "metadata_collection": "optional",
-            "auto_shutdown": True,  # TODO: Add setting
             "zip_upload": settings.ALLOW_ZIP_UPLOAD,
             "scanner_assets_auto_update_enabled": getattr(settings, "SCANNER_ASSETS_AUTO_UPDATE_ENABLED", False),
         }

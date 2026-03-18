@@ -5,6 +5,7 @@ This module defines the ScanRepository interface for accessing scan data.
 This is a domain layer interface that should be implemented by infrastructure layer.
 """
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
@@ -58,6 +59,7 @@ class ScanRepository(ABC):
     async def list_scans(
         self,
         user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
         project_id: Optional[str] = None,
         status: Optional[ScanStatus] = None,
         scan_type: Optional[ScanType] = None,
@@ -72,6 +74,7 @@ class ScanRepository(ABC):
     async def count_scans(
         self,
         user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
         project_id: Optional[str] = None,
         status: Optional[ScanStatus] = None,
         scan_type: Optional[ScanType] = None,
@@ -101,11 +104,37 @@ class ScanRepository(ABC):
         pass
     
     @abstractmethod
-    async def get_recent_scans(self, limit: int = 10) -> List[Scan]:
-        """Get recent scans."""
+    async def get_recent_scans(
+        self,
+        limit: int = 10,
+        *,
+        owner_user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+    ) -> List[Scan]:
+        """Recent scans for an owner (user_id or guest session). Empty if neither set."""
         pass
     
     @abstractmethod
     async def get_scan_statistics(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Get scan statistics."""
         pass
+
+    @abstractmethod
+    async def count_scans_created_since(
+        self,
+        since: datetime,
+        *,
+        global_all: bool = False,
+        user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+    ) -> int:
+        """Count scans with created_at >= since. Use exactly one of global_all, user_id, or guest_session_id."""
+
+    @abstractmethod
+    async def count_active_scans_for_actor(
+        self,
+        *,
+        user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+    ) -> int:
+        """Count scans in pending or running for the given user or guest session."""

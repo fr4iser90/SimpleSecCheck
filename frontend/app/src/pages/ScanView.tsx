@@ -797,7 +797,6 @@ export default function ScanView() {
         display: 'flex',
         flexDirection: 'column',
       }}>
-        {/* Full-Page Report */}
         <div style={{ 
           flex: 1,
           overflow: 'hidden',

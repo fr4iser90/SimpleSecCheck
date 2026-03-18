@@ -159,9 +159,11 @@ class ScanUpdateRequestDTO:
 @dataclass
 class ScanFilterDTO:
     """Data Transfer Object for scan filtering requests."""
-    
+
     # Filter criteria
     user_id: Optional[str] = None
+    """Guest scans: filter by scan_metadata.session_id instead of user_id."""
+    guest_session_id: Optional[str] = None
     project_id: Optional[str] = None
     status: Optional[str] = None
     scan_type: Optional[str] = None

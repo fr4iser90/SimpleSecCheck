@@ -29,3 +29,9 @@ install:
   - --force-reinstall
   - --no-cache-dir
   - typing_extensions>=4.14.1
+exit_codes:
+  binary: wapiti
+  codes:
+    0: Scan completed successfully.
+    1: Vulnerabilities or anomalies reported (depends on Wapiti version/flags).
+    2: Invalid URL, crawl error, or scanner crash.

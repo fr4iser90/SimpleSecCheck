@@ -200,7 +200,7 @@ async def test_custom_setup(api_client, docker_compose):
         admin_password="CustomPass123!",
         system_config={
             "auth_mode": "session",
-            "scanner_timeout": 600
+            "max_concurrent_jobs": 5,
         }
     )
     

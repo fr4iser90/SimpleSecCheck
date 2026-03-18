@@ -50,7 +50,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
     try {
       const backendLanguage = mapUILanguageToPromptLanguage(promptLanguage)
       const endpoint = scanId
-        ? `/api/my-results/${scanId}/ai-prompt?language=${backendLanguage}`
+        ? `/api/results/${scanId}/ai-prompt?language=${backendLanguage}`
         : `/api/scan/ai-prompt?language=${backendLanguage}&policy_path=${encodeURIComponent(policyPath)}`
 
       const response = await fetch(endpoint)

@@ -5,10 +5,11 @@ This module provides the PostgreSQL implementation of the ScanRepository interfa
 """
 import json
 import logging
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, or_, func, text
 
 from domain.repositories.scan_repository import ScanRepository
 from domain.entities.scan import Scan, ScanStatus, ScanType
@@ -283,6 +284,7 @@ class DatabaseScanRepository(ScanRepository):
     async def list_scans(
         self,
         user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
         project_id: Optional[str] = None,
         status: Optional[ScanStatus] = None,
         scan_type: Optional[ScanType] = None,
@@ -297,8 +299,12 @@ class DatabaseScanRepository(ScanRepository):
             try:
                 query = select(ScanModel)
                 conditions = []
+                extra_params: Dict[str, Any] = {}
                 
-                if user_id:
+                if guest_session_id:
+                    conditions.append(text("scans.scan_metadata->>'session_id' = :gsid"))
+                    extra_params["gsid"] = guest_session_id
+                elif user_id:
                     conditions.append(ScanModel.user_id == UUID(user_id))
                 if project_id:
                     conditions.append(ScanModel.project_id == project_id)
@@ -307,7 +313,6 @@ class DatabaseScanRepository(ScanRepository):
                 if scan_type:
                     conditions.append(ScanModel.scan_type == scan_type.value)
                 if tags:
-                    # PostgreSQL JSONB contains operator
                     for tag in tags:
                         conditions.append(ScanModel.tags.contains([tag]))
                 
@@ -315,8 +320,9 @@ class DatabaseScanRepository(ScanRepository):
                     query = query.where(and_(*conditions))
                 
                 query = query.order_by(ScanModel.created_at.desc()).limit(limit).offset(offset)
-                
-                result = await session.execute(query)
+                result = await session.execute(
+                    query.params(**extra_params) if extra_params else query
+                )
                 models = result.scalars().all()
                 return [await self._model_to_entity(model) for model in models]
             except Exception as e:
@@ -326,6 +332,7 @@ class DatabaseScanRepository(ScanRepository):
     async def count_scans(
         self,
         user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
         project_id: Optional[str] = None,
         status: Optional[ScanStatus] = None,
         scan_type: Optional[ScanType] = None,
@@ -338,8 +345,12 @@ class DatabaseScanRepository(ScanRepository):
             try:
                 query = select(func.count(ScanModel.id))
                 conditions = []
+                extra_params: Dict[str, Any] = {}
                 
-                if user_id:
+                if guest_session_id:
+                    conditions.append(text("scans.scan_metadata->>'session_id' = :gsid"))
+                    extra_params["gsid"] = guest_session_id
+                elif user_id:
                     conditions.append(ScanModel.user_id == UUID(user_id))
                 if project_id:
                     conditions.append(ScanModel.project_id == project_id)
@@ -354,7 +365,9 @@ class DatabaseScanRepository(ScanRepository):
                 if conditions:
                     query = query.where(and_(*conditions))
                 
-                result = await session.execute(query)
+                result = await session.execute(
+                    query.params(**extra_params) if extra_params else query
+                )
                 return result.scalar() or 0
             except Exception as e:
                 logger.error(f"Failed to count scans: {e}")
@@ -461,17 +474,30 @@ class DatabaseScanRepository(ScanRepository):
                 logger.error(f"Failed to update results for scan {scan_id}: {e}")
                 raise
     
-    async def get_recent_scans(self, limit: int = 10) -> List[Scan]:
-        """Get recent scans."""
+    async def get_recent_scans(
+        self,
+        limit: int = 10,
+        *,
+        owner_user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+    ) -> List[Scan]:
+        """Recent scans for one owner; empty if no owner scope."""
         await self.db_adapter.ensure_initialized()
         
         async with self.db_adapter.async_session() as session:
             try:
-                result = await session.execute(
-                    select(ScanModel)
-                    .order_by(ScanModel.created_at.desc())
-                    .limit(limit)
-                )
+                q = select(ScanModel)
+                if guest_session_id:
+                    q = (
+                        q.where(text("scans.scan_metadata->>'session_id' = :gsid"))
+                        .params(gsid=guest_session_id)
+                    )
+                elif owner_user_id:
+                    q = q.where(ScanModel.user_id == UUID(owner_user_id))
+                else:
+                    return []
+                q = q.order_by(ScanModel.created_at.desc()).limit(limit)
+                result = await session.execute(q)
                 models = result.scalars().all()
                 return [await self._model_to_entity(model) for model in models]
             except Exception as e:
@@ -545,4 +571,74 @@ class DatabaseScanRepository(ScanRepository):
                 }
             except Exception as e:
                 logger.error(f"Failed to get scan statistics: {e}")
+                raise
+
+    async def count_scans_created_since(
+        self,
+        since: datetime,
+        *,
+        global_all: bool = False,
+        user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+    ) -> int:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                query = select(func.count(ScanModel.id)).where(ScanModel.created_at >= since)
+                extra_params: Dict[str, Any] = {}
+                if global_all:
+                    pass
+                elif user_id:
+                    query = query.where(ScanModel.user_id == UUID(user_id))
+                elif guest_session_id:
+                    query = query.where(
+                        and_(
+                            ScanModel.user_id.is_(None),
+                            text("scans.scan_metadata->>'session_id' = :gsid"),
+                        )
+                    )
+                    extra_params["gsid"] = guest_session_id
+                else:
+                    return 0
+                result = await session.execute(
+                    query.params(**extra_params) if extra_params else query
+                )
+                return int(result.scalar() or 0)
+            except Exception as e:
+                logger.error(f"count_scans_created_since failed: {e}")
+                raise
+
+    async def count_active_scans_for_actor(
+        self,
+        *,
+        user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+    ) -> int:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                st = or_(
+                    ScanModel.status == ScanStatus.PENDING.value,
+                    ScanModel.status == ScanStatus.RUNNING.value,
+                )
+                query = select(func.count(ScanModel.id)).where(st)
+                extra_params: Dict[str, Any] = {}
+                if user_id:
+                    query = query.where(ScanModel.user_id == UUID(user_id))
+                elif guest_session_id:
+                    query = query.where(
+                        and_(
+                            ScanModel.user_id.is_(None),
+                            text("scans.scan_metadata->>'session_id' = :gsid"),
+                        )
+                    )
+                    extra_params["gsid"] = guest_session_id
+                else:
+                    return 0
+                result = await session.execute(
+                    query.params(**extra_params) if extra_params else query
+                )
+                return int(result.scalar() or 0)
+            except Exception as e:
+                logger.error(f"count_active_scans_for_actor failed: {e}")
                 raise

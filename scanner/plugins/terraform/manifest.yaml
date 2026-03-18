@@ -29,3 +29,10 @@ assets:
   mount:
     host_subpath: scanner/plugins/terraform/config/config.yaml
     container_path: /app/scanner/plugins/terraform/config/config.yaml
+exit_codes:
+  binary: checkov
+  note: Terraform plugin runs Checkov on .tf files — same exit semantics as checkov.
+  codes:
+    0: No failed checks.
+    1: Failed IaC checks detected.
+    2: Fatal error — could not run.

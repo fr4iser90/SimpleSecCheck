@@ -1,5 +1,14 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { apiFetch } from '../utils/apiClient'
+
+interface RegistryScanner {
+  name: string
+  enabled?: boolean
+  scan_types?: string[]
+  priority?: number
+  description?: string
+}
 
 interface ScannerStatus {
   workers_running: number
@@ -20,6 +29,7 @@ interface ScannerStatus {
 
 export default function ScannerManagementPage() {
   const [status, setStatus] = useState<ScannerStatus | null>(null)
+  const [registry, setRegistry] = useState<RegistryScanner[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
@@ -38,8 +48,21 @@ export default function ScannerManagementPage() {
     }
   }
 
+  const loadRegistry = async () => {
+    try {
+      const response = await apiFetch('/api/scanners')
+      if (response.ok) {
+        const data = await response.json()
+        setRegistry(Array.isArray(data.scanners) ? data.scanners : [])
+      }
+    } catch {
+      setRegistry([])
+    }
+  }
+
   useEffect(() => {
     loadStatus()
+    void loadRegistry()
     const interval = setInterval(loadStatus, 5000) // Refresh every 5 seconds
     return () => clearInterval(interval)
   }, [])
@@ -76,9 +99,10 @@ export default function ScannerManagementPage() {
     <div className="container" style={{ padding: '2rem' }}>
       <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1>Scan Engine Management</h1>
+          <h1>Scan Engine</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-            Monitor and manage the scan engine, workers, and queue
+            Workers, queue snapshot, and registered scanners. Tool timeouts &amp; tokens:{' '}
+            <Link to="/admin/tool-settings">Tool settings</Link>.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -191,9 +215,43 @@ export default function ScannerManagementPage() {
             </div>
           </div>
 
+          <div style={{ marginBottom: '2rem' }}>
+            <h2 style={{ marginBottom: '1rem' }}>Scanner registry ({registry.length})</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
+              Tools discovered in the scanner image (DB snapshot). Binary versions are resolved when each tool
+              runs; use refresh on this page to sync after image updates.
+            </p>
+            {registry.length === 0 ? (
+              <div style={{ padding: '1rem', color: 'var(--text-secondary)' }}>No scanners in DB yet.</div>
+            ) : (
+              <div style={{ overflowX: 'auto', border: '1px solid var(--glass-border-dark)', borderRadius: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
+                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Scanner</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Types</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Priority</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Enabled</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {registry.map((s) => (
+                      <tr key={s.name} style={{ borderTop: '1px solid var(--glass-border-dark)' }}>
+                        <td style={{ padding: '0.75rem' }}>{s.name}</td>
+                        <td style={{ padding: '0.75rem' }}>{(s.scan_types || []).join(', ') || '—'}</td>
+                        <td style={{ padding: '0.75rem' }}>{s.priority ?? '—'}</td>
+                        <td style={{ padding: '0.75rem' }}>{s.enabled !== false ? 'Yes' : 'No'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Queue Items */}
           <div>
-            <h2 style={{ marginBottom: '1rem' }}>Queue (Next 10 Scans)</h2>
+            <h2 style={{ marginBottom: '1rem' }}>Queue (next 10 pending)</h2>
             <div style={{
               background: 'var(--glass-bg-dark)',
               borderRadius: '8px',

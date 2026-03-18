@@ -59,3 +59,10 @@ assets:
   mount:
     host_subpath: scanner/plugins/zap/config/baseline.conf
     container_path: /app/scanner/plugins/zap/config/baseline.conf
+exit_codes:
+  binary: zap-baseline.py
+  codes:
+    0: Pass — no alerts above configured threshold.
+    1: WARN level alerts (baseline script convention).
+    2: FAIL — high/critical alerts or scan failure.
+    3: Script/setup error (ZAP not found, bad target).

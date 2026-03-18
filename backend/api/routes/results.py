@@ -1,95 +1,72 @@
 """
-Results API Routes
+Results API — HTML report (summary.html).
 
-Serves scan report HTML (summary.html) for /api/results/{scan_id}/report
-and /api/my-results/{scan_id}/report. Scanner writes reports to
-results/{scan_id}/summary/summary.html.
+Access: owner, report_shared_with_user_ids, or ?share_token= (report_share_token in metadata).
 """
 from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi import status as fastapi_status
 
 from api.deps.actor_context import get_actor_context, ActorContext
 from application.services.scan_service import ScanService
 from domain.exceptions.scan_exceptions import ScanNotFoundException
+from domain.services.scan_result_access import can_read_scan_results
 from config.settings import get_settings
 from infrastructure.container import get_scan_service
-
 
 router = APIRouter(
     prefix="/api",
     tags=["results"],
-    responses={
-        404: {"description": "Report or scan not found"},
-        403: {"description": "Forbidden"},
-    },
+    responses={404: {"description": "Not found"}, 403: {"description": "Forbidden"}},
 )
 
 
-def _get_report_path(scan_id: str) -> Path:
-    """Resolve path to summary.html for a scan. Backend container has results at /app/results."""
-    settings = get_settings()
-    base = Path(settings.RESULTS_DIR_HOST if hasattr(settings, "RESULTS_DIR_HOST") else "/app/results")
+def _report_path(scan_id: str) -> Path:
+    s = get_settings()
+    base = Path(s.RESULTS_DIR_HOST if hasattr(s, "RESULTS_DIR_HOST") else "/app/results")
     return base / scan_id / "summary" / "summary.html"
 
 
-@router.get(
-    "/results/{scan_id}/report",
-    summary="Get scan report (public)",
-    description="Serve the HTML report for a scan. No ownership check.",
-)
-async def get_results_report(scan_id: str):
-    """Serve summary.html for the given scan_id if the file exists."""
-    report_path = _get_report_path(scan_id)
-    if not report_path.is_file():
-        raise HTTPException(
-            status_code=fastapi_status.HTTP_404_NOT_FOUND,
-            detail="Report not found",
-        )
-    return FileResponse(
-        report_path,
-        media_type="text/html",
-        filename="summary.html",
-    )
-
-
-def _get_scan_service_dependency():
+def _scan_svc():
     return get_scan_service()
 
 
-@router.get(
-    "/my-results/{scan_id}/report",
-    summary="Get my scan report",
-    description="Serve the HTML report for a scan. If authenticated, only the scan owner can access.",
-)
-async def get_my_results_report(
+async def _serve_report(
+    scan_id: str,
+    actor: ActorContext,
+    svc: ScanService,
+    share_token: Optional[str],
+):
+    try:
+        dto = await svc.get_scan_by_id(scan_id)
+    except ScanNotFoundException:
+        raise HTTPException(fastapi_status.HTTP_404_NOT_FOUND, "Scan not found")
+
+    uid = dto.user_id if dto.user_id not in (None, "") else None
+    if not can_read_scan_results(
+        metadata=dto.metadata or {},
+        scan_user_id=str(uid) if uid else None,
+        actor_user_id=actor.user_id,
+        actor_session_id=actor.session_id,
+        actor_is_authenticated=bool(actor.is_authenticated),
+        share_token_query=share_token,
+    ):
+        raise HTTPException(fastapi_status.HTTP_403_FORBIDDEN, "Access denied")
+
+    p = _report_path(scan_id)
+    if not p.is_file():
+        raise HTTPException(fastapi_status.HTTP_404_NOT_FOUND, "Report not found")
+    return FileResponse(p, media_type="text/html", filename="summary.html")
+
+
+@router.get("/results/{scan_id}/report")
+async def get_results_report(
     scan_id: str,
     actor_context: ActorContext = Depends(get_actor_context),
-    scan_service: ScanService = Depends(_get_scan_service_dependency),
+    scan_service: ScanService = Depends(_scan_svc),
+    share_token: Optional[str] = Query(None),
 ):
-    """Serve summary.html for the given scan_id. When authenticated, require scan ownership."""
-    try:
-        scan_dto = await scan_service.get_scan_by_id(scan_id)
-    except ScanNotFoundException:
-        raise HTTPException(
-            status_code=fastapi_status.HTTP_404_NOT_FOUND,
-            detail="Scan not found",
-        )
-    if actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
-        raise HTTPException(
-            status_code=fastapi_status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
-        )
-    report_path = _get_report_path(scan_id)
-    if not report_path.is_file():
-        raise HTTPException(
-            status_code=fastapi_status.HTTP_404_NOT_FOUND,
-            detail="Report not found",
-        )
-    return FileResponse(
-        report_path,
-        media_type="text/html",
-        filename="summary.html",
-    )
+    return await _serve_report(scan_id, actor_context, scan_service, share_token)

@@ -361,3 +361,21 @@ class AggregatedResultSchema(BaseModel):
     duration: Optional[float] = Field(None, ge=0, description="Total duration")
     
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
+class ReportShareLinkRequestSchema(BaseModel):
+    """Request to create or refresh a token-based report share path."""
+
+    regenerate: bool = Field(
+        default=False,
+        description="If true, issue a new token; previous share links stop working",
+    )
+
+
+class ReportShareLinkResponseSchema(BaseModel):
+    """Relative path with share_token; prepend request origin for a full URL."""
+
+    share_path: str = Field(
+        ...,
+        description="e.g. /api/results/{scan_id}/report?share_token=...",
+    )

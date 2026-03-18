@@ -20,5 +20,5 @@ pytest tests/e2e -v -s
 
 ## Notes
 
-- `test_multiple_repos.py` checks report access via `/api/my-results/.../report` when available, else `/api/results`.
+- `test_multiple_repos.py` checks report access via `/api/results/{scan_id}/report` (session cookie).
 - `test_queue_steps_sessions.py` requires **session auth** enabled to validate session isolation and report access.

@@ -172,3 +172,35 @@ def test_queue_list_returns_200(app_with_auth_admin):
     if response.status_code == 200:
         data = response.json()
         assert "items" in data or "queue_length" in data or "queue" in data
+
+
+def test_report_share_link_creates_token(app_with_auth_admin, mock_scan_service):
+    """Owner POST report-share-link returns share_path with token."""
+    sid = "scan-share-test-1"
+    dto = _make_scan_dto(scan_id=sid, user_id="admin-id")
+
+    async def _get(oid):
+        return dto if oid == sid else None
+
+    async def _update(oid, req):
+        dto.metadata = {**(dto.metadata or {}), **(req.metadata or {})}
+        return dto
+
+    mock_scan_service.get_scan_by_id = AsyncMock(side_effect=_get)
+    mock_scan_service.update_scan = AsyncMock(side_effect=_update)
+    client = TestClient(app_with_auth_admin)
+    r = client.post(f"/api/v1/scans/{sid}/report-share-link", json={})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["share_path"].startswith(f"/api/results/{sid}/report?share_token=")
+    assert len(data["share_path"]) > len(f"/api/results/{sid}/report?share_token=") + 8
+
+
+def test_report_share_link_forbidden_other_user(app_with_auth_admin, mock_scan_service):
+    """Non-owner cannot create share link."""
+    sid = "scan-owned-by-other"
+    dto = _make_scan_dto(scan_id=sid, user_id="someone-else-id")
+    mock_scan_service.get_scan_by_id = AsyncMock(return_value=dto)
+    client = TestClient(app_with_auth_admin)
+    r = client.post(f"/api/v1/scans/{sid}/report-share-link", json={})
+    assert r.status_code == 403

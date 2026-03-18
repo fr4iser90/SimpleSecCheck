@@ -35,3 +35,9 @@ install:
   - -s
   - /opt/gitleaks
   - /usr/local/bin/gitleaks
+exit_codes:
+  binary: gitleaks
+  codes:
+    0: No leaks detected.
+    1: Leaks detected or scan failed.
+    126: Invalid config or path.

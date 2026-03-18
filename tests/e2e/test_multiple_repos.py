@@ -93,7 +93,7 @@ async def test_multiple_repo_scans(client: httpx.AsyncClient, test_repos: List[D
             pytest.fail(f"Scan {scan_id} completed but no scan_id found in queue item")
         
         # Verify results: prefer per-scan report URL if it works, else global results list
-        report_response = await client.get(f"/api/my-results/{actual_scan_id}/report")
+        report_response = await client.get(f"/api/results/{actual_scan_id}/report")
         if report_response.status_code == 200:
             pass
         else:

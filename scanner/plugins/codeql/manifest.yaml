@@ -65,3 +65,17 @@ install:
   - pack
   - download
   - codeql/go-queries
+exit_codes:
+  binary: codeql
+  codes:
+    0: Command succeeded.
+    1: General error.
+    2: User error — invalid arguments or usage.
+    32: Query compilation or resolution error.
+    33: Database incompatible or corrupt.
+    34: Resource limit (memory, disk).
+    35: Interrupted.
+    36: Internal error.
+    37: License or feature restriction.
+    38: Network or download failure.
+    39: Toolchain or extractor failure.

@@ -19,6 +19,9 @@ import UserManagementPage from './pages/UserManagementPage'
 import FeatureFlagsPage from './pages/FeatureFlagsPage'
 import AuthSettingsPage from './pages/AuthSettingsPage'
 import QueueSettingsPage from './pages/QueueSettingsPage'
+import ExecutionSettingsPage from './pages/ExecutionSettingsPage'
+import AdminHealthPage from './pages/AdminHealthPage'
+import AdminPoliciesPage from './pages/AdminPoliciesPage'
 import IPControlPage from './pages/IPControlPage'
 import ScannerManagementPage from './pages/ScannerManagementPage'
 import AdminToolDurationPage from './pages/AdminToolDurationPage'
@@ -165,16 +168,29 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
           <AuthSettingsPage />
         </ProtectedRoute>
       } />
+      <Route path="/admin/execution" element={
+        <ProtectedRoute>
+          <Header />
+          <ExecutionSettingsPage />
+        </ProtectedRoute>
+      } />
       <Route path="/admin/queue" element={
         <ProtectedRoute>
           <Header />
           <QueueSettingsPage />
         </ProtectedRoute>
       } />
-      <Route path="/admin/security" element={
+      <Route path="/admin/security" element={<Navigate to="/admin/policies" replace />} />
+      <Route path="/admin/policies" element={
         <ProtectedRoute>
           <Header />
-          <div style={{ padding: '2rem' }}>Security Policies - Coming Soon</div>
+          <AdminPoliciesPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/health" element={
+        <ProtectedRoute>
+          <Header />
+          <AdminHealthPage />
         </ProtectedRoute>
       } />
       <Route path="/admin/audit-log" element={

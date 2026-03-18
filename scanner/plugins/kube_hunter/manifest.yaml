@@ -24,3 +24,8 @@ install:
 - - pip3
   - install
   - kube-hunter
+exit_codes:
+  binary: kube-hunter
+  codes:
+    0: Run completed (may still report findings in output).
+    1: Error — could not reach API, auth failure, or internal error.

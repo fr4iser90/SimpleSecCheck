@@ -4,7 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Setup wizard** — Removed global “scanner timeout” (per-tool timeouts remain via admin/manifest). Replaced “Max concurrent scans” with **max concurrent scan jobs**: stored in system config and used by the worker as parallel **complete** scans (queue holds the rest). Optional override: env `MAX_CONCURRENT_JOBS`. Admin: `GET/PUT /api/admin/config/worker-jobs`.
+
+### Removed
+- **Auto-shutdown (Web UI + `/api/shutdown/status`)** — Stub feature removed; use `docker compose down` / hosting controls to stop the stack.
+
+### Security
+- **Owner-based results access** — HTML report at `/api/results/.../report` requires owner session, `report_shared_with_user_ids`, or `?share_token=` (`report_share_token`). Scan APIs (GET by id, status, steps, results) use the same read rules; update/delete/cancel/retry are **owner-only**. List/recent scans scoped to current user or guest session. See `docs/SCAN_RESULT_ACCESS.md`.
+
 ### Added
+- **Scan enforcement** — Optional hourly + concurrent limits per user/guest/global; max scanner container wall time (worker). Policies: blocked target globs/`regex:` patterns, blocked scan types, require-auth-for-git. `GET/PUT /api/admin/config/scan-enforcement`. UI: **Execution** (limits + duration), **Security policies** (target/type rules). See `docs/SCAN_ENFORCEMENT.md`. Scan retry skips rate limits but still applies policies.
+- **Admin → Execution** (`/admin/execution`) — parallel scan jobs (`max_concurrent_jobs`), queue strategy, editable admin/user/guest priorities, and enforced limits above. `/admin/queue` redirects here.
+- **Admin Dashboard layout** — Grouped sections: System, Users, Execution, Scan Engine (scanners & assets, tool settings, tool duration), Security (policies, abuse protection), Observability (audit, health). Removed duplicate standalone cards (vuln DB, notifications) from the grid; those remain future work.
+- **Execution → live queue** — `GET /api/admin/execution/queue-overview`: pending/running counts, Redis job length, running scans, next 15 pending with ETA. Shown on `/admin/execution` (auto-refresh 10s). Links to scan view via router state.
+- **Observability → System Health** — `GET /api/admin/system-health` (DB + Redis + worker `GET /api/scanners/`). Page `/admin/health` with 15s refresh.
+- **Security → Policies** — `/admin/policies` edits enforced submission rules; `/admin/security` redirects there.
+- **System settings** — Intro links to Auth, Execution, feature flags, health.
+- **Scan Engine page** — Scanner registry table from `GET /api/scanners` (name, types, priority, enabled); copy clarifies assets vs tool settings.
+- **Plugin manifest `exit_codes`** — Every scanner plugin `manifest.yaml` includes an English `exit_codes` block (`binary`, `codes`, and optional `note` for script-only or base/test plugins). Use it to interpret CLI exit values per tool.
+- **Runtime manifest hints** — On non-zero exit, `BaseScanner.run_command` logs a line from that plugin’s `exit_codes` when the failed command’s binary matches `exit_codes.binary` (e.g. OWASP exit 14 → OSS Index). Undocumented codes log a short INFO; plugins with only `note` log it once per scan.
+- **Report share link (UI + API)** — `POST /api/v1/scans/{scan_id}/report-share-link` (owner) returns `share_path`; **My Scans** copies link; **Scan view** uses **Copy share link** in the generated report toolbar (next to CSV), via `postMessage`; button hidden for `file:` or non-iframe (standalone HTML).
 - **Checkpoint for CodeQL, OWASP Dependency-Check, Snyk, SonarQube** – `checkpoint:` in manifests + `report.json` for resume/skip like other tools. SonarQube writes `report.json` on server-unreachable skip and after successful analysis (stub when the CLI leaves no local JSON).
 - **Checkpoint for all remaining scanners** – android, anchore, burp, clair, docker_bench, ios, ios_plist, kube_bench, kube_hunter, nikto, nuclei, wapiti, zap (`report.xml` / `any`). Excludes only `base` and `test` manifests.
 - **Scan heartbeat recovery** – Worker updates `last_heartbeat_at` while the scanner container runs. API recovers only **stale** `running` scans (no more “reset all running on startup”). Background sweep re-enqueues stale jobs without restarting the API. Env: `SCAN_HEARTBEAT_STALE_SECONDS`, `SCAN_HEARTBEAT_NULL_GRACE_SECONDS`, `SCAN_STALE_SWEEP_INTERVAL_SECONDS`, `SCAN_STALE_SWEEP_DISABLE`. Docs: `docs/SCAN_HEARTBEAT_RECOVERY.md`.

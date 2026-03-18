@@ -860,6 +860,17 @@ async def _create_system_state(config: Dict[str, Any]):
                 if hasattr(settings, flag_name):
                     setattr(settings, flag_name, flag_value)
         
+        cfg = dict(config)
+        if cfg.get("max_concurrent_jobs") is None and cfg.get("max_concurrent_scans") is not None:
+            try:
+                cfg["max_concurrent_jobs"] = max(1, min(50, int(cfg["max_concurrent_scans"])))
+            except (TypeError, ValueError):
+                cfg["max_concurrent_jobs"] = 3
+        cfg.pop("scanner_timeout", None)
+        cfg.pop("max_concurrent_scans", None)
+        if cfg.get("max_concurrent_jobs") is None:
+            cfg["max_concurrent_jobs"] = 3
+
         async with db_adapter.async_session() as session:
             # Check if system state already exists
             result = await session.execute(
@@ -871,8 +882,8 @@ async def _create_system_state(config: Dict[str, Any]):
                 # Update existing system state with actual values
                 system_state.setup_status = SetupStatusEnum.COMPLETED
                 system_state.version = "1.0.0"
-                system_state.auth_mode = config.get("auth_mode", settings.AUTH_MODE)
-                system_state.config = config
+                system_state.auth_mode = cfg.get("auth_mode", settings.AUTH_MODE)
+                system_state.config = cfg
                 system_state.database_initialized = all_tables_exist
                 system_state.admin_user_created = admin_exists
                 system_state.system_configured = True  # Always True when setup is completed
@@ -883,8 +894,8 @@ async def _create_system_state(config: Dict[str, Any]):
                 system_state = SystemState()
                 system_state.setup_status = SetupStatusEnum.COMPLETED
                 system_state.version = "1.0.0"
-                system_state.auth_mode = config.get("auth_mode", settings.AUTH_MODE)
-                system_state.config = config
+                system_state.auth_mode = cfg.get("auth_mode", settings.AUTH_MODE)
+                system_state.config = cfg
                 system_state.database_initialized = all_tables_exist
                 system_state.admin_user_created = admin_exists
                 system_state.system_configured = True  # Always True when setup is completed

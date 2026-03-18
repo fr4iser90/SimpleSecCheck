@@ -38,3 +38,9 @@ assets:
   mount:
     host_subpath: scanner/plugins/trivy/cache
     container_path: /app/scanner/plugins/trivy/cache
+exit_codes:
+  binary: trivy
+  codes:
+    0: Success — scan completed; no issues above configured severity/exit threshold.
+    1: Vulnerabilities or misconfigurations found (default when issues exceed exit policy).
+    2: Fatal error — bad arguments, DB failure, or scan could not complete.

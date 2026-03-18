@@ -1434,6 +1434,27 @@ input:focus, select:focus {
   font-size: 1rem;
 }
 
+.admin-dashboard-section {
+  margin-bottom: 2.5rem;
+}
+
+.admin-dashboard-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin: 0 0 1rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--glass-border-dark);
+}
+
+.admin-dashboard-section-emoji {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
 .admin-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
