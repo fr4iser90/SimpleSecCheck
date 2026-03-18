@@ -94,6 +94,8 @@ class Settings(BaseSettings):
     QUEUE_PRIORITY_ADMIN: int = Field(default=10, description="Default priority for admin scans (higher = earlier)")
     QUEUE_PRIORITY_USER: int = Field(default=5, description="Default priority for logged-in user scans")
     QUEUE_PRIORITY_GUEST: int = Field(default=1, description="Default priority for guest scans")
+    # Only used when user did not check/uncheck the box (config missing or None). If user explicitly unchecks = no collection always.
+    COLLECT_METADATA_DEFAULT: bool = Field(default=False, description="When True: collect metadata if user did not set the option. When False (default): collect only if user checked the box. User unchecked = never collect. Env: COLLECT_METADATA_DEFAULT=true.")
     
     # Scanner assets (DBs, manifests, etc.): global auto-update; can be extended with per-asset or health (SonarQube, Docker) in DB
     SCANNER_ASSETS_AUTO_UPDATE_ENABLED: bool = Field(default=False, description="If True, scanner assets (e.g. vuln DBs) are auto-updated; else admins trigger updates manually.")

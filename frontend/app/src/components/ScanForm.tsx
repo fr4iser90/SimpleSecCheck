@@ -93,7 +93,6 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
     target_url: string
   } | null>(null)
   const [loadingTargetType, setLoadingTargetType] = useState(false)
-  const [ciMode, setCiMode] = useState(false)
   const [findingPolicy, setFindingPolicy] = useState('')
   const [collectMetadata, setCollectMetadata] = useState(metadataCollection === 'always')
   const [selectedScanners, setSelectedScanners] = useState<string[]>([])
@@ -351,9 +350,6 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
       if (collectMetadata) {
         scanConfig.collect_metadata = collectMetadata
       }
-      if (ciMode) {
-        scanConfig.ci_mode = ciMode
-      }
 
       // Get backend scan_type from config (backend-driven!)
       const scanTypeConfig = scanTypesConfig[scanType]
@@ -570,22 +566,6 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
                 Allowed targets: {config.allowed_targets_display.join(', ') || 'none'}
               </small>
             )}
-          </div>
-        )}
-
-        {scanType === 'code' && isLocalPath && (
-          <div className="form-group" style={{ marginTop: '1rem' }}>
-            <label>
-              <input
-                type="checkbox"
-                checked={ciMode}
-                onChange={(e) => setCiMode(e.target.checked)}
-              />
-              CI Mode (scan only tracked files)
-            </label>
-            <small className="form-help-text info">
-              Scans only files tracked by Git (ignores untracked files). Only available for local Git repositories.
-            </small>
           </div>
         )}
 

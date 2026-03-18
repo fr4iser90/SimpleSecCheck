@@ -219,6 +219,8 @@ class ContainerSpec:
             "RESULTS_DIR_IN_CONTAINER": container_results_dir,  # Base directory - orchestrator appends scan_id
             "TARGET_PATH_IN_CONTAINER": "/target",
             "COLLECT_METADATA": "true" if collect_metadata else "false",
+            # CI mode: for local_mount (local code) always scan only Git-tracked files
+            "CI_MODE": "true" if target_type == "local_mount" else "false",
         }
         
         # Add selected scanners if provided (from backend/queue message)
@@ -308,7 +310,13 @@ class ContainerSpec:
         # Mount host paths to container paths (what Scanner container sees)
         # NOTE: Logs are part of Results - Scanner creates results/{scan_id}/logs/ automatically
         spec.add_volume(results_dir, container_results_dir, read_only=False)
-        
+
+        # Mount project root to /project in Scanner so entrypoint can detect host UID/GID (stat /project).
+        # This ensures result files are created with host ownership instead of container default (101).
+        host_project_root = os.path.dirname(results_dir)
+        if host_project_root:
+            spec.add_volume(host_project_root, "/project", read_only=True)
+
         # Mount scanner asset volumes (if provided)
         # Plugins define their required volumes in manifest.yaml (e.g., OWASP data, Trivy cache)
         # Backend fetches these from worker API and includes them in queue message

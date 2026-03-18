@@ -187,7 +187,9 @@ class JobOrchestrationService:
             finding_policy = job_data.get('finding_policy')
             collect_metadata = job_data.get('collect_metadata')
             if collect_metadata is None:
-                raise ValueError("collect_metadata is required in queue message but not provided. Backend must set collect_metadata.")
+                collect_metadata = False  # Optional: not set or null = no metadata collection
+            else:
+                collect_metadata = bool(collect_metadata)
             exclude_paths = job_data.get('exclude_paths')
             git_branch = job_data.get('git_branch')
             asset_volumes = job_data.get('asset_volumes', [])  # Asset volumes from scanner manifests (backend provides)

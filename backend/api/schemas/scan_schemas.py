@@ -67,11 +67,15 @@ class ScanConfigSchema(BaseModel):
     environment_variables: Dict[str, str] = Field(default_factory=dict, description="Environment variables")
     docker_options: Dict[str, Any] = Field(default_factory=dict, description="Docker execution options")
     
+    finding_policy: Optional[str] = Field(None, max_length=500, description="Relative path to finding policy file (e.g. .scanning/finding-policy.json)")
+    collect_metadata: Optional[bool] = Field(None, description="Include Git info, project path, etc. in the scan report")
+    git_branch: Optional[str] = Field(None, max_length=255, description="Git branch to scan")
+    
     @field_validator('enabled_scanners')
     def validate_scanners(cls, v):
-        """Validate scanner list."""
-        if not v:
-            raise ValueError("At least one scanner must be specified")
+        """Validate scanner list (allow empty when scanners are sent as top-level 'scanners')."""
+        if v is None:
+            return []
         return v
     
     @field_validator('include_paths', 'exclude_paths')

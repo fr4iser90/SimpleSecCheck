@@ -18,7 +18,6 @@ export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set())
   const [urlsText, setUrlsText] = useState('')
   const [gitBranch, setGitBranch] = useState('')
-  const [ciMode, setCiMode] = useState(false)
   const [findingPolicy, setFindingPolicy] = useState('')
   const [collectMetadata, setCollectMetadata] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -102,7 +101,6 @@ export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
           scan_type: scanType,
           repositories: repoUrls,
           git_branch: gitBranch.trim() || null,
-          ci_mode: ciMode,
           finding_policy: findingPolicy.trim() || null,
           collect_metadata: collectMetadata,
         }),
@@ -292,19 +290,6 @@ export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
             </small>
           </div>
 
-          <div className="form-group">
-            <label>
-              <input
-                type="checkbox"
-                checked={ciMode}
-                onChange={(e) => setCiMode(e.target.checked)}
-              />
-              CI Mode (scan only tracked files)
-            </label>
-            <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
-              Scans only files tracked by Git (ignores untracked files)
-            </small>
-          </div>
         </>
       )}
 

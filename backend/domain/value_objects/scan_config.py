@@ -60,6 +60,11 @@ class ScanConfig:
     environment_variables: Dict[str, str] = field(default_factory=dict)
     docker_options: Dict[str, Any] = field(default_factory=dict)
     
+    # Optional scan options (passed to worker/scanner; not used by domain validation)
+    finding_policy: Optional[str] = None
+    collect_metadata: Optional[bool] = None
+    git_branch: Optional[str] = None
+    
     def validate(self) -> bool:
         """Validate the scan configuration."""
         if self.timeout <= 0:
@@ -126,6 +131,9 @@ class ScanConfig:
             'custom_rules': self.custom_rules,
             'environment_variables': self.environment_variables,
             'docker_options': self.docker_options,
+            'finding_policy': self.finding_policy,
+            'collect_metadata': self.collect_metadata,
+            'git_branch': self.git_branch,
         }
     
     @classmethod
@@ -152,6 +160,9 @@ class ScanConfig:
             custom_rules=data.get('custom_rules', []),
             environment_variables=data.get('environment_variables', {}),
             docker_options=data.get('docker_options', {}),
+            finding_policy=data.get('finding_policy'),
+            collect_metadata=data.get('collect_metadata'),
+            git_branch=data.get('git_branch'),
         )
     
     def merge_with(self, other: 'ScanConfig') -> 'ScanConfig':
@@ -182,4 +193,7 @@ class ScanConfig:
             custom_rules=other.custom_rules if other.custom_rules else self.custom_rules,
             environment_variables={**self.environment_variables, **other.environment_variables},
             docker_options={**self.docker_options, **other.docker_options},
+            finding_policy=other.finding_policy if other.finding_policy is not None else self.finding_policy,
+            collect_metadata=other.collect_metadata if other.collect_metadata is not None else self.collect_metadata,
+            git_branch=other.git_branch if other.git_branch is not None else self.git_branch,
         )

@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 DEFAULT_SCANNER_IMAGE = os.getenv("SCANNER_IMAGE", "simpleseccheck-scanner:local")
 
 
+def _collect_metadata_default(config: Optional[dict]) -> bool:
+    """If user did not set collect_metadata (missing or None), use admin default (usually False = no collection)."""
+    if not config:
+        return getattr(get_settings(), "COLLECT_METADATA_DEFAULT", False)
+    v = config.get("collect_metadata")
+    if v is not None:
+        return bool(v)
+    return getattr(get_settings(), "COLLECT_METADATA_DEFAULT", False)
+
+
 class QueueService:
     """Redis-based queue service for scan jobs."""
     
@@ -98,7 +108,7 @@ class QueueService:
                 "config": scan.config,
                 "image": scan.config.get("image", DEFAULT_SCANNER_IMAGE) if scan.config else DEFAULT_SCANNER_IMAGE,
                 "finding_policy": scan.config.get("finding_policy") if scan.config else None,
-                "collect_metadata": scan.config.get("collect_metadata", True) if scan.config else True,
+                "collect_metadata": _collect_metadata_default(scan.config),
                 "exclude_paths": scan.config.get("exclude_paths") if scan.config else None,
                 "git_branch": scan.config.get("git_branch") if scan.config else None,
                 "asset_volumes": asset_volumes,
