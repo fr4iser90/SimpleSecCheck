@@ -610,6 +610,7 @@ class ScanOrchestrator:
         """
         Pre-register all steps as 'pending' BEFORE scan starts.
         Uses StepDefinitionsRegistry - NO HARDCODED STEPS!
+        Order matches execution: Git Clone, Initialization, [Metadata], scanners..., Artifact Collection, Completion.
         """
         # Get conditions and scanners
         conditions = self._get_conditions()
@@ -626,11 +627,20 @@ class ScanOrchestrator:
             scanner_count=len(scanners)
         )
         
+        # Split into "before scanners" and "after scanners" so display order matches execution order
+        before_scanner = [
+            s for s in step_definitions
+            if s.step_type not in (StepType.ARTIFACT_COLLECTION, StepType.COMPLETION)
+        ]
+        after_scanner = [
+            s for s in step_definitions
+            if s.step_type in (StepType.ARTIFACT_COLLECTION, StepType.COMPLETION)
+        ]
+
         total_steps = len(step_definitions) + len(scanners)
         self.log_message(f"Pre-registering {total_steps} steps from registry (Step Definitions: {len(step_definitions)}, Scanners: {len(scanners)})")
-        
-        # Register all step definitions from registry
-        for step_def in step_definitions:
+
+        def register_step(step_def):
             if step_def.name not in self.step_registry.steps:
                 self.step_registry.step_counter += 1
                 step = Step(
@@ -643,8 +653,11 @@ class ScanOrchestrator:
                 )
                 self.step_registry.steps[step_def.name] = step
                 self.step_registry._write_to_log(step)
-        
-        # Register all scanner steps (or selected ones)
+
+        # Register in execution order: before-scanner steps, then scanners, then after-scanner steps
+        for step_def in before_scanner:
+            register_step(step_def)
+
         for scanner in scanners:
             if scanner.name not in self.step_registry.steps:
                 self.step_registry.step_counter += 1
@@ -658,6 +671,9 @@ class ScanOrchestrator:
                 )
                 self.step_registry.steps[scanner.name] = scanner_step
                 self.step_registry._write_to_log(scanner_step)
+
+        for step_def in after_scanner:
+            register_step(step_def)
         
         # Send initial update to frontend with all steps
         asyncio.create_task(self.step_registry._send_update())

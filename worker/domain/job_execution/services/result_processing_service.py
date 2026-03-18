@@ -360,11 +360,18 @@ class ResultProcessingService:
                         vuln_counts[k] = 0
             else:
                 vuln_counts = _aggregate_vulnerability_counts(result.structured_results)
-            duration_seconds = int(result.execution_time_seconds) if result.execution_time_seconds is not None else None
 
             # Build per-tool results for results column and scanner_duration_stats (from steps.log or tool reports)
             scan_results = _build_scan_results_for_duration_stats(result.structured_results)
             results_json = json.dumps(scan_results) if scan_results else None
+
+            # Duration: use execution_time_seconds when set; otherwise sum of per-tool durations so DB always has a value
+            if result.execution_time_seconds is not None:
+                duration_seconds = int(result.execution_time_seconds)
+            elif scan_results:
+                duration_seconds = sum(s.get("duration", 0) or 0 for s in scan_results)
+            else:
+                duration_seconds = None
             
             # Update scan status, vulnerability counts, and results in database
             async with self.database_adapter.get_session() as session:
