@@ -1,35 +1,52 @@
-name: owasp
-version: "1.0"
+id: owasp
+version: '1.0'
 display_name: OWASP Dependency Check
-description: OWASP's dependency vulnerability scanner. Identifies known vulnerabilities in project dependencies.
+description: OWASP's dependency vulnerability scanner. Identifies known vulnerabilities
+  in project dependencies.
 categories:
-  - Dependency Scanning
-  - SCA
-icon: "🔒"
-category: dependency
-languages: []
+- dependency
+- sca
+icon: 🔒
+languages: null
 severity_supported: true
-timeout: 1200
+execution:
+  timeout: 1200
 homepage: https://owasp.org/www-project-dependency-check/
 documentation: https://jeremylong.github.io/DependencyCheck/
 install:
-  - ["wget", "https://api.github.com/repos/jeremylong/DependencyCheck/releases/latest", "-O", "/tmp/owasp-release.json"]
-  - ["/bin/sh", "-c", "OWASP_DC_URL=$(cat /tmp/owasp-release.json | jq -r '.assets[] | select(.name | test(\"dependency-check.*release.zip\") and (test(\"ant\") | not) and (test(\"asc\") | not)) | .browser_download_url') && wget -O dependency-check.zip $OWASP_DC_URL"]
-  - ["unzip", "dependency-check.zip", "-d", "/opt"]
-  - ["rm", "dependency-check.zip"]
-  - ["ln", "-s", "/opt/dependency-check/bin/dependency-check.sh", "/usr/local/bin/dependency-check"]
-  - ["mkdir", "-p", "/app/owasp-dependency-check-data"]
+- - wget
+  - https://api.github.com/repos/jeremylong/DependencyCheck/releases/latest
+  - -O
+  - /tmp/owasp-release.json
+- - /bin/sh
+  - -c
+  - OWASP_DC_URL=$(cat /tmp/owasp-release.json | jq -r '.assets[] | select(.name |
+    test("dependency-check.*release.zip") and (test("ant") | not) and (test("asc")
+    | not)) | .browser_download_url') && wget -O dependency-check.zip $OWASP_DC_URL
+- - unzip
+  - dependency-check.zip
+  - -d
+  - /opt
+- - rm
+  - dependency-check.zip
+- - ln
+  - -s
+  - /opt/dependency-check/bin/dependency-check.sh
+  - /usr/local/bin/dependency-check
+- - mkdir
+  - -p
+  - /app/owasp-dependency-check-data
 assets:
-  - id: data
-    type: data
-    description: OWASP Dependency Check data cache
-    mount:
-      host_subpath: scanner/plugins/owasp/data
-      container_path: /app/scanner/plugins/owasp/data
-    update:
-      enabled: true
-      command:
-        - dependency-check
-        - --updateonly
-        - --data
-        - /app/scanner/plugins/owasp/data
+- id: data
+  type: data
+  description: OWASP Dependency Check data cache
+  mount:
+    host_subpath: scanner/plugins/owasp/data
+    container_path: /app/scanner/plugins/owasp/data
+  update:
+    enabled: true
+    command:
+    - dependency-check
+    - --updateonly
+    - --data
+    - /app/scanner/plugins/owasp/data

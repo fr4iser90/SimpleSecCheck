@@ -46,7 +46,6 @@ def sample_scanner():
     return Scanner(
         name="TestScanner",
         capabilities=[capability],
-        script_path="/app/scripts/test_scanner.sh",
         enabled=True,
         priority=0
     )
@@ -65,7 +64,6 @@ def multiple_scanners():
         scanners.append(Scanner(
             name=f"Scanner{i}",
             capabilities=[capability],
-            script_path=f"/app/scripts/scanner{i}.sh",
             enabled=True,
             priority=i  # Different priorities
         ))
@@ -103,14 +101,12 @@ class TestScannerRegistryRegister:
         new_scanner = Scanner(
             name="TestScanner",
             capabilities=[],
-            script_path="/new/path.sh",
             enabled=False,
             priority=10
         )
         ScannerRegistry.register(new_scanner)
         
         assert len(ScannerRegistry._scanners) == 1
-        assert ScannerRegistry._scanners["TestScanner"].script_path == "/new/path.sh"
         assert ScannerRegistry._scanners["TestScanner"].enabled is False
     
     def test_register_with_all_fields(self, clean_registry):
@@ -123,7 +119,6 @@ class TestScannerRegistryRegister:
         scanner = Scanner(
             name="FullScanner",
             capabilities=[capability],
-            script_path="/app/scripts/full.sh",
             enabled=True,
             priority=5,
             requires_condition="IS_NATIVE",
@@ -169,13 +164,11 @@ class TestScannerRegistryGetScannersForTarget:
         code_scanner = Scanner(
             name="CodeScanner",
             capabilities=[code_capability],
-            script_path="/app/code.sh",
             enabled=True
         )
         secrets_scanner = Scanner(
             name="SecretsScanner",
             capabilities=[secrets_capability],
-            script_path="/app/secrets.sh",
             enabled=True
         )
         
@@ -195,7 +188,6 @@ class TestScannerRegistryGetScannersForTarget:
         disabled_scanner = Scanner(
             name="DisabledScanner",
             capabilities=sample_scanner.capabilities,
-            script_path="/app/disabled.sh",
             enabled=False
         )
         
@@ -217,7 +209,6 @@ class TestScannerRegistryGetScannersForTarget:
         conditional_scanner = Scanner(
             name="ConditionalScanner",
             capabilities=[capability],
-            script_path="/app/conditional.sh",
             enabled=True,
             requires_condition="IS_NATIVE"
         )
@@ -253,7 +244,6 @@ class TestScannerRegistryGetScannersForTarget:
         conditional_scanner = Scanner(
             name="ConditionalScanner",
             capabilities=[capability],
-            script_path="/app/conditional.sh",
             enabled=True,
             requires_condition="IS_NATIVE"
         )
@@ -308,7 +298,6 @@ class TestScannerRegistryGetScannersForTarget:
         multi_scanner = Scanner(
             name="MultiScanner",
             capabilities=[capability1, capability2],
-            script_path="/app/multi.sh",
             enabled=True
         )
         
@@ -338,7 +327,6 @@ class TestScannerRegistryGetScannersForTarget:
         scanner = Scanner(
             name="LocalScanner",
             capabilities=[capability],
-            script_path="/app/local.sh",
             enabled=True
         )
         
@@ -371,13 +359,11 @@ class TestScannerRegistryGetScannersForType:
         code_scanner = Scanner(
             name="CodeScanner",
             capabilities=[code_capability],
-            script_path="/app/code.sh",
             enabled=True
         )
         secrets_scanner = Scanner(
             name="SecretsScanner",
             capabilities=[secrets_capability],
-            script_path="/app/secrets.sh",
             enabled=True
         )
         
@@ -399,7 +385,6 @@ class TestScannerRegistryGetScannersForType:
         disabled_scanner = Scanner(
             name="DisabledScanner",
             capabilities=[capability],
-            script_path="/app/disabled.sh",
             enabled=False
         )
         
@@ -419,14 +404,12 @@ class TestScannerRegistryGetScannersForType:
         scanner1 = Scanner(
             name="Scanner1",
             capabilities=[capability],
-            script_path="/app/scanner1.sh",
             enabled=True,
             priority=10
         )
         scanner2 = Scanner(
             name="Scanner2",
             capabilities=[capability],
-            script_path="/app/scanner2.sh",
             enabled=True,
             priority=5
         )
@@ -464,8 +447,8 @@ class TestScannerRegistryGetTotalSteps:
             collect_metadata=False
         )
         
-        # 1 (git clone) + 1 (init) + 1 (scanner) + 1 (completion) = 4
-        assert steps == 4
+        # StepDefinitionsRegistry: git + init + artifact + completion + scanner_count
+        assert steps == 5
     
     def test_get_total_steps_without_git_clone(self, clean_registry, sample_scanner):
         """Test calculating steps without git clone."""
@@ -478,8 +461,7 @@ class TestScannerRegistryGetTotalSteps:
             collect_metadata=False
         )
         
-        # 1 (init) + 1 (scanner) + 1 (completion) = 3
-        assert steps == 3
+        assert steps == 5  # git_repo always includes Git Clone step + pipeline + 1 scanner
     
     def test_get_total_steps_with_metadata(self, clean_registry, sample_scanner):
         """Test calculating steps with metadata collection."""
@@ -492,8 +474,7 @@ class TestScannerRegistryGetTotalSteps:
             collect_metadata=True
         )
         
-        # 1 (init) + 1 (scanner) + 1 (metadata) + 1 (completion) = 4
-        assert steps == 4
+        assert steps == 6
     
     def test_get_total_steps_all_options(self, clean_registry, multiple_scanners):
         """Test calculating steps with all options enabled."""
@@ -507,8 +488,7 @@ class TestScannerRegistryGetTotalSteps:
             collect_metadata=True
         )
         
-        # 1 (git clone) + 1 (init) + 3 (scanners) + 1 (metadata) + 1 (completion) = 7
-        assert steps == 7
+        assert steps == 8
     
     def test_get_total_steps_no_scanners(self, clean_registry):
         """Test calculating steps with no matching scanners."""
@@ -519,8 +499,7 @@ class TestScannerRegistryGetTotalSteps:
             collect_metadata=False
         )
         
-        # 1 (init) + 0 (scanners) + 1 (completion) = 2
-        assert steps == 2
+        assert steps == 4
     
     def test_get_total_steps_with_conditions(self, clean_registry):
         """Test calculating steps with conditional scanners."""
@@ -533,7 +512,6 @@ class TestScannerRegistryGetTotalSteps:
         conditional_scanner = Scanner(
             name="ConditionalScanner",
             capabilities=[capability],
-            script_path="/app/conditional.sh",
             enabled=True,
             requires_condition="IS_NATIVE"
         )
@@ -548,9 +526,8 @@ class TestScannerRegistryGetTotalSteps:
             collect_metadata=False,
             conditions=None
         )
-        assert steps == 2  # init + completion
+        assert steps == 4
         
-        # With condition True - should count scanner
         steps = ScannerRegistry.get_total_steps(
             target_type=TargetType.GIT_REPO,
             scan_types=[ScanType.CODE],
@@ -558,7 +535,7 @@ class TestScannerRegistryGetTotalSteps:
             collect_metadata=False,
             conditions={"IS_NATIVE": True}
         )
-        assert steps == 3  # init + scanner + completion
+        assert steps == 5
 
 
 # ============================================================================
@@ -596,13 +573,11 @@ class TestScannerRegistryGetAllScanners:
         enabled_scanner = Scanner(
             name="Enabled",
             capabilities=[],
-            script_path="/app/enabled.sh",
             enabled=True
         )
         disabled_scanner = Scanner(
             name="Disabled",
             capabilities=[],
-            script_path="/app/disabled.sh",
             enabled=False
         )
         
@@ -714,13 +689,14 @@ class TestScannerRegistryRegisterFromClass:
         scanner = ScannerRegistry.get_scanner("Bandit")
         assert scanner is not None
     
-    @patch('scanner.core.scanner_registry.ScannerAssetsManager')
+    @patch('scanner.core.scanner_assets.manager.ScannerAssetsManager')
     @patch('scanner.core.scanner_registry.Path')
     def test_register_from_class_with_manifest(self, mock_path_class, mock_assets_manager_class, clean_registry):
         """Test registering with manifest.yaml name."""
         # Mock manifest loading
         mock_manifest = MagicMock()
-        mock_manifest.name = "ManifestScanner"
+        mock_manifest.id = "test"
+        mock_manifest.display_name = "ManifestScanner"
         
         mock_assets_manager_instance = MagicMock()
         mock_assets_manager_instance.get_manifest.return_value = mock_manifest
@@ -742,29 +718,23 @@ class TestScannerRegistryRegisterFromClass:
         scanner = ScannerRegistry.get_scanner("ManifestScanner")
         assert scanner is not None
     
-    @patch('scanner.core.scanner_registry.ScannerAssetsManager')
+    @patch('scanner.core.scanner_assets.manager.ScannerAssetsManager')
     @patch('scanner.core.scanner_registry.Path')
     def test_register_from_class_manifest_loading_failure(self, mock_path_class, mock_assets_manager_class, clean_registry):
-        """Test that manifest loading failure is handled gracefully."""
-        # Mock manifest loading failure
         mock_path_instance = MagicMock()
         mock_path_instance.exists.return_value = True
         mock_path_class.return_value = mock_path_instance
-        
         mock_assets_manager_class.side_effect = Exception("Manifest load failed")
-        
+
         class TestScannerClass:
             CAPABILITIES = []
             PRIORITY = 0
             SCRIPT_PATH = "/app/test.sh"
             __name__ = "TestScannerClass"
             __module__ = "scanner.plugins.test.scanner"
-        
-        # Should not raise exception, should fall back to class name
-        ScannerRegistry.register_from_class(TestScannerClass)
-        
-        scanner = ScannerRegistry.get_scanner("Test")
-        assert scanner is not None
+
+        with pytest.raises(RuntimeError, match="manifest"):
+            ScannerRegistry.register_from_class(TestScannerClass)
     
     def test_register_from_class_python_class_format(self, clean_registry):
         """Test that python_class is correctly formatted."""
@@ -790,15 +760,15 @@ class TestScannerRegistryRegisterFromClass:
             REQUIRES_CONDITION = "IS_NATIVE"
             SCRIPT_PATH = "/app/test.sh"
             __name__ = "ConditionalScannerClass"
-            __module__ = "scanner.plugins.conditional.scanner"
+            __module__ = "scanner.plugins.test.scanner"
         
         ScannerRegistry.register_from_class(ConditionalScannerClass)
         
         scanner = ScannerRegistry.get_scanner("ConditionalScanner")
         assert scanner.requires_condition == "IS_NATIVE"
     
-    def test_register_from_class_without_script_path(self, clean_registry):
-        """Test registering scanner without SCRIPT_PATH."""
+    def test_register_from_class_sets_python_class(self, clean_registry):
+        """Test register_from_class sets python_class from module."""
         class TestScannerClass:
             SCANNER_NAME = "TestScanner"
             CAPABILITIES = []
@@ -809,44 +779,31 @@ class TestScannerRegistryRegisterFromClass:
         ScannerRegistry.register_from_class(TestScannerClass)
         
         scanner = ScannerRegistry.get_scanner("TestScanner")
-        assert scanner.script_path is None
+        assert scanner.python_class == "scanner.plugins.test.scanner.TestScannerClass" 
     
-    @patch('scanner.core.scanner_registry.ScannerAssetsManager')
-    @patch('scanner.core.scanner_registry.Path')
-    def test_register_from_class_manifest_path_not_exists(self, mock_path_class, mock_assets_manager_class, clean_registry):
-        """Test when manifest path doesn't exist."""
-        mock_path_instance = MagicMock()
-        mock_path_instance.exists.return_value = False
-        mock_path_class.return_value = mock_path_instance
-        
+    def test_register_from_class_manifest_path_not_exists(self, clean_registry):
+        """Plugin folder without manifest.yaml → RuntimeError."""
         class TestScannerClass:
             CAPABILITIES = []
             PRIORITY = 0
             SCRIPT_PATH = "/app/test.sh"
             __name__ = "TestScannerClass"
-            __module__ = "scanner.plugins.test.scanner"
-        
-        ScannerRegistry.register_from_class(TestScannerClass)
-        
-        # Should fall back to class name
-        scanner = ScannerRegistry.get_scanner("Test")
-        assert scanner is not None
+            __module__ = "scanner.plugins.nonexistent_plugin_xyz.scanner"
+
+        with pytest.raises(RuntimeError, match="manifest"):
+            ScannerRegistry.register_from_class(TestScannerClass)
     
     def test_register_from_class_non_plugin_module(self, clean_registry):
-        """Test registering scanner from non-plugin module."""
         class TestScannerClass:
             SCANNER_NAME = "TestScanner"
             CAPABILITIES = []
             PRIORITY = 0
             SCRIPT_PATH = "/app/test.sh"
             __name__ = "TestScannerClass"
-            __module__ = "some.other.module"  # Not a plugin module
-        
-        ScannerRegistry.register_from_class(TestScannerClass)
-        
-        scanner = ScannerRegistry.get_scanner("TestScanner")
-        assert scanner is not None
-        # Should use SCANNER_NAME, not try to load manifest
+            __module__ = "some.other.module"
+
+        with pytest.raises(RuntimeError, match="manifest"):
+            ScannerRegistry.register_from_class(TestScannerClass)
 
 
 # ============================================================================
@@ -869,7 +826,6 @@ class TestScannerDiscoveryIntegration:
             scanner = Scanner(
                 name=f"Scanner{i}",
                 capabilities=[capability],
-                script_path=f"/app/scanner{i}.sh",
                 enabled=True,
                 priority=i
             )
@@ -893,7 +849,7 @@ class TestScannerDiscoveryIntegration:
             collect_metadata=True
         )
         
-        assert steps == 5  # git clone + init + 1 scanner + metadata + completion
+        assert steps == 6
     
     def test_complex_filtering_scenario(self, clean_registry):
         """Test complex filtering with multiple conditions."""
@@ -942,7 +898,6 @@ class TestScannerDiscoveryIntegration:
             scanner = Scanner(
                 name=config["name"],
                 capabilities=[capability],
-                script_path=f"/app/{config['name'].lower()}.sh",
                 enabled=config["enabled"],
                 priority=config["priority"],
                 requires_condition=config["condition"]

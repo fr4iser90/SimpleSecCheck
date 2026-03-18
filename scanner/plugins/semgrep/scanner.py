@@ -213,7 +213,7 @@ class SemgrepScanner(BaseScanner):
                 "--sarif",
                 "-o", str(sarif_output)
             ]
-            result = self.run_command(cmd, capture_output=True, timeout=300)
+            result = self.run_command(cmd, capture_output=True)
             if result.returncode == 0 and sarif_output.exists():
                 self.complete_substep("SARIF Export", "SARIF report generated successfully")
             else:
@@ -237,7 +237,7 @@ class SemgrepScanner(BaseScanner):
                 "--json",
                 "-o", str(security_json)
             ]
-            self.run_command(cmd, capture_output=True, timeout=600)
+            self.run_command(cmd, capture_output=True)
             if security_json.exists():
                 self.complete_substep("Security Deep Scan", "Security deep scan completed")
             else:

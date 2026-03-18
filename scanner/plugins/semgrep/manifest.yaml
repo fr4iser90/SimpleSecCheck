@@ -1,27 +1,44 @@
-name: semgrep
-version: "1.0"
-description: Static analysis tool for multiple languages. Finds bugs and security vulnerabilities in code.
+id: semgrep
+version: '1.0'
+display_name: Semgrep
+description: Static analysis tool for multiple languages. Finds bugs and security
+  vulnerabilities in code.
 categories:
-  - Code Scanning
-  - SAST
-icon: "🔍"
-category: code
+- code
+- sast
+icon: 🔍
 languages:
-  - python
-  - javascript
-  - typescript
-  - java
-  - go
-  - ruby
-  - c
-  - cpp
-  - csharp
+- python
+- javascript
+- typescript
+- java
+- go
+- ruby
+- c
+- cpp
+- csharp
 severity_supported: true
-timeout: 900
+execution:
+  timeout: 900
 homepage: https://semgrep.dev
 documentation: https://semgrep.dev/docs/
 install:
-  - ["pip3", "install", "--upgrade", "pip", "setuptools", "wheel"]
-  - ["/bin/sh", "-c", "pip3 uninstall -y typing_extensions pydantic pydantic_core semgrep || true"]
-  - ["pip3", "install", "--force-reinstall", "--no-cache-dir", "typing_extensions>=4.14.1", "pydantic>=2.0.0", "pydantic-core>=2.0.0"]
-  - ["pip3", "install", "semgrep"]
+- - pip3
+  - install
+  - --upgrade
+  - pip
+  - setuptools
+  - wheel
+- - /bin/sh
+  - -c
+  - pip3 uninstall -y typing_extensions pydantic pydantic_core semgrep || true
+- - pip3
+  - install
+  - --force-reinstall
+  - --no-cache-dir
+  - typing_extensions>=4.14.1
+  - pydantic>=2.0.0
+  - pydantic-core>=2.0.0
+- - pip3
+  - install
+  - semgrep

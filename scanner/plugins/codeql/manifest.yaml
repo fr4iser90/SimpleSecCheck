@@ -1,30 +1,61 @@
-name: codeql
-version: "1.0"
-description: GitHub's semantic code analysis engine. Finds security vulnerabilities using queries.
+id: codeql
+version: '1.0'
+display_name: Codeql
+description: GitHub's semantic code analysis engine. Finds security vulnerabilities
+  using queries.
 categories:
-  - Code Scanning
-  - SAST
-icon: "🔎"
-category: code
+- code
+- sast
+icon: 🔎
 languages:
-  - python
-  - javascript
-  - java
-  - cpp
-  - csharp
-  - go
+- python
+- javascript
+- java
+- cpp
+- csharp
+- go
 severity_supported: true
-timeout: 1200
+execution:
+  timeout: 1200
 homepage: https://codeql.github.com
 documentation: https://codeql.github.com/docs/
 install:
-  - ["/bin/sh", "-c", "CODEQL_URL=$(wget -qO- https://api.github.com/repos/github/codeql-cli-binaries/releases/latest | jq -r '.assets[] | select(.name | test(\"codeql-linux64.zip\")) | .browser_download_url') && wget -O /tmp/codeql.zip $CODEQL_URL"]
-  - ["unzip", "/tmp/codeql.zip", "-d", "/opt"]
-  - ["rm", "/tmp/codeql.zip"]
-  - ["ln", "-s", "/opt/codeql/codeql", "/usr/local/bin/codeql"]
-  - ["codeql", "pack", "download", "codeql/python-queries"]
-  - ["codeql", "pack", "download", "codeql/javascript-queries"]
-  - ["codeql", "pack", "download", "codeql/java-queries"]
-  - ["codeql", "pack", "download", "codeql/cpp-queries"]
-  - ["codeql", "pack", "download", "codeql/csharp-queries"]
-  - ["codeql", "pack", "download", "codeql/go-queries"]
+- - /bin/sh
+  - -c
+  - CODEQL_URL=$(wget -qO- https://api.github.com/repos/github/codeql-cli-binaries/releases/latest
+    | jq -r '.assets[] | select(.name | test("codeql-linux64.zip")) | .browser_download_url')
+    && wget -O /tmp/codeql.zip $CODEQL_URL
+- - unzip
+  - /tmp/codeql.zip
+  - -d
+  - /opt
+- - rm
+  - /tmp/codeql.zip
+- - ln
+  - -s
+  - /opt/codeql/codeql
+  - /usr/local/bin/codeql
+- - codeql
+  - pack
+  - download
+  - codeql/python-queries
+- - codeql
+  - pack
+  - download
+  - codeql/javascript-queries
+- - codeql
+  - pack
+  - download
+  - codeql/java-queries
+- - codeql
+  - pack
+  - download
+  - codeql/cpp-queries
+- - codeql
+  - pack
+  - download
+  - codeql/csharp-queries
+- - codeql
+  - pack
+  - download
+  - codeql/go-queries

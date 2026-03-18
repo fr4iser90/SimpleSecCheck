@@ -311,6 +311,9 @@ export default function Header() {
               <Link to="/admin/tool-duration" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
                 Tool duration (exact per scanner)
               </Link>
+              <Link to="/admin/tool-settings" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
+                Tool settings (DB overrides)
+              </Link>
               <Link to="/admin/vulnerabilities" className="dropdown-item" onClick={() => setShowAdminMenu(false)}>
                 Vulnerability Database
               </Link>

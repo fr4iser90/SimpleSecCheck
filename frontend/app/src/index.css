@@ -1571,3 +1571,290 @@ input:focus, select:focus {
 .substep-fade-in {
   animation: substepFadeIn 0.2s ease-out forwards;
 }
+
+/* Scan progress: step cards (compact + expandable substeps) */
+.scan-step-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 1.25rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .scan-step-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+}
+
+.scan-step-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  min-width: 0;
+}
+
+.scan-step-card-header--clickable {
+  cursor: pointer;
+  border-radius: 8px;
+  margin: -0.25rem;
+  padding: 0.25rem;
+  outline: none;
+}
+
+.scan-step-card-header--clickable:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.scan-step-card-header--clickable:focus-visible {
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.6);
+}
+
+.scan-step-card-chevron {
+  flex-shrink: 0;
+  width: 1.25rem;
+  font-size: 0.65rem;
+  opacity: 0.85;
+  line-height: 1.5rem;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: rotate(0deg);
+}
+
+.scan-step-card-chevron--open {
+  transform: rotate(90deg);
+}
+
+.scan-step-card-emoji {
+  font-size: 1.35rem;
+  flex-shrink: 0;
+  line-height: 1.25;
+}
+
+.scan-step-card-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.scan-step-card-step-num {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.scan-step-card-name {
+  font-size: 0.8125rem;
+  opacity: 0.82;
+  margin-top: 0.15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-step-card-count {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0.75;
+  padding: 0.2rem 0.45rem;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  align-self: center;
+}
+
+.scan-step-card-duration {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  opacity: 0.7;
+  margin-left: 0.35rem;
+  white-space: nowrap;
+}
+
+.scan-step-card-sub-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.scan-step-card-sub-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.35s ease;
+  min-width: 0;
+}
+
+.scan-step-card-message {
+  font-size: 0.8125rem;
+  opacity: 0.72;
+  margin-bottom: 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-step-card-pulse-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(0, 123, 255, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: auto;
+}
+
+.scan-step-card-pulse-bar-inner {
+  width: 60%;
+  height: 100%;
+  background: #007bff;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Expand/collapse substeps panel (grid rows 0fr → 1fr) */
+.scan-step-substeps-anim {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-top: 0;
+  pointer-events: none;
+}
+
+.scan-step-substeps-anim--open {
+  grid-template-rows: 1fr;
+  margin-top: 0.75rem;
+  pointer-events: auto;
+}
+
+.scan-step-substeps-anim-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.scan-step-substeps-panel {
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  max-height: min(40vh, 280px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.scan-step-substeps-panel-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
+  margin-bottom: 0.5rem;
+  flex-shrink: 0;
+}
+
+.scan-step-substeps-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scan-step-substeps-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1.2fr) minmax(0, 1.4fr) auto;
+  gap: 0.35rem 0.5rem;
+  align-items: center;
+  padding: 0.4rem 0.35rem;
+  font-size: 0.78rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.scan-step-substeps-row:last-child {
+  border-bottom: none;
+}
+
+.scan-step-substeps-icon {
+  font-weight: bold;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.scan-step-substeps-name,
+.scan-step-substeps-msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-step-substeps-msg {
+  opacity: 0.72;
+}
+
+.scan-step-substeps-time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  font-size: 0.72rem;
+}
+
+@media (max-width: 400px) {
+  .scan-step-substeps-row {
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+  }
+  .scan-step-substeps-icon {
+    grid-row: span 2;
+  }
+  .scan-step-substeps-msg {
+    grid-column: 2;
+  }
+  .scan-step-substeps-time {
+    grid-column: 2;
+    justify-self: end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-step-card-chevron {
+    transition: none;
+  }
+
+  .scan-step-substeps-anim {
+    transition: none;
+  }
+
+  .scan-step-substeps-anim:not(.scan-step-substeps-anim--open) {
+    display: none;
+    margin-top: 0;
+  }
+
+  .scan-step-substeps-anim--open {
+    display: grid;
+    grid-template-rows: 1fr;
+    margin-top: 0.75rem;
+    pointer-events: auto;
+  }
+
+  .scan-step-card-sub-bar-fill {
+    transition: none;
+  }
+
+  .substep-slot-live-inner {
+    animation: none !important;
+  }
+
+  .scan-step-card-pulse-bar-inner {
+    animation: none !important;
+    width: 100%;
+    opacity: 0.5;
+  }
+
+  .scan-step-card {
+    transition: border-color 0.01s ease, opacity 0.01s ease !important;
+  }
+}

@@ -1,31 +1,58 @@
-name: zap
-version: "1.0"
-description: OWASP ZAP - Web application security scanner. Finds vulnerabilities in web applications.
+id: zap
+version: '1.0'
+display_name: Zap
+description: OWASP ZAP - Web application security scanner. Finds vulnerabilities in
+  web applications.
 categories:
-  - Web Application Security
-  - DAST
-icon: "🕷️"
-category: web
-languages: []
+- web
+- web_application_security
+- dast
+icon: 🕷️
+languages: null
 severity_supported: true
-timeout: 1200
+execution:
+  timeout: 1200
 homepage: https://www.zaproxy.org
 documentation: https://www.zaproxy.org/docs/
 install:
-  - ["wget", "https://github.com/zaproxy/zaproxy/releases/download/v2.16.1/ZAP_2.16.1_Linux.tar.gz"]
-  - ["tar", "-xvzf", "ZAP_2.16.1_Linux.tar.gz", "-C", "/opt"]
-  - ["rm", "ZAP_2.16.1_Linux.tar.gz"]
-  - ["wget", "https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap-baseline.py", "-O", "/usr/local/bin/zap-baseline.py"]
-  - ["chmod", "+x", "/usr/local/bin/zap-baseline.py"]
-  - ["wget", "https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap_common.py", "-O", "/usr/local/bin/zap_common.py"]
-  - ["mkdir", "-p", "/zap/wrk/zap"]
-  - ["cp", "/app/scanner/plugins/zap/config/baseline.conf", "/zap/wrk/zap/baseline.conf"]
-  - ["cp", "-r", "/opt/ZAP_2.16.1/", "/zap/"]
-  - ["ln", "-sf", "/zap/zap.sh", "/zap/zap-x.sh"]
+- - wget
+  - https://github.com/zaproxy/zaproxy/releases/download/v2.16.1/ZAP_2.16.1_Linux.tar.gz
+- - tar
+  - -xvzf
+  - ZAP_2.16.1_Linux.tar.gz
+  - -C
+  - /opt
+- - rm
+  - ZAP_2.16.1_Linux.tar.gz
+- - wget
+  - https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap-baseline.py
+  - -O
+  - /usr/local/bin/zap-baseline.py
+- - chmod
+  - +x
+  - /usr/local/bin/zap-baseline.py
+- - wget
+  - https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/zap_common.py
+  - -O
+  - /usr/local/bin/zap_common.py
+- - mkdir
+  - -p
+  - /zap/wrk/zap
+- - cp
+  - /app/scanner/plugins/zap/config/baseline.conf
+  - /zap/wrk/zap/baseline.conf
+- - cp
+  - -r
+  - /opt/ZAP_2.16.1/
+  - /zap/
+- - ln
+  - -sf
+  - /zap/zap.sh
+  - /zap/zap-x.sh
 assets:
-  - id: baseline_conf
-    type: config
-    description: ZAP baseline configuration
-    mount:
-      host_subpath: scanner/plugins/zap/config/baseline.conf
-      container_path: /app/scanner/plugins/zap/config/baseline.conf
+- id: baseline_conf
+  type: config
+  description: ZAP baseline configuration
+  mount:
+    host_subpath: scanner/plugins/zap/config/baseline.conf
+    container_path: /app/scanner/plugins/zap/config/baseline.conf

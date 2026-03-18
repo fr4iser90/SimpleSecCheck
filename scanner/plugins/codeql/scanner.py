@@ -140,7 +140,7 @@ class CodeQLScanner(BaseScanner):
         self.start_substep("Query Pack Loading", "Loading CodeQL query packs...", SubStepType.ACTION)
         for lang in detected_languages:
             pack_name = f"codeql/{lang}-queries"
-            dl = self.run_command([*tool_cmd, "pack", "download", pack_name], capture_output=True, timeout=120)
+            dl = self.run_command([*tool_cmd, "pack", "download", pack_name], capture_output=True)
             if dl.returncode != 0:
                 self.log(f"CodeQL pack download {pack_name} failed (exit {dl.returncode}); analyze may fail.", "WARNING")
         self.complete_substep("Query Pack Loading", "Query packs ready")

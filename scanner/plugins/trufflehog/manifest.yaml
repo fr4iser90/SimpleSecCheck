@@ -1,17 +1,31 @@
-name: trufflehog
-version: "1.0"
-description: Advanced secret scanning tool. Finds credentials, API keys, and other secrets in code.
+id: trufflehog
+version: '1.0'
+display_name: Trufflehog
+description: Advanced secret scanning tool. Finds credentials, API keys, and other
+  secrets in code.
 categories:
-  - Secrets Scanning
-icon: "🐷"
-category: secrets
-languages: []
+- secrets
+icon: 🐷
+languages: null
 severity_supported: false
-timeout: 600
+execution:
+  timeout: 600
 homepage: https://github.com/trufflesecurity/trufflehog
 documentation: https://docs.trufflesecurity.com/
 install:
-  - ["/bin/sh", "-c", "TRUFFLEHOG_URL=$(wget -qO- https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | jq -r '.assets[] | select(.name | test(\"trufflehog.*linux.*amd64.tar.gz\")) | .browser_download_url') && wget -O /tmp/trufflehog.tar.gz $TRUFFLEHOG_URL"]
-  - ["tar", "-xvzf", "/tmp/trufflehog.tar.gz", "-C", "/opt"]
-  - ["rm", "/tmp/trufflehog.tar.gz"]
-  - ["ln", "-s", "/opt/trufflehog", "/usr/local/bin/trufflehog"]
+- - /bin/sh
+  - -c
+  - TRUFFLEHOG_URL=$(wget -qO- https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest
+    | jq -r '.assets[] | select(.name | test("trufflehog.*linux.*amd64.tar.gz")) |
+    .browser_download_url') && wget -O /tmp/trufflehog.tar.gz $TRUFFLEHOG_URL
+- - tar
+  - -xvzf
+  - /tmp/trufflehog.tar.gz
+  - -C
+  - /opt
+- - rm
+  - /tmp/trufflehog.tar.gz
+- - ln
+  - -s
+  - /opt/trufflehog
+  - /usr/local/bin/trufflehog

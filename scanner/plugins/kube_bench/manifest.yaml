@@ -1,18 +1,33 @@
-name: kube_bench
-version: "1.0"
-description: Kubernetes security benchmark. Checks Kubernetes cluster configuration against CIS benchmarks.
+id: kube_bench
+version: '1.0'
+display_name: Kube Bench
+description: Kubernetes security benchmark. Checks Kubernetes cluster configuration
+  against CIS benchmarks.
 categories:
-  - Kubernetes Security
-  - Configuration
-icon: "☸️"
-category: container
-languages: []
+- container
+- kubernetes_security
+- configuration
+icon: ☸️
+languages: null
 severity_supported: true
-timeout: 600
+execution:
+  timeout: 600
 homepage: https://github.com/aquasecurity/kube-bench
 documentation: https://github.com/aquasecurity/kube-bench#readme
 install:
-  - ["/bin/sh", "-c", "KUBE_BENCH_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/kube-bench/releases/latest | jq -r '.assets[] | select(.name | test(\"kube-bench.*linux.*amd64.tar.gz\")) | .browser_download_url') && wget -O /tmp/kube-bench.tar.gz $KUBE_BENCH_URL"]
-  - ["tar", "-xvzf", "/tmp/kube-bench.tar.gz", "-C", "/opt"]
-  - ["rm", "/tmp/kube-bench.tar.gz"]
-  - ["ln", "-s", "/opt/kube-bench", "/usr/local/bin/kube-bench"]
+- - /bin/sh
+  - -c
+  - KUBE_BENCH_URL=$(wget -qO- https://api.github.com/repos/aquasecurity/kube-bench/releases/latest
+    | jq -r '.assets[] | select(.name | test("kube-bench.*linux.*amd64.tar.gz")) |
+    .browser_download_url') && wget -O /tmp/kube-bench.tar.gz $KUBE_BENCH_URL
+- - tar
+  - -xvzf
+  - /tmp/kube-bench.tar.gz
+  - -C
+  - /opt
+- - rm
+  - /tmp/kube-bench.tar.gz
+- - ln
+  - -s
+  - /opt/kube-bench
+  - /usr/local/bin/kube-bench

@@ -1,18 +1,32 @@
-name: nuclei
-version: "1.0"
+id: nuclei
+version: '1.0'
+display_name: Nuclei
 description: Fast vulnerability scanner. Uses templates to scan for known vulnerabilities.
 categories:
-  - Web Application Security
-  - Vulnerability Scanning
-icon: "⚛️"
-category: web
-languages: []
+- web
+- web_application_security
+- vulnerability_scanning
+icon: ⚛️
+languages: null
 severity_supported: true
-timeout: 900
+execution:
+  timeout: 900
 homepage: https://github.com/projectdiscovery/nuclei
 documentation: https://docs.projectdiscovery.io/nuclei/
 install:
-  - ["/bin/sh", "-c", "NUCLEI_URL=$(wget -qO- https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | jq -r '.assets[] | select(.name | test(\"nuclei.*linux.*amd64.zip\")) | .browser_download_url') && wget -O /tmp/nuclei.zip $NUCLEI_URL"]
-  - ["unzip", "-o", "/tmp/nuclei.zip", "-d", "/opt"]
-  - ["rm", "/tmp/nuclei.zip"]
-  - ["ln", "-s", "/opt/nuclei", "/usr/local/bin/nuclei"]
+- - /bin/sh
+  - -c
+  - NUCLEI_URL=$(wget -qO- https://api.github.com/repos/projectdiscovery/nuclei/releases/latest
+    | jq -r '.assets[] | select(.name | test("nuclei.*linux.*amd64.zip")) | .browser_download_url')
+    && wget -O /tmp/nuclei.zip $NUCLEI_URL
+- - unzip
+  - -o
+  - /tmp/nuclei.zip
+  - -d
+  - /opt
+- - rm
+  - /tmp/nuclei.zip
+- - ln
+  - -s
+  - /opt/nuclei
+  - /usr/local/bin/nuclei

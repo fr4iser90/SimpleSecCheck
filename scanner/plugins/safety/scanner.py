@@ -154,7 +154,6 @@ class SafetyScanner(BaseScanner):
                     pip_audit_ok = self.run_command(
                         ["pip-audit", "--format", "json", "--requirement", str(dep_file)],
                         capture_output=True,
-                        timeout=120,
                     )
                     if pip_audit_ok.returncode in (0, 1) and (pip_audit_ok.stdout or "").strip():
                         try:

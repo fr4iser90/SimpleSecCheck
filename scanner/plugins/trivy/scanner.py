@@ -139,7 +139,7 @@ class TrivyScanner(BaseScanner):
             self.complete_substep("Download Vulnerability Database", "Using existing database")
         else:
             try:
-                result = self.run_command(["trivy", "image", "--download-db-only"], capture_output=True, timeout=300)
+                result = self.run_command(["trivy", "image", "--download-db-only"], capture_output=True)
                 if result.returncode == 0:
                     self.complete_substep("Download Vulnerability Database", "Vulnerability database ready")
                 else:
@@ -212,7 +212,7 @@ class TrivyScanner(BaseScanner):
                 *skip_args,
                 str(self.target_path)
             ]
-            secret_result = self.run_command(secret_cmd, capture_output=True, timeout=300)
+            secret_result = self.run_command(secret_cmd, capture_output=True)
             if secret_result.returncode == 0:
                 self.complete_substep("Secret Scanning", "Secret scanning completed")
             else:
@@ -231,7 +231,7 @@ class TrivyScanner(BaseScanner):
                 *skip_args,
                 str(self.target_path)
             ]
-            config_result = self.run_command(config_cmd, capture_output=True, timeout=300)
+            config_result = self.run_command(config_cmd, capture_output=True)
             if config_result.returncode == 0:
                 self.complete_substep("Config Scanning", "Config scanning completed")
             else:
@@ -250,7 +250,7 @@ class TrivyScanner(BaseScanner):
                 *skip_args,
                 str(self.target_path)
             ]
-            license_result = self.run_command(license_cmd, capture_output=True, timeout=300)
+            license_result = self.run_command(license_cmd, capture_output=True)
             if license_result.returncode == 0:
                 self.complete_substep("License Scanning", "License scanning completed")
             else:
@@ -321,7 +321,7 @@ class TrivyScanner(BaseScanner):
                 *skip_args,
                 str(self.target_path)
             ]
-            sarif_result = self.run_command(sarif_cmd, capture_output=True, timeout=300)
+            sarif_result = self.run_command(sarif_cmd, capture_output=True)
             if sarif_result.returncode == 0 and sarif_output.exists():
                 self.complete_substep("SARIF Export", "SARIF report generated successfully")
             else:
@@ -342,7 +342,7 @@ class TrivyScanner(BaseScanner):
                 *skip_args,
                 str(self.target_path)
             ]
-            result = self.run_command(cmd, capture_output=True, timeout=300)
+            result = self.run_command(cmd, capture_output=True)
             if result.returncode == 0 and secrets_output.exists():
                 self.complete_substep("Secrets/Config Deep Scan", "Secrets/config deep scan completed")
             else:

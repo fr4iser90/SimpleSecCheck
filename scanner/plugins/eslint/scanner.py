@@ -104,7 +104,6 @@ class ESLintScanner(BaseScanner):
             ["npm", "install", "eslint-plugin-security", "@typescript-eslint/parser", "@typescript-eslint/eslint-plugin"],
             capture_output=True,
             cwd=self.results_dir,
-            timeout=120,
         )
         if install_result.returncode != 0:
             self.log("npm install for eslint plugins failed (will try anyway): " + (install_result.stderr or install_result.stdout or "")[:200], "WARNING")

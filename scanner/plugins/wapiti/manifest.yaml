@@ -1,16 +1,25 @@
-name: wapiti
-version: "1.0"
-description: Web application vulnerability scanner. Detects security flaws in web applications.
+id: wapiti
+version: '1.0'
+display_name: Wapiti
+description: Web application vulnerability scanner. Detects security flaws in web
+  applications.
 categories:
-  - Web Application Security
-  - DAST
-icon: "🕸️"
-category: web
-languages: []
+- web
+- web_application_security
+- dast
+icon: 🕸️
+languages: null
 severity_supported: true
-timeout: 900
+execution:
+  timeout: 900
 homepage: https://wapiti-scanner.github.io/
 documentation: https://wapiti-scanner.github.io/documentation/
 install:
-  - ["pip3", "install", "wapiti3"]
-  - ["pip3", "install", "--force-reinstall", "--no-cache-dir", "typing_extensions>=4.14.1"]
+- - pip3
+  - install
+  - wapiti3
+- - pip3
+  - install
+  - --force-reinstall
+  - --no-cache-dir
+  - typing_extensions>=4.14.1

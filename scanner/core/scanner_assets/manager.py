@@ -20,7 +20,11 @@ class ScannerAssetsManager:
         for manifest_path in self.scanners_root.rglob("manifest.yaml"):
             manifest = self._load_manifest_file(manifest_path)
             if manifest:
-                manifests[manifest.name] = manifest
+                if manifest.id in manifests:
+                    raise ValueError(
+                        f"Duplicate manifest id {manifest.id!r}: {manifest_path} vs existing"
+                    )
+                manifests[manifest.id] = manifest
         return manifests
 
     def list_assets(self) -> List[ScannerAsset]:
@@ -29,11 +33,12 @@ class ScannerAssetsManager:
             assets.extend(manifest.assets)
         return assets
 
-    def get_manifest(self, scanner_name: str) -> Optional[ScannerManifest]:
-        return self.load_manifests().get(scanner_name)
+    def get_manifest(self, plugin_id: str) -> Optional[ScannerManifest]:
+        """plugin_id must match manifest id (and plugin folder name)."""
+        return self.load_manifests().get(plugin_id)
 
-    def get_asset(self, scanner_name: str, asset_id: str) -> Optional[ScannerAsset]:
-        manifest = self.get_manifest(scanner_name)
+    def get_asset(self, plugin_id: str, asset_id: str) -> Optional[ScannerAsset]:
+        manifest = self.get_manifest(plugin_id)
         if not manifest:
             return None
         for asset in manifest.assets:
@@ -47,12 +52,11 @@ class ScannerAssetsManager:
             return host_project_root
         return host_project_root / host_subpath
 
-    def get_display_name(self, plugin_name: str) -> str:
-        """Return display name for plugin (from manifest.display_name or manifest.name)."""
-        manifest = self.get_manifest(plugin_name)
+    def get_display_name(self, plugin_id: str) -> str:
+        manifest = self.get_manifest(plugin_id)
         if not manifest:
-            return plugin_name
-        return manifest.display_name or manifest.name or plugin_name
+            return plugin_id
+        return (manifest.display_name or plugin_id).strip() or plugin_id
 
     def _load_manifest_file(self, manifest_path: Path) -> Optional[ScannerManifest]:
         try:
@@ -60,7 +64,16 @@ class ScannerAssetsManager:
         except Exception:
             return None
 
-        name = data.get("name")
+        plugin_dir = manifest_path.parent.name
+        scanner_id = data.get("id")
+        if scanner_id is not None:
+            scanner_id = str(scanner_id).strip()
+        if not scanner_id:
+            return None
+        if scanner_id != plugin_dir:
+            # Single source: id must match plugin directory
+            return None
+
         assets_data = data.get("assets", [])
         install_data = data.get("install", [])
         assets: List[ScannerAsset] = []
@@ -90,9 +103,6 @@ class ScannerAssetsManager:
                 )
             )
 
-        if not name:
-            return None
-
         install_commands: List[List[str]] = []
         if isinstance(install_data, list):
             for command in install_data:
@@ -108,7 +118,7 @@ class ScannerAssetsManager:
         if categories is not None and not isinstance(categories, list):
             categories = [str(categories)] if categories else None
         if categories is not None:
-            categories = [str(c).strip() for c in categories if c]
+            categories = [str(c).strip().lower() for c in categories if c]
         icon = data.get("icon")
         if icon is not None:
             icon = str(icon).strip() or None
@@ -119,11 +129,18 @@ class ScannerAssetsManager:
         version = data.get("version")
         if version is not None:
             version = str(version).strip() or None
+
         languages = data.get("languages")
-        if languages is not None and isinstance(languages, list):
-            languages = [str(l).strip() for l in languages if l]
-        elif languages is not None:
+        if languages is None:
+            languages = None  # all
+        elif isinstance(languages, list):
+            if not languages:
+                languages = None
+            else:
+                languages = [str(l).strip() for l in languages if l]
+        else:
             languages = [str(languages).strip()] if str(languages).strip() else None
+
         severity_supported = data.get("severity_supported")
         if severity_supported is not None and not isinstance(severity_supported, bool):
             severity_supported = None
@@ -132,15 +149,17 @@ class ScannerAssetsManager:
             severity_map = {str(k).strip(): str(v).strip() for k, v in severity_map.items() if k and v}
         else:
             severity_map = None
-        category = data.get("category")
-        if category is not None:
-            category = str(category).strip() or None
-        timeout = data.get("timeout")
-        if timeout is not None:
+
+        timeout = None
+        ex = data.get("execution")
+        if isinstance(ex, dict) and ex.get("timeout") is not None:
             try:
-                timeout = int(timeout)
+                t = int(ex["timeout"])
+                if t > 0:
+                    timeout = t
             except (TypeError, ValueError):
-                timeout = None
+                pass
+
         homepage = data.get("homepage")
         if homepage is not None:
             homepage = str(homepage).strip() or None
@@ -149,7 +168,7 @@ class ScannerAssetsManager:
             documentation = str(documentation).strip() or None
 
         return ScannerManifest(
-            name=name,
+            id=scanner_id,
             assets=assets,
             install=install_commands,
             raw=data,
@@ -157,7 +176,6 @@ class ScannerAssetsManager:
             languages=languages,
             severity_supported=severity_supported,
             severity_map=severity_map,
-            category=category,
             timeout=timeout,
             display_name=display_name,
             description=description,
@@ -168,13 +186,12 @@ class ScannerAssetsManager:
         )
 
 
-def get_plugin_display_name(plugin_name: str, scanners_root: Optional[Path] = None) -> str:
-    """Return display name for a plugin (single source: manifest). Used by scanner __init__."""
-    root = scanners_root or Path("/app/scanner/plugins")
+def get_plugin_display_name(plugin_id: str, scanners_root: Optional[Path] = None) -> str:
+    root = scanners_root or Path(__file__).resolve().parent.parent.parent / "plugins"
     if not root.exists():
-        return plugin_name
+        return plugin_id
     try:
         manager = ScannerAssetsManager(root)
-        return manager.get_display_name(plugin_name)
+        return manager.get_display_name(plugin_id)
     except Exception:
-        return plugin_name
+        return plugin_id

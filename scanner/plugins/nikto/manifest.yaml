@@ -1,20 +1,39 @@
-name: nikto
-version: "1.0"
+id: nikto
+version: '1.0'
+display_name: Nikto
 description: Web server scanner. Tests web servers for dangerous files and misconfigurations.
 categories:
-  - Web Application Security
-icon: "🌐"
-category: web
-languages: []
+- web
+- web_application_security
+icon: 🌐
+languages: null
 severity_supported: true
-timeout: 600
+execution:
+  timeout: 600
 homepage: https://github.com/sullo/nikto
 documentation: https://cirt.net/Nikto2
 install:
-  - ["apt-get", "update"]
-  - ["apt-get", "install", "-y", "perl", "libwww-perl", "liblwp-protocol-https-perl", "unzip"]
-  - ["wget", "https://github.com/sullo/nikto/archive/master.zip", "-O", "/tmp/nikto.zip"]
-  - ["unzip", "/tmp/nikto.zip"]
-  - ["mv", "nikto-main", "/opt/nikto"]
-  - ["ln", "-s", "/opt/nikto/program/nikto.pl", "/usr/local/bin/nikto"]
-  - ["rm", "/tmp/nikto.zip"]
+- - apt-get
+  - update
+- - apt-get
+  - install
+  - -y
+  - perl
+  - libwww-perl
+  - liblwp-protocol-https-perl
+  - unzip
+- - wget
+  - https://github.com/sullo/nikto/archive/master.zip
+  - -O
+  - /tmp/nikto.zip
+- - unzip
+  - /tmp/nikto.zip
+- - mv
+  - nikto-main
+  - /opt/nikto
+- - ln
+  - -s
+  - /opt/nikto/program/nikto.pl
+  - /usr/local/bin/nikto
+- - rm
+  - /tmp/nikto.zip

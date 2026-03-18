@@ -1,17 +1,28 @@
-name: docker_bench
-version: "1.0"
-description: Docker security benchmark. Checks Docker daemon configuration against CIS benchmarks.
+id: docker_bench
+version: '1.0'
+display_name: Docker Bench
+description: Docker security benchmark. Checks Docker daemon configuration against
+  CIS benchmarks.
 categories:
-  - Container Security
-  - Configuration
-icon: "🐋"
-category: container
-languages: []
+- container
+- container_security
+- configuration
+icon: 🐋
+languages: null
 severity_supported: true
-timeout: 300
+execution:
+  timeout: 300
 homepage: https://github.com/docker/docker-bench-security
 documentation: https://github.com/docker/docker-bench-security#readme
 install:
-  - ["git", "clone", "https://github.com/docker/docker-bench-security.git", "/opt/docker-bench-security"]
-  - ["ln", "-s", "/opt/docker-bench-security/docker-bench-security.sh", "/usr/local/bin/docker-bench-security"]
-  - ["chmod", "+x", "/opt/docker-bench-security/docker-bench-security.sh"]
+- - git
+  - clone
+  - https://github.com/docker/docker-bench-security.git
+  - /opt/docker-bench-security
+- - ln
+  - -s
+  - /opt/docker-bench-security/docker-bench-security.sh
+  - /usr/local/bin/docker-bench-security
+- - chmod
+  - +x
+  - /opt/docker-bench-security/docker-bench-security.sh

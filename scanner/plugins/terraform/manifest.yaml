@@ -1,21 +1,25 @@
-name: terraform
-version: "1.0"
-description: Terraform security scanner. Validates Terraform configurations for security best practices.
+id: terraform
+version: '1.0'
+display_name: Terraform
+description: Terraform security scanner. Validates Terraform configurations for security
+  best practices.
 categories:
-  - IaC Security
-icon: "🏗️"
-category: iac
-languages: []
+- iac
+icon: 🏗️
+languages: null
 severity_supported: true
-timeout: 600
+execution:
+  timeout: 600
 homepage: https://www.checkov.io
 documentation: https://www.checkov.io/documentation.html
 install:
-  - ["pip3", "install", "checkov"]
+- - pip3
+  - install
+  - checkov
 assets:
-  - id: config
-    type: config
-    description: Terraform Checkov config
-    mount:
-      host_subpath: scanner/plugins/terraform/config/config.yaml
-      container_path: /app/scanner/plugins/terraform/config/config.yaml
+- id: config
+  type: config
+  description: Terraform Checkov config
+  mount:
+    host_subpath: scanner/plugins/terraform/config/config.yaml
+    container_path: /app/scanner/plugins/terraform/config/config.yaml

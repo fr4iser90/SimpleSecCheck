@@ -69,7 +69,7 @@ def install_from_manifests(
     """
     manager = ScannerAssetsManager(scanners_root)
     manifests = list(manager.load_manifests().values())
-    manifests.sort(key=lambda manifest: (0 if manifest.name == "base" else 1, manifest.name))
+    manifests.sort(key=lambda m: (0 if m.id == "base" else 1, m.id))
     
     # Load cache if available
     cache = {}
@@ -81,33 +81,33 @@ def install_from_manifests(
     new_cache = {}
     
     for manifest in manifests:
-        manifest_path = scanners_root / manifest.name / "manifest.yaml"
+        manifest_path = scanners_root / manifest.id / "manifest.yaml"
         current_hash = get_manifest_hash(manifest_path)
-        cached_hash = cache.get(manifest.name, "")
+        cached_hash = cache.get(manifest.id, "")
         
         # Always install base, or if manifest changed, or if force_all
         should_install = (
-            manifest.name == "base" or
+            manifest.id == "base" or
             current_hash != cached_hash or
             cached_hash == "" or
             force_all
         )
         
         if should_install:
-            changed_manifests.append(manifest.name)
-            print(f"[Install] Installing {manifest.name} (manifest changed or first install)")
+            changed_manifests.append(manifest.id)
+            print(f"[Install] Installing {manifest.id} (manifest changed or first install)")
             try:
                 for command in manifest.install:
                     run_command(command)
             except subprocess.CalledProcessError as e:
                 print(
-                    f"[Warning] Install failed for {manifest.name}: {e}. Continuing (tool may be optional or installed at runtime).",
+                    f"[Warning] Install failed for {manifest.id}: {e}. Continuing (tool may be optional or installed at runtime).",
                     file=sys.stderr,
                 )
         else:
-            print(f"[Skip] Skipping {manifest.name} (manifest unchanged)")
+            print(f"[Skip] Skipping {manifest.id} (manifest unchanged)")
         
-        new_cache[manifest.name] = current_hash
+        new_cache[manifest.id] = current_hash
     
     # Save updated cache
     if cache_file:

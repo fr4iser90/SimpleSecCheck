@@ -1,14 +1,18 @@
-name: ios_plist
-version: "1.0"
+id: ios_plist
+version: '1.0'
+display_name: Ios Plist
 description: iOS plist security and configuration analysis.
 categories:
-  - Mobile Security
-icon: "🍎"
-category: code
-languages: []
+- code
+- mobile
+icon: 🍎
+languages: null
 severity_supported: true
-timeout: 300
+execution:
+  timeout: 300
 homepage: https://developer.apple.com/
 documentation: https://developer.apple.com/documentation/
 install:
-  - ["pip3", "install", "defusedxml"]
+- - pip3
+  - install
+  - defusedxml

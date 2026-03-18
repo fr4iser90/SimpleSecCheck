@@ -88,6 +88,13 @@ class BaseScanner(ABC):
         except Exception as e:
             print(f"[{self.name}] Error writing to log: {e}")
     
+    def get_timeout(self) -> int:
+        """Return timeout in seconds from env (set by orchestrator from manifest). Default 900."""
+        try:
+            return int(os.getenv("SCANNER_TIMEOUT_SECONDS", "900"))
+        except (ValueError, TypeError):
+            return 900
+    
     def run_command(
         self,
         cmd: List[str],
@@ -103,12 +110,14 @@ class BaseScanner(ABC):
             cmd: Command to run
             cwd: Working directory
             env: Environment variables
-            timeout: Timeout in seconds
+            timeout: Timeout in seconds (None = use SCANNER_TIMEOUT_SECONDS from manifest)
             capture_output: Whether to capture stdout/stderr
         
         Returns:
             CompletedProcess result
         """
+        if timeout is None:
+            timeout = self.get_timeout()
         self.log(f"Running command: {' '.join(cmd)}")
         
         process = None

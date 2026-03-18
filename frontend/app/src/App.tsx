@@ -22,6 +22,7 @@ import QueueSettingsPage from './pages/QueueSettingsPage'
 import IPControlPage from './pages/IPControlPage'
 import ScannerManagementPage from './pages/ScannerManagementPage'
 import AdminToolDurationPage from './pages/AdminToolDurationPage'
+import AdminScannerToolSettingsPage from './pages/AdminScannerToolSettingsPage'
 import ProfilePage from './pages/ProfilePage'
 import APIKeysPage from './pages/APIKeysPage'
 import MyReposPage from './pages/MyReposPage'
@@ -198,6 +199,12 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
         <ProtectedRoute>
           <Header />
           <AdminToolDurationPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/tool-settings" element={
+        <ProtectedRoute>
+          <Header />
+          <AdminScannerToolSettingsPage />
         </ProtectedRoute>
       } />
       <Route path="/admin/vulnerabilities" element={

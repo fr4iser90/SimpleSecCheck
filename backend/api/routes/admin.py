@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from api.deps.actor_context import get_admin_user, ActorContext
 from infrastructure.database.adapter import db_adapter
-from infrastructure.database.models import SystemState
+from infrastructure.database.models import SystemState, Scanner, ScannerToolSettings
 from domain.services.audit_log_service import AuditLogService
 from domain.services.scanner_duration_service import ScannerDurationService
 from domain.services.target_permission_policy import ALL_SCAN_FEATURE_FLAG_KEYS
@@ -1311,3 +1311,196 @@ async def get_scanner_duration_stats(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get scanner duration stats: {str(e)}"
         )
+
+
+def _mask_sensitive_config(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not config:
+        return {}
+    out = {}
+    for k, v in config.items():
+        ku = str(k).upper()
+        if any(x in ku for x in ("TOKEN", "PASSWORD", "SECRET", "KEY", "AUTH")) and v:
+            out[k] = "********"
+        else:
+            out[k] = v
+    return out
+
+
+def _merge_tool_config(old: Optional[Dict], new: Optional[Dict]) -> Dict[str, Any]:
+    old = dict(old or {})
+    if not new:
+        return old
+    sens = ("TOKEN", "PASSWORD", "SECRET", "KEY", "AUTH")
+    for k, v in new.items():
+        if v is None:
+            continue
+        vs = str(v).strip()
+        if vs in ("", "********") and any(x in str(k).upper() for x in sens):
+            continue
+        if vs == "":
+            old.pop(k, None)
+        else:
+            old[k] = v
+    return old
+
+
+class ScannerToolSettingsPut(BaseModel):
+    """DB override layer; null = do not change column (use omit for clear)."""
+
+    enabled: Optional[bool] = Field(None, description="false = force disable tool; true = force enable; omit/null = use discovery")
+    timeout_seconds: Optional[int] = Field(None, ge=30, le=86400, description="Override manifest timeout")
+    config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Env vars per scanner run e.g. SONAR_HOST_URL, SONAR_TOKEN, SNYK_TOKEN",
+    )
+
+
+@router.get("/scanner-tool-settings")
+async def get_scanner_tool_settings(
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, Any]:
+    """
+    List scanners. DB overrides are keyed by tools_key (slug), not display name.
+    """
+    from application.services.scanner_tool_overrides_service import (
+        tools_key_from_scanner_row,
+        execution_timeout_from_meta,
+    )
+
+    await db_adapter.ensure_initialized()
+    async with db_adapter.async_session() as session:
+        res = await session.execute(select(Scanner).order_by(Scanner.name))
+        scanners = list(res.scalars().all())
+        res2 = await session.execute(select(ScannerToolSettings))
+        db_map = {r.scanner_key: r for r in res2.scalars().all()}
+        items = []
+        for sc in scanners:
+            tk = tools_key_from_scanner_row(sc)
+            meta = sc.scanner_metadata if isinstance(sc.scanner_metadata, dict) else {}
+            mt = execution_timeout_from_meta(meta)
+            row = db_map.get(tk)
+            eff_timeout = row.timeout_seconds if row and row.timeout_seconds else mt
+            eff_enabled = row.enabled if row is not None and row.enabled is not None else sc.enabled
+            items.append(
+                {
+                    "tools_key": tk,
+                    "display_name": sc.name,
+                    "execution_timeout": mt,
+                    "discovery_enabled": sc.enabled,
+                    "effective_timeout": eff_timeout,
+                    "effective_enabled": eff_enabled,
+                    "db_override": {
+                        "enabled": row.enabled if row else None,
+                        "timeout_seconds": row.timeout_seconds if row else None,
+                        "config": _mask_sensitive_config(row.config if row else {}),
+                    }
+                    if row
+                    else None,
+                }
+            )
+        return {
+            "scanners": items,
+            "help": {
+                "tools_key": "Use slug in API path (e.g. sonarqube, semgrep). From scanner sync metadata.",
+                "config_examples": {"sonarqube": ["SONAR_HOST_URL", "SONAR_TOKEN"], "snyk": ["SNYK_TOKEN"]},
+            },
+        }
+
+
+@router.put("/scanner-tool-settings/{tools_key:path}")
+async def put_scanner_tool_settings(
+    tools_key: str,
+    body: ScannerToolSettingsPut,
+    request: Request,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, Any]:
+    from application.services.scanner_tool_overrides_service import (
+        find_scanner_by_tools_key,
+        tools_key_from_scanner_row,
+    )
+
+    await db_adapter.ensure_initialized()
+    async with db_adapter.async_session() as session:
+        sc = await find_scanner_by_tools_key(session, tools_key)
+        if not sc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown tools_key: {tools_key}. Sync scanners first; use slug e.g. semgrep, sonarqube.",
+            )
+        tk = tools_key_from_scanner_row(sc)
+        res2 = await session.execute(
+            select(ScannerToolSettings).where(ScannerToolSettings.scanner_key == tk)
+        )
+        row = res2.scalar_one_or_none()
+        uid = None
+        try:
+            from uuid import UUID as _U
+            uid = _U(str(actor_context.user_id)) if actor_context.user_id else None
+        except Exception:
+            pass
+        if row is None:
+            if body.enabled is None and body.timeout_seconds is None and body.config is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Provide at least one of enabled, timeout_seconds, or config",
+                )
+            row = ScannerToolSettings(
+                scanner_key=tk,
+                enabled=body.enabled,
+                timeout_seconds=body.timeout_seconds,
+                config=_merge_tool_config({}, body.config) if body.config is not None else {},
+                updated_by_user_id=uid,
+            )
+            session.add(row)
+        else:
+            if body.enabled is not None:
+                row.enabled = body.enabled
+            if body.timeout_seconds is not None:
+                row.timeout_seconds = body.timeout_seconds
+            if body.config is not None:
+                row.config = _merge_tool_config(row.config, body.config)
+            row.updated_by_user_id = uid
+            row.updated_at = datetime.utcnow()
+        await session.commit()
+    await AuditLogService.log_event(
+        user_id=actor_context.user_id,
+        user_email=actor_context.email,
+        action_type="SCANNER_TOOL_SETTINGS_UPDATED",
+        target=tk,
+        details={"timeout": body.timeout_seconds, "enabled": body.enabled},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("User-Agent"),
+    )
+    return {"ok": True, "tools_key": tk}
+
+
+@router.delete("/scanner-tool-settings/{tools_key:path}")
+async def delete_scanner_tool_settings(
+    tools_key: str,
+    request: Request,
+    actor_context: ActorContext = Depends(get_admin_user),
+) -> Dict[str, Any]:
+    from application.services.scanner_tool_overrides_service import find_scanner_by_tools_key, tools_key_from_scanner_row
+
+    await db_adapter.ensure_initialized()
+    async with db_adapter.async_session() as session:
+        sc = await find_scanner_by_tools_key(session, tools_key)
+        if not sc:
+            raise HTTPException(status_code=404, detail=f"Unknown tools_key: {tools_key}")
+        tk = tools_key_from_scanner_row(sc)
+        res = await session.execute(
+            select(ScannerToolSettings).where(ScannerToolSettings.scanner_key == tk)
+        )
+        row = res.scalar_one_or_none()
+        if row:
+            await session.delete(row)
+            await session.commit()
+    await AuditLogService.log_event(
+        user_id=actor_context.user_id,
+        user_email=actor_context.email,
+        action_type="SCANNER_TOOL_SETTINGS_CLEARED",
+        target=tk,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("User-Agent"),
+    )
+    return {"ok": True, "tools_key": tk}

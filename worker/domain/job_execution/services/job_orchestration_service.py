@@ -5,6 +5,7 @@ Handles the orchestration of job execution including queuing, scheduling, and co
 """
 
 import asyncio
+import json
 import logging
 import os
 import uuid
@@ -194,6 +195,9 @@ class JobOrchestrationService:
             git_branch = job_data.get('git_branch')
             asset_volumes = job_data.get('asset_volumes', [])  # Asset volumes from scanner manifests (backend provides)
             scanners = job_data.get('scanners', [])  # Selected scanners from backend (if empty, scanner filters by scan_type)
+            scanner_tool_overrides_json = job_data.get("scanner_tool_overrides_json") or "{}"
+            if not isinstance(scanner_tool_overrides_json, str):
+                scanner_tool_overrides_json = json.dumps(scanner_tool_overrides_json or {})
             
             # Create container specification
             # Pass host paths for volume mounting, container paths for environment variables
@@ -212,7 +216,8 @@ class JobOrchestrationService:
                 git_branch=git_branch,
                 results_dir_container=results_dir_container,  # Container path (for Scanner env vars)
                 asset_volumes=asset_volumes,  # Asset volumes from scanner manifests
-                scanners=scanners  # Selected scanners from backend (if empty, scanner filters by scan_type)
+                scanners=scanners,  # Selected scanners from backend (if empty, scanner filters by scan_type)
+                scanner_tool_overrides_json=scanner_tool_overrides_json,
             )
             
             # Create job execution

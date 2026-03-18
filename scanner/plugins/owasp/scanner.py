@@ -118,7 +118,7 @@ class OWASPScanner(BaseScanner):
             if nvd_api_key:
                 cmd.append(f"--nvdApiKey={nvd_api_key}")
             
-            result = self.run_command(cmd, capture_output=True, timeout=1800)  # 30 min timeout
+            result = self.run_command(cmd, capture_output=True)
             if result.returncode != 0:
                 self.log("Database download failed or incomplete, continuing with partial database...", "WARNING")
                 self.complete_substep("Download / Update Database", "Download completed with warnings")
@@ -220,7 +220,7 @@ class OWASPScanner(BaseScanner):
             ]
             
             # Run command and capture all output
-            result = self.run_command(cmd, capture_output=True, timeout=3600)  # 1 hour timeout
+            result = self.run_command(cmd, capture_output=True)
             if result.returncode != 0:
                 # Collect actual error messages
                 error_messages = []

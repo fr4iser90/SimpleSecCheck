@@ -232,6 +232,23 @@ class Scanner(Base):
         return f"<Scanner(id={self.id}, name='{self.name}', scan_types={self.scan_types}, enabled={self.enabled})>"
 
 
+class ScannerToolSettings(Base):
+    """
+    Admin overrides. PK scanner_key = tools_key slug (semgrep, sonarqube), not display name.
+    """
+    __tablename__ = "scanner_tool_settings"
+
+    scanner_key = Column(String(128), primary_key=True, nullable=False)  # tools_key
+    enabled = Column(Boolean, nullable=True)  # NULL = use scanners.enabled from discovery
+    timeout_seconds = Column(Integer, nullable=True)  # NULL = use execution.timeout from scanner metadata
+    config = Column(JSON, default=dict, nullable=False)  # e.g. SONAR_HOST_URL, SONAR_TOKEN, SNYK_TOKEN
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    updated_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    def __repr__(self):
+        return f"<ScannerToolSettings(scanner_key={self.scanner_key})>"
+
+
 # Create indexes for better performance
 from sqlalchemy import Index
 

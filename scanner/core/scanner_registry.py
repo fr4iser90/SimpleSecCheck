@@ -69,16 +69,15 @@ class ScannerCapability:
 
 @dataclass
 class Scanner:
-    """Scanner definition. tools_key is the canonical key for results/tools/<key>/ (from registry only)."""
+    """Scanner definition. name = display/step label; tools_key = manifest.id only."""
     name: str
     capabilities: List[ScannerCapability]
-    script_path: str  # Path to scanner script (inside container)
     enabled: bool = True
     priority: int = 0  # Execution order (lower = earlier)
     requires_condition: Optional[str] = None  # Optional condition (e.g., "IS_NATIVE")
     python_class: Optional[str] = None  # Fully-qualified Python scanner class
-    manifest_name: Optional[str] = None  # Manifest name from manifest.yaml (for asset lookup)
-    tools_key: Optional[str] = None  # Canonical subdir name under results/tools/; set from plugin module path at registration
+    tools_key: Optional[str] = None  # Canonical key = manifest.id only (results/tools/<id>/, DB scanner_key)
+    timeout: Optional[int] = None  # Max duration in seconds (from manifest only); orchestrator/scanner use this
 
 
 class ScannerRegistry:
@@ -201,9 +200,9 @@ class ScannerRegistry:
         class_name = scanner_class.__name__
         module = scanner_class.__module__
         
-        # Load manifest for this plugin (display_name, assets); plugin name from module path only
+        # Load manifest: canonical tools_key = manifest.id only (no module path, no slugify).
         manifest = None
-        manifest_name = None
+        plugin_name = None
         if module and "scanner.plugins." in module:
             parts = module.split(".")
             if len(parts) >= 3 and parts[0] == "scanner" and parts[1] == "plugins":
@@ -211,48 +210,55 @@ class ScannerRegistry:
                 try:
                     from pathlib import Path
                     from scanner.core.scanner_assets.manager import ScannerAssetsManager
-                    scanners_root = Path("/app/scanner/plugins")
+                    scanners_root = Path(__file__).resolve().parent.parent / "plugins"
                     if scanners_root.exists():
                         manifest_path = scanners_root / plugin_name / "manifest.yaml"
                         if manifest_path.exists():
                             assets_manager = ScannerAssetsManager(scanners_root)
                             manifest = assets_manager.get_manifest(plugin_name)
-                            if manifest:
-                                manifest_name = manifest.name
                 except Exception:
                     pass
 
-        # Single source for display name: manifest.display_name (or manifest.name), else class name
+        if not manifest or not getattr(manifest, "id", None):
+            raise RuntimeError(
+                f"Scanner {class_name} must have scanner/plugins/{plugin_name or '?'}/manifest.yaml "
+                f"with id matching folder name (canonical tools_key). No name field, no fallbacks."
+            )
+        tools_key = str(manifest.id).strip()
+        if not tools_key:
+            raise RuntimeError(f"Scanner {class_name}: manifest.id is empty")
+
         scanner_name = (
             getattr(scanner_class, "SCANNER_NAME", None)
             or getattr(scanner_class, "NAME", None)
-            or (manifest.display_name if manifest and getattr(manifest, "display_name", None) else None)
-            or manifest_name
+            or (manifest.display_name if manifest.display_name else None)
             or class_name.replace("Scanner", "")
         )
-        
-        # Get metadata from class attributes
+
         capabilities = getattr(scanner_class, "CAPABILITIES", [])
         priority = getattr(scanner_class, "PRIORITY", 0)
         requires_condition = getattr(scanner_class, "REQUIRES_CONDITION", None)
-        script_path = getattr(scanner_class, "SCRIPT_PATH", None)
         module = scanner_class.__module__
         python_class = f"{module}.{class_name}"
-        tools_key: Optional[str] = None
-        if python_class:
-            parts = python_class.split(".")
-            if len(parts) >= 3 and parts[0] == "scanner" and parts[1] == "plugins":
-                tools_key = parts[2]
+        timeout = None
+        if manifest:
+            try:
+                mt = getattr(manifest, "timeout", None)
+                if mt is not None:
+                    t = int(mt)
+                    if t > 0:
+                        timeout = t
+            except (TypeError, ValueError):
+                pass
         # Create and register Scanner
         scanner = Scanner(
             name=scanner_name,
             capabilities=capabilities,
-            script_path=script_path,
             priority=priority,
             requires_condition=requires_condition,
             python_class=python_class,
-            manifest_name=manifest_name,
             tools_key=tools_key,
+            timeout=timeout,
         )
         cls.register(scanner)
 
@@ -266,13 +272,10 @@ def _register_all_scanners():
     # === CODE SCANNERS ===
   
 
-# Auto-register on import (legacy manual registration - will be replaced by auto-registration)
-# This is kept as fallback for scanners that don't have metadata yet
+# Empty hook (plugins register via import scanner.plugins below)
 _register_all_scanners()
 
-# Auto-discover Python scanner classes (dynamic registration)
-# Import plugins to auto-register all scanners
 try:
-    import scanner.plugins  # noqa: F401 - This triggers auto-registration via __init__.py
+    import scanner.plugins  # noqa: F401 - triggers register_from_class per plugin
 except Exception:
-    pass  # Plugin import failed, fallback to manual registration
+    pass

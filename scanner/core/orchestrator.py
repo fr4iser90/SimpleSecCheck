@@ -3,6 +3,7 @@ Modern Python Orchestrator
 Replaces the legacy shell-based orchestrator with dynamic, registry-based scanner execution
 No hardcoded steps, no log parsing - direct step communication!
 """
+import json
 import os
 import subprocess
 import sys
@@ -146,7 +147,46 @@ class ScanOrchestrator:
         # Overall success tracking
         self.overall_success = True
         self.scanner_statuses: Dict[str, str] = {}
+        # DB admin overrides merged at enqueue (manifest + scanner_tool_settings)
+        raw_ov = os.getenv("SCANNER_TOOL_OVERRIDES_JSON", "").strip()
+        self._tool_overrides: Dict[str, Any] = {}
+        if raw_ov:
+            try:
+                self._tool_overrides = json.loads(raw_ov)
+                if not isinstance(self._tool_overrides, dict):
+                    self._tool_overrides = {}
+            except (json.JSONDecodeError, TypeError):
+                self._tool_overrides = {}
     
+    def _tools_key_for_override(self, scanner: Scanner) -> str:
+        """Merge map is keyed by tools_key (same as scanner_tool_settings.scanner_key)."""
+        tk = (scanner.tools_key or "").strip().lower()
+        return tk if tk else ""
+
+    def _override_for_scanner(self, scanner: Scanner) -> Dict[str, Any]:
+        tk = self._tools_key_for_override(scanner)
+        o = self._tool_overrides.get(tk) or {}
+        return o if isinstance(o, dict) else {}
+
+    def _scanner_admin_enabled(self, scanner: Scanner) -> bool:
+        if self._override_for_scanner(scanner).get("enabled") is False:
+            return False
+        return True
+
+    def _merged_timeout(self, scanner: Scanner) -> int:
+        o = self._override_for_scanner(scanner)
+        t = o.get("timeout")
+        if t is not None:
+            try:
+                ti = int(t)
+                if ti > 0:
+                    return ti
+            except (TypeError, ValueError):
+                pass
+        if scanner.timeout and scanner.timeout > 0:
+            return int(scanner.timeout)
+        return 900
+
     def log_message(self, message: str):
         """Log message to scan.log"""
         import datetime
@@ -266,101 +306,98 @@ class ScanOrchestrator:
     
     async def _run_scanner(self, scanner: Scanner) -> bool:
         """
-        Run a scanner script (Bash) or Python scanner class
-        
+        Run a scanner via its registered Python class.
+
         Args:
             scanner: Scanner definition
-        
+
         Returns:
             True if successful, False otherwise
         """
         # Start step
         self.step_registry.start_step(scanner.name, f"Running {scanner.name} scan...")
-        self.log_message(f"--- Orchestrating {scanner.name} Scan ---")
-        if not scanner.tools_key:
-            self.log_message(f"[ORCHESTRATOR] Scanner {scanner.name} has no tools_key in registry, skipping.")
-            self.scanner_statuses[scanner.name] = "FAILED"
-            self.step_registry.fail_step(scanner.name, "No tools_key in registry")
-            return False
-        scanner_dir = self.tools_dir_results / scanner.tools_key
-        scanner_dir.mkdir(parents=True, exist_ok=True)
-        scanner_log_file = scanner_dir / "log"
-        
-        # Prepare environment
-        env = os.environ.copy()
-        env["TARGET_PATH"] = str(self.target_path)
-        env["RESULTS_DIR"] = str(scanner_dir)  # Scanner writes to its own directory
-        env["LOG_FILE"] = str(scanner_log_file)  # Scanner has its own log
-        
-        # Check if Python scanner class exists (new approach)
-        python_scanner_class = scanner.python_class
-        
-        if python_scanner_class:
-            # Use Python scanner class
+        timeout_sec = self._merged_timeout(scanner)
+        os.environ["SCANNER_TIMEOUT_SECONDS"] = str(timeout_sec)
+        ov = self._override_for_scanner(scanner)
+        env_backup: Dict[str, Optional[str]] = {}
+        for k, v in (ov.get("env") or {}).items():
+            if not k or v is None:
+                continue
+            env_backup[k] = os.environ.get(k)
+            os.environ[str(k)] = str(v)
+        try:
+            self.log_message(f"--- Orchestrating {scanner.name} Scan ---")
+            if not scanner.tools_key:
+                self.log_message(f"[ORCHESTRATOR] Scanner {scanner.name} has no tools_key in registry, skipping.")
+                self.scanner_statuses[scanner.name] = "FAILED"
+                self.step_registry.fail_step(scanner.name, "No tools_key in registry")
+                return False
+            if not scanner.python_class:
+                self.log_message(
+                    f"[ORCHESTRATOR] Scanner {scanner.name} has no python_class, skipping."
+                )
+                self.scanner_statuses[scanner.name] = "FAILED"
+                self.step_registry.fail_step(scanner.name, "No python_class on scanner")
+                return False
+            scanner_dir = self.tools_dir_results / scanner.tools_key
+            scanner_dir.mkdir(parents=True, exist_ok=True)
+            scanner_log_file = scanner_dir / "log"
+
+            python_scanner_class = scanner.python_class
             try:
                 self.log_message(f"Using Python scanner class: {python_scanner_class}")
                 module_path, class_name = python_scanner_class.rsplit(".", 1)
                 module = __import__(module_path, fromlist=[class_name])
                 scanner_class = getattr(module, class_name)
-                
-                # Build scanner arguments dynamically using inspect
-                # step_name from registry (manifest = single source) so plugin uses same step as pre-registered
+
                 scanner_kwargs = {
                     "target_path": str(self.target_path),
                     "results_dir": str(scanner_dir),
                     "log_file": str(scanner_log_file),
                     "step_name": scanner.name,
                 }
-                
-                # Get the __init__ signature to see what parameters the scanner accepts
+
                 sig = inspect.signature(scanner_class.__init__)
                 param_names = set(sig.parameters.keys())
-                
-                # Remove 'self' from parameter names
-                param_names.discard('self')
-                
-                # Für jeden Parameter in der Signatur: Suche passende env_var
+                param_names.discard("self")
+
                 for param_name in param_names:
-                    # Skip bereits gesetzte Parameter
                     if param_name in scanner_kwargs:
                         continue
-                    
-                    # Default values (nur wenn Parameter optional ist und nicht gefunden wurde)
                     if param_name not in scanner_kwargs:
                         sig_param = sig.parameters.get(param_name)
                         if sig_param and sig_param.default != inspect.Parameter.empty:
-                            # Parameter hat Default-Wert, also optional - setze Defaults
                             if param_name == "scan_type":
                                 scanner_kwargs[param_name] = "fs"
                             elif param_name == "scan_target":
-                                scanner_kwargs[param_name] = os.getenv("SCAN_TARGET", "http://host.docker.internal:8000")
+                                scanner_kwargs[param_name] = os.getenv(
+                                    "SCAN_TARGET", "http://host.docker.internal:8000"
+                                )
                             elif param_name == "startup_delay":
                                 scanner_kwargs[param_name] = 25
-                
-                # Filter out None values (optional parameters that weren't provided)
-                scanner_kwargs = {k: v for k, v in scanner_kwargs.items() if v is not None or k in ["target_path", "results_dir", "log_file"]}
-                
-                # CRITICAL FIX: Only pass parameters that actually exist in the scanner signature
-                # Filter out any parameters that don't exist in the signature
+
+                scanner_kwargs = {
+                    k: v
+                    for k, v in scanner_kwargs.items()
+                    if v is not None or k in ["target_path", "results_dir", "log_file"]
+                }
+
                 valid_kwargs = {}
                 for param_name, param_value in scanner_kwargs.items():
                     if param_name in param_names:
                         valid_kwargs[param_name] = param_value
                     else:
-                        # Log warning if we're trying to pass an invalid parameter
-                        self.log_message(f"[WARNING] Skipping invalid parameter '{param_name}' for {scanner.name} (not in signature)")
-                
-                # Instantiate and run scanner
+                        self.log_message(
+                            f"[WARNING] Skipping invalid parameter '{param_name}' for {scanner.name} (not in signature)"
+                        )
+
                 scanner_instance = scanner_class(**valid_kwargs)
-                
                 success = scanner_instance.run()
-                
-                # If scanner wrote status.json with status "skipped", mark step as skipped (e.g. Brakeman/Terraform no files)
+
                 scanner_dir = self.tools_dir_results / scanner.tools_key
                 status_file = scanner_dir / "status.json"
                 if status_file.exists():
                     try:
-                        import json
                         data = json.loads(status_file.read_text(encoding="utf-8"))
                         if data.get("status") == "skipped":
                             msg = data.get("message", f"{scanner.name} skipped")
@@ -370,80 +407,30 @@ class ScanOrchestrator:
                             return False
                     except Exception:
                         pass
-                
+
                 if success:
                     self.log_message(f"{scanner.name} completed successfully (exit code 0)")
                     self.scanner_statuses[scanner.name] = "SUCCESS"
                     self.step_registry.complete_step(scanner.name, f"{scanner.name} scan completed")
                     return True
-                else:
-                    self.log_message(f"[ORCHESTRATOR WARNING] {scanner.name} failed, but continuing scan...")
-                    self.scanner_statuses[scanner.name] = "FAILED"
-                    self.step_registry.fail_step(scanner.name, f"{scanner.name} scan failed")
-                    # Don't set overall_success = False - allow scan to complete even if one scanner fails
-                    # The scan will still generate a summary with partial results
-                    return False  # Return False but continue with other scanners
-                    
-            except Exception as e:
-                self.log_message(f"[ORCHESTRATOR WARNING] {scanner.name} Python scanner exception: {e}, but continuing scan...")
-                self.scanner_statuses[scanner.name] = "FAILED"
-                self.step_registry.fail_step(scanner.name, f"{scanner.name} scan error: {str(e)}")
-                # Don't set overall_success = False - allow scan to complete even if one scanner fails
-                return False  # Return False but continue with other scanners
-        
-        script_path = Path(scanner.script_path)
-        
-        if not script_path.exists():
-            self.log_message(f"[ORCHESTRATOR WARNING] {scanner.name} script not found: {script_path}, but continuing scan...")
-            self.scanner_statuses[scanner.name] = "FAILED"
-            self.step_registry.fail_step(scanner.name, f"Script not found: {script_path}")
-            # Don't set overall_success = False - allow scan to complete even if one scanner fails
-            return False  # Return False but continue with other scanners
-        
-        self.log_message(f"Executing {script_path}...")
-        
-        # Execute scanner script
-        try:
-            result = subprocess.run(
-                ["/bin/bash", str(script_path)],
-                env=env,
-                cwd=str(self.base_dir),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=3600  # 1 hour timeout per scanner
-            )
-            
-            # Write output to log
-            if result.stdout:
-                with open(self.log_file, "a", encoding="utf-8") as f:
-                    f.write(result.stdout)
-            
-            if result.returncode == 0:
-                self.log_message(f"{scanner.name} completed successfully (exit code 0)")
-                self.scanner_statuses[scanner.name] = "SUCCESS"
-                self.step_registry.complete_step(scanner.name, f"{scanner.name} scan completed")
-                return True
-            else:
-                self.log_message(f"[ORCHESTRATOR WARNING] {scanner.name} failed with exit code {result.returncode}, but continuing scan...")
+                self.log_message(f"[ORCHESTRATOR WARNING] {scanner.name} failed, but continuing scan...")
                 self.scanner_statuses[scanner.name] = "FAILED"
                 self.step_registry.fail_step(scanner.name, f"{scanner.name} scan failed")
-                # Don't set overall_success = False - allow scan to complete even if one scanner fails
-                return False  # Return False but continue with other scanners
-                
-        except subprocess.TimeoutExpired:
-            self.log_message(f"[ORCHESTRATOR WARNING] {scanner.name} timed out after 1 hour, but continuing scan...")
-            self.scanner_statuses[scanner.name] = "FAILED"
-            self.step_registry.fail_step(scanner.name, f"{scanner.name} scan timed out")
-            # Don't set overall_success = False - allow scan to complete even if one scanner fails
-            return False  # Return False but continue with other scanners
-        except Exception as e:
-            self.log_message(f"[ORCHESTRATOR WARNING] {scanner.name} exception: {e}, but continuing scan...")
-            self.scanner_statuses[scanner.name] = "FAILED"
-            self.step_registry.fail_step(scanner.name, f"{scanner.name} scan error: {str(e)}")
-            # Don't set overall_success = False - allow scan to complete even if one scanner fails
-            return False  # Return False but continue with other scanners
+                return False
+
+            except Exception as e:
+                self.log_message(
+                    f"[ORCHESTRATOR WARNING] {scanner.name} Python scanner exception: {e}, but continuing scan..."
+                )
+                self.scanner_statuses[scanner.name] = "FAILED"
+                self.step_registry.fail_step(scanner.name, f"{scanner.name} scan error: {str(e)}")
+                return False
         finally:
+            for k, old in env_backup.items():
+                if old is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = old
             self.log_message(f"--- {scanner.name} Scan Orchestration Finished ---")
     
     async def _collect_metadata(self):
@@ -667,14 +654,22 @@ class ScanOrchestrator:
                     status=StepStatus.PENDING,
                     message=f"Running {scanner.name} scan... (pending)",
                     started_at=None,
-                    completed_at=None
+                    completed_at=None,
+                    timeout_seconds=self._merged_timeout(scanner),
                 )
                 self.step_registry.steps[scanner.name] = scanner_step
                 self.step_registry._write_to_log(scanner_step)
 
         for step_def in after_scanner:
             register_step(step_def)
-        
+
+        for scanner in scanners:
+            if not self._scanner_admin_enabled(scanner):
+                self.step_registry.skip_step(
+                    scanner.name,
+                    "Disabled in admin tool settings (DB override).",
+                )
+
         # Send initial update to frontend with all steps
         asyncio.create_task(self.step_registry._send_update())
         
@@ -731,6 +726,8 @@ class ScanOrchestrator:
                 self.log_message(f"[WARNING] No scanners found! Check scanner registration and capabilities.")
         
         for scanner in scanners:
+            if not self._scanner_admin_enabled(scanner):
+                continue
             await self._run_scanner(scanner)
         
         # Run Artifact Collection step AFTER all scanners (before Completion)
@@ -943,11 +940,20 @@ async def list_scanners():
             scan_types = list(set(scan_types))
             
             # Get manifest for this plugin (metadata and assets)
-            manifest = manifests.get(scanner_obj.manifest_name) if (manifests and scanner_obj.manifest_name) else None
+            manifest = (
+                manifests.get(scanner_obj.tools_key)
+                if (manifests and scanner_obj.tools_key)
+                else None
+            )
             description = manifest.description if manifest and manifest.description else f"Security scanner: {scanner_obj.name}"
             categories = manifest.categories if manifest and manifest.categories else ["Security Scanning"]
             icon = manifest.icon if manifest and manifest.icon else "🔧"
             
+            try:
+                mt = getattr(scanner_obj, "timeout", None)
+                exec_timeout = int(mt) if mt and int(mt) > 0 else 900
+            except (TypeError, ValueError):
+                exec_timeout = 900
             scanner_data = {
                 "name": scanner_obj.name,
                 "scan_types": scan_types,
@@ -957,6 +963,8 @@ async def list_scanners():
                 "description": description,
                 "categories": categories,
                 "icon": icon,
+                "execution_timeout": exec_timeout,
+                "tools_key": getattr(scanner_obj, "tools_key", None),
             }
             
             if manifest:
@@ -999,10 +1007,13 @@ async def list_scanners():
             for scanner_data in scanner_list:
                 # Extract metadata (description, categories, assets)
                 # Icons are NOT stored in DB - they remain in frontend code only
+                mt = int(scanner_data.get("execution_timeout") or 900)
                 metadata = {
                     "description": scanner_data.get("description"),
                     "categories": scanner_data.get("categories", []),
-                    "assets": scanner_data.get("assets", [])
+                    "assets": scanner_data.get("assets", []),
+                    "execution": {"timeout": mt},
+                    "tools_key": scanner_data.get("tools_key"),
                 }
                 
                 # Check if scanner exists

@@ -59,7 +59,7 @@ class KubeHunterScanner(BaseScanner):
         self.log("Running cluster security scan...")
         cmd = ["kube-hunter", "--remote", "localhost", "--report", "json"]
         
-        result = self.run_command(cmd, capture_output=True, timeout=10)
+        result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:
             with open(json_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
@@ -70,7 +70,7 @@ class KubeHunterScanner(BaseScanner):
         self.log("Running text report generation...")
         cmd = ["kube-hunter", "--remote", "localhost", "--report", "plain"]
         
-        result = self.run_command(cmd, capture_output=True, timeout=10)
+        result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:
             with open(text_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)

@@ -93,7 +93,8 @@ export default function QueueView() {
           <div>
             <h2>Public Queue</h2>
             <p style={{ marginTop: '0.5rem', opacity: 0.8, fontSize: '0.9rem' }}>
-              Anonymized view of all scans in the queue
+              Anonymized view of all scans in the queue. To cancel your own scan, open{' '}
+              <a href="/my-scans" style={{ color: 'var(--primary, #007bff)' }}>My Scans</a> or the scan progress page.
             </p>
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>

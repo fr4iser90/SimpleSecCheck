@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useConfig } from '../hooks/useConfig'
 import { formatEstimatedTime, formatDuration } from '../utils/timeUtils'
 
@@ -27,10 +27,43 @@ interface MyScansData {
 export default function MyScansPage() {
   useConfig()
   const navigate = useNavigate()
+  const location = useLocation()
   const [scansData, setScansData] = useState<MyScansData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [flashMessage, setFlashMessage] = useState<string | null>(null)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+
+  const handleCancelScanRow = async (scanId: string) => {
+    if (!window.confirm('Cancel this scan? It will leave the queue or stop if running.')) return
+    setCancellingId(scanId)
+    setError(null)
+    try {
+      const { apiFetch } = await import('../utils/apiClient')
+      const res = await apiFetch(`/api/v1/scans/${scanId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scan_id: scanId, force: false }),
+      })
+      if (!res.ok) {
+        let msg = `Cancel failed (${res.status})`
+        try {
+          const j = await res.json()
+          msg = typeof j.detail === 'string' ? j.detail : msg
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg)
+      }
+      setFlashMessage('Scan cancelled.')
+      await fetchMyScans()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Cancel failed')
+    } finally {
+      setCancellingId(null)
+    }
+  }
 
   const fetchMyScans = async () => {
     try {
@@ -54,6 +87,14 @@ export default function MyScansPage() {
   useEffect(() => {
     fetchMyScans()
   }, [])
+
+  useEffect(() => {
+    const flash = (location.state as { flash?: string } | null)?.flash
+    if (flash) {
+      setFlashMessage(flash)
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.state, location.pathname, navigate])
 
   // Auto-refresh every 3 seconds if enabled
   useEffect(() => {
@@ -152,6 +193,33 @@ export default function MyScansPage() {
                 <strong>Completed:</strong> {scansData.scans.filter(item => item.status === 'completed').length}
               </div>
             </div>
+          </div>
+        )}
+
+        {flashMessage && (
+          <div
+            style={{
+              background: 'rgba(40, 167, 69, 0.15)',
+              border: '1px solid #28a745',
+              borderRadius: '8px',
+              padding: '0.75rem 1rem',
+              marginBottom: '1rem',
+              color: '#155724',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '1rem',
+            }}
+          >
+            <span>{flashMessage}</span>
+            <button
+              type="button"
+              onClick={() => setFlashMessage(null)}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.1rem' }}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
           </div>
         )}
 
@@ -303,6 +371,36 @@ export default function MyScansPage() {
                             View Steps
                           </button>
                         )}
+                        {(item.status === 'pending' || item.status === 'running') &&
+                          (item.scan_id || item.queue_id) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCancelScanRow(String(item.scan_id || item.queue_id))
+                              }
+                              disabled={cancellingId === String(item.scan_id || item.queue_id)}
+                              style={{
+                                padding: '0.375rem 0.75rem',
+                                background: 'transparent',
+                                color: '#dc3545',
+                                border: '1px solid rgba(220, 53, 69, 0.5)',
+                                borderRadius: '4px',
+                                cursor:
+                                  cancellingId === String(item.scan_id || item.queue_id)
+                                    ? 'wait'
+                                    : 'pointer',
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                opacity:
+                                  cancellingId === String(item.scan_id || item.queue_id) ? 0.6 : 1,
+                              }}
+                              title="Cancel this scan"
+                            >
+                              {cancellingId === String(item.scan_id || item.queue_id)
+                                ? 'Cancelling…'
+                                : 'Cancel'}
+                            </button>
+                          )}
                         {item.status === 'completed' && item.scan_id && (
                           <a
                             href={`/api/my-results/${item.scan_id}/report`}

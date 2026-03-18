@@ -1,18 +1,29 @@
-name: eslint
-version: "1.0"
-description: JavaScript and TypeScript linter with security rules. Finds code quality and security issues.
+id: eslint
+version: '1.0'
+display_name: Eslint
+description: JavaScript and TypeScript linter with security rules. Finds code quality
+  and security issues.
 categories:
-  - Code Scanning
-  - Linting
-icon: "📝"
-category: code
+- code
+- linting
+icon: 📝
 languages:
-  - javascript
-  - typescript
+- javascript
+- typescript
 severity_supported: true
-timeout: 600
+execution:
+  timeout: 600
 homepage: https://eslint.org
 documentation: https://eslint.org/docs/latest/
 install:
-  - ["npm", "install", "-g", "eslint", "eslint-plugin-security", "@typescript-eslint/parser", "@typescript-eslint/eslint-plugin"]
-  - ["npm", "install", "-g", "typescript"]
+- - npm
+  - install
+  - -g
+  - eslint
+  - eslint-plugin-security
+  - '@typescript-eslint/parser'
+  - '@typescript-eslint/eslint-plugin'
+- - npm
+  - install
+  - -g
+  - typescript

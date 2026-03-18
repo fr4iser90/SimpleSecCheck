@@ -1,21 +1,27 @@
-name: anchore
-version: "1.0"
-description: Container image security scanner. Scans container images for vulnerabilities and policy violations.
+id: anchore
+version: '1.0'
+display_name: Anchore
+description: Container image security scanner. Scans container images for vulnerabilities
+  and policy violations.
 categories:
-  - Container Security
-icon: "⚓"
-category: container
-languages: []
+- container
+- container_security
+icon: ⚓
+languages: null
 severity_supported: true
-timeout: 900
+execution:
+  timeout: 900
 homepage: https://github.com/anchore/grype
 documentation: https://github.com/anchore/grype#readme
 install:
-  - ["/bin/sh", "-c", "curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin"]
+- - /bin/sh
+  - -c
+  - curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh
+    -s -- -b /usr/local/bin
 assets:
-  - id: config
-    type: config
-    description: Anchore config
-    mount:
-      host_subpath: scanner/plugins/anchore/config/config.yaml
-      container_path: /app/scanner/plugins/anchore/config/config.yaml
+- id: config
+  type: config
+  description: Anchore config
+  mount:
+    host_subpath: scanner/plugins/anchore/config/config.yaml
+    container_path: /app/scanner/plugins/anchore/config/config.yaml

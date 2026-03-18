@@ -24,6 +24,7 @@ The scanner provides a unified interface for multiple security analysis tools:
 - **Modular Design**: Each scanner is a separate plugin
 - **Standardized Interface**: Consistent API for all scanners
 - **Easy Extension**: New scanners can be added without core changes
+- **Manifest identity**: The technical tool ID is **`id` in `manifest.yaml`** (must match the plugin folder name). There is no `name` field—use **`display_name`** for UI. DB `scanner_tool_settings.scanner_key` and registry `tools_key` always equal that `id`.
 
 ### Output Processing (`scanner/output/`)
 - **HTML Report Generator**: Creates web-based security reports

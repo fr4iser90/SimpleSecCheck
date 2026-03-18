@@ -19,6 +19,7 @@ const adminSections: CardItem[] = [
   { to: '/admin/audit-log', title: 'Audit Log', description: 'Security-relevant events and changes', icon: '📋' },
   { to: '/admin/security/ip-control', title: 'IP & Abuse Protection', description: 'Block IPs, abuse limits', icon: '🛡️' },
   { to: '/admin/scanner', title: 'Scan Engine Management', description: 'Scanners, assets, updates', icon: '🔧' },
+  { to: '/admin/tool-settings', title: 'Tool settings (DB)', description: 'Manifest + DB: timeouts, SonarQube, tokens', icon: '🧩' },
   { to: '/admin/tool-duration', title: 'Tool duration (exact per scanner)', description: 'Real run times per tool, used for queue estimates', icon: '⏱️' },
   { to: '/admin/vulnerabilities', title: 'Vulnerability Database', description: 'CVE data, updates', icon: '📦', comingSoon: true },
   { to: '/admin/scan-policies', title: 'Scan Policies', description: 'Finding policies, rules', icon: '📜', comingSoon: true },

@@ -1,20 +1,23 @@
-name: clair
-version: "1.0"
-description: Container vulnerability scanner. Analyzes container images for known vulnerabilities.
+id: clair
+version: '1.0'
+display_name: Clair
+description: Container vulnerability scanner. Analyzes container images for known
+  vulnerabilities.
 categories:
-  - Container Security
-icon: "🐳"
-category: container
-languages: []
+- container
+- container_security
+icon: 🐳
+languages: null
 severity_supported: true
-timeout: 900
+execution:
+  timeout: 900
 homepage: https://github.com/quay/clair
 documentation: https://github.com/quay/clair/tree/main/documentation
 install: []
 assets:
-  - id: config
-    type: config
-    description: Clair config
-    mount:
-      host_subpath: scanner/plugins/clair/config/config.yaml
-      container_path: /app/scanner/plugins/clair/config/config.yaml
+- id: config
+  type: config
+  description: Clair config
+  mount:
+    host_subpath: scanner/plugins/clair/config/config.yaml
+    container_path: /app/scanner/plugins/clair/config/config.yaml

@@ -1,15 +1,20 @@
-name: kube_hunter
-version: "1.0"
-description: Kubernetes penetration testing tool. Hunts for security weaknesses in Kubernetes clusters.
+id: kube_hunter
+version: '1.0'
+display_name: Kube Hunter
+description: Kubernetes penetration testing tool. Hunts for security weaknesses in
+  Kubernetes clusters.
 categories:
-  - Kubernetes Security
-  - Penetration Testing
-icon: "🎯"
-category: container
-languages: []
+- container
+- kubernetes_security
+- penetration_testing
+icon: 🎯
+languages: null
 severity_supported: true
-timeout: 600
+execution:
+  timeout: 600
 homepage: https://github.com/aquasecurity/kube-hunter
 documentation: https://github.com/aquasecurity/kube-hunter#readme
 install:
-  - ["pip3", "install", "kube-hunter"]
+- - pip3
+  - install
+  - kube-hunter

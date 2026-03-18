@@ -274,6 +274,36 @@ def _read_deduplicated_steps(scan_id: str) -> tuple[List[Dict[str, Any]], int, i
     # Convert dict to sorted list by step number
     steps = [steps_dict[key] for key in sorted(steps_dict.keys())]
     
+    # Enrich each step with duration_seconds (elapsed) and ensure timeout_seconds (max from manifest)
+    for step in steps:
+        started_at = step.get("started_at")
+        completed_at = step.get("completed_at")
+        if started_at and completed_at:
+            try:
+                from datetime import datetime
+                start = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                end = datetime.fromisoformat(completed_at.replace("Z", "+00:00"))
+                step["duration_seconds"] = max(0, int((end - start).total_seconds()))
+            except (ValueError, TypeError, AttributeError):
+                step["duration_seconds"] = None
+        elif started_at and step.get("status") == "running":
+            try:
+                import time
+                from datetime import datetime
+                start = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                step["duration_seconds"] = max(0, int(time.time() - start.timestamp()))
+            except (ValueError, TypeError, AttributeError, OSError):
+                step["duration_seconds"] = None
+        else:
+            step["duration_seconds"] = None
+        # timeout_seconds is already in step from steps.log; ensure it's int or None
+        to = step.get("timeout_seconds")
+        if to is not None:
+            try:
+                step["timeout_seconds"] = int(to)
+            except (ValueError, TypeError):
+                step["timeout_seconds"] = None
+    
     # Calculate progress
     total_steps = len(steps)
     completed_steps = sum(1 for step in steps if step.get("status") in ["completed", "failed"])

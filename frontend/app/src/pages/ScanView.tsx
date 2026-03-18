@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import ReportViewer from '../components/ReportViewer'
 import StepsSidebar from '../components/StepsSidebar'
 import AIPromptModal from '../components/AIPromptModal'
 import { SubstepSlot } from '../components/SubstepSlot'
 import { useWebSocket } from '../services/websocketService'
+import { formatDuration } from '../utils/timeUtils'
 
 // Backend is the source of truth!
 // Backend uses TWO status systems:
@@ -47,6 +48,12 @@ interface Step {
   status: 'pending' | 'running' | 'completed' | 'failed'
   message?: string
   substeps?: SubStep[]
+  /** Step start (ISO); used for live elapsed while running */
+  started_at?: string | null
+  /** Elapsed time in seconds (final when completed; while running prefer started_at + tick) */
+  duration_seconds?: number | null
+  /** Max duration in seconds from manifest (timeout) */
+  timeout_seconds?: number | null
 }
 
 interface WebSocketMessage {
@@ -78,6 +85,12 @@ export default function ScanView() {
   const [isStepsSidebarOpen, setIsStepsSidebarOpen] = useState(false)
   const [isLogsSidebarOpen, setIsLogsSidebarOpen] = useState(false)
   const [isAIPromptModalOpen, setIsAIPromptModalOpen] = useState(false)
+  /** Step numbers with expanded substep list */
+  const [expandedStepNumbers, setExpandedStepNumbers] = useState<Set<number>>(new Set())
+  const [cancelLoading, setCancelLoading] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+  /** Re-render every second while scan runs so step/substep durations tick */
+  const [, setLiveTick] = useState(0)
 
   // Check if scan_id is a queue_id (UUID format)
   const isQueueId = (id: string | null): boolean => {
@@ -157,6 +170,12 @@ export default function ScanView() {
     }
   }, [status.status, status.scan_id])
 
+  useEffect(() => {
+    if (status.status !== 'running') return
+    const id = window.setInterval(() => setLiveTick((n) => n + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [status.status])
+
   // WebSocket: Real-time scan updates using new service
   const { service } = useWebSocket(
     status.status === 'running' && status.scan_id ? status.scan_id : null
@@ -184,7 +203,10 @@ export default function ScanView() {
                 message: substep.message || '',
                 started_at: substep.started_at || null,
                 completed_at: substep.completed_at || null,
-              })) : []
+              })) : [],
+              started_at: step.started_at ?? null,
+              duration_seconds: step.duration_seconds ?? null,
+              timeout_seconds: step.timeout_seconds ?? null,
             }))
             setSteps(convertedSteps)
             if (data.progress_percentage !== undefined) {
@@ -246,6 +268,81 @@ export default function ScanView() {
   }, [])
 
   // Progress is now calculated in backend and sent via WebSocket
+
+  const toggleStepExpand = (stepNumber: number) => {
+    setExpandedStepNumbers((prev) => {
+      const next = new Set(prev)
+      if (next.has(stepNumber)) next.delete(stepNumber)
+      else next.add(stepNumber)
+      return next
+    })
+  }
+
+  const formatSubstepDuration = (s: SubStep): string => {
+    if (s.completed_at && s.started_at) {
+      const a = new Date(s.started_at).getTime()
+      const b = new Date(s.completed_at).getTime()
+      if (!Number.isNaN(a) && !Number.isNaN(b) && b >= a) return `${Math.round((b - a) / 1000)}s`
+    }
+    if (s.status === 'running' && s.started_at) {
+      const a = new Date(s.started_at).getTime()
+      if (!Number.isNaN(a)) return `${Math.max(0, Math.round((Date.now() - a) / 1000))}s`
+    }
+    return ''
+  }
+
+  const getStepElapsedSeconds = (step: Step): number | null => {
+    if (step.status === 'running' && step.started_at) {
+      const t = new Date(step.started_at).getTime()
+      if (!Number.isNaN(t)) return Math.max(0, Math.floor((Date.now() - t) / 1000))
+    }
+    if (step.duration_seconds != null) return step.duration_seconds
+    return null
+  }
+
+  const handleCancelScan = useCallback(async () => {
+    const id = status.scan_id
+    if (!id || cancelLoading) return
+    if (!window.confirm('Cancel this scan? It will be removed from the queue or stopped if already running.')) return
+    setCancelError(null)
+    setCancelLoading(true)
+    try {
+      const { apiFetch } = await import('../utils/apiClient')
+      const res = await apiFetch(`/api/v1/scans/${id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scan_id: id, force: false }),
+      })
+      if (!res.ok) {
+        let msg = `Request failed (${res.status})`
+        try {
+          const j = await res.json()
+          const d = j.detail
+          msg = typeof d === 'string' ? d : Array.isArray(d) ? String(d[0]?.msg ?? msg) : msg
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg)
+      }
+      navigate('/my-scans', { replace: true, state: { flash: 'Scan cancelled.' } })
+    } catch (e) {
+      setCancelError(e instanceof Error ? e.message : 'Cancel failed')
+    } finally {
+      setCancelLoading(false)
+    }
+  }, [status.scan_id, cancelLoading, navigate])
+
+  const cancelButtonStyle = {
+    marginTop: '1.25rem',
+    padding: '0.6rem 1.25rem',
+    background: 'transparent',
+    color: 'var(--text-muted, #adb5bd)',
+    border: '1px solid rgba(220, 53, 69, 0.5)',
+    borderRadius: '8px',
+    cursor: cancelLoading ? 'wait' : 'pointer',
+    fontSize: '0.9rem',
+    opacity: cancelLoading ? 0.7 : 1,
+  }
 
   // Show queue waiting state (Backend queue status: 'pending')
   if (status.status === 'pending') {
@@ -346,6 +443,17 @@ export default function ScanView() {
               }} />
             </div>
           </div>
+
+          {status.scan_id && (
+            <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+              <button type="button" onClick={handleCancelScan} disabled={cancelLoading} style={cancelButtonStyle}>
+                {cancelLoading ? 'Cancelling…' : 'Cancel scan (leave queue)'}
+              </button>
+              {cancelError && (
+                <div style={{ marginTop: '0.75rem', color: '#dc3545', fontSize: '0.875rem' }}>{cancelError}</div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     )
@@ -369,7 +477,17 @@ export default function ScanView() {
           <p style={{ opacity: 0.7, marginTop: '0.5rem' }}>
             Scan ID: {status.scan_id}
           </p>
-          
+          {status.scan_id && (
+            <div style={{ marginTop: '1rem' }}>
+              <button type="button" onClick={handleCancelScan} disabled={cancelLoading} style={cancelButtonStyle}>
+                {cancelLoading ? 'Cancelling…' : 'Cancel scan'}
+              </button>
+              {cancelError && (
+                <div style={{ marginTop: '0.5rem', color: '#dc3545', fontSize: '0.875rem' }}>{cancelError}</div>
+              )}
+            </div>
+          )}
+
           {/* Progress Bar */}
           {steps.length > 0 && (
             <div style={{
@@ -401,14 +519,7 @@ export default function ScanView() {
 
         {/* Steps Cards */}
         {steps.length > 0 && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-            gap: '1rem',
-            maxWidth: '1200px',
-            margin: '0 auto',
-            width: '100%',
-          }}>
+          <div className="scan-step-card-grid">
             {steps.map((step) => {
               const getStepColor = () => {
                 switch (step.status) {
@@ -418,7 +529,7 @@ export default function ScanView() {
                   default: return '#6c757d'
                 }
               }
-              
+
               const getStepIcon = () => {
                 switch (step.status) {
                   case 'completed': return '✅'
@@ -446,64 +557,163 @@ export default function ScanView() {
                 }
               }
 
+              const subs = step.substeps ?? []
+              const hasSubsteps = subs.length > 0
+              const completedSubs = subs.filter((s) => s.status === 'completed').length
+              const totalSubs = subs.length
+              const subProgressPct = totalSubs > 0 ? Math.round((completedSubs / totalSubs) * 100) : 0
+              const expanded = expandedStepNumbers.has(step.number)
+              const borderColor = getStepColor()
+
+              const current = hasSubsteps ? subs[subs.length - 1] : null
+              const type = current?.type || 'action'
+              const typeStyle =
+                type === 'phase'
+                  ? { badge: '🔹', bgColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' }
+                  : type === 'output'
+                    ? { badge: '📄', bgColor: 'rgba(34, 197, 94, 0.15)', borderColor: 'rgba(34, 197, 94, 0.3)' }
+                    : { badge: '⚙️', bgColor: 'rgba(0, 0, 0, 0.2)', borderColor: 'rgba(255, 255, 255, 0.1)' }
+
               return (
                 <div
                   key={step.number}
+                  className={`scan-step-card ${expanded ? 'scan-step-card-expanded' : ''}`}
                   style={{
-                    padding: '1.5rem',
+                    padding: '1rem 1.25rem',
                     background: 'var(--glass-bg-dark)',
-                    border: `2px solid ${getStepColor()}`,
+                    border: `2px solid ${borderColor}`,
                     borderRadius: '12px',
-                    transition: 'all 0.3s ease',
-                    opacity: step.status === 'pending' ? 0.6 : 1,
+                    transition: 'border-color 0.2s ease, opacity 0.2s ease',
+                    opacity: step.status === 'pending' ? 0.65 : 1,
+                    minHeight: expanded ? undefined : 220,
+                    display: 'flex',
+                    flexDirection: 'column',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                    <span style={{ fontSize: '1.5rem' }}>{getStepIcon()}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: '1rem' }}>
-                        Step {step.number}
-                      </div>
-                      <div style={{ fontSize: '0.875rem', opacity: 0.8, marginTop: '0.25rem' }}>
-                        {step.name}
-                      </div>
+                  <div
+                    className={hasSubsteps ? 'scan-step-card-header scan-step-card-header--clickable' : 'scan-step-card-header'}
+                    role={hasSubsteps ? 'button' : undefined}
+                    tabIndex={hasSubsteps ? 0 : undefined}
+                    aria-expanded={hasSubsteps ? expanded : undefined}
+                    onClick={() => hasSubsteps && toggleStepExpand(step.number)}
+                    onKeyDown={(e) => {
+                      if (!hasSubsteps) return
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        toggleStepExpand(step.number)
+                      }
+                    }}
+                  >
+                    {hasSubsteps && (
+                      <span
+                        className={`scan-step-card-chevron${expanded ? ' scan-step-card-chevron--open' : ''}`}
+                        aria-hidden
+                      >
+                        ▶
+                      </span>
+                    )}
+                    <span className="scan-step-card-emoji">{getStepIcon()}</span>
+                    <div className="scan-step-card-title-block">
+                      <div className="scan-step-card-step-num">Step {step.number}</div>
+                      <div className="scan-step-card-name">{step.name}</div>
                     </div>
+                    {hasSubsteps && (
+                      <span className="scan-step-card-count" title="Completed substeps / total">
+                        {completedSubs}/{totalSubs}
+                      </span>
+                    )}
+                    {(() => {
+                      const elapsed = getStepElapsedSeconds(step)
+                      if (elapsed == null && step.timeout_seconds == null) return null
+                      return (
+                        <span
+                          className="scan-step-card-duration"
+                          title={
+                            step.timeout_seconds != null
+                              ? elapsed != null
+                                ? `Elapsed / max: ${formatDuration(elapsed)} / ${formatDuration(step.timeout_seconds)}`
+                                : `Max duration: ${formatDuration(step.timeout_seconds)}`
+                              : elapsed != null
+                                ? `Elapsed: ${formatDuration(elapsed)}`
+                                : undefined
+                          }
+                        >
+                          {elapsed != null && formatDuration(elapsed)}
+                          {elapsed != null && step.timeout_seconds != null && ' / '}
+                          {step.timeout_seconds != null && `max ${formatDuration(step.timeout_seconds)}`}
+                        </span>
+                      )
+                    })()}
                   </div>
+                  {hasSubsteps && (
+                    <div
+                      className="scan-step-card-sub-bar"
+                      title={`${completedSubs} of ${totalSubs} substeps completed`}
+                    >
+                      <div
+                        className="scan-step-card-sub-bar-fill"
+                        style={{
+                          width: `${subProgressPct}%`,
+                          background: borderColor,
+                        }}
+                      />
+                    </div>
+                  )}
                   {step.message && (
-                    <div style={{ fontSize: '0.875rem', opacity: 0.7, marginBottom: '0.5rem' }}>
+                    <div
+                      className="scan-step-card-message"
+                      title={step.message}
+                    >
                       {step.message}
                     </div>
                   )}
-                  {step.substeps && step.substeps.length > 0 && (() => {
-                    const current = step.substeps[step.substeps.length - 1]
-                    const type = current.type || 'action'
-                    const typeStyle = type === 'phase' ? { badge: '🔹', bgColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' }
-                      : type === 'output' ? { badge: '📄', bgColor: 'rgba(34, 197, 94, 0.15)', borderColor: 'rgba(34, 197, 94, 0.3)' }
-                      : { badge: '⚙️', bgColor: 'rgba(0, 0, 0, 0.2)', borderColor: 'rgba(255, 255, 255, 0.1)' }
-                    return (
-                      <SubstepSlot
-                        current={current}
-                        typeStyle={typeStyle}
-                        getSubStepColor={(s) => getSubStepColor(s.status)}
-                        getSubStepIcon={(s) => getSubStepIcon(s.status)}
-                      />
-                    )
-                  })()}
-                  {step.status === 'running' && (!step.substeps || step.substeps.length === 0) && (
-                    <div style={{
-                      width: '100%',
-                      height: '4px',
-                      background: 'rgba(0, 123, 255, 0.2)',
-                      borderRadius: '2px',
-                      overflow: 'hidden',
-                      marginTop: '0.5rem',
-                    }}>
-                      <div style={{
-                        width: '60%',
-                        height: '100%',
-                        background: '#007bff',
-                        animation: 'pulse 1.5s ease-in-out infinite',
-                      }} />
+                  {current && (
+                    <SubstepSlot
+                      current={current}
+                      typeStyle={typeStyle}
+                      getSubStepColor={(s) => getSubStepColor(s.status)}
+                      getSubStepIcon={(s) => getSubStepIcon(s.status)}
+                    />
+                  )}
+                  {step.status === 'running' && !hasSubsteps && (
+                    <div className="scan-step-card-pulse-bar">
+                      <div className="scan-step-card-pulse-bar-inner" />
+                    </div>
+                  )}
+                  {hasSubsteps && (
+                    <div
+                      className={`scan-step-substeps-anim${expanded ? ' scan-step-substeps-anim--open' : ''}`}
+                      aria-hidden={!expanded}
+                    >
+                      <div className="scan-step-substeps-anim-inner">
+                        <div className="scan-step-substeps-panel">
+                          <div className="scan-step-substeps-panel-title">All substeps</div>
+                          <ul className="scan-step-substeps-list">
+                            {subs.map((sub, idx) => {
+                              const dur = formatSubstepDuration(sub)
+                              return (
+                                <li key={`${step.number}-${idx}-${sub.name}`} className="scan-step-substeps-row">
+                                  <span
+                                    className="scan-step-substeps-icon"
+                                    style={{ color: getSubStepColor(sub.status) }}
+                                  >
+                                    {getSubStepIcon(sub.status)}
+                                  </span>
+                                  <span className="scan-step-substeps-name" title={sub.name}>
+                                    {sub.name}
+                                  </span>
+                                  {sub.message && (
+                                    <span className="scan-step-substeps-msg" title={sub.message}>
+                                      {sub.message}
+                                    </span>
+                                  )}
+                                  {dur && <span className="scan-step-substeps-time">{dur}</span>}
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

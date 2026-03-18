@@ -71,6 +71,7 @@ class Step:
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     substeps: List[SubStep] = field(default_factory=list)
+    timeout_seconds: Optional[int] = None  # Max duration from manifest (for scanner steps)
 
 
 class StepRegistry:
@@ -260,17 +261,25 @@ class StepRegistry:
     def get_steps_for_frontend(self) -> List[dict]:
         """
         Get steps formatted for frontend
-        
+
         Returns:
             List of step dictionaries
         """
         steps_list = []
         for step in sorted(self.steps.values(), key=lambda s: s.number):
+            duration_seconds = None
+            if step.started_at and step.completed_at:
+                delta = (step.completed_at - step.started_at).total_seconds()
+                duration_seconds = max(0, int(delta))
+            elif step.started_at and step.status == StepStatus.RUNNING:
+                delta = (datetime.now() - step.started_at).total_seconds()
+                duration_seconds = max(0, int(delta))
             step_dict = {
                 "number": step.number,
                 "name": step.name,
                 "status": step.status.value,
                 "message": step.message,
+                "started_at": step.started_at.isoformat() if step.started_at else None,
                 "substeps": [
                     {
                         "name": substep.name,
@@ -280,7 +289,9 @@ class StepRegistry:
                         "completed_at": substep.completed_at.isoformat() if substep.completed_at else None,
                     }
                     for substep in step.substeps
-                ]
+                ],
+                "duration_seconds": duration_seconds,
+                "timeout_seconds": getattr(step, "timeout_seconds", None),
             }
             steps_list.append(step_dict)
         return steps_list
@@ -533,6 +544,12 @@ class StepRegistry:
                                 substep_type=substep_type
                             ))
                         
+                        timeout_seconds = step_data.get("timeout_seconds")
+                        if timeout_seconds is not None and not isinstance(timeout_seconds, int):
+                            try:
+                                timeout_seconds = int(timeout_seconds)
+                            except (ValueError, TypeError):
+                                timeout_seconds = None
                         # Register step if not already registered
                         if step_name not in self.steps:
                             self.steps[step_name] = Step(
@@ -542,7 +559,8 @@ class StepRegistry:
                                 message=message,
                                 started_at=started_at,
                                 completed_at=completed_at,
-                                substeps=substeps
+                                substeps=substeps,
+                                timeout_seconds=timeout_seconds,
                             )
                             # Update step_counter to highest step number
                             if step_number > self.step_counter:
@@ -583,7 +601,8 @@ class StepRegistry:
                     }
                     for substep in step.substeps
                 ],
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "timeout_seconds": getattr(step, "timeout_seconds", None),
             }
             step_dict = _json_serializable(step_dict)
 

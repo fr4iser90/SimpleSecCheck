@@ -173,7 +173,8 @@ class ContainerSpec:
         git_branch: Optional[str] = None,
         results_dir_container: Optional[str] = None,  # Container path (what Scanner sees)
         asset_volumes: Optional[List[Dict[str, str]]] = None,  # Asset volumes from scanner manifests
-        scanners: Optional[List[str]] = None  # Selected scanners from backend (if None, scanner filters by scan_type)
+        scanners: Optional[List[str]] = None,  # Selected scanners from backend (if None, scanner filters by scan_type)
+        scanner_tool_overrides_json: str = "{}",
     ) -> 'ContainerSpec':
         """Create container spec from scan configuration.
         
@@ -230,6 +231,8 @@ class ContainerSpec:
         scanners_list = scanners if scanners is not None else []
         if scanners_list:
             environment["SELECTED_SCANNERS"] = json.dumps(scanners_list)
+        if scanner_tool_overrides_json and scanner_tool_overrides_json.strip() not in ("", "{}"):
+            environment["SCANNER_TOOL_OVERRIDES_JSON"] = scanner_tool_overrides_json
         
         # Add exclude paths if provided
         if exclude_paths:

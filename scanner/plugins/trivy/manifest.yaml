@@ -1,30 +1,34 @@
-name: trivy
-version: "1.0"
-description: Comprehensive security scanner. Scans filesystems, dependencies, and container images for vulnerabilities.
+id: trivy
+version: '1.0'
+display_name: Trivy
+description: Comprehensive security scanner. Scans filesystems, dependencies, and
+  container images for vulnerabilities.
 categories:
-  - Dependency Scanning
-  - Container Security
-  - Filesystem Scanning
-icon: "🛡️"
-category: dependency
-languages: []
+- dependency
+- container_security
+- filesystem_scanning
+icon: 🛡️
+languages: null
 severity_supported: true
-timeout: 900
+execution:
+  timeout: 900
 homepage: https://github.com/aquasecurity/trivy
 documentation: https://aquasecurity.github.io/trivy/
 install:
-  - ["/bin/sh", "-c", "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin"]
+- - /bin/sh
+  - -c
+  - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh
+    | sh -s -- -b /usr/local/bin
 assets:
-  - id: config
-    type: config
-    description: Trivy config
-    mount:
-      host_subpath: scanner/plugins/trivy/config/config.yaml
-      container_path: /app/scanner/plugins/trivy/config/config.yaml
-  # Cache in plugin dir (like OWASP); avoid container_path under /tmp to prevent "no space left on device".
-  - id: cache
-    type: data
-    description: Trivy vulnerability database cache
-    mount:
-      host_subpath: scanner/plugins/trivy/cache
-      container_path: /app/scanner/plugins/trivy/cache
+- id: config
+  type: config
+  description: Trivy config
+  mount:
+    host_subpath: scanner/plugins/trivy/config/config.yaml
+    container_path: /app/scanner/plugins/trivy/config/config.yaml
+- id: cache
+  type: data
+  description: Trivy vulnerability database cache
+  mount:
+    host_subpath: scanner/plugins/trivy/cache
+    container_path: /app/scanner/plugins/trivy/cache

@@ -1,15 +1,17 @@
-name: npm_audit
-version: "1.0"
-description: Node.js package vulnerability scanner. Checks npm dependencies for known security issues.
+id: npm_audit
+version: '1.0'
+display_name: Npm Audit
+description: Node.js package vulnerability scanner. Checks npm dependencies for known
+  security issues.
 categories:
-  - Dependency Scanning
-icon: "📦"
-category: dependency
+- dependency
+icon: 📦
 languages:
-  - javascript
-  - typescript
+- javascript
+- typescript
 severity_supported: true
-timeout: 300
+execution:
+  timeout: 300
 homepage: https://docs.npmjs.com/cli/v8/commands/npm-audit
 documentation: https://docs.npmjs.com/cli/v8/commands/npm-audit
 install: []

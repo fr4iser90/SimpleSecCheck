@@ -1,15 +1,19 @@
-name: safety
-version: "1.0"
-description: Python dependency vulnerability scanner. Checks Python packages against known vulnerabilities.
+id: safety
+version: '1.0'
+display_name: Safety
+description: Python dependency vulnerability scanner. Checks Python packages against
+  known vulnerabilities.
 categories:
-  - Dependency Scanning
-icon: "🐍"
-category: dependency
+- dependency
+icon: 🐍
 languages:
-  - python
+- python
 severity_supported: true
-timeout: 300
+execution:
+  timeout: 300
 homepage: https://github.com/pyupio/safety
 documentation: https://docs.pyup.io/docs/safety-cli
 install:
-  - ["pip3", "install", "safety"]
+- - pip3
+  - install
+  - safety

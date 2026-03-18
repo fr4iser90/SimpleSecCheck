@@ -133,7 +133,7 @@ class CheckovScanner(BaseScanner):
         env["MKL_NUM_THREADS"] = "1"
         cmd = ["checkov", "-d", str(self.target_path), *skip_args, "--output", "json", "--quiet"]
         
-        result = self.run_command(cmd, capture_output=True, timeout=1800, env=env)
+        result = self.run_command(cmd, capture_output=True, env=env)
         wrote_json = False
         if result.stdout and result.stdout.strip():
             try:
@@ -174,7 +174,7 @@ class CheckovScanner(BaseScanner):
         self.log("Generating text report...")
         cmd = ["checkov", "-d", str(self.target_path), *skip_args, "--output", "cli", "--quiet"]
         
-        result = self.run_command(cmd, capture_output=True, timeout=1800, env=env)
+        result = self.run_command(cmd, capture_output=True, env=env)
         if result.stdout and result.stdout.strip():
             with open(text_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)

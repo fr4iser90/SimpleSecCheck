@@ -1,17 +1,31 @@
-name: gitleaks
-version: "1.0"
-description: Secret scanning tool for Git repositories. Detects hardcoded secrets and credentials.
+id: gitleaks
+version: '1.0'
+display_name: Gitleaks
+description: Secret scanning tool for Git repositories. Detects hardcoded secrets
+  and credentials.
 categories:
-  - Secrets Scanning
-icon: "🔑"
-category: secrets
-languages: []
+- secrets
+icon: 🔑
+languages: null
 severity_supported: false
-timeout: 600
+execution:
+  timeout: 600
 homepage: https://github.com/gitleaks/gitleaks
 documentation: https://github.com/gitleaks/gitleaks#readme
 install:
-  - ["/bin/sh", "-c", "GITLEAKS_URL=$(wget -qO- https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.assets[] | select(.name | test(\"gitleaks.*linux_x64.tar.gz\")) | .browser_download_url') && wget -O /tmp/gitleaks.tar.gz $GITLEAKS_URL"]
-  - ["tar", "-xvzf", "/tmp/gitleaks.tar.gz", "-C", "/opt"]
-  - ["rm", "/tmp/gitleaks.tar.gz"]
-  - ["ln", "-s", "/opt/gitleaks", "/usr/local/bin/gitleaks"]
+- - /bin/sh
+  - -c
+  - GITLEAKS_URL=$(wget -qO- https://api.github.com/repos/gitleaks/gitleaks/releases/latest
+    | jq -r '.assets[] | select(.name | test("gitleaks.*linux_x64.tar.gz")) | .browser_download_url')
+    && wget -O /tmp/gitleaks.tar.gz $GITLEAKS_URL
+- - tar
+  - -xvzf
+  - /tmp/gitleaks.tar.gz
+  - -C
+  - /opt
+- - rm
+  - /tmp/gitleaks.tar.gz
+- - ln
+  - -s
+  - /opt/gitleaks
+  - /usr/local/bin/gitleaks
