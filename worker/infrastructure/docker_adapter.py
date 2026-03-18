@@ -139,6 +139,8 @@ class DockerAdapter:
                     config["cpu_period"] = host_config_dict["cpu_period"]
                 if "mem_limit" in host_config_dict:
                     config["mem_limit"] = host_config_dict["mem_limit"]
+                if host_config_dict.get("init"):
+                    config["init"] = True
                 if "restart_policy" in host_config_dict:
                     config["restart_policy"] = host_config_dict["restart_policy"]
                 if "port_bindings" in host_config_dict:
@@ -184,7 +186,8 @@ class DockerAdapter:
                 self.client.containers.get,
                 container_id
             )
-            await asyncio.to_thread(container.stop)
+            # Longer timeout so tools (Checkov, CodeQL, …) can SIGTERM children before SIGKILL
+            await asyncio.to_thread(container.stop, timeout=45)
         except DockerException as e:
             self.logger.error(f"Error stopping container {container_id}: {e}")
             raise

@@ -20,6 +20,12 @@ languages:
 severity_supported: true
 execution:
   timeout: 900
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  version_command:
+  - semgrep
+  - --version
 homepage: https://semgrep.dev
 documentation: https://semgrep.dev/docs/
 install:

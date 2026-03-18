@@ -10,6 +10,12 @@ languages: null
 severity_supported: false
 execution:
   timeout: 300
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  version_command:
+  - detect-secrets
+  - --version
 homepage: https://github.com/Yelp/detect-secrets
 documentation: https://github.com/Yelp/detect-secrets#readme
 install:

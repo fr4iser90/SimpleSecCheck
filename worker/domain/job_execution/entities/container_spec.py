@@ -58,7 +58,9 @@ class ContainerSpec:
     working_dir: Optional[str] = None
     user: Optional[str] = None
     entrypoint: Optional[List[str]] = None
-    
+    # Docker embeds tini as PID 1: reaps zombies (e.g. Checkov workers) when parent dies abruptly
+    use_docker_init: bool = True
+
     def add_volume(self, host_path: str, container_path: str, read_only: bool = False) -> None:
         """Add a volume mount."""
         # Validate host_path is a string
@@ -122,7 +124,10 @@ class ContainerSpec:
         
         if self.memory_limit:
             host_config["mem_limit"] = self.memory_limit
-        
+
+        if self.use_docker_init:
+            host_config["init"] = True
+
         if self.restart_policy:
             host_config["restart_policy"] = {"Name": self.restart_policy}
         

@@ -13,6 +13,12 @@ languages:
 severity_supported: true
 execution:
   timeout: 600
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  version_command:
+  - eslint
+  - --version
 homepage: https://eslint.org
 documentation: https://eslint.org/docs/latest/
 install:

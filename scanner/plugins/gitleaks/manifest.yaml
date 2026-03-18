@@ -10,6 +10,12 @@ languages: null
 severity_supported: false
 execution:
   timeout: 600
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  version_command:
+  - gitleaks
+  - version
 homepage: https://github.com/gitleaks/gitleaks
 documentation: https://github.com/gitleaks/gitleaks#readme
 install:

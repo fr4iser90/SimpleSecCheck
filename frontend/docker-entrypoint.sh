@@ -1,34 +1,13 @@
 #!/bin/sh
 set -e
 
-# Optionally remap nginx user/group to host UID/GID for volume permissions
-PUID=${PUID:-1000}
-PGID=${PGID:-1000}
-CURRENT_UID=$(id -u nginx 2>/dev/null || echo 101)
-CURRENT_GID=$(id -g nginx 2>/dev/null || echo 101)
+# Do NOT chown ./results here. Backend/Worker/Scanner map to host UID (e.g. 1000:992).
+# If usermod for nginx fails, chown -R would reassign the whole tree to nginx (UID 101)
+# and break scanner writes — that caused intermittent 101 vs fr4iser on the host.
 
-if [ "$PGID" != "$CURRENT_GID" ]; then
-    if getent group "$PGID" >/dev/null 2>&1; then
-        usermod -g "$PGID" nginx >/dev/null 2>&1 || true
-    else
-        groupmod -g "$PGID" nginx >/dev/null 2>&1 || true
-    fi
-fi
-
-if [ "$PUID" != "$CURRENT_UID" ]; then
-    usermod -u "$PUID" nginx >/dev/null 2>&1 || true
-fi
-
-CHOWN_UID=$(id -u nginx 2>/dev/null || echo 101)
-CHOWN_GID=$(id -g nginx 2>/dev/null || echo 101)
-
-# Ensure results directory exists and is readable by nginx
+# Optional mount; nginx does not read results (API proxies to backend). No chown/chmod.
 RESULTS_DIR=${RESULTS_DIR:-/app/results}
-if [ ! -d "$RESULTS_DIR" ]; then
-    mkdir -p "$RESULTS_DIR" >/dev/null 2>&1 || true
-fi
-chown -R "$CHOWN_UID:$CHOWN_GID" "$RESULTS_DIR" 2>/dev/null || true
-chmod -R u+rX,g+rX "$RESULTS_DIR" 2>/dev/null || true
+[ -d "$RESULTS_DIR" ] || mkdir -p "$RESULTS_DIR" 2>/dev/null || true
 
 # Backup and use standard entrypoint, but suppress output
 if [ -f /usr/local/bin/docker-entrypoint.sh ]; then

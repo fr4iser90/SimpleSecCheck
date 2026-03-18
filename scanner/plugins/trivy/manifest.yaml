@@ -12,6 +12,12 @@ languages: null
 severity_supported: true
 execution:
   timeout: 900
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  version_command:
+  - trivy
+  - version
 homepage: https://github.com/aquasecurity/trivy
 documentation: https://aquasecurity.github.io/trivy/
 install:

@@ -11,6 +11,12 @@ languages:
 severity_supported: true
 execution:
   timeout: 300
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  version_command:
+  - safety
+  - --version
 homepage: https://github.com/pyupio/safety
 documentation: https://docs.pyup.io/docs/safety-cli
 install:

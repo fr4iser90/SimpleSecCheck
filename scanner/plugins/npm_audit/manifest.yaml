@@ -12,6 +12,12 @@ languages:
 severity_supported: true
 execution:
   timeout: 300
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  version_command:
+  - npm
+  - -v
 homepage: https://docs.npmjs.com/cli/v8/commands/npm-audit
 documentation: https://docs.npmjs.com/cli/v8/commands/npm-audit
 install: []

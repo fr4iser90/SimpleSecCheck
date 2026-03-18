@@ -10,6 +10,12 @@ languages: null
 severity_supported: false
 execution:
   timeout: 600
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  version_command:
+  - trufflehog
+  - --version
 homepage: https://github.com/trufflesecurity/trufflehog
 documentation: https://docs.trufflesecurity.com/
 install:

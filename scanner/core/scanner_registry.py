@@ -4,9 +4,12 @@ Modern, dynamic scanner registration system - no hardcoded steps!
 """
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 from pathlib import Path
 import inspect
+
+if TYPE_CHECKING:
+    from scanner.core.scanner_assets.models import ScannerCheckpointConfig
 
 
 class ScanType(Enum):
@@ -78,6 +81,7 @@ class Scanner:
     python_class: Optional[str] = None  # Fully-qualified Python scanner class
     tools_key: Optional[str] = None  # Canonical key = manifest.id only (results/tools/<id>/, DB scanner_key)
     timeout: Optional[int] = None  # Max duration in seconds (from manifest only); orchestrator/scanner use this
+    checkpoint: Optional["ScannerCheckpointConfig"] = None  # from manifest.checkpoint; None = no resume skip
 
 
 class ScannerRegistry:
@@ -250,7 +254,7 @@ class ScannerRegistry:
                         timeout = t
             except (TypeError, ValueError):
                 pass
-        # Create and register Scanner
+        cp = getattr(manifest, "checkpoint", None) if manifest else None
         scanner = Scanner(
             name=scanner_name,
             capabilities=capabilities,
@@ -259,6 +263,7 @@ class ScannerRegistry:
             python_class=python_class,
             tools_key=tools_key,
             timeout=timeout,
+            checkpoint=cp,
         )
         cls.register(scanner)
 

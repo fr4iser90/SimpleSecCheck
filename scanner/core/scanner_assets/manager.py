@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import yaml
 
-from .models import ScannerManifest, ScannerAsset, AssetMount, AssetUpdate
+from .models import (
+    ScannerManifest,
+    ScannerAsset,
+    AssetMount,
+    AssetUpdate,
+    ScannerCheckpointConfig,
+)
 
 
 class ScannerAssetsManager:
@@ -167,11 +173,30 @@ class ScannerAssetsManager:
         if documentation is not None:
             documentation = str(documentation).strip() or None
 
+        checkpoint_cfg: Optional[ScannerCheckpointConfig] = None
+        cp = data.get("checkpoint")
+        if isinstance(cp, dict) and cp.get("primary_artifact"):
+            pa = str(cp["primary_artifact"]).strip()
+            if pa:
+                fmt = str(cp.get("artifact_format") or "json").strip().lower()
+                if fmt not in ("json", "sarif", "any"):
+                    fmt = "json"
+                vc = cp.get("version_command")
+                vcmd: Optional[List[str]] = None
+                if isinstance(vc, list) and vc:
+                    vcmd = [str(x) for x in vc if str(x).strip()]
+                checkpoint_cfg = ScannerCheckpointConfig(
+                    primary_artifact=pa,
+                    artifact_format=fmt,
+                    version_command=vcmd,
+                )
+
         return ScannerManifest(
             id=scanner_id,
             assets=assets,
             install=install_commands,
             raw=data,
+            checkpoint=checkpoint_cfg,
             version=version,
             languages=languages,
             severity_supported=severity_supported,

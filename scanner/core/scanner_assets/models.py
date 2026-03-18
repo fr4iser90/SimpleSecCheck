@@ -28,6 +28,15 @@ class ScannerAsset:
 
 
 @dataclass
+class ScannerCheckpointConfig:
+    """manifest.checkpoint — omit → no checkpoint skip for this plugin."""
+
+    primary_artifact: str
+    artifact_format: str = "json"
+    version_command: Optional[List[str]] = None
+
+
+@dataclass
 class ScannerManifest:
     """Manifest: id is the ONLY technical identity (tools_key). No manifest name field."""
     id: str
@@ -35,6 +44,7 @@ class ScannerManifest:
     install: List[List[str]]
     raw: Dict[str, Any]
 
+    checkpoint: Optional[ScannerCheckpointConfig] = None
     version: Optional[str] = None
     languages: Optional[List[str]] = None  # None = all languages
     severity_supported: Optional[bool] = None

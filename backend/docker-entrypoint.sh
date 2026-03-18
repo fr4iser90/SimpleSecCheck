@@ -1,67 +1,53 @@
 #!/bin/bash
-# Backend Refactored Docker Entrypoint
+# Align backend UID/GID with host project owner (same pattern as worker/scanner).
+set +e
 
-set -e
-# Automatically detect UID/GID from mounted project root directory
-# This ensures files are created with correct ownership on host
-# /project is always mounted in docker-compose (.:/project:ro)
+BACKEND_UID=""
+BACKEND_GID=""
 
-PROJECT_ROOT="/project"
-if [ -d "$PROJECT_ROOT" ]; then
-    DETECTED_UID=$(stat -c "%u" "$PROJECT_ROOT" 2>/dev/null || echo "")
-    DETECTED_GID=$(stat -c "%g" "$PROJECT_ROOT" 2>/dev/null || echo "")
+if [ -d "/project" ]; then
+    DETECTED_UID=$(stat -c "%u" "/project" 2>/dev/null || echo "")
+    DETECTED_GID=$(stat -c "%g" "/project" 2>/dev/null || echo "")
     if [ -n "$DETECTED_UID" ] && [ -n "$DETECTED_GID" ]; then
-        PUID=$DETECTED_UID
-        PGID=$DETECTED_GID
-        echo "[Entrypoint] Auto-detected PUID=$PUID PGID=$PGID from $PROJECT_ROOT"
+        BACKEND_UID=$DETECTED_UID
+        BACKEND_GID=$DETECTED_GID
+        echo "[Backend Entrypoint] Auto-detected UID=$BACKEND_UID GID=$BACKEND_GID from /project mount"
+
+        CURRENT_UID=$(id -u backend)
+        CURRENT_GID=$(id -g backend)
+
+        if [ "$BACKEND_GID" != "$CURRENT_GID" ]; then
+            if getent group "$BACKEND_GID" >/dev/null 2>&1; then
+                usermod -g "$BACKEND_GID" backend
+            else
+                groupmod -g "$BACKEND_GID" backend
+            fi
+        fi
+
+        if [ "$BACKEND_UID" != "$CURRENT_UID" ]; then
+            usermod -u "$BACKEND_UID" backend
+        fi
     else
-        echo "[Entrypoint] Could not detect UID/GID from $PROJECT_ROOT, skipping user remapping"
+        echo "[Backend Entrypoint] Could not detect UID/GID from /project, using default backend user"
     fi
 else
-    echo "[Entrypoint] Project root $PROJECT_ROOT not found, skipping user remapping"
+    echo "[Backend Entrypoint] /project not mounted, using default backend user"
 fi
 
-CURRENT_UID=$(id -u backend)
-CURRENT_GID=$(id -g backend)
+FINAL_UID=$(id -u backend)
+FINAL_GID=$(id -g backend)
 
-# Only remap if PUID/PGID were detected
-if [ -n "$PUID" ] && [ -n "$PGID" ]; then
-    if [ "$PGID" != "$CURRENT_GID" ]; then
-        if getent group "$PGID" >/dev/null 2>&1; then
-            usermod -g "$PGID" backend
-        else
-            groupmod -g "$PGID" backend
-        fi
-    fi
+RESULTS_DIR="${RESULTS_DIR:-/app/results}"
+UPLOADS_DIR="${UPLOAD_STORAGE_PATH:-/app/uploads}"
+mkdir -p "$RESULTS_DIR" "$UPLOADS_DIR" 2>/dev/null || true
 
-    if [ "$PUID" != "$CURRENT_UID" ]; then
-        usermod -u "$PUID" backend
-    fi
+echo "[Backend Entrypoint] chown $RESULTS_DIR $UPLOADS_DIR /app to UID=$FINAL_UID GID=$FINAL_GID"
+chown -R "$FINAL_UID:$FINAL_GID" "$RESULTS_DIR" "$UPLOADS_DIR" /app 2>/dev/null || true
+chmod -R u+rwX,g+rwX "$RESULTS_DIR" "$UPLOADS_DIR" 2>/dev/null || true
+
+if ! gosu backend test -w "$RESULTS_DIR" 2>/dev/null; then
+    echo "[Backend Entrypoint] WARNING: $RESULTS_DIR not writable by backend (uid=$FINAL_UID)"
+    ls -ld "$RESULTS_DIR" || true
 fi
 
-CHOWN_UID=$(id -u backend)
-CHOWN_GID=$(id -g backend) 
-
-# Wait for dependencies
-echo "Waiting for database and Redis..."
-until pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" 2>/dev/null; do
-  echo "Waiting for database..."
-  sleep 2
-done
-
-until redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping 2>/dev/null; do
-  echo "Waiting for Redis..."
-  sleep 2
-done
-
-echo "Dependencies are ready!"
-
-# Run migrations if needed
-if [ "$RUN_MIGRATIONS" = "true" ]; then
-  echo "Running database migrations..."
-  # Add migration commands here
-fi
-
-# Start the application
-echo "Starting backend application..."
-exec "$@"
+exec gosu backend "$@"

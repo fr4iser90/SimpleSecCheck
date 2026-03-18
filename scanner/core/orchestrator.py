@@ -27,6 +27,7 @@ from scanner.core.scanner_registry import ScannerRegistry, ScanType, TargetType,
 from scanner.core.step_registry import StepRegistry, StepStatus, Step, SubStepType
 from scanner.core.step_definitions import StepDefinitionsRegistry, StepType
 from scanner.core.base_scanner import set_global_step_registry
+from scanner.core import scan_checkpoint as scan_cp
 
 
 # Single Source of Truth: Mapping from frontend scan_type to scanner scan_types
@@ -724,11 +725,100 @@ class ScanOrchestrator:
             self.log_message(f"Running all {len(scanners)} scanners for target {self.target_type.value}")
             if len(scanners) == 0:
                 self.log_message(f"[WARNING] No scanners found! Check scanner registration and capabilities.")
-        
+
+        checkpoint_path = self.results_dir / "checkpoint.json"
+        cp = scan_cp.load_checkpoint(checkpoint_path)
+        raw_ov = os.getenv("SCANNER_TOOL_OVERRIDES_JSON", "").strip()
+        global_hash = scan_cp.compute_scan_config_hash(
+            scan_types=[s.value for s in self.scan_types],
+            target_type=self.target_type.value,
+            collect_metadata=self.collect_metadata,
+            selected_scanners=sorted(self.selected_scanners) if self.selected_scanners else None,
+            overrides_json=raw_ov,
+        )
+        checkpoint_disabled = os.getenv("SCAN_CHECKPOINT_DISABLE", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if not checkpoint_disabled:
+            if (cp.get("scan_config_hash") or "") != global_hash:
+                scan_cp.invalidate_scanner_steps(cp)
+            cp["scan_config_hash"] = global_hash
+            cp["pipeline_order"] = [s.tools_key or "" for s in scanners if s.tools_key]
+
+        target_fp = scan_cp.target_fingerprint_git(self.target_path)
+        if not checkpoint_disabled:
+            prev_fp = (cp.get("target_fingerprint") or "").strip()
+            if target_fp and prev_fp and prev_fp != target_fp:
+                scan_cp.invalidate_scanner_steps(cp)
+                self.log_message(
+                    f"[Checkpoint] Target revision changed ({prev_fp[:8]}… → {target_fp[:8]}…), scanner checkpoints cleared"
+                )
+            if target_fp:
+                cp["target_fingerprint"] = target_fp
+            else:
+                scan_cp.invalidate_scanner_steps(cp)
+            scan_cp.save_checkpoint(checkpoint_path, cp)
+        resumed_any = False
+        executed_upstream = False
+
         for scanner in scanners:
             if not self._scanner_admin_enabled(scanner):
                 continue
-            await self._run_scanner(scanner)
+            if not scanner.tools_key:
+                executed_upstream = True
+                await self._run_scanner(scanner)
+                continue
+            scanner_dir = self.tools_dir_results / scanner.tools_key
+            cfg_h = scan_cp.scanner_config_hash(
+                scanner.tools_key,
+                self._merged_timeout(scanner),
+                self._override_for_scanner(scanner),
+            )
+            can_resume = (
+                not checkpoint_disabled
+                and bool(target_fp)
+                and scanner.checkpoint is not None
+            )
+            if can_resume:
+                skip_ok, skip_reason = scan_cp.can_skip_scanner(
+                    cp=cp,
+                    tools_key=scanner.tools_key,
+                    checkpoint_cfg=scanner.checkpoint,
+                    scanner_dir=scanner_dir,
+                    config_hash=cfg_h,
+                    current_global_hash=global_hash,
+                    executed_upstream=executed_upstream,
+                )
+                if skip_ok:
+                    self.step_registry.start_step(
+                        scanner.name, f"Restoring {scanner.name} from checkpoint..."
+                    )
+                    self.log_message(
+                        f"[Checkpoint] {scanner.name} skipped (verified); reason={skip_reason or 'ok'}"
+                    )
+                    self.step_registry.complete_step(
+                        scanner.name,
+                        "Restored from checkpoint (artifact + config verified)",
+                    )
+                    self.scanner_statuses[scanner.name] = "SUCCESS"
+                    resumed_any = True
+                    cp["resumed"] = True
+                    scan_cp.save_checkpoint(checkpoint_path, cp)
+                    continue
+            executed_upstream = True
+            ran_ok = await self._run_scanner(scanner)
+            if ran_ok and scanner.checkpoint and not checkpoint_disabled:
+                scan_cp.record_scanner_completed(
+                    cp,
+                    scanner.tools_key,
+                    scanner.checkpoint,
+                    scanner_dir,
+                    global_hash,
+                    cfg_h,
+                )
+                scan_cp.save_checkpoint(checkpoint_path, cp)
         
         # Run Artifact Collection step AFTER all scanners (before Completion)
         artifact_collection_step_def = None
@@ -751,6 +841,14 @@ class ScanOrchestrator:
             self.step_registry.start_step("Completion", "Finalizing scan...")
             self._generate_html_report()
             self.log_message("SimpleSecCheck Scan Completed")
+            if not checkpoint_disabled:
+                try:
+                    cp_done = scan_cp.load_checkpoint(checkpoint_path)
+                    cp_done["status"] = "completed"
+                    cp_done["resumed"] = bool(cp_done.get("resumed") or resumed_any)
+                    scan_cp.save_checkpoint(checkpoint_path, cp_done)
+                except Exception:
+                    pass
             if self.overall_success:
                 self.step_registry.complete_step("Completion", "Scan completed successfully")
             else:
