@@ -246,6 +246,11 @@ class ContainerSpec:
         # Add git branch if provided
         if git_branch:
             environment["GIT_BRANCH"] = git_branch
+
+        # Optional full git clone (fixes shallow-clone + semgrep/git edge cases)
+        _gcf = os.getenv("GIT_CLONE_FULL", "").strip().lower()
+        if _gcf in ("1", "true", "yes"):
+            environment["GIT_CLONE_FULL"] = "1"
         
         # Finding policy: tell scanner where the policy file is in the container.
         # For both git_repo and local_mount the project (or clone) is mounted at /target,

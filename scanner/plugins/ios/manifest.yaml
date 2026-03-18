@@ -10,6 +10,9 @@ languages: null
 severity_supported: true
 execution:
   timeout: 600
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
 homepage: https://developer.apple.com/
 documentation: https://developer.apple.com/documentation/
 install:

@@ -118,6 +118,20 @@ class DockerJobExecutor:
             self.logger.error(f"Error starting container {container_id}: {e}")
             raise
     
+    async def _heartbeat_while_running(self, scan_id, stop: asyncio.Event) -> None:
+        from worker.domain.job_execution.services.result_processing_service import (
+            update_scan_heartbeat,
+        )
+
+        while not stop.is_set():
+            if self.database_adapter:
+                await update_scan_heartbeat(self.database_adapter, str(scan_id))
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=25.0)
+                return
+            except asyncio.TimeoutError:
+                continue
+
     async def _monitor_execution(self, job_execution: JobExecution, container_id: str) -> ExecutionResult:
         """Monitor container execution and collect results.
         
@@ -131,9 +145,24 @@ class DockerJobExecutor:
         try:
             # Get container logs
             logs = await self._get_container_logs(container_id)
-            
-            # Wait for container to complete
-            exit_code = await self._wait_for_container(container_id)
+
+            stop_hb = asyncio.Event()
+            hb_task = None
+            if self.database_adapter:
+                hb_task = asyncio.create_task(
+                    self._heartbeat_while_running(job_execution.scan_id, stop_hb)
+                )
+            try:
+                # Wait for container to complete
+                exit_code = await self._wait_for_container(container_id)
+            finally:
+                stop_hb.set()
+                if hb_task:
+                    hb_task.cancel()
+                    try:
+                        await hb_task
+                    except asyncio.CancelledError:
+                        pass
             
             # Get container stats
             stats = await self._get_container_stats(container_id)

@@ -11,6 +11,9 @@ languages: null
 severity_supported: true
 execution:
   timeout: 1200
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
 homepage: https://portswigger.net/burp
 documentation: https://portswigger.net/burp/documentation
 install:

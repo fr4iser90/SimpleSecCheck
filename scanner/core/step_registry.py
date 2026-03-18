@@ -301,6 +301,36 @@ class StepRegistry:
         
         # Send WebSocket update
         asyncio.create_task(self._send_update())
+
+    def set_step_pending_for_run(self, step_name: str) -> None:
+        """Clear step to pending for a new container run (DB/log). Skips admin-disabled (SKIPPED)."""
+        if step_name not in self.steps:
+            return
+        st = self.steps[step_name]
+        if st.status == StepStatus.SKIPPED:
+            return
+        st.status = StepStatus.PENDING
+        st.message = f"{step_name}... (pending)"
+        st.started_at = None
+        st.completed_at = None
+        st.substeps = []
+        self._write_to_log(st)
+
+    def apply_checkpoint_restored_step(self, step_name: str, skip_reason: str = "") -> None:
+        """Mark scanner step completed from checkpoint (single write, DB + log)."""
+        now = _utc_now()
+        if step_name not in self.steps:
+            return
+        st = self.steps[step_name]
+        st.status = StepStatus.COMPLETED
+        st.started_at = now
+        st.completed_at = now
+        st.substeps = []
+        msg = "Restored from checkpoint (artifact + config verified)"
+        if skip_reason and skip_reason != "ok":
+            msg = f"{msg} ({skip_reason})"
+        st.message = msg
+        self._write_to_log(st)
     
     def get_steps_for_frontend(self) -> List[dict]:
         """

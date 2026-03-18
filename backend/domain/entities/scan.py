@@ -17,6 +17,7 @@ class ScanStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    INTERRUPTED = "interrupted"  # Worker lost / stale heartbeat (before re-queue)
 
 
 class ScanType(str, Enum):
@@ -53,7 +54,8 @@ class Scan:
     completed_at: Optional[datetime] = None
     updated_at: datetime = field(default_factory=datetime.utcnow)
     scheduled_at: Optional[datetime] = None  # Scheduled start time (optional)
-    
+    last_heartbeat_at: Optional[datetime] = None  # Worker/orchestrator liveness (running scans)
+
     # Results
     results: List[Dict[str, Any]] = field(default_factory=list)
     total_vulnerabilities: int = 0
@@ -116,8 +118,8 @@ class Scan:
     
     def retry(self):
         """Retry the scan."""
-        if self.status != ScanStatus.FAILED:
-            raise ValueError("Scan can only be retried from FAILED status")
+        if self.status not in (ScanStatus.FAILED, ScanStatus.INTERRUPTED):
+            raise ValueError("Scan can only be retried from FAILED or INTERRUPTED status")
         
         self.status = ScanStatus.PENDING
         self.started_at = None
@@ -158,7 +160,12 @@ class Scan:
     
     def is_completed(self) -> bool:
         """Check if scan is completed."""
-        return self.status in [ScanStatus.COMPLETED, ScanStatus.FAILED, ScanStatus.CANCELLED]
+        return self.status in [
+            ScanStatus.COMPLETED,
+            ScanStatus.FAILED,
+            ScanStatus.CANCELLED,
+            ScanStatus.INTERRUPTED,
+        ]
     
     def is_successful(self) -> bool:
         """Check if scan completed successfully."""
@@ -201,6 +208,9 @@ class Scan:
             'project_id': self.project_id,
             'tags': self.tags,
             'scheduled_at': self.scheduled_at.isoformat() if self.scheduled_at else None,
+            'last_heartbeat_at': (
+                self.last_heartbeat_at.isoformat() if self.last_heartbeat_at else None
+            ),
             'scan_metadata': self.scan_metadata,
             'critical_vulnerabilities': self.critical_vulnerabilities,
             'high_vulnerabilities': self.high_vulnerabilities,
@@ -235,6 +245,11 @@ class Scan:
             project_id=data.get('project_id'),
             tags=data.get('tags', []),
             scheduled_at=datetime.fromisoformat(data['scheduled_at']) if data.get('scheduled_at') else None,
+            last_heartbeat_at=(
+                datetime.fromisoformat(data['last_heartbeat_at'])
+                if data.get('last_heartbeat_at')
+                else None
+            ),
             scan_metadata=data.get('scan_metadata', {}),
             critical_vulnerabilities=data.get('critical_vulnerabilities', 0),
             high_vulnerabilities=data.get('high_vulnerabilities', 0),

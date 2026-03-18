@@ -11,6 +11,12 @@ languages: null
 severity_supported: true
 execution:
   timeout: 900
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  version_command:
+  - grype
+  - version
 homepage: https://github.com/anchore/grype
 documentation: https://github.com/anchore/grype#readme
 install:

@@ -159,11 +159,13 @@ async def update_scan_status_to_running(database_adapter: PostgreSQLAdapter, sca
         
         # Update scan status to running
         async with database_adapter.get_session() as session:
+            now = datetime.utcnow()
             update_query = text("""
                 UPDATE scans 
                 SET status = :status,
                     started_at = :started_at,
-                    updated_at = :updated_at
+                    updated_at = :updated_at,
+                    last_heartbeat_at = :heartbeat
                 WHERE id = :scan_id
             """)
             
@@ -172,8 +174,9 @@ async def update_scan_status_to_running(database_adapter: PostgreSQLAdapter, sca
                 {
                     "scan_id": scan_id,
                     "status": "running",
-                    "started_at": datetime.utcnow(),
-                    "updated_at": datetime.utcnow()
+                    "started_at": now,
+                    "updated_at": now,
+                    "heartbeat": now,
                 }
             )
             await session.commit()
@@ -184,6 +187,27 @@ async def update_scan_status_to_running(database_adapter: PostgreSQLAdapter, sca
         logger = logging.getLogger(__name__)
         logger.error(f"Error updating scan status to running: {e}")
         # Don't raise - this is not critical for job execution
+
+
+async def update_scan_heartbeat(database_adapter: PostgreSQLAdapter, scan_id: str) -> None:
+    """Periodic liveness ping while worker runs the scan container."""
+    try:
+        from sqlalchemy import text
+        from datetime import datetime
+
+        now = datetime.utcnow()
+        async with database_adapter.get_session() as session:
+            await session.execute(
+                text("""
+                    UPDATE scans
+                    SET last_heartbeat_at = :hb, updated_at = :hb
+                    WHERE id = :scan_id AND status = 'running'
+                """),
+                {"scan_id": scan_id, "hb": now},
+            )
+            await session.commit()
+    except Exception:
+        pass
 
 
 class ResultProcessingService:

@@ -131,10 +131,16 @@ class ScanValidationService:
         """Validate scan status transition."""
         valid_transitions = {
             ScanStatus.PENDING: [ScanStatus.RUNNING, ScanStatus.CANCELLED],
-            ScanStatus.RUNNING: [ScanStatus.COMPLETED, ScanStatus.FAILED, ScanStatus.CANCELLED],
+            ScanStatus.RUNNING: [
+                ScanStatus.COMPLETED,
+                ScanStatus.FAILED,
+                ScanStatus.CANCELLED,
+                ScanStatus.INTERRUPTED,
+            ],
             ScanStatus.COMPLETED: [],
             ScanStatus.FAILED: [ScanStatus.PENDING],
-            ScanStatus.CANCELLED: [ScanStatus.PENDING]
+            ScanStatus.INTERRUPTED: [ScanStatus.PENDING],
+            ScanStatus.CANCELLED: [ScanStatus.PENDING],
         }
         
         if new_status not in valid_transitions.get(current_status, []):

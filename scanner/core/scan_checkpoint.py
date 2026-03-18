@@ -1,5 +1,5 @@
 """
-Scan checkpoint (results/{scan_id}/checkpoint.json).
+Scan checkpoint (results/{scan_id}/logs/checkpoint.json).
 Resume skips only for plugins that declare manifest.checkpoint.
 """
 from __future__ import annotations
@@ -39,8 +39,36 @@ def compute_scan_config_hash(
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def ensure_git_safe_directory(repo: Path) -> None:
+    """
+    Mark repo as trusted so git commands work (avoids 'dubious ownership' exit 128
+    in Docker/volume mounts). Idempotent.
+    """
+    try:
+        if not (repo / ".git").exists():
+            return
+        p = str(repo.resolve())
+        subprocess.run(
+            ["git", "config", "--global", "--add", "safe.directory", p],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        subprocess.run(
+            ["git", "config", "--global", "--add", "safe.directory", "*"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except Exception:
+        pass
+
+
 def target_fingerprint_git(repo: Path) -> str:
     try:
+        ensure_git_safe_directory(repo)
         r = subprocess.run(
             ["git", "-C", str(repo), "rev-parse", "HEAD"],
             capture_output=True,
@@ -55,6 +83,16 @@ def target_fingerprint_git(repo: Path) -> str:
     return ""
 
 
+def _looks_like_version_line(line: str) -> bool:
+    s = (line or "").strip()
+    if not s or len(s) > 200:
+        return False
+    lower = s.lower()
+    if lower.startswith(("traceback", "fatal:", "error:", "exception")):
+        return False
+    return True
+
+
 def run_tool_version(version_command: Optional[List[str]]) -> str:
     if not version_command:
         return ""
@@ -66,8 +104,19 @@ def run_tool_version(version_command: Optional[List[str]]) -> str:
             timeout=60,
             check=False,
         )
-        out = (r.stdout or r.stderr or "").strip().splitlines()
-        return (out[0] if out else "").strip()[:500]
+        if r.returncode == 0 and (r.stdout or "").strip():
+            first = (r.stdout or "").strip().splitlines()[0].strip()[:500]
+            if _looks_like_version_line(first):
+                return first
+        if r.returncode == 0 and (r.stderr or "").strip():
+            first = (r.stderr or "").strip().splitlines()[0].strip()[:500]
+            if _looks_like_version_line(first):
+                return first
+        if (r.stdout or "").strip():
+            first = (r.stdout or "").strip().splitlines()[0].strip()[:500]
+            if _looks_like_version_line(first):
+                return first
+        return ""
     except Exception:
         return ""
 
@@ -176,11 +225,8 @@ def can_skip_scanner(
     scanner_dir: Path,
     config_hash: str,
     current_global_hash: str,
-    executed_upstream: bool,
 ) -> Tuple[bool, str]:
-    """If executed_upstream, never skip (downstream invalidation)."""
-    if executed_upstream:
-        return False, "upstream_rerun"
+    """Resume skip when artifact + hashes match (scanners are independent per target tree)."""
     if not checkpoint_cfg:
         return False, "no_manifest_checkpoint"
     key = scanner_step_key(tools_key)
@@ -215,8 +261,12 @@ def record_scanner_completed(
     scanner_dir: Path,
     current_global_hash: str,
     config_hash: str,
+    *,
+    target_fingerprint_ok: bool = True,
 ) -> None:
     if not checkpoint_cfg:
+        return
+    if not target_fingerprint_ok:
         return
     ok, ah, _ = validate_primary_artifact(
         scanner_dir,

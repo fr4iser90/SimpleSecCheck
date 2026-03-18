@@ -219,8 +219,10 @@ class ScanService:
             if not scan:
                 raise ScanNotFoundException(scan_id)
             
-            if scan.status != ScanStatus.FAILED:
-                raise ScanValidationException("Only failed scans can be retried")
+            if scan.status not in (ScanStatus.FAILED, ScanStatus.INTERRUPTED):
+                raise ScanValidationException(
+                    "Only failed or interrupted scans can be retried"
+                )
             
             # Create new scan request from existing scan
             request = self._create_retry_request(scan)

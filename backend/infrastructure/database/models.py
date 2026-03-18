@@ -144,7 +144,8 @@ class Scan(Base):
     completed_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     scheduled_at = Column(DateTime, nullable=True)  # Scheduled start time (optional)
-    
+    last_heartbeat_at = Column(DateTime, nullable=True)  # Worker liveness while running
+
     # Results
     results = Column(JSON, default=list)
     total_vulnerabilities = Column(Integer, default=0, nullable=False)

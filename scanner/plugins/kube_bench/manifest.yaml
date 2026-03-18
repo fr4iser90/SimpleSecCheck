@@ -12,6 +12,12 @@ languages: null
 severity_supported: true
 execution:
   timeout: 600
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  version_command:
+  - kube-bench
+  - version
 homepage: https://github.com/aquasecurity/kube-bench
 documentation: https://github.com/aquasecurity/kube-bench#readme
 install:

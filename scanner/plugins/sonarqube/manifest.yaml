@@ -19,6 +19,12 @@ languages:
 severity_supported: true
 execution:
   timeout: 900
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  version_command:
+  - sonar-scanner
+  - --version
 homepage: https://www.sonarsource.com/products/sonarqube/
 documentation: https://docs.sonarqube.org/
 install:

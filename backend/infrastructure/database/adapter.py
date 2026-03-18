@@ -154,6 +154,7 @@ class DatabaseAdapter:
                     ("low_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL", "scans"),
                     ("info_vulnerabilities", "INTEGER DEFAULT 0 NOT NULL", "scans"),
                     ("priority", "INTEGER DEFAULT 0 NOT NULL", "scans"),
+                    ("last_heartbeat_at", "TIMESTAMP WITHOUT TIME ZONE", "scans"),
                 ]
                 
                 # List of columns to check and add if missing for scanners table
@@ -171,6 +172,9 @@ class DatabaseAdapter:
                     "low_vulnerabilities": text("ALTER TABLE scans ADD COLUMN low_vulnerabilities INTEGER DEFAULT 0 NOT NULL"),
                     "info_vulnerabilities": text("ALTER TABLE scans ADD COLUMN info_vulnerabilities INTEGER DEFAULT 0 NOT NULL"),
                     "priority": text("ALTER TABLE scans ADD COLUMN priority INTEGER DEFAULT 0 NOT NULL"),
+                    "last_heartbeat_at": text(
+                        "ALTER TABLE scans ADD COLUMN last_heartbeat_at TIMESTAMP WITHOUT TIME ZONE"
+                    ),
                 }
                 _alter_scanners = {
                     "scanner_metadata": text("ALTER TABLE scanners ADD COLUMN scanner_metadata JSONB DEFAULT '{}'::jsonb NOT NULL"),
@@ -265,11 +269,63 @@ class DatabaseAdapter:
                 
                 await session.commit()
                 logger.info("Successfully migrated scan_type values")
+
+                await self._ensure_scan_steps_table(session)
+                await session.commit()
                         
         except Exception as e:
             logger.warning(f"Migration check failed (this is OK if tables don't exist yet): {e}")
             # Don't raise - migrations are optional
     
+    async def _ensure_scan_steps_table(self, session) -> None:
+        """Create scan_steps and columns for DB-backed step UI (scanner mirrors here)."""
+        try:
+            await session.execute(
+                text("""
+                    CREATE TABLE IF NOT EXISTS scan_steps (
+                        scan_id VARCHAR(80) NOT NULL,
+                        step_number INTEGER NOT NULL,
+                        step_name VARCHAR(255) NOT NULL,
+                        status VARCHAR(32) NOT NULL,
+                        message TEXT,
+                        started_at TIMESTAMP WITHOUT TIME ZONE,
+                        completed_at TIMESTAMP WITHOUT TIME ZONE,
+                        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+                        substeps JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        timeout_seconds INTEGER,
+                        PRIMARY KEY (scan_id, step_number)
+                    )
+                """)
+            )
+            await session.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_scan_steps_scan_id ON scan_steps (scan_id)")
+            )
+            if not await self.check_table_exists("scan_steps"):
+                return
+            for column_name, alter_sql in (
+                (
+                    "substeps",
+                    "ALTER TABLE scan_steps ADD COLUMN substeps JSONB NOT NULL DEFAULT '[]'::jsonb",
+                ),
+                (
+                    "timeout_seconds",
+                    "ALTER TABLE scan_steps ADD COLUMN timeout_seconds INTEGER",
+                ),
+            ):
+                r = await session.execute(
+                    text("""
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'scan_steps'
+                          AND column_name = :c
+                    """),
+                    {"c": column_name},
+                )
+                if r.scalar() is None:
+                    await session.execute(text(alter_sql))
+                    logger.info(f"Added column {column_name} to scan_steps")
+        except Exception as e:
+            logger.warning(f"scan_steps migration: {e}")
+
     async def check_admin_user_exists(self) -> bool:
         """Check if an admin user exists in the database."""
         try:

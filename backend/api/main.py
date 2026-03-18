@@ -11,6 +11,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+import asyncio
 import logging
 import time
 
@@ -41,6 +42,7 @@ logger = get_logger("api.main")
 
 # Global variable to store auto-scan scheduler instance
 _auto_scan_scheduler = None
+_stale_sweep_task = None
 
 
 def create_app() -> FastAPI:
@@ -365,7 +367,6 @@ async def startup_event():
                     break
                 # If tables were just created, wait a bit and retry
                 if attempt < max_retries - 1:
-                    import asyncio
                     await asyncio.sleep(1)
             
             # Log token to stdout (not central logs) - always log even if storage failed
@@ -381,20 +382,47 @@ async def startup_event():
     # Only log if setup is complete
     try:
         await _re_enqueue_pending_scans()
-        if setup_complete:
-            logger.info("No pending or running scans to re-enqueue")
     except Exception as e:
         if setup_complete:
             logger.error("Failed to re-enqueue pending scans", error=str(e), exc_info=True)
+
+    # Periodic stale-running sweep (heartbeat-based; no full API restart needed)
+    if os.getenv("SCAN_STALE_SWEEP_DISABLE", "").lower() not in ("1", "true", "yes"):
+        try:
+            import api.main as main_module
+
+            async def _stale_sweep_loop():
+                interval = max(30, int(os.getenv("SCAN_STALE_SWEEP_INTERVAL_SECONDS", "90")))
+                while True:
+                    await asyncio.sleep(interval)
+                    try:
+                        from domain.services.scan_heartbeat_recovery import (
+                            recover_stale_running_scans,
+                        )
+
+                        n = await recover_stale_running_scans()
+                        if n and setup_complete:
+                            logger.info("Stale heartbeat sweep: re-enqueued %s scan(s)", n)
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as ex:
+                        if setup_complete:
+                            logger.error("Stale sweep error: %s", ex, exc_info=True)
+
+            main_module._stale_sweep_task = asyncio.create_task(_stale_sweep_loop())
+            if setup_complete:
+                logger.info("Scan stale-heartbeat sweep started")
+        except Exception as e:
+            if setup_complete:
+                logger.warning("Could not start stale sweep: %s", e)
     
     # Pre-load scanners on startup (especially important during setup)
     # This ensures scanners are available when user completes setup
     # Do this silently during setup mode
     try:
         import httpx
-        import asyncio
-        
-        # Wait a bit for worker to be ready
+
+        # Wait a bit for worker to be ready (asyncio: module import at top of file)
         await asyncio.sleep(2)
         
         worker_url = os.getenv("WORKER_API_URL", "http://worker:8081")
@@ -455,94 +483,51 @@ async def startup_event():
 
 
 async def _re_enqueue_pending_scans():
-    """Re-enqueue all pending scans and recover running scans that may have been lost from the queue."""
+    """Re-enqueue pending scans; recover only *stale-heartbeat* running scans (worker liveness)."""
     from infrastructure.logging_config import get_logger
+
     logger = get_logger("api.main")
-    
+
     try:
         from infrastructure.repositories.scan_repository import DatabaseScanRepository
         from infrastructure.services.queue_service import QueueService
         from domain.entities.scan import ScanStatus
-        from infrastructure.database.adapter import db_adapter
-        from sqlalchemy import select, update
-        from infrastructure.database.models import Scan as ScanModel
-        from datetime import datetime
-        
-        # Get repository and queue service
+        from domain.services.scan_heartbeat_recovery import recover_stale_running_scans
+
         scan_repository = DatabaseScanRepository()
         queue_service = QueueService()
-        
-        # Get all pending scans
+
         pending_scans = await scan_repository.get_by_status(ScanStatus.PENDING, limit=1000)
-        
-        # Get all running scans (these were likely interrupted by restart)
-        running_scans = await scan_repository.get_by_status(ScanStatus.RUNNING, limit=1000)
-        
-        total_scans = len(pending_scans) + len(running_scans)
-        
-        if total_scans == 0:
-            logger.info("No pending or running scans to re-enqueue")
+        running_before = await scan_repository.get_by_status(ScanStatus.RUNNING, limit=1000)
+
+        if not pending_scans and not running_before:
+            logger.info("No pending or running scans to process")
             return
-        
-        logger.info(f"Found {len(pending_scans)} pending scans and {len(running_scans)} running scans to recover")
-        
-        # Reset running scans to pending (they were interrupted by restart)
-        recovered_scans = []
-        if running_scans:
-            await db_adapter.ensure_initialized()
-            async with db_adapter.async_session() as session:
-                for scan in running_scans:
-                    try:
-                        from uuid import UUID
-                        scan_uuid = UUID(scan.id)
-                        
-                        # Reset status to pending and clear started_at
-                        update_stmt = (
-                            update(ScanModel)
-                            .where(ScanModel.id == scan_uuid)
-                            .values(
-                                status="pending",
-                                started_at=None,
-                                updated_at=datetime.utcnow(),
-                                error_message=None
-                            )
-                        )
-                        await session.execute(update_stmt)
-                        
-                        # Reload scan entity to get updated status
-                        reloaded_scan = await scan_repository.get_by_id(scan.id)
-                        if reloaded_scan:
-                            recovered_scans.append(reloaded_scan)
-                            logger.info(f"Reset running scan {scan.id} to pending (was interrupted by restart)")
-                    except Exception as e:
-                        logger.error(f"Failed to reset running scan {scan.id}: {e}", exc_info=True)
-                
-                await session.commit()
-        
-        # Combine all scans to re-enqueue (pending + recovered running scans)
-        all_scans = list(pending_scans) + recovered_scans
-        
-        # Re-enqueue each scan
-        enqueued_count = 0
-        failed_count = 0
-        
-        for scan in all_scans:
+
+        enqueued_pending = 0
+        failed_pending = 0
+        for scan in pending_scans:
             try:
                 await queue_service.enqueue_scan(scan)
-                enqueued_count += 1
-                logger.debug(f"Re-enqueued scan {scan.id}")
+                enqueued_pending += 1
             except Exception as e:
-                failed_count += 1
-                logger.error(f"Failed to re-enqueue scan {scan.id}: {e}", exc_info=True)
-        
+                failed_pending += 1
+                logger.error("Failed to re-enqueue pending scan %s: %s", scan.id, e)
+
+        stale_recovered = await recover_stale_running_scans()
+        still_running = await scan_repository.get_by_status(ScanStatus.RUNNING, limit=1000)
+
         logger.info(
-            f"Re-enqueue complete: {enqueued_count} successful, {failed_count} failed out of {total_scans} total "
-            f"({len(pending_scans)} pending + {len(running_scans)} recovered running)"
+            "Queue recovery: %s pending re-enqueued (%s failed), %s stale running recovered via heartbeat, "
+            "%s scans still running (fresh heartbeat)",
+            enqueued_pending,
+            failed_pending,
+            stale_recovered,
+            len(still_running),
         )
-        
+
     except Exception as e:
-        logger.error(f"Error during re-enqueue of pending scans: {e}", exc_info=True)
-        # Don't raise - we don't want to fail startup if this fails
+        logger.error("Error during re-enqueue / heartbeat recovery: %s", e, exc_info=True)
 
 
 async def shutdown_event():
@@ -555,9 +540,17 @@ async def shutdown_event():
         }}
     )
     
-    # Stop auto-scan scheduler
+    # Stop auto-scan scheduler and stale sweep
     try:
         import api.main as main_module
+        if getattr(main_module, "_stale_sweep_task", None):
+            main_module._stale_sweep_task.cancel()
+            try:
+                await main_module._stale_sweep_task
+            except Exception:
+                pass
+            main_module._stale_sweep_task = None
+            logger.info("Stale heartbeat sweep stopped")
         if hasattr(main_module, '_auto_scan_scheduler') and main_module._auto_scan_scheduler:
             await main_module._auto_scan_scheduler.stop()
             logger.info("Auto-scan scheduler stopped")

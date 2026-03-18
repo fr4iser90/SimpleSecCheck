@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Checkpoint for CodeQL, OWASP Dependency-Check, Snyk, SonarQube** – `checkpoint:` in manifests + `report.json` for resume/skip like other tools. SonarQube writes `report.json` on server-unreachable skip and after successful analysis (stub when the CLI leaves no local JSON).
+- **Checkpoint for all remaining scanners** – android, anchore, burp, clair, docker_bench, ios, ios_plist, kube_bench, kube_hunter, nikto, nuclei, wapiti, zap (`report.xml` / `any`). Excludes only `base` and `test` manifests.
+- **Scan heartbeat recovery** – Worker updates `last_heartbeat_at` while the scanner container runs. API recovers only **stale** `running` scans (no more “reset all running on startup”). Background sweep re-enqueues stale jobs without restarting the API. Env: `SCAN_HEARTBEAT_STALE_SECONDS`, `SCAN_HEARTBEAT_NULL_GRACE_SECONDS`, `SCAN_STALE_SWEEP_INTERVAL_SECONDS`, `SCAN_STALE_SWEEP_DISABLE`. Docs: `docs/SCAN_HEARTBEAT_RECOVERY.md`.
+- **Scan status `interrupted`** – Enum for explicit / future use; retry also allowed from `interrupted`.
+
 ## [2.0.0] - 2026-03-16
 
 ### Summary

@@ -84,12 +84,30 @@ class SonarQubeScanner(BaseScanner):
             urlopen(sonar_url + "/api/system/status", timeout=3)
         except (URLError, OSError, Exception) as e:
             self.log(f"SonarQube server not reachable at {sonar_url}: {e}", "WARNING")
+            msg = (
+                "SonarQube server not configured or not reachable "
+                "(set SONAR_HOST_URL or run SonarQube)."
+            )
             status_file = self.results_dir / "status.json"
             try:
-                status_file.write_text(json.dumps({
-                    "status": "skipped",
-                    "message": "SonarQube server not configured or not reachable (set SONAR_HOST_URL or run SonarQube)."
-                }), encoding="utf-8")
+                status_file.write_text(
+                    json.dumps({"status": "skipped", "message": msg}), encoding="utf-8"
+                )
+            except Exception:
+                pass
+            # report.json for scan checkpoint / resume skip
+            try:
+                (self.results_dir / "report.json").write_text(
+                    json.dumps(
+                        {
+                            "skipped": True,
+                            "message": msg,
+                            "completed_at": datetime.now().isoformat(),
+                        },
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
             except Exception:
                 pass
             return True
@@ -161,9 +179,26 @@ class SonarQubeScanner(BaseScanner):
         if json_output.exists():
             self.log("SonarQube results available.", "SUCCESS")
             return True
-        else:
-            self.log("SonarQube produced no output file; no report written.", "WARNING")
+        if result.returncode == 0:
+            # sonar-scanner uploads to server; local JSON may be absent — write stub for checkpoint
+            try:
+                json_output.write_text(
+                    json.dumps(
+                        {
+                            "sonarqube": "analysis_completed",
+                            "message": "Results uploaded to SonarQube server",
+                            "completed_at": datetime.now().isoformat(),
+                        },
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                self.log("SonarQube checkpoint report written.", "SUCCESS")
+            except Exception as ex:
+                self.log(f"Could not write checkpoint report: {ex}", "WARNING")
             return True
+        self.log("SonarQube produced no output file; no report written.", "WARNING")
+        return True
 
 
 if __name__ == "__main__":

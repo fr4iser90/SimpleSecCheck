@@ -3,6 +3,7 @@ Modern Python Orchestrator
 Replaces the legacy shell-based orchestrator with dynamic, registry-based scanner execution
 No hardcoded steps, no log parsing - direct step communication!
 """
+import asyncio
 import json
 import os
 import subprocess
@@ -726,7 +727,7 @@ class ScanOrchestrator:
             if len(scanners) == 0:
                 self.log_message(f"[WARNING] No scanners found! Check scanner registration and capabilities.")
 
-        checkpoint_path = self.results_dir / "checkpoint.json"
+        checkpoint_path = self.results_dir / "logs" / "checkpoint.json"
         cp = scan_cp.load_checkpoint(checkpoint_path)
         raw_ov = os.getenv("SCANNER_TOOL_OVERRIDES_JSON", "").strip()
         global_hash = scan_cp.compute_scan_config_hash(
@@ -761,14 +762,15 @@ class ScanOrchestrator:
                 scan_cp.invalidate_scanner_steps(cp)
             scan_cp.save_checkpoint(checkpoint_path, cp)
         resumed_any = False
-        executed_upstream = False
+        fp_ok = bool(target_fp)
+        already_checkpoint_restored: set = set()
 
+        # Sync UI/DB step state from checkpoint before running scanners (DB-driven progress)
         for scanner in scanners:
             if not self._scanner_admin_enabled(scanner):
                 continue
             if not scanner.tools_key:
-                executed_upstream = True
-                await self._run_scanner(scanner)
+                self.step_registry.set_step_pending_for_run(scanner.name)
                 continue
             scanner_dir = self.tools_dir_results / scanner.tools_key
             cfg_h = scan_cp.scanner_config_hash(
@@ -789,25 +791,46 @@ class ScanOrchestrator:
                     scanner_dir=scanner_dir,
                     config_hash=cfg_h,
                     current_global_hash=global_hash,
-                    executed_upstream=executed_upstream,
                 )
                 if skip_ok:
-                    self.step_registry.start_step(
-                        scanner.name, f"Restoring {scanner.name} from checkpoint..."
+                    self.step_registry.apply_checkpoint_restored_step(
+                        scanner.name, skip_reason or ""
                     )
                     self.log_message(
                         f"[Checkpoint] {scanner.name} skipped (verified); reason={skip_reason or 'ok'}"
-                    )
-                    self.step_registry.complete_step(
-                        scanner.name,
-                        "Restored from checkpoint (artifact + config verified)",
                     )
                     self.scanner_statuses[scanner.name] = "SUCCESS"
                     resumed_any = True
                     cp["resumed"] = True
                     scan_cp.save_checkpoint(checkpoint_path, cp)
+                    already_checkpoint_restored.add(scanner.name)
                     continue
-            executed_upstream = True
+            self.step_registry.set_step_pending_for_run(scanner.name)
+
+        for tail in ("Artifact Collection", "Completion"):
+            self.step_registry.set_step_pending_for_run(tail)
+        try:
+            asyncio.create_task(self.step_registry._send_update())
+        except RuntimeError:
+            pass
+        self.log_message(
+            "[Checkpoint] Step states synced from checkpoint (pending / restored) for this run."
+        )
+
+        for scanner in scanners:
+            if not self._scanner_admin_enabled(scanner):
+                continue
+            if not scanner.tools_key:
+                await self._run_scanner(scanner)
+                continue
+            if scanner.name in already_checkpoint_restored:
+                continue
+            scanner_dir = self.tools_dir_results / scanner.tools_key
+            cfg_h = scan_cp.scanner_config_hash(
+                scanner.tools_key,
+                self._merged_timeout(scanner),
+                self._override_for_scanner(scanner),
+            )
             ran_ok = await self._run_scanner(scanner)
             if ran_ok and scanner.checkpoint and not checkpoint_disabled:
                 scan_cp.record_scanner_completed(
@@ -817,6 +840,7 @@ class ScanOrchestrator:
                     scanner_dir,
                     global_hash,
                     cfg_h,
+                    target_fingerprint_ok=fp_ok,
                 )
                 scan_cp.save_checkpoint(checkpoint_path, cp)
         

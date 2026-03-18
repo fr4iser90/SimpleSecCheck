@@ -18,7 +18,7 @@ This document defines how interrupted scans may resume safely. **File on volume 
 
 | Location | Role |
 |----------|------|
-| `results/{scan_id}/checkpoint.json` | **Source of truth** — scanner reads/writes |
+| `results/{scan_id}/logs/checkpoint.json` | **Source of truth** — scanner reads/writes |
 | DB column (optional, future) | Mirror for UI/API — **never** sole authority |
 
 ---
@@ -191,6 +191,10 @@ Track sub-state per language, e.g.:
 
 **Plug-and-play:** Only plugins that declare a `checkpoint` block participate in resume. Others always execute.
 
+**Plugins with checkpoint** (when primary artifact exists + hashes match):  
+android, anchore, bandit, brakeman, burp, checkov, clair, codeql, detect_secrets, docker_bench, eslint, gitleaks, ios, ios_plist, kube_bench, kube_hunter, nikto, nuclei, npm_audit, owasp, safety, semgrep, snyk, sonarqube, terraform, trufflehog, trivy, wapiti, zap (`report.xml`, format `any`).  
+Excluded: `base`, `test` (non-scanners).
+
 ```yaml
 # scanner/plugins/<id>/manifest.yaml
 checkpoint:
@@ -203,9 +207,14 @@ Orchestrator stores steps under keys `scanner:<manifest.id>` (same as `tools_key
 Disable all resume: env `SCAN_CHECKPOINT_DISABLE=1`.  
 Resume requires a **git** target fingerprint (`git rev-parse HEAD`); local mounts without `.git` clear scanner checkpoints.
 
+**Git in Docker:** Orchestrator calls `git config --global safe.directory` for the clone path (and `*`) so `rev-parse` / Semgrep are not blocked by “dubious ownership”. Optional **`GIT_CLONE_FULL=1`** on the worker (forwarded to the scan container) uses a non-shallow clone if shallow clones break `git ls-files` / Semgrep.
+
 ## 15. Changelog
 
 | Date | Change |
 |------|--------|
 | 2026-03-18 | Initial enterprise spec (steps map, statuses, hashes, order, CodeQL, resumed rule). |
 | 2026-03-18 | Implementation: `scanner/core/scan_checkpoint.py`, orchestrator integration, manifest `checkpoint` on major plugins. |
+| 2026-03-18 | `safe.directory` + optional `GIT_CLONE_FULL`; no `upstream_rerun` gate; checkpoint steps only when fingerprint OK. |
+| 2026-03-18 | Checkpoint added for CodeQL, OWASP, Snyk, SonarQube manifests; SonarQube `report.json` on skip/success. |
+| 2026-03-18 | Checkpoint on remaining plugins: android, anchore, burp, clair, docker_bench, ios, ios_plist, kube_bench, kube_hunter, nikto, nuclei, wapiti, zap. |

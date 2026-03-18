@@ -274,40 +274,137 @@ def _read_deduplicated_steps(scan_id: str) -> tuple[List[Dict[str, Any]], int, i
     # Convert dict to sorted list by step number
     steps = [steps_dict[key] for key in sorted(steps_dict.keys())]
     
-    # Enrich each step with duration_seconds (elapsed) and ensure timeout_seconds (max from manifest)
     for step in steps:
-        started_at = step.get("started_at")
-        completed_at = step.get("completed_at")
-        if started_at and completed_at:
-            try:
-                from datetime import datetime
-                start = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-                end = datetime.fromisoformat(completed_at.replace("Z", "+00:00"))
-                step["duration_seconds"] = max(0, int((end - start).total_seconds()))
-            except (ValueError, TypeError, AttributeError):
-                step["duration_seconds"] = None
-        elif started_at and step.get("status") == "running":
-            try:
-                import time
-                from datetime import datetime
-                start = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-                step["duration_seconds"] = max(0, int(time.time() - start.timestamp()))
-            except (ValueError, TypeError, AttributeError, OSError):
-                step["duration_seconds"] = None
-        else:
-            step["duration_seconds"] = None
-        # timeout_seconds is already in step from steps.log; ensure it's int or None
-        to = step.get("timeout_seconds")
-        if to is not None:
-            try:
-                step["timeout_seconds"] = int(to)
-            except (ValueError, TypeError):
-                step["timeout_seconds"] = None
+        _enrich_step_duration_fields(step)
     
     # Calculate progress
     total_steps = len(steps)
     completed_steps = sum(1 for step in steps if step.get("status") in ["completed", "failed"])
     
+    return steps, total_steps, completed_steps
+
+
+def _enrich_step_duration_fields(step: Dict[str, Any]) -> None:
+    """Mutate step dict with duration_seconds (same logic as steps.log path)."""
+    import time
+    from datetime import datetime, timezone
+    started_at = step.get("started_at")
+    completed_at = step.get("completed_at")
+    if started_at and completed_at:
+        try:
+            start = datetime.fromisoformat(str(started_at).replace("Z", "+00:00"))
+            end = datetime.fromisoformat(str(completed_at).replace("Z", "+00:00"))
+            step["duration_seconds"] = max(0, int((end - start).total_seconds()))
+        except (ValueError, TypeError, AttributeError, OSError):
+            step["duration_seconds"] = None
+    elif started_at and step.get("status") == "running":
+        try:
+            start = datetime.fromisoformat(str(started_at).replace("Z", "+00:00"))
+            step["duration_seconds"] = max(0, int(time.time() - start.timestamp()))
+        except (ValueError, TypeError, AttributeError, OSError):
+            step["duration_seconds"] = None
+    else:
+        step["duration_seconds"] = None
+    to = step.get("timeout_seconds")
+    if to is not None:
+        try:
+            step["timeout_seconds"] = int(to)
+        except (ValueError, TypeError):
+            step["timeout_seconds"] = None
+
+
+def _dt_to_iso_z(dt: Any) -> Optional[str]:
+    if dt is None:
+        return None
+    from datetime import datetime, timezone
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt.isoformat().replace("+00:00", "Z")
+    if isinstance(dt, str):
+        return dt
+    return None
+
+
+async def _read_steps_from_database(scan_id: str) -> Optional[tuple[List[Dict[str, Any]], int, int]]:
+    """
+    Load steps from scan_steps when the scanner has mirrored state (DATABASE_URL in scan container).
+    Returns None to fall back to steps.log.
+    """
+    from sqlalchemy import text
+    from infrastructure.database.adapter import db_adapter
+    try:
+        await db_adapter.ensure_initialized()
+    except Exception:
+        return None
+    try:
+        async with db_adapter.async_session() as session:
+            result = await session.execute(
+                text(
+                    """
+                    SELECT step_number, step_name, status, message,
+                           started_at, completed_at, substeps, timeout_seconds
+                    FROM scan_steps
+                    WHERE scan_id = :sid
+                    ORDER BY step_number ASC
+                    """
+                ),
+                {"sid": scan_id},
+            )
+            rows = result.fetchall()
+    except Exception:
+        return None
+    if not rows:
+        return None
+    steps: List[Dict[str, Any]] = []
+    for row in rows:
+        sn, sname, st, msg, sa, ca, subs, to = (
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[6],
+            row[7],
+        )
+        substeps: List[Dict[str, Any]] = []
+        if subs is not None:
+            if isinstance(subs, str):
+                try:
+                    substeps = json.loads(subs) if subs else []
+                except json.JSONDecodeError:
+                    substeps = []
+            elif isinstance(subs, list):
+                substeps = subs
+        step = {
+            "number": int(sn),
+            "name": sname or "Unknown",
+            "status": st or "pending",
+            "message": msg or "",
+            "started_at": _dt_to_iso_z(sa),
+            "completed_at": _dt_to_iso_z(ca),
+            "substeps": [
+                {
+                    "name": (ss.get("name") or "") if isinstance(ss, dict) else "",
+                    "status": (ss.get("status") or "pending") if isinstance(ss, dict) else "pending",
+                    "message": (ss.get("message") or "") if isinstance(ss, dict) else "",
+                    "started_at": ss.get("started_at") if isinstance(ss, dict) else None,
+                    "completed_at": ss.get("completed_at") if isinstance(ss, dict) else None,
+                    "type": (ss.get("type") or "action") if isinstance(ss, dict) else "action",
+                }
+                for ss in substeps
+            ],
+            "timeout_seconds": int(to) if to is not None else None,
+        }
+        _enrich_step_duration_fields(step)
+        steps.append(step)
+    total_steps = len(steps)
+    completed_steps = sum(
+        1 for s in steps if s.get("status") in ("completed", "failed")
+    )
     return steps, total_steps, completed_steps
 
 
@@ -958,7 +1055,10 @@ async def get_scan_status(
 @router.get(
     "/{scan_id}/steps",
     summary="Get scan steps status",
-    description="Get step-by-step progress of a scan from steps.log file.",
+    description=(
+        "Step progress: read from PostgreSQL scan_steps when the scanner mirrors there "
+        "(DATABASE_URL in scan container); otherwise steps.log."
+    ),
     response_description="Step status information",
 )
 async def get_scan_steps(
@@ -968,32 +1068,35 @@ async def get_scan_steps(
 ) -> Dict[str, Any]:
     """
     Get scan steps status.
-    
-    Reads the steps.log file from the scan results directory and returns step information.
-    
-    - **scan_id**: ID of the scan
-    - **actor_context**: Resolved user/session context
-    - **scan_service**: Scan service
+
+    Primary source: ``scan_steps`` table (one row per step, no log dedup).
+    Fallback: ``results/{scan_id}/logs/steps.log`` (legacy / no DB mirror).
     """
     try:
         from pathlib import Path
-        import json
         from config.settings import settings
         
         # Check permissions
         scan_dto = await scan_service.get_scan_by_id(scan_id)
-        # Allow access if:
-        # 1. User is authenticated AND owns the scan, OR
-        # 2. User is not authenticated (public access for viewing steps)
-        # Deny access if user is authenticated but doesn't own the scan
         if actor_context.is_authenticated and scan_dto.user_id != actor_context.get_identifier():
             raise HTTPException(
                 status_code=fastapi_status.HTTP_403_FORBIDDEN,
                 detail="Access denied"
             )
-        
-        # Construct path to steps.log file
-        # Results are mounted at /app/results in the backend container
+
+        db_bundle = await _read_steps_from_database(scan_id)
+        if db_bundle is not None:
+            steps, total_steps, completed_steps = db_bundle
+            progress_percentage = int((completed_steps / total_steps * 100)) if total_steps > 0 else 0
+            return {
+                "scan_id": scan_id,
+                "steps": steps,
+                "total_steps": total_steps,
+                "completed_steps": completed_steps,
+                "progress_percentage": progress_percentage,
+                "source": "database",
+            }
+
         results_dir = Path(settings.RESULTS_DIR_HOST if hasattr(settings, 'RESULTS_DIR_HOST') else "/app/results")
         steps_log_path = results_dir / scan_id / "logs" / "steps.log"
         
@@ -1004,10 +1107,10 @@ async def get_scan_steps(
                 "total_steps": 0,
                 "completed_steps": 0,
                 "progress_percentage": 0,
-                "message": "Steps log file not found (scan may not have started yet)"
+                "message": "Steps log file not found (scan may not have started yet)",
+                "source": "file",
             }
         
-        # Read and deduplicate steps
         steps, total_steps, completed_steps = _read_deduplicated_steps(scan_id)
         progress_percentage = int((completed_steps / total_steps * 100)) if total_steps > 0 else 0
         
@@ -1016,7 +1119,8 @@ async def get_scan_steps(
             "steps": steps,
             "total_steps": total_steps,
             "completed_steps": completed_steps,
-            "progress_percentage": progress_percentage
+            "progress_percentage": progress_percentage,
+            "source": "file",
         }
         
     except ScanNotFoundException as e:

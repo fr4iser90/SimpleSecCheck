@@ -12,6 +12,9 @@ languages: null
 severity_supported: true
 execution:
   timeout: 1200
+checkpoint:
+  primary_artifact: report.xml
+  artifact_format: any
 homepage: https://www.zaproxy.org
 documentation: https://www.zaproxy.org/docs/
 install:

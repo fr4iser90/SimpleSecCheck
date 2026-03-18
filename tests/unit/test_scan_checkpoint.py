@@ -105,27 +105,40 @@ def test_can_skip_scanner_ok(tmp_path: Path):
         scanner_dir=d,
         config_hash=ch,
         current_global_hash=gh,
-        executed_upstream=False,
     )
     assert ok
 
 
-def test_can_skip_upstream_rerun(tmp_path: Path):
+def test_can_skip_after_notional_upstream_rerun(tmp_path: Path):
+    """Skip is allowed even if an earlier scanner re-ran (independent artifacts)."""
     cfg = ScannerCheckpointConfig("report.json", "json", None)
     d = tmp_path / "s"
     d.mkdir()
     (d / "report.json").write_text("{}", encoding="utf-8")
-    cp = {"steps": {}}
-    ok, reason = can_skip_scanner(
+    ah = artifact_sha256(d / "report.json")
+    ch = scanner_config_hash("s", 900, {})
+    gh = "sameglobal"
+    cp = {
+        "scan_config_hash": gh,
+        "steps": {
+            "scanner:s": {
+                "status": "completed",
+                "global_config_hash": gh,
+                "config_hash": ch,
+                "tool_version": "",
+                "artifact_hash": ah,
+            }
+        },
+    }
+    ok, _ = can_skip_scanner(
         cp=cp,
         tools_key="s",
         checkpoint_cfg=cfg,
         scanner_dir=d,
-        config_hash="x",
-        current_global_hash="g",
-        executed_upstream=True,
+        config_hash=ch,
+        current_global_hash=gh,
     )
-    assert not ok and reason == "upstream_rerun"
+    assert ok
 
 
 def test_record_scanner_completed(tmp_path: Path):
@@ -134,13 +147,23 @@ def test_record_scanner_completed(tmp_path: Path):
     d.mkdir()
     (d / "report.json").write_text('{"Results":[]}', encoding="utf-8")
     cp = {"steps": {}}
-    record_scanner_completed(cp, "trivy", cfg, d, "gh", "ch")
+    record_scanner_completed(cp, "trivy", cfg, d, "gh", "ch", target_fingerprint_ok=True)
     assert cp["steps"]["scanner:trivy"]["status"] == "completed"
     assert cp["steps"]["scanner:trivy"]["global_config_hash"] == "gh"
 
 
+def test_record_scanner_completed_skips_without_fingerprint(tmp_path: Path):
+    cfg = ScannerCheckpointConfig("report.json", "json", None)
+    d = tmp_path / "trivy"
+    d.mkdir()
+    (d / "report.json").write_text('{"Results":[]}', encoding="utf-8")
+    cp = {"steps": {}}
+    record_scanner_completed(cp, "trivy", cfg, d, "gh", "ch", target_fingerprint_ok=False)
+    assert "scanner:trivy" not in cp.get("steps", {})
+
+
 def test_load_checkpoint_file(tmp_path: Path):
-    p = tmp_path / "checkpoint.json"
+    p = tmp_path / "logs" / "checkpoint.json"
     p.write_text(json.dumps({"version": 1, "steps": {}}), encoding="utf-8")
     data = load_checkpoint(p)
     assert data["version"] == 1
