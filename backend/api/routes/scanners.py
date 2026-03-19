@@ -9,7 +9,7 @@ import os
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from api.deps.actor_context import get_actor_context, ActorContext
 import httpx
 
