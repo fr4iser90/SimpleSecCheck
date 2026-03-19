@@ -194,8 +194,7 @@ export default function TargetCard({
               )}
               {(target.last_scan.status === 'completed' || target.last_scan.status === 'failed') && (
                 <Link
-                  to="/scan"
-                  state={{ scan_id: target.last_scan.scan_id, status: target.last_scan.status }}
+                  to={`/api/results/${target.last_scan.scan_id}/report`}
                   style={{ fontSize: '0.85rem', color: 'var(--color-primary, #0d6efd)' }}
                 >
                   View report →

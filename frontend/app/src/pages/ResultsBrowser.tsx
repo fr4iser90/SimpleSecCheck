@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 
 interface Scan {
   id: string
@@ -9,7 +8,6 @@ interface Scan {
 }
 
 export default function ResultsBrowser() {
-  const navigate = useNavigate()
   const [scans, setScans] = useState<Scan[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -27,15 +25,7 @@ export default function ResultsBrowser() {
   }, [])
 
   const openReport = (scanId: string) => {
-    // Navigate to scan view with the scan_id
-    // The ScanView will automatically load the report if results_dir is available
-    navigate('/scan', {
-      state: {
-        status: 'completed',
-        scan_id: scanId,
-        results_dir: scanId,
-      },
-    })
+    window.location.href = `/api/results/${scanId}/report`
   }
 
   return (
