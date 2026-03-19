@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useConfig } from '../hooks/useConfig'
 import { formatEstimatedTime, formatDuration } from '../utils/timeUtils'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface MyScanItem {
   queue_id: string
@@ -99,7 +100,7 @@ export default function MyScansPage() {
 
   const fetchMyScans = async () => {
     try {
-      const response = await fetch('/api/queue/my-scans')
+      const response = await fetch(resolveApiUrl('/api/queue/my-scans'))
       if (!response.ok) {
         if (response.status === 401) {
           throw new Error('Session required. Please refresh the page.')

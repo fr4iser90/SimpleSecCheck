@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface SetupStatus {
   setup_required: boolean
@@ -79,7 +80,7 @@ export default function SetupWizard() {
 
   const loadUseCases = async () => {
     try {
-      const response = await fetch('/api/setup/use-cases')
+      const response = await fetch(resolveApiUrl('/api/setup/use-cases'))
       if (response.ok) {
         const data = await response.json()
         setUseCases(data)
@@ -102,7 +103,7 @@ export default function SetupWizard() {
       // No session yet - check if setup is already complete (public info)
       // This allows redirecting if setup is done, without requiring token
       try {
-        const response = await fetch('/api/setup/status')
+        const response = await fetch(resolveApiUrl('/api/setup/status'))
         if (response.ok) {
           const data = await response.json()
           if (data.setup_complete) {
@@ -132,7 +133,7 @@ export default function SetupWizard() {
     try {
       setLoading(true)
       // Validate session by checking setup status WITH session header
-      const response = await fetch('/api/setup/status', {
+      const response = await fetch(resolveApiUrl('/api/setup/status'), {
         headers: {
           'X-Setup-Session': sessionId
         }
@@ -182,7 +183,7 @@ export default function SetupWizard() {
       setLoading(true)
       setError(null)
       
-      const response = await fetch('/api/setup/verify', {
+      const response = await fetch(resolveApiUrl('/api/setup/verify'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -204,7 +205,7 @@ export default function SetupWizard() {
         
         // Fetch setup status with session to get real values
         try {
-          const statusResponse = await fetch('/api/setup/status', {
+          const statusResponse = await fetch(resolveApiUrl('/api/setup/status'), {
             headers: {
               'X-Setup-Session': data.session_id
             }
@@ -344,7 +345,7 @@ export default function SetupWizard() {
       setLoading(true)
       setError(null)
       
-      const response = await fetch('/api/setup/initialize', {
+      const response = await fetch(resolveApiUrl('/api/setup/initialize'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

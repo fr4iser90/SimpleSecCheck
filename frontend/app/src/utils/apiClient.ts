@@ -1,3 +1,5 @@
+import { resolveApiUrl } from './resolveApiUrl'
+
 /**
  * API Client: access token in memory only, refresh via HttpOnly cookie.
  * - All requests send credentials so the refresh_token cookie is sent when needed.
@@ -27,7 +29,7 @@ async function refreshToken(): Promise<string | null> {
   if (refreshPromise) return refreshPromise
   refreshPromise = (async () => {
     try {
-      const response = await fetch('/api/v1/auth/refresh', {
+      const response = await fetch(resolveApiUrl('/api/v1/auth/refresh'), {
         method: 'POST',
         credentials: 'include',
       })
@@ -69,7 +71,8 @@ export async function apiFetch(
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
-  let response = await fetch(url, {
+  const resolvedUrl = resolveApiUrl(url)
+  let response = await fetch(resolvedUrl, {
     ...options,
     headers,
     credentials: options.credentials ?? defaultCredentials,
@@ -79,7 +82,7 @@ export async function apiFetch(
     const newToken = await refreshToken()
     if (newToken) {
       headers.set('Authorization', `Bearer ${newToken}`)
-      response = await fetch(url, {
+      response = await fetch(resolvedUrl, {
         ...options,
         headers,
         credentials: options.credentials ?? defaultCredentials,

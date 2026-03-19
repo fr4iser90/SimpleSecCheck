@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useConfig } from '../hooks/useConfig'
 import { getReportEndpoint } from '../utils/apiEndpoints'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 const COPY_SHARE_MSG = 'SSC_COPY_SHARE_LINK'
 
@@ -58,7 +59,7 @@ export default function ReportViewer({ scanId }: ReportViewerProps = {}) {
 
     const fetchReport = async (endpoint: string) => {
       try {
-        const response = await fetch(endpoint, { credentials: 'include' })
+        const response = await fetch(resolveApiUrl(endpoint), { credentials: 'include' })
         if (response.ok) {
           const blob = await response.blob()
           const url = URL.createObjectURL(blob)

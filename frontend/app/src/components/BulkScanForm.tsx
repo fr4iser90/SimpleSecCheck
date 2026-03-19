@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useConfig } from '../hooks/useConfig'
 import RateLimitIndicator from './RateLimitIndicator'
 import RepositorySelector, { Repository } from './RepositorySelector'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface BulkScanFormProps {
   onBatchStart: (batchId: string) => void
@@ -51,7 +52,7 @@ export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
         max_repos: '100'
       })
 
-      const response = await fetch(`/api/git/repos?${params}`)
+      const response = await fetch(resolveApiUrl(`/api/git/repos?${params}`))
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.detail || 'Failed to load repositories')
@@ -113,7 +114,7 @@ export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
     setLoading(true)
 
     try {
-      const response = await fetch('/api/bulk/start', {
+      const response = await fetch(resolveApiUrl('/api/bulk/start'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

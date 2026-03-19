@@ -32,6 +32,7 @@ import AdminScannerToolSettingsPage from './pages/AdminScannerToolSettingsPage'
 import ProfilePage from './pages/ProfilePage'
 import APIKeysPage from './pages/APIKeysPage'
 import MyTargetsPage from './pages/MyTargetsPage'
+import Footer from './components/Footer'
 import './App.css'
 
 /**
@@ -295,6 +296,7 @@ function AppContent() {
         <BrowserRouter>
           <div className="app">
             <AppRoutes setupStatus={setupStatus} />
+            {setupStatus.setup_complete ? <Footer /> : null}
           </div>
         </BrowserRouter>
       )}

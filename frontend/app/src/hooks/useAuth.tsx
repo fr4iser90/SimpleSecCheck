@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext, ReactNode } from 'react'
 import { useConfig } from './useConfig'
 import * as apiClient from '../utils/apiClient'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface User {
   user_id: string
@@ -51,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Restore session from HttpOnly refresh_token cookie (reload / new tab)
   useEffect(() => {
     let cancelled = false
-    fetch('/api/v1/auth/refresh', { method: 'POST', credentials: 'include' })
+    fetch(resolveApiUrl('/api/v1/auth/refresh'), { method: 'POST', credentials: 'include' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled && data?.access_token) {

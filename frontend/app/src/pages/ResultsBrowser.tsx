@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface Scan {
   id: string
@@ -12,7 +13,7 @@ export default function ResultsBrowser() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/results')
+    fetch(resolveApiUrl('/api/results'))
       .then((response) => response.json())
       .then((data) => {
         setScans(data.scans || [])
@@ -25,7 +26,7 @@ export default function ResultsBrowser() {
   }, [])
 
   const openReport = (scanId: string) => {
-    window.location.href = `/api/results/${scanId}/report`
+    window.location.href = resolveApiUrl(`/api/results/${scanId}/report`)
   }
 
   return (

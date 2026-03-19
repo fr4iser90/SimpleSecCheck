@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface RepositoryScan {
   repository_url: string
@@ -39,7 +40,7 @@ export default function BatchProgress({ batchId }: BatchProgressProps) {
   useEffect(() => {
     const fetchProgress = async () => {
       try {
-        const response = await fetch(`/api/bulk/status?batch_id=${batchId}`)
+        const response = await fetch(resolveApiUrl(`/api/bulk/status?batch_id=${batchId}`))
         if (!response.ok) {
           throw new Error('Failed to fetch batch progress')
         }
@@ -67,7 +68,7 @@ export default function BatchProgress({ batchId }: BatchProgressProps) {
 
   const handlePause = async () => {
     try {
-      const response = await fetch('/api/bulk/pause', { method: 'POST' })
+      const response = await fetch(resolveApiUrl('/api/bulk/pause'), { method: 'POST' })
       if (response.ok) {
         const data = await response.json()
         setProgress(data)
@@ -79,7 +80,7 @@ export default function BatchProgress({ batchId }: BatchProgressProps) {
 
   const handleResume = async () => {
     try {
-      const response = await fetch('/api/bulk/resume', { method: 'POST' })
+      const response = await fetch(resolveApiUrl('/api/bulk/resume'), { method: 'POST' })
       if (response.ok) {
         const data = await response.json()
         setProgress(data)
@@ -93,7 +94,7 @@ export default function BatchProgress({ batchId }: BatchProgressProps) {
     if (!confirm('Are you sure you want to stop the batch scan?')) return
     
     try {
-      const response = await fetch('/api/bulk/stop', { method: 'POST' })
+      const response = await fetch(resolveApiUrl('/api/bulk/stop'), { method: 'POST' })
       if (response.ok) {
         const data = await response.json()
         setProgress(data)

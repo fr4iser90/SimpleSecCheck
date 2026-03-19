@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface UpdateStatus {
   status: 'idle' | 'running' | 'done' | 'error'
@@ -53,7 +54,7 @@ export default function ScannerDataUpdate() {
     if (!isAdmin) return
     const fetchAssets = async () => {
       try {
-        const response = await fetch('/api/scanners/assets')
+        const response = await fetch(resolveApiUrl('/api/scanners/assets'))
         if (!response.ok) {
           console.error('[ScannerDataUpdate] Failed to fetch assets:', response.status)
           return
@@ -100,7 +101,7 @@ export default function ScannerDataUpdate() {
 
     const fetchStatus = async () => {
       try {
-        const response = await fetch('/api/scanners/assets/update/status')
+        const response = await fetch(resolveApiUrl('/api/scanners/assets/update/status'))
         if (!response.ok) {
           console.error('[ScannerDataUpdate] Failed to fetch status:', response.status)
           return
@@ -131,7 +132,7 @@ export default function ScannerDataUpdate() {
     if (selectedAssetKey === 'all') {
       const updatePromises = updatableAssets.map(async (item) => {
         try {
-          const response = await fetch(`/api/scanners/${item.scanner}/assets/${item.asset.id}/update`, {
+          const response = await fetch(resolveApiUrl(`/api/scanners/${item.scanner}/assets/${item.asset.id}/update`), {
             method: 'POST',
           })
           if (!response.ok) {
@@ -162,7 +163,7 @@ export default function ScannerDataUpdate() {
     // Single asset update
     const [scannerName, assetId] = selectedAssetKey.split(':')
     try {
-      const response = await fetch(`/api/scanners/${scannerName}/assets/${assetId}/update`, {
+      const response = await fetch(resolveApiUrl(`/api/scanners/${scannerName}/assets/${assetId}/update`), {
         method: 'POST',
       })
       if (!response.ok) {

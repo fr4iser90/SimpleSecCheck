@@ -3,6 +3,7 @@ import { FrontendConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
 import ScanStep from './ScanStep'
 import ScannerCardGrid from './ScannerCardGrid'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
 
@@ -216,7 +217,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
     
     const loadScanners = async () => {
       try {
-        const response = await fetch(`/api/scanners?scan_type=${scanType}`)
+        const response = await fetch(resolveApiUrl(`/api/scanners?scan_type=${scanType}`))
         if (!response.ok) {
           throw new Error('Failed to load scanners')
         }

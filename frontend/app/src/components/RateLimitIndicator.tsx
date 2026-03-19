@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface RateLimitInfo {
   remaining: number
@@ -18,7 +19,7 @@ export default function RateLimitIndicator() {
   useEffect(() => {
     const fetchRateLimit = async () => {
       try {
-        const response = await fetch('/api/github/rate-limit')
+        const response = await fetch(resolveApiUrl('/api/github/rate-limit'))
         if (!response.ok) {
           throw new Error('Failed to fetch rate limit')
         }

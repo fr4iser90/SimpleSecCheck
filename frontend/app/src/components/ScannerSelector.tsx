@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface Scanner {
   name: string
@@ -30,7 +31,7 @@ export default function ScannerSelector({
       setLoading(true)
       setError(null)
       try {
-        const response = await fetch(`/api/scanners?scan_type=${scanType}`)
+        const response = await fetch(resolveApiUrl(`/api/scanners?scan_type=${scanType}`))
         if (!response.ok) {
           throw new Error('Failed to load scanners')
         }

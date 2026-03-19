@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { resolveApiUrl } from '../utils/resolveApiUrl';
 
 interface SystemCheck {
   name: string;
@@ -43,7 +44,7 @@ const Setup: React.FC = () => {
 
   const checkSetupStatus = async () => {
     try {
-      const response = await fetch('/api/setup/status');
+      const response = await fetch(resolveApiUrl('/api/setup/status'));
       const data = await response.json();
       
       if (!data.setup_required) {
@@ -60,7 +61,7 @@ const Setup: React.FC = () => {
     setError(null);
     
     try {
-      const response = await fetch('/api/setup/health');
+      const response = await fetch(resolveApiUrl('/api/setup/health'));
       const data = await response.json();
       
       // Update system checks based on response
@@ -145,7 +146,7 @@ const Setup: React.FC = () => {
     setError(null);
 
     try {
-      const response = await fetch('/api/setup/initialize', {
+      const response = await fetch(resolveApiUrl('/api/setup/initialize'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

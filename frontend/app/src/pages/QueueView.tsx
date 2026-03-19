@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useConfig } from '../hooks/useConfig'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface QueueItem {
   queue_id: string
@@ -26,7 +27,7 @@ export default function QueueView() {
 
   const fetchQueue = async () => {
     try {
-      const response = await fetch('/api/queue?limit=100')
+      const response = await fetch(resolveApiUrl('/api/queue?limit=100'))
       if (!response.ok) {
         throw new Error('Failed to fetch queue')
       }

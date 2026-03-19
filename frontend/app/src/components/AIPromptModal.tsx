@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation, Language } from '../i18n'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface AIPromptModalProps {
   isOpen: boolean
@@ -54,7 +55,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
         ? `/api/results/${scanId}/ai-prompt?language=${backendLanguage}&${policyParam}`
         : `/api/scan/ai-prompt?language=${backendLanguage}&${policyParam}`
 
-      const response = await fetch(endpoint)
+      const response = await fetch(resolveApiUrl(endpoint))
       
       if (response.ok) {
         const data: PromptData = await response.json()

@@ -1,4 +1,5 @@
 import { useState, useEffect, ReactNode } from 'react'
+import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 export interface SetupStatus {
   setup_required: boolean
@@ -41,7 +42,7 @@ export default function BootstrapLoader({ children }: BootstrapLoaderProps) {
           const controller = new AbortController()
           const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout per request
 
-          const response = await fetch('/api/setup/status', {
+          const response = await fetch(resolveApiUrl('/api/setup/status'), {
             signal: controller.signal
           })
 
