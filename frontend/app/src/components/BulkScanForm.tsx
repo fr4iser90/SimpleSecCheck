@@ -51,14 +51,30 @@ export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
         max_repos: '100'
       })
 
-      const response = await fetch(`/api/github/repos?${params}`)
+      const response = await fetch(`/api/git/repos?${params}`)
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.detail || 'Failed to load repositories')
       }
 
       const data = await response.json()
-      setRepositories(data.repositories || [])
+      const rawRepos = data.repos || []
+      // Map API shape (full_name, html_url, ...) to Repository (url, clone_url, name, ...)
+      const mapped: Repository[] = rawRepos.map((r: { full_name: string; html_url: string; description?: string | null; default_branch?: string; stargazers_count?: number; forks_count?: number; private?: boolean }) => ({
+        name: r.full_name.split('/').pop() || r.full_name,
+        full_name: r.full_name,
+        url: r.html_url,
+        clone_url: r.html_url,
+        private: r.private ?? false,
+        size_mb: 0,
+        language: null,
+        description: r.description ?? null,
+        default_branch: r.default_branch || 'main',
+        updated_at: '',
+        stargazers_count: r.stargazers_count ?? 0,
+        forks_count: r.forks_count ?? 0,
+      }))
+      setRepositories(mapped)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load repositories')
       setRepositories([])

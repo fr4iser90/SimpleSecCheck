@@ -239,30 +239,39 @@ async def discover_github_repos(
     username = username.strip()
     
     try:
-        # Build GitHub API URL
-        url = f"https://api.github.com/users/{username}/repos"
-        params = {
-            "per_page": min(max_repos, 100),  # GitHub API max per page is 100
-            "sort": "updated",
-            "direction": "desc"
-        }
-        
         headers = {
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "SimpleSecCheck"
         }
-        
-        # Add token if provided (for private repos)
         if github_token:
             headers["Authorization"] = f"token {github_token}"
         
+        params = {
+            "per_page": min(max_repos, 100),
+            "sort": "updated",
+            "direction": "desc"
+        }
         repos = []
         page = 1
         
         async with httpx.AsyncClient(timeout=30.0) as client:
+            # Resolve user vs org: /users/{name} for users, /orgs/{name} for organizations
+            user_resp = await client.get(f"https://api.github.com/users/{username}", headers=headers)
+            if user_resp.status_code == 200:
+                repos_url = f"https://api.github.com/users/{username}/repos"
+            else:
+                org_resp = await client.get(f"https://api.github.com/orgs/{username}", headers=headers)
+                if org_resp.status_code == 200:
+                    repos_url = f"https://api.github.com/orgs/{username}/repos"
+                else:
+                    raise HTTPException(
+                        status_code=fastapi_status.HTTP_404_NOT_FOUND,
+                        detail=f"User or organization '{username}' not found"
+                    )
+            
             while len(repos) < max_repos:
                 params["page"] = page
-                response = await client.get(url, params=params, headers=headers)
+                response = await client.get(repos_url, params=params, headers=headers)
                 
                 if response.status_code == 404:
                     raise HTTPException(
@@ -308,7 +317,7 @@ async def discover_github_repos(
                 
                 page += 1
         
-        logger.info(f"Found {len(repos)} repositories for user '{username}'")
+        logger.info("Found %s repositories for '%s'", len(repos), username)
         return GitHubReposResponse(repos=repos)
         
     except httpx.TimeoutException:
