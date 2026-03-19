@@ -80,10 +80,10 @@ class WorkerJobsConfigRequest(BaseModel):
 def _default_execution_limits() -> Dict[str, Any]:
     return {
         "max_scans_per_hour_global": None,
-        "max_scans_per_hour_per_user": None,
-        "max_scans_per_hour_per_guest_session": None,
-        "max_concurrent_scans_per_user": None,
-        "max_concurrent_scans_per_guest": None,
+        "max_scans_per_hour_per_user": 20,
+        "max_scans_per_hour_per_guest_session": 5,
+        "max_concurrent_scans_per_user": 3,
+        "max_concurrent_scans_per_guest": 2,
         "rate_limit_admins": False,
         "max_scan_duration_seconds": 3600,
     }

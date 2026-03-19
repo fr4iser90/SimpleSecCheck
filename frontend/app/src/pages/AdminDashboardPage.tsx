@@ -64,15 +64,8 @@ const DASHBOARD_GROUPS: DashboardGroup[] = [
       {
         to: '/admin/execution',
         title: 'Queue & parallel scans',
-        description: 'Max concurrent jobs, FIFO / priority / round-robin, role priorities',
+        description: 'Max concurrent jobs, rate limits, FIFO / priority / round-robin, role priorities',
         icon: '📊',
-      },
-      {
-        to: '#',
-        title: 'Rate limits',
-        description: 'Global scan rate limits per tenant (planned)',
-        icon: '⏱️',
-        comingSoon: true,
       },
     ],
   },
