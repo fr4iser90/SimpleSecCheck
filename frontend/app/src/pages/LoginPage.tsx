@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useConfig } from '../hooks/useConfig'
+import ThemeToggle from '../components/ThemeToggle'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -33,6 +34,9 @@ export default function LoginPage() {
     <div className="login-page">
       <div className="login-container">
         <div className="login-header">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+            <ThemeToggle />
+          </div>
           <h1>🛡️ SimpleSecCheck</h1>
           <p>Please sign in to continue</p>
         </div>
@@ -92,15 +96,15 @@ export default function LoginPage() {
         </form>
 
           <div style={{ marginTop: '16px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <Link to="/password-reset" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '14px' }}>
+            <Link to="/password-reset" style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: '14px' }}>
               Forgot password?
             </Link>
             {config?.features?.allow_self_registration && (
-              <Link to="/signup" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '14px' }}>
+              <Link to="/signup" style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: '14px' }}>
                 Create an account
               </Link>
             )}
-            <Link to="/capabilities" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '14px' }}>
+            <Link to="/capabilities" style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: '14px' }}>
               Guest vs account (live config)
             </Link>
           </div>

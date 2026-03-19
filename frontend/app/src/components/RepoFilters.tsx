@@ -38,7 +38,7 @@ export default function RepoFilters({
           <select
             value={filter}
             onChange={(e) => onFilterChange(e.target.value as FilterType)}
-            style={{ padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-dark)', border: '1px solid var(--glass-border-dark)', color: 'var(--text-dark)' }}
+            style={{ padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-main)', border: '1px solid var(--glass-border-main)', color: 'var(--text-main)' }}
           >
             <option value="all">All</option>
             <option value="healthy">🟢 Healthy</option>
@@ -52,7 +52,7 @@ export default function RepoFilters({
           <select
             value={sortBy}
             onChange={(e) => onSortChange(e.target.value as SortType)}
-            style={{ padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-dark)', border: '1px solid var(--glass-border-dark)', color: 'var(--text-dark)' }}
+            style={{ padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-main)', border: '1px solid var(--glass-border-main)', color: 'var(--text-main)' }}
           >
             <option value="name">Name</option>
             <option value="score">Score</option>
@@ -66,7 +66,7 @@ export default function RepoFilters({
             placeholder="🔍 Search repositories..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-dark)', border: '1px solid var(--glass-border-dark)', color: 'var(--text-dark)' }}
+            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-bg-main)', border: '1px solid var(--glass-border-main)', color: 'var(--text-main)' }}
           />
         </div>
       </div>
@@ -80,8 +80,8 @@ export default function RepoFilters({
         <button 
           onClick={onConfigureScannersClick}
           style={{
-            background: 'var(--glass-bg-dark)',
-            border: '1px solid var(--glass-border-dark)',
+            background: 'var(--glass-bg-main)',
+            border: '1px solid var(--glass-border-main)',
             color: 'var(--text-primary)',
             padding: '0.5rem 1rem',
             borderRadius: '8px',

@@ -130,10 +130,10 @@ export default function ScannerManagementPage() {
           {/* Status Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
             <div style={{
-              background: 'var(--glass-bg-dark)',
+              background: 'var(--glass-bg-main)',
               padding: '1.5rem',
               borderRadius: '8px',
-              border: '1px solid var(--glass-border-dark)'
+              border: '1px solid var(--glass-border-main)'
             }}>
               <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-pass)' }}>
                 {status.workers_running}
@@ -141,10 +141,10 @@ export default function ScannerManagementPage() {
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Workers Running</div>
             </div>
             <div style={{
-              background: 'var(--glass-bg-dark)',
+              background: 'var(--glass-bg-main)',
               padding: '1.5rem',
               borderRadius: '8px',
-              border: '1px solid var(--glass-border-dark)'
+              border: '1px solid var(--glass-border-main)'
             }}>
               <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-medium)' }}>
                 {status.queue_size}
@@ -152,10 +152,10 @@ export default function ScannerManagementPage() {
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Queue Size</div>
             </div>
             <div style={{
-              background: 'var(--glass-bg-dark)',
+              background: 'var(--glass-bg-main)',
               padding: '1.5rem',
               borderRadius: '8px',
-              border: '1px solid var(--glass-border-dark)'
+              border: '1px solid var(--glass-border-main)'
             }}>
               <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-info)' }}>
                 {status.active_scans}
@@ -163,12 +163,12 @@ export default function ScannerManagementPage() {
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Active Scans</div>
             </div>
             <div style={{
-              background: 'var(--glass-bg-dark)',
+              background: 'var(--glass-bg-main)',
               padding: '1.5rem',
               borderRadius: '8px',
-              border: '1px solid var(--glass-border-dark)'
+              border: '1px solid var(--glass-border-main)'
             }}>
-              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-dark)' }}>
+              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-main)' }}>
                 {formatTime(status.average_scan_time)}
               </div>
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Avg Scan Time</div>
@@ -180,10 +180,10 @@ export default function ScannerManagementPage() {
             <h2 style={{ marginBottom: '1rem' }}>Today's Metrics</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
               <div style={{
-                background: 'var(--glass-bg-dark)',
+                background: 'var(--glass-bg-main)',
                 padding: '1.5rem',
                 borderRadius: '8px',
-                border: '1px solid var(--glass-border-dark)'
+                border: '1px solid var(--glass-border-main)'
               }}>
                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-pass)' }}>
                   {status.scans_completed_today}
@@ -191,10 +191,10 @@ export default function ScannerManagementPage() {
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Completed</div>
               </div>
               <div style={{
-                background: 'var(--glass-bg-dark)',
+                background: 'var(--glass-bg-main)',
                 padding: '1.5rem',
                 borderRadius: '8px',
-                border: '1px solid var(--glass-border-dark)'
+                border: '1px solid var(--glass-border-main)'
               }}>
                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-critical)' }}>
                   {status.errors_today}
@@ -202,10 +202,10 @@ export default function ScannerManagementPage() {
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Errors</div>
               </div>
               <div style={{
-                background: 'var(--glass-bg-dark)',
+                background: 'var(--glass-bg-main)',
                 padding: '1.5rem',
                 borderRadius: '8px',
-                border: '1px solid var(--glass-border-dark)'
+                border: '1px solid var(--glass-border-main)'
               }}>
                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-high)' }}>
                   {status.timeouts_today}
@@ -224,7 +224,7 @@ export default function ScannerManagementPage() {
             {registry.length === 0 ? (
               <div style={{ padding: '1rem', color: 'var(--text-secondary)' }}>No scanners in DB yet.</div>
             ) : (
-              <div style={{ overflowX: 'auto', border: '1px solid var(--glass-border-dark)', borderRadius: 8 }}>
+              <div style={{ overflowX: 'auto', border: '1px solid var(--glass-border-main)', borderRadius: 8 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
@@ -236,7 +236,7 @@ export default function ScannerManagementPage() {
                   </thead>
                   <tbody>
                     {registry.map((s) => (
-                      <tr key={s.name} style={{ borderTop: '1px solid var(--glass-border-dark)' }}>
+                      <tr key={s.name} style={{ borderTop: '1px solid var(--glass-border-main)' }}>
                         <td style={{ padding: '0.75rem' }}>{s.name}</td>
                         <td style={{ padding: '0.75rem' }}>{(s.scan_types || []).join(', ') || '—'}</td>
                         <td style={{ padding: '0.75rem' }}>{s.priority ?? '—'}</td>
@@ -253,10 +253,10 @@ export default function ScannerManagementPage() {
           <div>
             <h2 style={{ marginBottom: '1rem' }}>Queue (next 10 pending)</h2>
             <div style={{
-              background: 'var(--glass-bg-dark)',
+              background: 'var(--glass-bg-main)',
               borderRadius: '8px',
               overflow: 'hidden',
-              border: '1px solid var(--glass-border-dark)'
+              border: '1px solid var(--glass-border-main)'
             }}>
               {status.queue_items.length === 0 ? (
                 <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -266,15 +266,15 @@ export default function ScannerManagementPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Scan Name</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Target</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Priority</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Created</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Scan Name</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Target</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Priority</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Created</th>
                     </tr>
                   </thead>
                   <tbody>
                     {status.queue_items.map((item) => (
-                      <tr key={item.scan_id} style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
+                      <tr key={item.scan_id} style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
                         <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{item.name}</td>
                         <td style={{ padding: '1rem', fontSize: '0.85rem', fontFamily: 'monospace' }}>
                           {item.target.length > 50 ? `${item.target.substring(0, 50)}...` : item.target}

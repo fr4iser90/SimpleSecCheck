@@ -225,11 +225,11 @@ export default function MyTargetsPage() {
       ) : targets.length === 0 ? (
         <div
           style={{
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
             padding: '3rem',
             borderRadius: '8px',
             textAlign: 'center',
-            border: '1px solid var(--glass-border-dark)',
+            border: '1px solid var(--glass-border-main)',
           }}
         >
           <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>

@@ -194,10 +194,10 @@ export default function FeatureFlagsPage() {
         <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div>
       ) : (
         <div style={{
-          background: 'var(--glass-bg-dark)',
+          background: 'var(--glass-bg-main)',
           padding: '2rem',
           borderRadius: '8px',
-          border: '1px solid var(--glass-border-dark)'
+          border: '1px solid var(--glass-border-main)'
         }}>
           <div style={{
             display: 'flex',
@@ -205,7 +205,7 @@ export default function FeatureFlagsPage() {
             gap: '0.75rem',
             marginBottom: '1.5rem',
             paddingBottom: '1.5rem',
-            borderBottom: '1px solid var(--glass-border-dark)'
+            borderBottom: '1px solid var(--glass-border-main)'
           }}>
             <span style={{ color: 'var(--text-secondary)', alignSelf: 'center', marginRight: '0.5rem' }}>Policy presets:</span>
             <button
@@ -214,9 +214,9 @@ export default function FeatureFlagsPage() {
               style={{
                 padding: '0.5rem 1rem',
                 borderRadius: '6px',
-                border: '1px solid var(--glass-border-dark)',
+                border: '1px solid var(--glass-border-main)',
                 background: 'rgba(255, 255, 255, 0.05)',
-                color: 'var(--text-dark)',
+                color: 'var(--text-main)',
                 cursor: 'pointer'
               }}
             >
@@ -228,9 +228,9 @@ export default function FeatureFlagsPage() {
               style={{
                 padding: '0.5rem 1rem',
                 borderRadius: '6px',
-                border: '1px solid var(--glass-border-dark)',
+                border: '1px solid var(--glass-border-main)',
                 background: 'rgba(255, 255, 255, 0.05)',
-                color: 'var(--text-dark)',
+                color: 'var(--text-main)',
                 cursor: 'pointer'
               }}
             >
@@ -245,7 +245,7 @@ export default function FeatureFlagsPage() {
                 marginBottom: '1rem',
                 background: 'rgba(255, 255, 255, 0.02)',
                 borderRadius: '8px',
-                border: '1px solid var(--glass-border-dark)',
+                border: '1px solid var(--glass-border-main)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center'

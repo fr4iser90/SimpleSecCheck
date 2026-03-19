@@ -25,19 +25,19 @@ def html_header(title, embedded_scripts="", ai_prompt_disabled=False, overall_st
   --color-info: #6c757d;
   --color-pass: #28a745;
   --bg-light: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-  --bg-dark: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+  --bg-main: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
   --text-light: #212529;
-  --text-dark: #f8f9fa;
+  --text-main: #f8f9fa;
   --text-primary: #1a1a1a;
   --text-secondary: #495057;
   --border-radius: 16px;
   --shadow: 0 8px 32px rgba(0,0,0,0.1);
-  --shadow-dark: 0 8px 32px rgba(0,0,0,0.3);
+  --shadow-main: 0 8px 32px rgba(0,0,0,0.3);
   --transition: all 0.3s ease;
   --glass-bg: rgba(255,255,255,0.25);
-  --glass-bg-dark: rgba(0,0,0,0.25);
+  --glass-bg-main: rgba(0,0,0,0.25);
   --glass-border: rgba(255,255,255,0.18);
-  --glass-border-dark: rgba(255,255,255,0.1);
+  --glass-border-main: rgba(255,255,255,0.1);
   /* Modal (AI Prompt): readable, not too transparent */
   --modal-overlay: rgba(0, 0, 0, 0.75);
   --modal-content-bg: #1a1a2e;
@@ -63,9 +63,9 @@ body {{
 }}
 
 body.dark {{
-  background: var(--bg-dark);
+  background: var(--bg-main);
   background-attachment: fixed;
-  color: var(--text-dark);
+  color: var(--text-main);
   --text-primary: #f0f0f0;
   --text-secondary: #b0b0b0;
   --modal-content-bg: #1a1a2e;
@@ -83,9 +83,9 @@ body.dark {{
 }}
 
 body.dark .glass {{
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
-  box-shadow: var(--shadow-dark);
+  background: var(--glass-bg-main);
+  border-color: var(--glass-border-main);
+  box-shadow: var(--shadow-main);
 }}
 
 /* Header with glassmorphism */
@@ -99,8 +99,8 @@ body.dark .glass {{
 }}
 
 body.dark .header {{
-  background: var(--glass-bg-dark);
-  border-bottom-color: var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border-bottom-color: var(--glass-border-main);
 }}
 
 .header-content {{
@@ -141,7 +141,7 @@ h2 {{ margin-top: 2em; }}
 }}
 
 .scan-meta span {{
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(10px);
   padding: 0.5rem 1rem;
   border-radius: 20px;
@@ -150,7 +150,7 @@ h2 {{ margin-top: 2em; }}
 
 body.dark .scan-meta span {{
   background: var(--glass-bg);
-  border-color: var(--glass-border-dark);
+  border-color: var(--glass-border-main);
 }}
 
 .container {{
@@ -186,8 +186,8 @@ body.dark .scan-meta span {{
 }}
 
 body.dark .summary-card {{
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border-color: var(--glass-border-main);
 }}
 
 .summary-card.critical {{ border-left-color: var(--color-critical); }}
@@ -226,7 +226,7 @@ body.dark .summary-card {{
   padding: 0.4rem 0.75rem;
   border-radius: 8px;
   border-left: 3px solid;
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   font-size: 0.85rem;
 }}
 body.dark .domain-score-card {{
@@ -252,8 +252,8 @@ body.dark .domain-score-card {{
 }}
 
 body.dark .tool-status-section {{
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border-color: var(--glass-border-main);
 }}
 
 .tool-status-grid {{
@@ -268,7 +268,7 @@ body.dark .tool-status-section {{
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   border-radius: 8px;
   font-size: 0.85rem;
   border: 1px solid var(--glass-border);
@@ -278,7 +278,7 @@ body.dark .tool-status-section {{
 
 body.dark .tool-status-item {{
   background: var(--glass-bg);
-  border-color: var(--glass-border-dark);
+  border-color: var(--glass-border-main);
 }}
 
 .tool-status-item .status-icon {{
@@ -354,8 +354,8 @@ body.dark .tool-status-item {{
 }}
 
 body.dark .filter-bar {{
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border-color: var(--glass-border-main);
 }}
 
 /* Legacy styles for compatibility */
@@ -369,12 +369,12 @@ body.dark .filter-bar {{
 }}
 
 body.dark .summary-box {{
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border-color: var(--glass-border-main);
 }}
 
 .tool-summary {{
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(10px);
   padding: 0.75rem;
   margin: 0.5rem 0;
@@ -384,7 +384,7 @@ body.dark .summary-box {{
 
 body.dark .tool-summary {{
   background: var(--glass-bg);
-  border-color: var(--glass-border-dark);
+  border-color: var(--glass-border-main);
 }}
 
 /* Severity colors */
@@ -416,8 +416,8 @@ body.dark .tool-summary {{
 }}
 
 body.dark .tool-category {{
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border-color: var(--glass-border-main);
 }}
 
 .tool-category > summary {{
@@ -595,8 +595,8 @@ table {{
 }}
 
 body.dark table {{
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border-color: var(--glass-border-main);
 }}
 
 th, td {{
@@ -606,7 +606,7 @@ th, td {{
 }}
 
 body.dark th, body.dark td {{
-  border: 1px solid var(--glass-border-dark);
+  border: 1px solid var(--glass-border-main);
 }}
 
 a {{ color: #667eea; text-decoration: none; }}
@@ -632,9 +632,9 @@ a:hover {{ text-decoration: underline; }}
 }}
 
 body.dark .toggle-btn {{
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
-  color: var(--text-dark);
+  background: var(--glass-bg-main);
+  border-color: var(--glass-border-main);
+  color: var(--text-main);
 }}
 
 /* Alert cards */
@@ -655,8 +655,8 @@ body.dark .toggle-btn {{
 }}
 
 body.dark .alert-detail {{
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border-color: var(--glass-border-main);
 }}
 
 .alert-detail.high {{
@@ -727,8 +727,8 @@ body.dark .alert-detail {{
 }}
 
 body.dark .all-clear {{
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border-color: var(--glass-border-main);
 }}
 
 @media (max-width: 768px) {{

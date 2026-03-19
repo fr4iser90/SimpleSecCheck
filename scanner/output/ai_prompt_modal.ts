@@ -56,7 +56,7 @@ function openAIPromptModal(): void {
       background: var(--modal-content-bg);
       border-radius: 16px;
       border: 1px solid var(--modal-content-border);
-      box-shadow: var(--shadow-dark);
+      box-shadow: var(--shadow-main);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -124,9 +124,9 @@ function openAIPromptModal(): void {
       align-items: center;
       justify-content: center;
       padding: 2rem;
-      background: var(--glass-bg-dark);
+      background: var(--glass-bg-main);
       border-radius: 8px;
-      border: 1px solid var(--glass-border-dark);
+      border: 1px solid var(--glass-border-main);
       color: var(--text-primary);
     `;
     const loadingText = document.createElement('div');
@@ -150,11 +150,11 @@ function openAIPromptModal(): void {
     textarea.style.cssText = `
       flex: 1;
       min-height: 400px;
-      background: var(--glass-bg-dark);
-      border: 1px solid var(--glass-border-dark);
+      background: var(--glass-bg-main);
+      border: 1px solid var(--glass-border-main);
       border-radius: 8px;
       padding: 1rem;
-      color: var(--text-dark);
+      color: var(--text-main);
       font-family: 'Courier New', monospace;
       font-size: 0.9rem;
       resize: vertical;
@@ -171,8 +171,8 @@ function openAIPromptModal(): void {
     
     const settingsSection = document.createElement('div');
     settingsSection.style.cssText = `
-      background: var(--glass-bg-dark);
-      border: 1px solid var(--glass-border-dark);
+      background: var(--glass-bg-main);
+      border: 1px solid var(--glass-border-main);
       border-radius: 8px;
       padding: 1rem;
       color: var(--text-primary);
@@ -207,8 +207,8 @@ function openAIPromptModal(): void {
         padding: 0.5rem 1rem;
         border-radius: 8px;
         cursor: pointer;
-        border: 1px solid var(--glass-border-dark);
-        background: var(--glass-bg-dark);
+        border: 1px solid var(--glass-border-main);
+        background: var(--glass-bg-main);
         color: var(--text-primary);
       `;
       setTextContent(btn, label);
@@ -231,8 +231,8 @@ function openAIPromptModal(): void {
     policyInput.style.cssText = `
       width: 100%;
       padding: 0.75rem;
-      background: var(--glass-bg-dark);
-      border: 1px solid var(--glass-border-dark);
+      background: var(--glass-bg-main);
+      border: 1px solid var(--glass-border-main);
       border-radius: 8px;
       color: var(--text-primary);
       box-sizing: border-box;
@@ -304,8 +304,8 @@ function openAIPromptModal(): void {
     maxInput.style.cssText = `
       width: 6rem;
       padding: 0.5rem 0.75rem;
-      background: var(--glass-bg-dark);
-      border: 1px solid var(--glass-border-dark);
+      background: var(--glass-bg-main);
+      border: 1px solid var(--glass-border-main);
       border-radius: 8px;
       color: var(--text-primary);
       box-sizing: border-box;
@@ -335,8 +335,8 @@ function openAIPromptModal(): void {
     statsDiv.style.cssText = `
       display: none;
       padding: 0.75rem;
-      background: var(--glass-bg-dark);
-      border: 1px solid var(--glass-border-dark);
+      background: var(--glass-bg-main);
+      border: 1px solid var(--glass-border-main);
       border-radius: 8px;
       font-size: 0.9rem;
       color: var(--text-secondary);
@@ -348,8 +348,8 @@ function openAIPromptModal(): void {
     
     const cancelBtn = document.createElement('button');
     cancelBtn.style.cssText = `
-      background: var(--glass-bg-dark);
-      border: 1px solid var(--glass-border-dark);
+      background: var(--glass-bg-main);
+      border: 1px solid var(--glass-border-main);
       padding: 0.75rem 1.5rem;
       border-radius: 8px;
       color: var(--text-primary);
@@ -365,7 +365,7 @@ function openAIPromptModal(): void {
       border-radius: 8px;
       background: var(--btn-primary-gradient);
       border: none;
-      color: var(--text-dark);
+      color: var(--text-main);
       cursor: pointer;
       font-weight: 600;
     `;
@@ -377,8 +377,8 @@ function openAIPromptModal(): void {
     newTabBtn.style.cssText = `
       padding: 0.75rem 1.5rem;
       border-radius: 8px;
-      background: var(--glass-bg-dark);
-      border: 1px solid var(--glass-border-dark);
+      background: var(--glass-bg-main);
+      border: 1px solid var(--glass-border-main);
       color: var(--text-primary);
       cursor: pointer;
       font-weight: 600;
@@ -453,8 +453,8 @@ function setAIPromptLanguage(lang: Language): void {
         btn.style.borderColor = 'var(--btn-primary)';
         btn.style.fontWeight = '600';
       } else {
-        btn.style.background = 'var(--glass-bg-dark)';
-        btn.style.borderColor = 'var(--glass-border-dark)';
+        btn.style.background = 'var(--glass-bg-main)';
+        btn.style.borderColor = 'var(--glass-border-main)';
         btn.style.fontWeight = '400';
       }
     }

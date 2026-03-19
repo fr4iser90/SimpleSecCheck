@@ -25,7 +25,7 @@ export default function ScannerSelection({
       <div style={{ 
         maxHeight, 
         overflowY: 'auto', 
-        border: '1px solid var(--glass-border-dark)',
+        border: '1px solid var(--glass-border-main)',
         borderRadius: '4px',
         padding: '0.5rem',
         background: 'rgba(0, 0, 0, 0.2)'

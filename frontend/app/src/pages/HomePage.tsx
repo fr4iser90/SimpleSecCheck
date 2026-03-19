@@ -41,7 +41,7 @@ export default function HomePage() {
             display: 'flex',
             gap: '0.5rem',
             marginBottom: '2rem',
-            borderBottom: '1px solid var(--glass-border-dark)'
+            borderBottom: '1px solid var(--glass-border-main)'
           }}>
             <button
               type="button"

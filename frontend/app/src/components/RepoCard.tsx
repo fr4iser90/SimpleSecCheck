@@ -48,7 +48,7 @@ export default function RepoCard({ repo, scanStatus, onScanNow, onEdit, onRemove
   return (
     <div
       style={{
-        background: 'var(--glass-bg-dark)',
+        background: 'var(--glass-bg-main)',
         padding: '1.5rem',
         borderRadius: '8px',
         border: `1px solid ${status.color}40`,
@@ -231,11 +231,11 @@ export default function RepoCard({ repo, scanStatus, onScanNow, onEdit, onRemove
             to={`/scan?scan_id=${repo.last_scan.scan_id}`}
             style={{
               padding: '0.5rem 1rem',
-              background: 'var(--glass-bg-dark)',
-              border: '1px solid var(--glass-border-dark)',
+              background: 'var(--glass-bg-main)',
+              border: '1px solid var(--glass-border-main)',
               borderRadius: '6px',
               textDecoration: 'none',
-              color: 'var(--text-dark)',
+              color: 'var(--text-main)',
               fontSize: '0.9rem'
             }}
           >

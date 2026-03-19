@@ -285,7 +285,7 @@ export default function MyScansPage() {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr className="table-head-row" style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
+                <tr className="table-head-row" style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
                   <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Repository</th>
                   <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Branch</th>
                   <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Scanners</th>
@@ -298,7 +298,7 @@ export default function MyScansPage() {
               </thead>
               <tbody>
                 {scansData.scans.map((item) => (
-                  <tr key={item.queue_id} style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
+                  <tr key={item.queue_id} style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
                     <td style={{ padding: '0.75rem' }}>
                       <div>
                         <div style={{ fontFamily: 'monospace', fontSize: '0.9rem' }}>
@@ -328,7 +328,7 @@ export default function MyScansPage() {
                                 fontWeight: '500',
                                 background: 'var(--surface-muted)',
                                 color: 'var(--accent)',
-                                border: '1px solid var(--glass-border-dark)',
+                                border: '1px solid var(--glass-border-main)',
                               }}
                             >
                               {scanner}

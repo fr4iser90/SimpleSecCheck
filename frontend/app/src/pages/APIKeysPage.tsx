@@ -162,10 +162,10 @@ export default function APIKeysPage() {
         <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div>
       ) : (
         <div style={{
-          background: 'var(--glass-bg-dark)',
+          background: 'var(--glass-bg-main)',
           borderRadius: '8px',
           overflow: 'hidden',
-          border: '1px solid var(--glass-border-dark)'
+          border: '1px solid var(--glass-border-main)'
         }}>
           {keys.length === 0 ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -175,17 +175,17 @@ export default function APIKeysPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Name</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Key Prefix</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Created</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Last Used</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Expires</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Actions</th>
+                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Name</th>
+                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Key Prefix</th>
+                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Created</th>
+                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Last Used</th>
+                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Expires</th>
+                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {keys.map((key) => (
-                  <tr key={key.id} style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
+                  <tr key={key.id} style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
                     <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{key.name}</td>
                     <td style={{ padding: '1rem', fontSize: '0.9rem', fontFamily: 'monospace' }}>
                       {key.key_prefix}...
@@ -230,12 +230,12 @@ export default function APIKeysPage() {
           zIndex: 1000
         }}>
           <div style={{
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
             padding: '2rem',
             borderRadius: '8px',
             width: '90%',
             maxWidth: '500px',
-            border: '1px solid var(--glass-border-dark)'
+            border: '1px solid var(--glass-border-main)'
           }}>
             <h2 style={{ marginTop: 0 }}>Create API Key</h2>
             <form onSubmit={handleCreate}>

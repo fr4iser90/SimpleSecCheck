@@ -385,8 +385,8 @@ export default function ScanView() {
               <div style={{
                 marginTop: '2rem',
                 padding: '1.5rem',
-                background: 'var(--glass-bg-dark)',
-                border: '1px solid var(--glass-border-dark)',
+                background: 'var(--glass-bg-main)',
+                border: '1px solid var(--glass-border-main)',
                 borderRadius: '12px',
                 width: '100%',
               }}>
@@ -416,8 +416,8 @@ export default function ScanView() {
             <div style={{
               marginTop: '2rem',
               padding: '1.5rem',
-              background: 'var(--glass-bg-dark)',
-              border: '1px solid var(--glass-border-dark)',
+              background: 'var(--glass-bg-main)',
+              border: '1px solid var(--glass-border-main)',
               borderRadius: '12px',
               width: '100%',
             }}>
@@ -429,8 +429,8 @@ export default function ScanView() {
             marginTop: '2rem',
             width: '100%',
             maxWidth: '600px',
-            background: 'var(--glass-bg-dark)',
-            border: '1px solid var(--glass-border-dark)',
+            background: 'var(--glass-bg-main)',
+            border: '1px solid var(--glass-border-main)',
             borderRadius: '8px',
             padding: '1rem',
           }}>
@@ -589,7 +589,7 @@ export default function ScanView() {
                   className={`scan-step-card ${expanded ? 'scan-step-card-expanded' : ''}`}
                   style={{
                     padding: '1rem 1.25rem',
-                    background: 'var(--glass-bg-dark)',
+                    background: 'var(--glass-bg-main)',
                     border: `2px solid ${borderColor}`,
                     borderRadius: '12px',
                     transition: 'border-color 0.2s ease, opacity 0.2s ease',
@@ -830,13 +830,13 @@ export default function ScanView() {
             onClick={() => setIsStepsSidebarOpen(true)}
             style={{
               padding: '1rem',
-              background: 'var(--glass-bg-dark)',
+              background: 'var(--glass-bg-main)',
               backdropFilter: 'blur(10px)',
-              border: '1px solid var(--glass-border-dark)',
+              border: '1px solid var(--glass-border-main)',
               borderRadius: '50%',
               width: '56px',
               height: '56px',
-              color: 'var(--text-dark)',
+              color: 'var(--text-main)',
               cursor: 'pointer',
               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
               fontSize: '1.5rem',
@@ -852,13 +852,13 @@ export default function ScanView() {
             onClick={() => setIsLogsSidebarOpen(true)}
             style={{
               padding: '1rem',
-              background: 'var(--glass-bg-dark)',
+              background: 'var(--glass-bg-main)',
               backdropFilter: 'blur(10px)',
-              border: '1px solid var(--glass-border-dark)',
+              border: '1px solid var(--glass-border-main)',
               borderRadius: '50%',
               width: '56px',
               height: '56px',
-              color: 'var(--text-dark)',
+              color: 'var(--text-main)',
               cursor: 'pointer',
               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
               fontSize: '1.5rem',
@@ -902,10 +902,10 @@ export default function ScanView() {
                 bottom: 0,
                 width: '500px',
                 maxWidth: '90vw',
-                background: 'var(--glass-bg-dark)',
+                background: 'var(--glass-bg-main)',
                 backdropFilter: 'blur(20px)',
-                borderLeft: '1px solid var(--glass-border-dark)',
-                boxShadow: 'var(--shadow-dark)',
+                borderLeft: '1px solid var(--glass-border-main)',
+                boxShadow: 'var(--shadow-main)',
                 zIndex: 1000,
                 display: 'flex',
                 flexDirection: 'column',
@@ -915,7 +915,7 @@ export default function ScanView() {
               <div
                 style={{
                   padding: '1.5rem',
-                  borderBottom: '1px solid var(--glass-border-dark)',
+                  borderBottom: '1px solid var(--glass-border-main)',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -929,7 +929,7 @@ export default function ScanView() {
                     border: 'none',
                     fontSize: '1.5rem',
                     cursor: 'pointer',
-                    color: 'var(--text-dark)',
+                    color: 'var(--text-main)',
                     padding: '0.25rem 0.5rem',
                     lineHeight: 1,
                   }}
@@ -978,10 +978,10 @@ export default function ScanView() {
           style={{
             marginTop: '1rem',
             padding: '0.75rem 1.5rem',
-            background: 'var(--glass-bg-dark)',
-            border: '1px solid var(--glass-border-dark)',
+            background: 'var(--glass-bg-main)',
+            border: '1px solid var(--glass-border-main)',
             borderRadius: '8px',
-            color: 'var(--text-dark)',
+            color: 'var(--text-main)',
             cursor: 'pointer',
           }}
         >

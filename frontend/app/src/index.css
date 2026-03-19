@@ -11,36 +11,87 @@
   --color-info: #6c757d;
   --color-pass: #28a745;
   
-  --bg-dark: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
-  --text-dark: #f8f9fa;
+  --bg-main: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+  --text-main: #f8f9fa;
   --text-secondary: rgba(248, 249, 250, 0.7);
   --accent: #667eea;
   --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --glass-bg-dark: rgba(0, 0, 0, 0.25);
-  --glass-border-dark: rgba(255, 255, 255, 0.1);
+  --focus-ring: rgba(102, 126, 234, 0.55);
+  --glass-bg-main: rgba(0, 0, 0, 0.25);
+  --glass-border-main: rgba(255, 255, 255, 0.1);
+  --surface-elevated: rgba(10, 10, 18, 0.55);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --interactive-hover: rgba(255, 255, 255, 0.12);
+  --interactive-active: rgba(255, 255, 255, 0.18);
+  --text-muted: rgba(248, 249, 250, 0.5);
   --border-radius: 16px;
-  --shadow-dark: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-main: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.26);
+  --shadow-lg: 0 12px 34px rgba(0, 0, 0, 0.35);
   --modal-overlay-bg: rgba(0, 0, 0, 0.75);
   --modal-content-bg: rgba(20, 20, 30, 0.95);
   --code-bg: #000000;
   --code-text: #f8f9fa;
   --surface-muted: rgba(255, 255, 255, 0.08);
+  --color-success: #28a745;
+  --color-warning: #ffc107;
+  --color-error: #dc3545;
+  --color-info-ui: #0dcaf0;
+  --color-success-bg: rgba(40, 167, 69, 0.18);
+  --color-warning-bg: rgba(255, 193, 7, 0.18);
+  --color-error-bg: rgba(220, 53, 69, 0.2);
+  --color-info-bg: rgba(13, 202, 240, 0.2);
+  --chart-1: #667eea;
+  --chart-2: #20c997;
+  --chart-3: #0dcaf0;
+  --chart-4: #ffc107;
+  --chart-5: #fd7e14;
+  --chart-6: #dc3545;
 }
 
 [data-theme='light'] {
-  --bg-dark: linear-gradient(135deg, #eef3ff 0%, #f7f9ff 45%, #ffffff 100%);
-  --text-dark: #1d2433;
+  --bg-main: linear-gradient(135deg, #eef3ff 0%, #f7f9ff 45%, #ffffff 100%);
+  --text-main: #1d2433;
   --text-secondary: rgba(29, 36, 51, 0.72);
   --accent: #4c5bd4;
   --accent-gradient: linear-gradient(135deg, #5f72e8 0%, #6e56b5 100%);
-  --glass-bg-dark: rgba(255, 255, 255, 0.78);
-  --glass-border-dark: rgba(17, 24, 39, 0.15);
-  --shadow-dark: 0 8px 26px rgba(17, 24, 39, 0.14);
+  --focus-ring: rgba(76, 91, 212, 0.45);
+  --glass-bg-main: rgba(255, 255, 255, 0.78);
+  --glass-border-main: rgba(17, 24, 39, 0.15);
+  --surface-elevated: rgba(255, 255, 255, 0.96);
+  --border-subtle: rgba(17, 24, 39, 0.1);
+  --border-strong: rgba(17, 24, 39, 0.24);
+  --interactive-hover: rgba(17, 24, 39, 0.08);
+  --interactive-active: rgba(17, 24, 39, 0.14);
+  --text-muted: rgba(29, 36, 51, 0.52);
+  --shadow-main: 0 8px 26px rgba(17, 24, 39, 0.14);
+  --shadow-sm: 0 2px 8px rgba(17, 24, 39, 0.08);
+  --shadow-md: 0 6px 16px rgba(17, 24, 39, 0.12);
+  --shadow-lg: 0 12px 30px rgba(17, 24, 39, 0.18);
   --modal-overlay-bg: rgba(17, 24, 39, 0.42);
   --modal-content-bg: rgba(255, 255, 255, 0.96);
   --code-bg: #f5f7fb;
   --code-text: #111827;
   --surface-muted: rgba(17, 24, 39, 0.06);
+  --color-success: #218838;
+  --color-warning: #d39e00;
+  --color-error: #c82333;
+  --color-info-ui: #0b8fb3;
+  --color-success-bg: rgba(33, 136, 56, 0.14);
+  --color-warning-bg: rgba(211, 158, 0, 0.16);
+  --color-error-bg: rgba(200, 35, 51, 0.14);
+  --color-info-bg: rgba(11, 143, 179, 0.14);
+  --chart-1: #5f72e8;
+  --chart-2: #16a085;
+  --chart-3: #2fa8cc;
+  --chart-4: #d39e00;
+  --chart-5: #d97706;
+  --chart-6: #c82333;
 }
 
 * {
@@ -53,9 +104,9 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   margin: 0;
   padding: 0;
-  background: var(--bg-dark);
+  background: var(--bg-main);
   background-attachment: fixed;
-  color: var(--text-dark);
+  color: var(--text-main);
   min-height: 100vh;
   transition: background 0.25s ease, color 0.25s ease;
 }
@@ -66,21 +117,21 @@ body {
 
 /* Glassmorphism */
 .glass {
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-radius: var(--border-radius);
-  border: 1px solid var(--glass-border-dark);
-  box-shadow: var(--shadow-dark);
+  border: 1px solid var(--glass-border-main);
+  box-shadow: var(--shadow-main);
   padding: 2rem;
 }
 
 /* Buttons */
 button {
-  background: var(--glass-bg-dark);
-  border: 1px solid var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border: 1px solid var(--glass-border-main);
   border-radius: 8px;
-  color: var(--text-dark);
+  color: var(--text-main);
   padding: 0.75rem 1.5rem;
   font-size: 1rem;
   cursor: pointer;
@@ -105,10 +156,10 @@ button.primary {
 
 /* Inputs */
 input, select {
-  background: var(--glass-bg-dark);
-  border: 1px solid var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border: 1px solid var(--glass-border-main);
   border-radius: 8px;
-  color: var(--text-dark);
+  color: var(--text-main);
   padding: 0.75rem;
   font-size: 1rem;
   width: 100%;
@@ -130,9 +181,9 @@ input:focus, select:focus {
 .header {
   position: relative;
   z-index: 100;
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--glass-border-dark);
+  border-bottom: 1px solid var(--glass-border-main);
   padding: 1.5rem 2rem;
   display: flex;
   justify-content: space-between;
@@ -145,23 +196,24 @@ input:focus, select:focus {
 }
 
 .theme-toggle-button {
-  position: fixed;
-  top: 0.9rem;
-  right: 1rem;
-  z-index: 1200;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   padding: 0.45rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid var(--glass-border-dark);
-  background: var(--glass-bg-dark);
-  color: var(--text-dark);
+  border: 1px solid var(--glass-border-main);
+  background: var(--glass-bg-main);
+  color: var(--text-main);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   font-size: 0.85rem;
   font-weight: 600;
-  box-shadow: var(--shadow-dark);
+  box-shadow: var(--shadow-main);
+}
+
+.theme-toggle-inline {
+  position: static;
+  z-index: auto;
 }
 
 .theme-toggle-button:hover {
@@ -183,9 +235,9 @@ input:focus, select:focus {
   justify-content: center;
   padding: 0.45rem 1rem;
   border-radius: 999px;
-  border: 1px solid var(--glass-border-dark);
-  background: var(--glass-bg-dark);
-  color: var(--text-dark);
+  border: 1px solid var(--glass-border-main);
+  background: var(--glass-bg-main);
+  color: var(--text-main);
   text-decoration: none;
   font-size: 0.9rem;
   transition: all 0.2s ease;
@@ -214,10 +266,10 @@ input:focus, select:focus {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: var(--glass-bg-dark);
-  border: 1px solid var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border: 1px solid var(--glass-border-main);
   border-radius: 8px;
-  color: var(--text-dark);
+  color: var(--text-main);
   cursor: pointer;
   font-size: 0.9rem;
   transition: all 0.2s ease;
@@ -233,11 +285,11 @@ input:focus, select:focus {
   right: 0;
   margin-top: 0.5rem;
   min-width: 200px;
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border-dark);
+  border: 1px solid var(--glass-border-main);
   border-radius: 8px;
-  box-shadow: var(--shadow-dark);
+  box-shadow: var(--shadow-main);
   z-index: 1001;
   padding: 0.5rem 0;
   opacity: 0;
@@ -255,7 +307,7 @@ input:focus, select:focus {
 .dropdown-item {
   display: block;
   padding: 0.75rem 1rem;
-  color: var(--text-dark);
+  color: var(--text-main);
   text-decoration: none;
   font-size: 0.9rem;
   transition: all 0.2s ease;
@@ -272,16 +324,16 @@ input:focus, select:focus {
 
 .dropdown-divider {
   height: 1px;
-  background: var(--glass-border-dark);
+  background: var(--glass-border-main);
   margin: 0.5rem 0;
 }
 
 /* Cards */
 .card {
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(10px);
   border-radius: var(--border-radius);
-  border: 1px solid var(--glass-border-dark);
+  border: 1px solid var(--glass-border-main);
   padding: 2rem;
   margin-bottom: 1.5rem;
 }
@@ -294,7 +346,7 @@ input:focus, select:focus {
 /* Reusable surface helpers */
 .surface-muted-box {
   background: var(--surface-muted);
-  border: 1px solid var(--glass-border-dark);
+  border: 1px solid var(--glass-border-main);
   border-radius: 8px;
 }
 
@@ -309,7 +361,7 @@ input:focus, select:focus {
 .table-cell-head {
   padding: 1rem;
   text-align: left;
-  border-bottom: 1px solid var(--glass-border-dark);
+  border-bottom: 1px solid var(--glass-border-main);
 }
 
 .table-cell {
@@ -318,7 +370,7 @@ input:focus, select:focus {
 }
 
 .table-row-divider {
-  border-bottom: 1px solid var(--glass-border-dark);
+  border-bottom: 1px solid var(--glass-border-main);
 }
 
 /* Statistics page */
@@ -393,8 +445,8 @@ input:focus, select:focus {
 .stat-card {
   padding: 1.25rem;
   border-radius: 12px;
-  border: 1px solid var(--glass-border-dark);
-  background: var(--glass-bg-dark);
+  border: 1px solid var(--glass-border-main);
+  background: var(--glass-bg-main);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -403,14 +455,14 @@ input:focus, select:focus {
 
 .stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-dark);
+  box-shadow: var(--shadow-main);
 }
 
 .stat-value {
   font-size: 1.75rem;
   font-weight: 700;
   line-height: 1.2;
-  color: var(--text-dark);
+  color: var(--text-main);
 }
 
 .stat-label {
@@ -427,7 +479,7 @@ input:focus, select:focus {
 .stat-card--success .stat-value { color: var(--color-pass); }
 .stat-card--success { border-color: rgba(40, 167, 69, 0.35); }
 
-.stat-card--neutral .stat-value { color: var(--text-dark); }
+.stat-card--neutral .stat-value { color: var(--text-main); }
 
 .stat-card--severity {
   border-color: color-mix(in srgb, var(--severity-color, var(--color-info)) 45%, transparent);
@@ -558,7 +610,7 @@ input:focus, select:focus {
 .progress-bar {
   width: 100%;
   height: 8px;
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   border-radius: 4px;
   overflow: hidden;
   margin-top: 0.5rem;
@@ -626,7 +678,7 @@ input:focus, select:focus {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
-  color: var(--text-dark);
+  color: var(--text-main);
 }
 
 .scan-step-required {
@@ -665,7 +717,7 @@ input:focus, select:focus {
 
 .scanner-card:not(.disabled):hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-dark);
+  box-shadow: var(--shadow-main);
 }
 
 .scanner-card-checkbox {
@@ -692,7 +744,7 @@ input:focus, select:focus {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
-  color: var(--text-dark);
+  color: var(--text-main);
 }
 
 .scanner-card-name.disabled {
@@ -718,8 +770,8 @@ input:focus, select:focus {
   padding: 0.125rem 0.5rem;
   background-color: rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  color: var(--text-dark);
-  border: 1px solid var(--glass-border-dark);
+  color: var(--text-main);
+  border: 1px solid var(--glass-border-main);
 }
 
 .scanner-card-requires {
@@ -745,7 +797,7 @@ input:focus, select:focus {
 .scanner-grid-loading {
   padding: 2rem;
   text-align: center;
-  color: var(--text-dark);
+  color: var(--text-main);
   opacity: 0.7;
 }
 
@@ -762,7 +814,7 @@ input:focus, select:focus {
 .scanner-grid-empty {
   padding: 2rem;
   text-align: center;
-  color: var(--text-dark);
+  color: var(--text-main);
   opacity: 0.7;
 }
 
@@ -775,10 +827,10 @@ input:focus, select:focus {
 .scanner-grid-button {
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
-  border: 1px solid var(--glass-border-dark);
+  border: 1px solid var(--glass-border-main);
   border-radius: 6px;
-  background-color: var(--glass-bg-dark);
-  color: var(--text-dark);
+  background-color: var(--glass-bg-main);
+  color: var(--text-main);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -847,7 +899,7 @@ input:focus, select:focus {
 
 .form-info-box.loading {
   border: 1px solid var(--color-info);
-  color: var(--text-dark);
+  color: var(--text-main);
 }
 
 .form-info-box.success {
@@ -876,8 +928,8 @@ input:focus, select:focus {
   font-family: monospace;
   font-size: 0.8rem;
   word-break: break-all;
-  color: var(--text-dark);
-  border: 1px solid var(--glass-border-dark);
+  color: var(--text-main);
+  border: 1px solid var(--glass-border-main);
 }
 
 .form-loading-text {
@@ -892,9 +944,9 @@ input:focus, select:focus {
   position: sticky;
   bottom: 0;
   padding: 1.5rem;
-  border-top: 2px solid var(--glass-border-dark);
+  border-top: 2px solid var(--glass-border-main);
   border-radius: 12px 12px 0 0;
-  box-shadow: var(--shadow-dark);
+  box-shadow: var(--shadow-main);
   margin-top: 2rem;
 }
 
@@ -973,9 +1025,9 @@ input:focus, select:focus {
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 50%;
-  background: var(--glass-bg-dark);
-  border: 2px solid var(--glass-border-dark);
-  color: var(--text-dark);
+  background: var(--glass-bg-main);
+  border: 2px solid var(--glass-border-main);
+  color: var(--text-main);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1003,7 +1055,7 @@ input:focus, select:focus {
 .progress-line {
   flex: 1;
   height: 2px;
-  background: var(--glass-border-dark);
+  background: var(--glass-border-main);
   margin: 0 1rem;
   position: relative;
   top: -1.25rem;
@@ -1035,17 +1087,17 @@ input:focus, select:focus {
 
 /* Setup Step Content */
 .setup-step {
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(10px);
   border-radius: var(--border-radius);
   padding: 2rem;
-  border: 1px solid var(--glass-border-dark);
+  border: 1px solid var(--glass-border-main);
   margin-top: 1rem;
 }
 
 .setup-step h3 {
   margin-top: 0;
-  color: var(--text-dark);
+  color: var(--text-main);
   font-size: 1.5rem;
   margin-bottom: 0.5rem;
   font-weight: 600;
@@ -1053,7 +1105,7 @@ input:focus, select:focus {
 
 .setup-step h4 {
   margin: 0 0 0.5rem 0;
-  color: var(--text-dark);
+  color: var(--text-main);
   font-size: 1.125rem;
   font-weight: 600;
 }
@@ -1068,10 +1120,10 @@ input:focus, select:focus {
 /* Use Case Cards */
 .use-case-card {
   padding: 1.5rem;
-  border: 2px solid var(--glass-border-dark);
+  border: 2px solid var(--glass-border-main);
   border-radius: 12px;
   cursor: pointer;
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(10px);
   transition: all 0.3s ease;
   margin-bottom: 1rem;
@@ -1092,7 +1144,7 @@ input:focus, select:focus {
 
 .use-case-card h4 {
   margin: 0 0 0.5rem 0;
-  color: var(--text-dark);
+  color: var(--text-main);
   font-size: 1.125rem;
   font-weight: 600;
 }
@@ -1117,11 +1169,11 @@ input:focus, select:focus {
   display: flex;
   align-items: center;
   padding: 1rem;
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(10px);
   border-radius: 8px;
   margin-bottom: 0.75rem;
-  border: 1px solid var(--glass-border-dark);
+  border: 1px solid var(--glass-border-main);
   transition: all 0.3s ease;
 }
 
@@ -1151,7 +1203,7 @@ input:focus, select:focus {
 }
 
 .requirement span:last-child {
-  color: var(--text-dark);
+  color: var(--text-main);
   font-weight: 500;
 }
 
@@ -1161,7 +1213,7 @@ input:focus, select:focus {
   padding: 0.75rem;
   background: rgba(0, 0, 0, 0.2);
   border-radius: 8px;
-  border: 1px solid var(--glass-border-dark);
+  border: 1px solid var(--glass-border-main);
 }
 
 .password-requirements small {
@@ -1209,7 +1261,7 @@ input:focus, select:focus {
   gap: 1rem;
   margin-top: 2rem;
   padding-top: 1.5rem;
-  border-top: 1px solid var(--glass-border-dark);
+  border-top: 1px solid var(--glass-border-main);
 }
 
 .step-actions button:last-child {
@@ -1254,18 +1306,18 @@ input:focus, select:focus {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: var(--accent-gradient);
+  background: var(--bg-main);
   padding: 1.25rem;
 }
 
 .login-container,
 .password-reset-container {
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-radius: 12px;
-  border: 1px solid var(--glass-border-dark);
-  box-shadow: var(--shadow-dark);
+  border: 1px solid var(--glass-border-main);
+  box-shadow: var(--shadow-main);
   padding: 2.5rem;
   width: 100%;
   max-width: 400px;
@@ -1281,7 +1333,7 @@ input:focus, select:focus {
 .password-reset-header h1 {
   margin: 0 0 0.5rem 0;
   font-size: 1.75rem;
-  color: var(--text-dark);
+  color: var(--text-main);
 }
 
 .login-header p,
@@ -1302,7 +1354,7 @@ input:focus, select:focus {
 .reset-button {
   padding: 0.75rem 1.5rem;
   background: var(--accent-gradient);
-  color: var(--text-dark);
+  color: var(--text-main);
   border: none;
   border-radius: 8px;
   font-size: 1rem;
@@ -1349,7 +1401,7 @@ input:focus, select:focus {
 
 .back-link:hover,
 .login-link:hover {
-  color: var(--text-dark);
+  color: var(--text-main);
   text-decoration: underline;
 }
 
@@ -1359,18 +1411,18 @@ input:focus, select:focus {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: var(--bg-dark);
+  background: var(--bg-main);
   background-attachment: fixed;
   padding: 1.25rem;
 }
 
 .setup-card {
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-radius: var(--border-radius);
-  border: 1px solid var(--glass-border-dark);
-  box-shadow: var(--shadow-dark);
+  border: 1px solid var(--glass-border-main);
+  box-shadow: var(--shadow-main);
   width: 100%;
   max-width: 800px;
   padding: 2.5rem;
@@ -1382,7 +1434,7 @@ input:focus, select:focus {
 }
 
 .setup-header h1 {
-  color: var(--text-dark);
+  color: var(--text-main);
   margin: 0 0 0.5rem 0;
   font-size: 1.75rem;
 }
@@ -1401,17 +1453,17 @@ input:focus, select:focus {
 }
 
 .admin-settings-container {
-  background: var(--glass-bg-dark);
+  background: var(--glass-bg-main);
   backdrop-filter: blur(10px);
   border-radius: 12px;
-  border: 1px solid var(--glass-border-dark);
+  border: 1px solid var(--glass-border-main);
   padding: 2rem;
 }
 
 .admin-settings-container h2 {
   margin: 0 0 1.5rem 0;
   font-size: 1.75rem;
-  color: var(--text-dark);
+  color: var(--text-main);
 }
 
 .settings-form {
@@ -1429,7 +1481,7 @@ input:focus, select:focus {
 .settings-section h3 {
   margin: 0;
   font-size: 1.25rem;
-  color: var(--text-dark);
+  color: var(--text-main);
 }
 
 .section-description {
@@ -1447,7 +1499,7 @@ input:focus, select:focus {
 .btn-primary {
   padding: 0.75rem 1.5rem;
   background: var(--accent-gradient);
-  color: var(--text-dark);
+  color: var(--text-main);
   border: none;
   border-radius: 8px;
   font-size: 1rem;
@@ -1468,9 +1520,9 @@ input:focus, select:focus {
 
 .btn-secondary {
   padding: 0.75rem 1.5rem;
-  background: var(--glass-bg-dark);
-  color: var(--text-dark);
-  border: 1px solid var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  color: var(--text-main);
+  border: 1px solid var(--glass-border-main);
   border-radius: 8px;
   font-size: 1rem;
   font-weight: 600;
@@ -1511,7 +1563,7 @@ input:focus, select:focus {
 .admin-dashboard-header h1 {
   margin: 0 0 0.5rem 0;
   font-size: 1.75rem;
-  color: var(--text-dark);
+  color: var(--text-main);
 }
 
 .admin-dashboard-subtitle {
@@ -1530,10 +1582,10 @@ input:focus, select:focus {
   gap: 0.5rem;
   font-size: 1.05rem;
   font-weight: 600;
-  color: var(--text-dark);
+  color: var(--text-main);
   margin: 0 0 1rem 0;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--glass-border-dark);
+  border-bottom: 1px solid var(--glass-border-main);
 }
 
 .admin-dashboard-section-emoji {
@@ -1550,8 +1602,8 @@ input:focus, select:focus {
 .admin-dashboard-card {
   display: block;
   padding: 1.5rem;
-  background: var(--glass-bg-dark);
-  border: 1px solid var(--glass-border-dark);
+  background: var(--glass-bg-main);
+  border: 1px solid var(--glass-border-main);
   border-radius: 12px;
   text-decoration: none;
   color: inherit;
@@ -1578,7 +1630,7 @@ input:focus, select:focus {
   margin: 0 0 0.5rem 0;
   font-size: 1.1rem;
   font-weight: 600;
-  color: var(--text-dark);
+  color: var(--text-main);
 }
 
 .admin-dashboard-card-description {
@@ -1603,8 +1655,6 @@ input:focus, select:focus {
 /* Responsive */
 @media (max-width: 768px) {
   .theme-toggle-button {
-    top: 0.6rem;
-    right: 0.6rem;
     padding: 0.4rem 0.65rem;
     font-size: 0.8rem;
   }

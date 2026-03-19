@@ -109,22 +109,22 @@ export default function ProfilePage() {
         <div style={{ display: 'grid', gap: '1.5rem' }}>
           {/* Account Information */}
           <div style={{
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
             padding: '2rem',
             borderRadius: '8px',
-            border: '1px solid var(--glass-border-dark)'
+            border: '1px solid var(--glass-border-main)'
           }}>
             <h2 style={{ marginTop: 0, marginBottom: '1.5rem' }}>Account Information</h2>
             <div style={{ display: 'grid', gap: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border-dark)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border-main)' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Email:</span>
                 <strong>{profile.email}</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border-dark)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border-main)' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Username:</span>
                 <strong>{profile.username}</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border-dark)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border-main)' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Role:</span>
                 <span style={{
                   padding: '0.25rem 0.5rem',
@@ -135,7 +135,7 @@ export default function ProfilePage() {
                   {profile.role}
                 </span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border-dark)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border-main)' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Account Created:</span>
                 <span>{new Date(profile.created_at).toLocaleDateString()}</span>
               </div>
@@ -148,10 +148,10 @@ export default function ProfilePage() {
 
           {/* Password Management */}
           <div style={{
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
             padding: '2rem',
             borderRadius: '8px',
-            border: '1px solid var(--glass-border-dark)'
+            border: '1px solid var(--glass-border-main)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h2 style={{ margin: 0 }}>Password Management</h2>
@@ -214,20 +214,20 @@ export default function ProfilePage() {
 
           {/* Quick Links */}
           <div style={{
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
             padding: '2rem',
             borderRadius: '8px',
-            border: '1px solid var(--glass-border-dark)'
+            border: '1px solid var(--glass-border-main)'
           }}>
             <h2 style={{ marginTop: 0, marginBottom: '1rem' }}>Quick Links</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <a href="/api-keys" style={{ color: 'var(--text-dark)', textDecoration: 'none' }}>
+              <a href="/api-keys" style={{ color: 'var(--text-main)', textDecoration: 'none' }}>
                 → Manage API Keys
               </a>
-              <a href="/my-targets" style={{ color: 'var(--text-dark)', textDecoration: 'none' }}>
+              <a href="/my-targets" style={{ color: 'var(--text-main)', textDecoration: 'none' }}>
                 → My GitHub Repos
               </a>
-              <a href="/my-scans" style={{ color: 'var(--text-dark)', textDecoration: 'none' }}>
+              <a href="/my-scans" style={{ color: 'var(--text-main)', textDecoration: 'none' }}>
                 → My Scans
               </a>
             </div>

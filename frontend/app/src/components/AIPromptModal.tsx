@@ -130,8 +130,8 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRadius: '8px',
-          border: '1px solid var(--glass-border-dark)',
-          boxShadow: 'var(--shadow-dark)',
+          border: '1px solid var(--glass-border-main)',
+          boxShadow: 'var(--shadow-main)',
           padding: '2rem',
           maxWidth: '900px',
           width: '100%',
@@ -149,7 +149,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
             justifyContent: 'space-between',
             alignItems: 'center',
             marginBottom: '1.5rem',
-            borderBottom: '1px solid var(--glass-border-dark)',
+            borderBottom: '1px solid var(--glass-border-main)',
             paddingBottom: '1rem',
           }}
         >
@@ -161,7 +161,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
               border: 'none',
               fontSize: '1.5rem',
               cursor: 'pointer',
-              color: 'var(--text-dark)',
+              color: 'var(--text-main)',
               padding: '0.25rem 0.5rem',
               lineHeight: 1,
             }}
@@ -184,9 +184,9 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                   alignItems: 'center',
                   justifyContent: 'center',
                   padding: '2rem',
-                  background: 'var(--glass-bg-dark)',
+                  background: 'var(--glass-bg-main)',
                   borderRadius: '8px',
-                  border: '1px solid var(--glass-border-dark)',
+                  border: '1px solid var(--glass-border-main)',
                 }}
               >
                 <div style={{ opacity: 0.7 }}>⏳ {t('aiPrompt.loadingPrompt')}</div>
@@ -211,7 +211,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                   flex: 1,
                   minHeight: '400px',
                   background: 'var(--code-bg)',
-                  border: '1px solid var(--glass-border-dark)',
+                  border: '1px solid var(--glass-border-main)',
                   borderRadius: '8px',
                   padding: '1rem',
                   color: 'var(--code-text)',
@@ -229,8 +229,8 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
           {/* Settings */}
           <div
             style={{
-              background: 'var(--glass-bg-dark)',
-              border: '1px solid var(--glass-border-dark)',
+              background: 'var(--glass-bg-main)',
+              border: '1px solid var(--glass-border-main)',
               borderRadius: '8px',
               padding: '1rem',
             }}
@@ -246,8 +246,8 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                       key={lang}
                       onClick={() => handleLanguageChange(lang)}
                       style={{
-                        background: promptLanguage === lang ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'var(--glass-bg-dark)',
-                        border: `1px solid ${promptLanguage === lang ? '#667eea' : 'var(--glass-border-dark)'}`,
+                        background: promptLanguage === lang ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'var(--glass-bg-main)',
+                        border: `1px solid ${promptLanguage === lang ? '#667eea' : 'var(--glass-border-main)'}`,
                         padding: '0.5rem 1rem',
                         borderRadius: '8px',
                         cursor: 'pointer',
@@ -271,10 +271,10 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                   style={{
                     width: '100%',
                     padding: '0.75rem',
-                    background: 'var(--glass-bg-dark)',
-                    border: '1px solid var(--glass-border-dark)',
+                    background: 'var(--glass-bg-main)',
+                    border: '1px solid var(--glass-border-main)',
                     borderRadius: '8px',
-                    color: 'var(--text-dark)',
+                    color: 'var(--text-main)',
                   }}
                 />
               </div>
@@ -288,8 +288,8 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                 display: 'flex',
                 gap: '1rem',
                 padding: '0.75rem',
-                background: 'var(--glass-bg-dark)',
-                border: '1px solid var(--glass-border-dark)',
+                background: 'var(--glass-bg-main)',
+                border: '1px solid var(--glass-border-main)',
                 borderRadius: '8px',
                 fontSize: '0.9rem',
                 opacity: 0.8,
@@ -307,8 +307,8 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
             <button
               onClick={onClose}
               style={{
-                background: 'var(--glass-bg-dark)',
-                border: '1px solid var(--glass-border-dark)',
+                background: 'var(--glass-bg-main)',
+                border: '1px solid var(--glass-border-main)',
                 padding: '0.75rem 1.5rem',
               }}
             >

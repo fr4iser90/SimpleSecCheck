@@ -93,8 +93,8 @@ export default function AdminToolDurationPage() {
                   className="stat-card stat-card--neutral"
                   style={{
                     padding: '1rem',
-                    background: 'var(--glass-bg-dark)',
-                    border: '1px solid var(--glass-border-dark)',
+                    background: 'var(--glass-bg-main)',
+                    border: '1px solid var(--glass-border-main)',
                     borderRadius: '12px',
                   }}
                 >

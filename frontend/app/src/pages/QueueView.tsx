@@ -171,11 +171,11 @@ export default function QueueView() {
               <div
                 key={item.queue_id}
                 style={{
-                  background: 'var(--glass-bg-dark)',
+                  background: 'var(--glass-bg-main)',
                   padding: '1.5rem',
                   borderRadius: '8px',
                   border: `1px solid ${getStatusColor(item.status)}40`,
-                  boxShadow: 'var(--shadow-dark)'
+                  boxShadow: 'var(--shadow-main)'
                 }}
               >
                 {/* Header with Position and Status */}
@@ -244,7 +244,7 @@ export default function QueueView() {
                             fontWeight: '500',
                             background: 'var(--surface-muted)',
                             color: 'var(--accent)',
-                            border: '1px solid var(--glass-border-dark)',
+                            border: '1px solid var(--glass-border-main)',
                           }}
                         >
                           {scanner}

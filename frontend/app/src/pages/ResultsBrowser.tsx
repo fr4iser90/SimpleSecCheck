@@ -46,8 +46,8 @@ export default function ResultsBrowser() {
               <div
                 key={scan.id}
                 style={{
-                  background: 'var(--glass-bg-dark)',
-                  border: '1px solid var(--glass-border-dark)',
+                  background: 'var(--glass-bg-main)',
+                  border: '1px solid var(--glass-border-main)',
                   borderRadius: '8px',
                   padding: '1rem',
                   marginBottom: '1rem',
@@ -76,8 +76,8 @@ export default function ResultsBrowser() {
                 }}
                 onMouseLeave={(e) => {
                   if (scan.has_report) {
-                    e.currentTarget.style.background = 'var(--glass-bg-dark)'
-                    e.currentTarget.style.borderColor = 'var(--glass-border-dark)'
+                    e.currentTarget.style.background = 'var(--glass-bg-main)'
+                    e.currentTarget.style.borderColor = 'var(--glass-border-main)'
                   }
                 }}
               >

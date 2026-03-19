@@ -109,9 +109,9 @@ export default function AdminPoliciesPage() {
             style={{
               marginTop: '1.5rem',
               padding: '1.25rem',
-              border: '1px solid var(--glass-border-dark)',
+              border: '1px solid var(--glass-border-main)',
               borderRadius: 12,
-              background: 'var(--glass-bg-dark)',
+              background: 'var(--glass-bg-main)',
             }}
           >
             {error && (

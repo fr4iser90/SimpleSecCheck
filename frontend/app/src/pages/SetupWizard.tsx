@@ -557,7 +557,7 @@ export default function SetupWizard() {
         padding: '1rem', 
         backgroundColor: 'var(--glass-bg-light)', 
         borderRadius: '8px',
-        border: '1px solid var(--glass-border-dark)'
+        border: '1px solid var(--glass-border-main)'
       }}>
         <label style={{ 
           display: 'flex', 
@@ -575,7 +575,7 @@ export default function SetupWizard() {
           <span>
             <strong>Auto-Login nach Setup</strong>
             <span style={{ display: 'block', color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-              Automatisch mit den Admin-Daten einloggen, damit du sofort die Admin- und User-Menüs nutzen kannst.
+              Log in automatically with your admin data so you can immediately use the admin and user menus.
             </span>
           </span>
         </label>
@@ -630,7 +630,7 @@ export default function SetupWizard() {
         </small>
       </div>
       
-      <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--glass-border-dark)' }}>
+      <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--glass-border-main)' }}>
         <h4>Email Configuration (Optional)</h4>
         <p style={{ marginBottom: '1rem' }}>
           Configure SMTP settings to enable password reset emails. This can be configured later in Admin Settings.
@@ -733,7 +733,7 @@ export default function SetupWizard() {
       <div style={{ 
         marginTop: '2rem', 
         paddingTop: '1.5rem', 
-        borderTop: '1px solid var(--glass-border-dark)',
+        borderTop: '1px solid var(--glass-border-main)',
         backgroundColor: 'var(--glass-bg-light)',
         padding: '1.5rem',
         borderRadius: '8px'

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
 import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
+import ThemeToggle from './ThemeToggle'
 
 export default function Header() {
   const { config } = useConfig()
@@ -160,6 +161,7 @@ export default function Header() {
         <Link to="/capabilities" className="nav-pill" title="What guests vs signed-in users can do">
           Guest vs account
         </Link>
+        <ThemeToggle />
         {isAuthenticated && user && isAdmin && (
           <div className="dropdown" ref={adminMenuRef}>
             <button

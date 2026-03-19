@@ -54,7 +54,7 @@ export default function SignUpPage() {
         <div className="login-container">
           <h1>🛡️ SimpleSecCheck</h1>
           <p>Self-registration is disabled. Contact an administrator to get an account.</p>
-          <Link to="/login" style={{ color: 'var(--color-primary)', marginTop: '1rem', display: 'inline-block' }}>
+          <Link to="/login" style={{ color: 'var(--accent)', marginTop: '1rem', display: 'inline-block' }}>
             ← Back to Sign in
           </Link>
         </div>
@@ -138,7 +138,7 @@ export default function SignUpPage() {
         </form>
 
         <div style={{ marginTop: '16px', textAlign: 'center' }}>
-          <Link to="/login" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '14px' }}>
+          <Link to="/login" style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: '14px' }}>
             Already have an account? Sign in
           </Link>
         </div>

@@ -93,11 +93,11 @@ export default function AuditLogPage() {
 
       {/* Filters */}
       <div style={{
-        background: 'var(--glass-bg-dark)',
+        background: 'var(--glass-bg-main)',
         padding: '1.5rem',
         borderRadius: '8px',
         marginBottom: '1.5rem',
-        border: '1px solid var(--glass-border-dark)'
+        border: '1px solid var(--glass-border-main)'
       }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
           <div>
@@ -157,10 +157,10 @@ export default function AuditLogPage() {
       ) : (
         <>
           <div style={{
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
             borderRadius: '8px',
             overflow: 'hidden',
-            border: '1px solid var(--glass-border-dark)'
+            border: '1px solid var(--glass-border-main)'
           }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>

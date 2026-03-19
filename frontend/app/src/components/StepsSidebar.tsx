@@ -132,10 +132,10 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
           bottom: 0,
           width: '400px',
           maxWidth: '90vw',
-          background: 'var(--glass-bg-dark)',
+          background: 'var(--glass-bg-main)',
           backdropFilter: 'blur(20px)',
-          borderLeft: '1px solid var(--glass-border-dark)',
-          boxShadow: 'var(--shadow-dark)',
+          borderLeft: '1px solid var(--glass-border-main)',
+          boxShadow: 'var(--shadow-main)',
           zIndex: 1000,
           display: 'flex',
           flexDirection: 'column',
@@ -146,7 +146,7 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
         <div
           style={{
             padding: '1.5rem',
-            borderBottom: '1px solid var(--glass-border-dark)',
+            borderBottom: '1px solid var(--glass-border-main)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -160,7 +160,7 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
               border: 'none',
               fontSize: '1.5rem',
               cursor: 'pointer',
-              color: 'var(--text-dark)',
+              color: 'var(--text-main)',
               padding: '0.25rem 0.5rem',
               lineHeight: 1,
             }}
@@ -208,8 +208,8 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
                     key={step.number}
                     style={{
                       padding: '1rem',
-                      background: 'var(--glass-bg-dark)',
-                      border: '1px solid var(--glass-border-dark)',
+                      background: 'var(--glass-bg-main)',
+                      border: '1px solid var(--glass-border-main)',
                       borderRadius: '8px',
                     }}
                   >
@@ -228,7 +228,7 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
                     {step.substeps && step.substeps.length > 0 && (
                       <SubstepSlot
                         current={step.substeps[step.substeps.length - 1]}
-                        typeStyle={{ badge: '⚙️', bgColor: 'var(--surface-muted)', borderColor: 'var(--glass-border-dark)' }}
+                        typeStyle={{ badge: '⚙️', bgColor: 'var(--surface-muted)', borderColor: 'var(--glass-border-main)' }}
                         getSubStepColor={(s) => getSubStepColor(s.status)}
                         getSubStepIcon={(s) => getSubStepIcon(s.status)}
                       />

@@ -301,7 +301,7 @@ export default function ScannerDataUpdate() {
               borderRadius: '4px',
               border: '1px solid rgba(255, 255, 255, 0.2)',
               background: 'rgba(0, 0, 0, 0.4)',
-              color: 'var(--text-dark, #f8f9fa)',
+              color: 'var(--text-main, #f8f9fa)',
             }}
           >
             <option value="" disabled>
@@ -328,12 +328,12 @@ export default function ScannerDataUpdate() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span style={{ color: getStatusColor(), fontWeight: 'bold' }}>{getStatusText()}</span>
             {status.started_at && (
-              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--text-dark, #f8f9fa)' }}>
+              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--text-main, #f8f9fa)' }}>
                 Started: {new Date(status.started_at).toLocaleString()}
               </span>
             )}
             {status.finished_at && (
-              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--text-dark, #f8f9fa)' }}>
+              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--text-main, #f8f9fa)' }}>
                 Finished: {new Date(status.finished_at).toLocaleString()}
               </span>
             )}

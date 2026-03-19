@@ -8,11 +8,11 @@ interface RepoStatsProps {
 export default function RepoStats({ total, scanned, needsAttention, critical }: RepoStatsProps) {
   return (
     <div style={{
-      background: 'var(--glass-bg-dark)',
+      background: 'var(--glass-bg-main)',
       padding: '1rem 1.5rem',
       borderRadius: '8px',
       marginBottom: '1.5rem',
-      border: '1px solid var(--glass-border-dark)',
+      border: '1px solid var(--glass-border-main)',
       display: 'flex',
       gap: '2rem',
       flexWrap: 'wrap',

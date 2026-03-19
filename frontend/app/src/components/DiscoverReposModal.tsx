@@ -67,7 +67,7 @@ export default function DiscoverReposModal({
               alignItems: 'center',
               marginBottom: '1rem',
               paddingBottom: '1rem',
-              borderBottom: '1px solid var(--glass-border-dark)'
+              borderBottom: '1px solid var(--glass-border-main)'
             }}>
               <div>
                 <strong>Found {discoveredRepos.length} repositories</strong>
@@ -116,7 +116,7 @@ export default function DiscoverReposModal({
                     gap: '1rem',
                     padding: '1rem',
                     background: selectedRepos.has(repo.full_name) ? 'rgba(102, 126, 234, 0.2)' : 'rgba(0, 0, 0, 0.2)',
-                    border: `1px solid ${selectedRepos.has(repo.full_name) ? 'var(--accent)' : 'var(--glass-border-dark)'}`,
+                    border: `1px solid ${selectedRepos.has(repo.full_name) ? 'var(--accent)' : 'var(--glass-border-main)'}`,
                     borderRadius: '6px',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease'

@@ -156,7 +156,7 @@ export default function UserManagementPage() {
               style={{
                 padding: '0.35rem 0.75rem',
                 borderRadius: '6px',
-                border: filter === f ? 'none' : '1px solid var(--glass-border-dark)',
+                border: filter === f ? 'none' : '1px solid var(--glass-border-main)',
                 background: filter === f ? undefined : 'transparent',
                 cursor: 'pointer',
                 fontSize: '0.9rem'
@@ -175,10 +175,10 @@ export default function UserManagementPage() {
         <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div>
       ) : (
         <div style={{
-          background: 'var(--glass-bg-dark)',
+          background: 'var(--glass-bg-main)',
           borderRadius: '8px',
           overflow: 'hidden',
-          border: '1px solid var(--glass-border-dark)'
+          border: '1px solid var(--glass-border-main)'
         }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -261,12 +261,12 @@ export default function UserManagementPage() {
           zIndex: 1000
         }}>
           <div style={{
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
             padding: '2rem',
             borderRadius: '8px',
             width: '90%',
             maxWidth: '500px',
-            border: '1px solid var(--glass-border-dark)'
+            border: '1px solid var(--glass-border-main)'
           }}>
             <h2 style={{ marginTop: 0 }}>Create User</h2>
             <form onSubmit={handleCreate}>
@@ -336,12 +336,12 @@ export default function UserManagementPage() {
           zIndex: 1000
         }}>
           <div style={{
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
             padding: '2rem',
             borderRadius: '8px',
             width: '90%',
             maxWidth: '500px',
-            border: '1px solid var(--glass-border-dark)'
+            border: '1px solid var(--glass-border-main)'
           }}>
             <h2 style={{ marginTop: 0 }}>Edit User</h2>
             <form onSubmit={handleUpdate}>

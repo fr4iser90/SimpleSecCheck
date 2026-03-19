@@ -357,9 +357,9 @@ export default function ExecutionSettingsPage() {
           style={{
             marginBottom: '2rem',
             padding: '1.25rem',
-            border: '1px solid var(--glass-border-dark)',
+            border: '1px solid var(--glass-border-main)',
             borderRadius: 12,
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
           }}
         >
           <h3 style={{ marginTop: 0 }}>Live queue</h3>
@@ -388,7 +388,7 @@ export default function ExecutionSettingsPage() {
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>
+                      <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>
                         <th style={{ padding: '0.35rem' }}>Scan</th>
                         <th style={{ padding: '0.35rem' }}>Target</th>
                         <th style={{ padding: '0.35rem' }}>Pri</th>
@@ -397,7 +397,7 @@ export default function ExecutionSettingsPage() {
                     </thead>
                     <tbody>
                       {overview.running.map((row) => (
-                        <tr key={row.scan_id} style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
+                        <tr key={row.scan_id} style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
                           <td style={{ padding: '0.35rem' }}>
                             <Link to="/scan" state={{ scan_id: row.scan_id }}>
                               {row.name || row.scan_id.slice(0, 8)}
@@ -423,7 +423,7 @@ export default function ExecutionSettingsPage() {
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>
+                      <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>
                         <th style={{ padding: '0.35rem' }}>#</th>
                         <th style={{ padding: '0.35rem' }}>Scan</th>
                         <th style={{ padding: '0.35rem' }}>Target</th>
@@ -433,7 +433,7 @@ export default function ExecutionSettingsPage() {
                     </thead>
                     <tbody>
                       {overview.next_pending.map((row) => (
-                        <tr key={row.scan_id} style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
+                        <tr key={row.scan_id} style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
                           <td style={{ padding: '0.35rem' }}>{row.position}</td>
                           <td style={{ padding: '0.35rem' }}>
                             <Link to="/scan" state={{ scan_id: row.scan_id }}>
@@ -600,9 +600,9 @@ export default function ExecutionSettingsPage() {
           style={{
             marginTop: '2rem',
             padding: '1.25rem',
-            border: '1px solid var(--glass-border-dark)',
+            border: '1px solid var(--glass-border-main)',
             borderRadius: 12,
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
           }}
         >
           <h3 style={{ marginTop: 0 }}>Enforced limits</h3>
@@ -740,9 +740,9 @@ export default function ExecutionSettingsPage() {
           style={{
             marginTop: '2rem',
             padding: '1.25rem',
-            border: '1px solid var(--glass-border-dark)',
+            border: '1px solid var(--glass-border-main)',
             borderRadius: 12,
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
           }}
         >
           <h3 style={{ marginTop: 0 }}>Scan form defaults (Finding Policy)</h3>

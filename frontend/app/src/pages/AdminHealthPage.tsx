@@ -106,7 +106,7 @@ export default function AdminHealthPage() {
             >
               <div
                 className="settings-section"
-                style={{ padding: '1.25rem', border: '1px solid var(--glass-border-dark)', borderRadius: 12 }}
+                style={{ padding: '1.25rem', border: '1px solid var(--glass-border-main)', borderRadius: 12 }}
               >
                 <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   PostgreSQL {pill(data.database?.status)}
@@ -125,7 +125,7 @@ export default function AdminHealthPage() {
               </div>
               <div
                 className="settings-section"
-                style={{ padding: '1.25rem', border: '1px solid var(--glass-border-dark)', borderRadius: 12 }}
+                style={{ padding: '1.25rem', border: '1px solid var(--glass-border-main)', borderRadius: 12 }}
               >
                 <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   Redis {pill(data.redis?.status)}
@@ -144,7 +144,7 @@ export default function AdminHealthPage() {
               </div>
               <div
                 className="settings-section"
-                style={{ padding: '1.25rem', border: '1px solid var(--glass-border-dark)', borderRadius: 12 }}
+                style={{ padding: '1.25rem', border: '1px solid var(--glass-border-main)', borderRadius: 12 }}
               >
                 <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   Worker API {pill(data.worker?.reachable)}

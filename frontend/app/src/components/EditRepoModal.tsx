@@ -45,7 +45,7 @@ export default function EditRepoModal({ isOpen, repo, onClose, onSubmit, formDat
         borderRadius: '8px',
         width: '90%',
         maxWidth: '500px',
-        border: '1px solid var(--glass-border-dark)',
+        border: '1px solid var(--glass-border-main)',
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
       }}>
         <h2 style={{ marginTop: 0 }}>Repository Settings</h2>

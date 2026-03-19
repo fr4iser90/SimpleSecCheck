@@ -50,7 +50,7 @@ export default function BulkScannerConfigModal({
         borderRadius: '8px',
         width: '90%',
         maxWidth: '600px',
-        border: '1px solid var(--glass-border-dark)',
+        border: '1px solid var(--glass-border-main)',
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
       }}>
         <h2 style={{ marginTop: 0 }}>Apply Scanner Selection to All Repos</h2>

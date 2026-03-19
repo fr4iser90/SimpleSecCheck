@@ -27,8 +27,8 @@ const CONTENT_BASE: React.CSSProperties = {
   borderRadius: '8px',
   maxHeight: '90vh',
   overflow: 'auto',
-  border: '1px solid var(--glass-border-dark)',
-  boxShadow: 'var(--shadow-dark)',
+  border: '1px solid var(--glass-border-main)',
+  boxShadow: 'var(--shadow-main)',
 }
 
 export interface ModalProps {

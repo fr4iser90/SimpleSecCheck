@@ -92,10 +92,10 @@ export default function TargetCard({
   return (
     <div
       style={{
-        background: 'var(--glass-bg-dark)',
+        background: 'var(--glass-bg-main)',
         padding: '1.5rem',
         borderRadius: '8px',
-        border: '1px solid var(--glass-border-dark)',
+        border: '1px solid var(--glass-border-main)',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
@@ -109,7 +109,7 @@ export default function TargetCard({
                 padding: '0.2rem 0.5rem',
                 borderRadius: '8px',
                 fontSize: '0.7rem',
-                background: 'var(--glass-border-dark)',
+                background: 'var(--glass-border-main)',
                 color: 'var(--text-secondary)',
               }}
             >
@@ -162,7 +162,7 @@ export default function TargetCard({
                     fontSize: '0.72rem',
                     background: firstScanStatusBadge.color,
                     border: `1px solid ${firstScanStatusBadge.border}`,
-                    color: 'var(--text-dark)',
+                    color: 'var(--text-main)',
                   }}
                 >
                   {firstScanStatusBadge.text}
@@ -218,7 +218,7 @@ export default function TargetCard({
             </div>
           )}
           {target.last_scan && (
-            <div style={{ marginTop: '0.5rem', padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-border-dark)', fontSize: '0.85rem' }}>
+            <div style={{ marginTop: '0.5rem', padding: '0.5rem', borderRadius: '6px', background: 'var(--glass-border-main)', fontSize: '0.85rem' }}>
               <div style={{ marginBottom: '0.25rem' }}>
                 <strong>Last scan</strong>
                 <span style={{ marginLeft: '0.5rem', color: 'var(--text-secondary)' }}>{target.last_scan.status}</span>
@@ -249,7 +249,7 @@ export default function TargetCard({
               {(target.last_scan.status === 'completed' || target.last_scan.status === 'failed') && (
                 <Link
                   to={`/api/results/${target.last_scan.scan_id}/report`}
-                  style={{ fontSize: '0.85rem', color: 'var(--color-primary, #0d6efd)' }}
+                  style={{ fontSize: '0.85rem', color: 'var(--accent, #0d6efd)' }}
                 >
                   View report →
                 </Link>

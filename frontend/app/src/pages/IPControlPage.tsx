@@ -108,10 +108,10 @@ export default function IPControlPage() {
       {/* Statistics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         <div style={{
-          background: 'var(--glass-bg-dark)',
+          background: 'var(--glass-bg-main)',
           padding: '1.5rem',
           borderRadius: '8px',
-          border: '1px solid var(--glass-border-dark)'
+          border: '1px solid var(--glass-border-main)'
         }}>
           <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-critical)' }}>
             {statistics.total_blocked}
@@ -119,10 +119,10 @@ export default function IPControlPage() {
           <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Blocked IPs</div>
         </div>
         <div style={{
-          background: 'var(--glass-bg-dark)',
+          background: 'var(--glass-bg-main)',
           padding: '1.5rem',
           borderRadius: '8px',
-          border: '1px solid var(--glass-border-dark)'
+          border: '1px solid var(--glass-border-main)'
         }}>
           <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-high)' }}>
             {statistics.total_activity_24h}
@@ -139,10 +139,10 @@ export default function IPControlPage() {
           <div style={{ marginBottom: '2rem' }}>
             <h2 style={{ marginBottom: '1rem' }}>Blocked IPs</h2>
             <div style={{
-              background: 'var(--glass-bg-dark)',
+              background: 'var(--glass-bg-main)',
               borderRadius: '8px',
               overflow: 'hidden',
-              border: '1px solid var(--glass-border-dark)'
+              border: '1px solid var(--glass-border-main)'
             }}>
               {blockedIPs.length === 0 ? (
                 <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -152,16 +152,16 @@ export default function IPControlPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>IP Address</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Reason</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Blocked At</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Expires</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Actions</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>IP Address</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Reason</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Blocked At</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Expires</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {blockedIPs.map((ip) => (
-                      <tr key={ip.id} style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
+                      <tr key={ip.id} style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
                         <td style={{ padding: '1rem', fontSize: '0.9rem', fontFamily: 'monospace' }}>{ip.ip_address}</td>
                         <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{ip.reason}</td>
                         <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
@@ -190,10 +190,10 @@ export default function IPControlPage() {
           <div>
             <h2 style={{ marginBottom: '1rem' }}>Suspicious Activity (Last 24h)</h2>
             <div style={{
-              background: 'var(--glass-bg-dark)',
+              background: 'var(--glass-bg-main)',
               borderRadius: '8px',
               overflow: 'hidden',
-              border: '1px solid var(--glass-border-dark)'
+              border: '1px solid var(--glass-border-main)'
             }}>
               {suspicious.length === 0 ? (
                 <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -203,15 +203,15 @@ export default function IPControlPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>IP Address</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Event Type</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Count</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Window Start</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>IP Address</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Event Type</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Count</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Window Start</th>
                     </tr>
                   </thead>
                   <tbody>
                     {suspicious.map((activity, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
+                      <tr key={idx} style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
                         <td style={{ padding: '1rem', fontSize: '0.9rem', fontFamily: 'monospace' }}>{activity.ip_address}</td>
                         <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{activity.event_type}</td>
                         <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
@@ -252,12 +252,12 @@ export default function IPControlPage() {
           zIndex: 1000
         }}>
           <div style={{
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
             padding: '2rem',
             borderRadius: '8px',
             width: '90%',
             maxWidth: '500px',
-            border: '1px solid var(--glass-border-dark)'
+            border: '1px solid var(--glass-border-main)'
           }}>
             <h2 style={{ marginTop: 0 }}>Block IP Address</h2>
             <form onSubmit={handleBlock}>

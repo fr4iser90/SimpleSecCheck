@@ -23,7 +23,7 @@ interface CapabilitiesPayload {
 
 function Row({ label, guest, user }: { label: string; guest: React.ReactNode; user: React.ReactNode }) {
   return (
-    <tr style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
+    <tr style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
       <th style={{ padding: '0.85rem 1rem', textAlign: 'left', verticalAlign: 'top', width: '28%' }}>{label}</th>
       <td style={{ padding: '0.85rem 1rem', verticalAlign: 'top' }}>{guest}</td>
       <td style={{ padding: '0.85rem 1rem', verticalAlign: 'top' }}>{user}</td>
@@ -75,9 +75,9 @@ export default function CapabilitiesPage() {
           </p>
 
           <div style={{
-            background: 'var(--glass-bg-dark)',
+            background: 'var(--glass-bg-main)',
             borderRadius: '8px',
-            border: '1px solid var(--glass-border-dark)',
+            border: '1px solid var(--glass-border-main)',
             overflow: 'auto',
           }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -135,17 +135,17 @@ export default function CapabilitiesPage() {
 
           <h2 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.1rem' }}>Access &amp; registration</h2>
           <ul style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            <li>Access mode: <strong style={{ color: 'var(--text-dark)' }}>{data.auth.access_mode}</strong></li>
-            <li>Login required for scans: <strong style={{ color: 'var(--text-dark)' }}>{data.auth.login_required ? 'Yes' : 'No'}</strong></li>
-            <li>Auth mode: <strong style={{ color: 'var(--text-dark)' }}>{data.auth.auth_mode}</strong></li>
-            <li>Self-registration: <strong style={{ color: 'var(--text-dark)' }}>{data.auth.allow_self_registration ? 'Open' : 'Admin-created accounts only'}</strong></li>
+            <li>Access mode: <strong style={{ color: 'var(--text-main)' }}>{data.auth.access_mode}</strong></li>
+            <li>Login required for scans: <strong style={{ color: 'var(--text-main)' }}>{data.auth.login_required ? 'Yes' : 'No'}</strong></li>
+            <li>Auth mode: <strong style={{ color: 'var(--text-main)' }}>{data.auth.auth_mode}</strong></li>
+            <li>Self-registration: <strong style={{ color: 'var(--text-main)' }}>{data.auth.allow_self_registration ? 'Open' : 'Admin-created accounts only'}</strong></li>
           </ul>
 
           <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <Link to="/" style={{ color: 'var(--color-primary)' }}>← Home / Start scan</Link>
-            <Link to="/login" style={{ color: 'var(--color-primary)' }}>Sign in</Link>
+            <Link to="/" style={{ color: 'var(--accent)' }}>← Home / Start scan</Link>
+            <Link to="/login" style={{ color: 'var(--accent)' }}>Sign in</Link>
             {data.auth.allow_self_registration && (
-              <Link to="/signup" style={{ color: 'var(--color-primary)' }}>Create account</Link>
+              <Link to="/signup" style={{ color: 'var(--accent)' }}>Create account</Link>
             )}
           </div>
         </>

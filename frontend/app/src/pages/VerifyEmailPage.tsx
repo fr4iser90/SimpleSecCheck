@@ -65,7 +65,7 @@ export default function VerifyEmailPage() {
               {message}
             </div>
             <div style={{ marginTop: '1rem', textAlign: 'center' }}>
-              <Link to="/login" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '14px' }}>
+              <Link to="/login" style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: '14px' }}>
                 ← Back to Sign in
               </Link>
             </div>
