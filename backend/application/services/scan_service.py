@@ -18,7 +18,6 @@ from domain.exceptions.scan_exceptions import (
     ScanValidationException,
 )
 from application.services.scan_enforcement import enforce_scan_creation
-from infrastructure.container import get_system_state_repository
 from domain.services.finding_policy_defaults import (
     DEFAULT_FINDING_POLICY_APPLY_BY_DEFAULT,
     DEFAULT_FINDING_POLICY_PATH,
@@ -108,6 +107,9 @@ class ScanService:
             if isinstance(existing, str) and existing.strip():
                 return
 
+            # Lazy import avoids circular import:
+            # infrastructure.container imports ScanService at module import time.
+            from infrastructure.container import get_system_state_repository
             repo = get_system_state_repository()
             state = await repo.get_singleton()
             defaults = ((state.config or {}).get("scan_defaults") or {}) if state else {}
