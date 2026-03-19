@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './hooks/useAuth'
 import { useConfig } from './hooks/useConfig'
 import BootstrapLoader, { SetupStatus } from './components/BootstrapLoader'
 import Header from './components/Header'
+import ThemeToggle from './components/ThemeToggle'
 import HomePage from './pages/HomePage'
 import ScanView from './pages/ScanView'
 import BatchProgressPage from './pages/BatchProgressPage'
@@ -289,6 +290,7 @@ function AppContent() {
       {(setupStatus) => (
         <BrowserRouter>
           <div className="app">
+            <ThemeToggle />
             <AppRoutes setupStatus={setupStatus} />
           </div>
         </BrowserRouter>

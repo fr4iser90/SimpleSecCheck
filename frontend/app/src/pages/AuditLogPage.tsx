@@ -164,34 +164,34 @@ export default function AuditLogPage() {
           }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Time</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>User</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Action</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Target</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>IP</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Result</th>
+                <tr className="table-head-row">
+                  <th className="table-cell-head">Time</th>
+                  <th className="table-cell-head">User</th>
+                  <th className="table-cell-head">Action</th>
+                  <th className="table-cell-head">Target</th>
+                  <th className="table-cell-head">IP</th>
+                  <th className="table-cell-head">Result</th>
                 </tr>
               </thead>
               <tbody>
                 {entries.map((entry) => (
-                  <tr key={entry.id} style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
-                    <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
+                  <tr key={entry.id} className="table-row-divider">
+                    <td className="table-cell">
                       {new Date(entry.created_at).toLocaleString()}
                     </td>
-                    <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
+                    <td className="table-cell">
                       {entry.user_email || 'System'}
                     </td>
-                    <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
+                    <td className="table-cell">
                       {entry.action_type}
                     </td>
-                    <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
+                    <td className="table-cell">
                       {entry.target || '-'}
                     </td>
-                    <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
+                    <td className="table-cell">
                       {entry.ip_address || '-'}
                     </td>
-                    <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
+                    <td className="table-cell">
                       <span style={{
                         color: entry.result === 'success' ? 'var(--color-pass)' : 'var(--color-critical)'
                       }}>

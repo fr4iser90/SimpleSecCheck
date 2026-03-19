@@ -94,7 +94,7 @@ export default function QueueView() {
             <h2>Public Queue</h2>
             <p style={{ marginTop: '0.5rem', opacity: 0.8, fontSize: '0.9rem' }}>
               Anonymized view of all scans in the queue. To cancel your own scan, open{' '}
-              <a href="/my-scans" style={{ color: 'var(--primary, #007bff)' }}>My Scans</a> or the scan progress page.
+              <a href="/my-scans" style={{ color: 'var(--accent)' }}>My Scans</a> or the scan progress page.
             </p>
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -110,10 +110,10 @@ export default function QueueView() {
               onClick={fetchQueue}
               disabled={loading}
               style={{
-                background: 'var(--primary)',
+                background: 'var(--accent-gradient)',
                 border: 'none',
                 borderRadius: '8px',
-                color: 'white',
+                color: '#fff',
                 padding: '0.5rem 1rem',
                 cursor: loading ? 'not-allowed' : 'pointer',
                 fontSize: '0.9rem',
@@ -126,7 +126,7 @@ export default function QueueView() {
         </div>
 
         {queueData && (
-          <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(0, 123, 255, 0.1)', borderRadius: '8px' }}>
+          <div className="surface-muted-box" style={{ marginBottom: '1rem', padding: '1rem' }}>
             <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
               <div>
                 <strong>Queue Length:</strong> {queueData.queue_length} / {queueData.max_queue_length}
@@ -158,11 +158,11 @@ export default function QueueView() {
         )}
 
         {loading && !queueData ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>
+          <div className="text-secondary" style={{ padding: '2rem', textAlign: 'center' }}>
             Loading queue...
           </div>
         ) : queueData && queueData.queue_length === 0 && queueData.items.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>
+          <div className="text-secondary" style={{ padding: '2rem', textAlign: 'center' }}>
             Queue is empty
           </div>
         ) : queueData && queueData.items.length > 0 ? (
@@ -175,7 +175,7 @@ export default function QueueView() {
                   padding: '1.5rem',
                   borderRadius: '8px',
                   border: `1px solid ${getStatusColor(item.status)}40`,
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                  boxShadow: 'var(--shadow-dark)'
                 }}
               >
                 {/* Header with Position and Status */}
@@ -242,9 +242,9 @@ export default function QueueView() {
                             borderRadius: '8px',
                             fontSize: '0.75rem',
                             fontWeight: '500',
-                            background: 'rgba(102, 126, 234, 0.15)',
-                            color: '#667eea',
-                            border: '1px solid rgba(102, 126, 234, 0.3)',
+                            background: 'var(--surface-muted)',
+                            color: 'var(--accent)',
+                            border: '1px solid var(--glass-border-dark)',
                           }}
                         >
                           {scanner}

@@ -154,6 +154,17 @@ export default function MyScansPage() {
     }
   }
 
+  const primaryButtonStyle = {
+    background: 'var(--accent-gradient)',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    padding: '0.5rem 1rem',
+    cursor: loading ? 'not-allowed' : 'pointer',
+    fontSize: '0.9rem',
+    opacity: loading ? 0.6 : 1,
+  }
+
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'pending':
@@ -193,16 +204,7 @@ export default function MyScansPage() {
             <button
               onClick={fetchMyScans}
               disabled={loading}
-              style={{
-                background: 'var(--primary)',
-                border: 'none',
-                borderRadius: '8px',
-                color: 'white',
-                padding: '0.5rem 1rem',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontSize: '0.9rem',
-                opacity: loading ? 0.6 : 1,
-              }}
+              style={primaryButtonStyle}
             >
               {loading ? 'Loading...' : '🔄 Refresh'}
             </button>
@@ -210,7 +212,7 @@ export default function MyScansPage() {
         </div>
 
         {scansData && scansData.scans.length > 0 && (
-          <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(0, 123, 255, 0.1)', borderRadius: '8px' }}>
+          <div className="surface-muted-box" style={{ marginBottom: '1rem', padding: '1rem' }}>
             <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
               <div>
                 <strong>Total Scans:</strong> {scansData.scans.length}
@@ -236,7 +238,7 @@ export default function MyScansPage() {
               borderRadius: '8px',
               padding: '0.75rem 1rem',
               marginBottom: '1rem',
-              color: '#155724',
+              color: 'var(--color-pass)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
@@ -269,21 +271,21 @@ export default function MyScansPage() {
         )}
 
         {loading && !scansData ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>
+          <div className="text-secondary" style={{ padding: '2rem', textAlign: 'center' }}>
             Loading your scans...
           </div>
         ) : scansData && scansData.scans.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>
+          <div className="text-secondary" style={{ padding: '2rem', textAlign: 'center' }}>
             <p>You haven't started any scans yet.</p>
             <p style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
-              Go to <a href="/" style={{ color: 'var(--primary)' }}>Home</a> to start a new scan.
+              Go to <a href="/" style={{ color: 'var(--accent)' }}>Home</a> to start a new scan.
             </p>
           </div>
         ) : scansData ? (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '2px solid #e9ecef' }}>
+                <tr className="table-head-row" style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
                   <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Repository</th>
                   <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Branch</th>
                   <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Scanners</th>
@@ -296,20 +298,20 @@ export default function MyScansPage() {
               </thead>
               <tbody>
                 {scansData.scans.map((item) => (
-                  <tr key={item.queue_id} style={{ borderBottom: '1px solid #e9ecef' }}>
+                  <tr key={item.queue_id} style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
                     <td style={{ padding: '0.75rem' }}>
                       <div>
                         <div style={{ fontFamily: 'monospace', fontSize: '0.9rem' }}>
                           {item.repository_name}
                         </div>
                         {item.repository_url && (
-                          <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.25rem' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
                             {item.repository_url}
                           </div>
                         )}
                       </div>
                     </td>
-                    <td style={{ padding: '0.75rem', color: '#6c757d' }}>
+                    <td style={{ padding: '0.75rem', color: 'var(--text-secondary)' }}>
                       {item.branch || '-'}
                     </td>
                     <td style={{ padding: '0.75rem' }}>
@@ -324,9 +326,9 @@ export default function MyScansPage() {
                                 borderRadius: '8px',
                                 fontSize: '0.75rem',
                                 fontWeight: '500',
-                                background: 'rgba(0, 123, 255, 0.1)',
-                                color: '#007bff',
-                                border: '1px solid rgba(0, 123, 255, 0.3)',
+                                background: 'var(--surface-muted)',
+                                color: 'var(--accent)',
+                                border: '1px solid var(--glass-border-dark)',
                               }}
                             >
                               {scanner}
@@ -334,7 +336,7 @@ export default function MyScansPage() {
                           ))}
                         </div>
                       ) : (
-                        <span style={{ color: '#6c757d', fontSize: '0.875rem' }}>-</span>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>-</span>
                       )}
                     </td>
                     <td style={{ padding: '0.75rem' }}>
@@ -351,10 +353,10 @@ export default function MyScansPage() {
                         {getStatusLabel(item.status)}
                       </span>
                     </td>
-                    <td style={{ padding: '0.75rem', color: '#6c757d' }}>
+                    <td style={{ padding: '0.75rem', color: 'var(--text-secondary)' }}>
                       {item.position !== undefined ? `#${item.position}` : '-'}
                     </td>
-                    <td style={{ padding: '0.75rem', color: '#6c757d', fontSize: '0.875rem' }}>
+                    <td style={{ padding: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
                       {item.status === 'pending' || item.status === 'running' ? (
                         item.estimated_time_seconds ? (
                           <span title={`Estimated time: ${formatEstimatedTime(item.estimated_time_seconds)}`}>
@@ -371,7 +373,7 @@ export default function MyScansPage() {
                         <span style={{ opacity: 0.6 }}>-</span>
                       )}
                     </td>
-                    <td style={{ padding: '0.75rem', color: '#6c757d', fontSize: '0.875rem' }}>
+                    <td style={{ padding: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
                       {new Date(item.created_at).toLocaleString()}
                     </td>
                     <td style={{ padding: '0.75rem' }}>
@@ -393,8 +395,8 @@ export default function MyScansPage() {
                             }}
                             style={{
                               padding: '0.375rem 0.75rem',
-                              background: '#007bff',
-                              color: 'white',
+                              background: 'var(--accent-gradient)',
+                              color: '#fff',
                               border: 'none',
                               borderRadius: '4px',
                               cursor: 'pointer',
@@ -465,7 +467,7 @@ export default function MyScansPage() {
                               style={{
                                 padding: '0.375rem 0.75rem',
                                 background: 'transparent',
-                                color: '#6f42c1',
+                                color: 'var(--accent)',
                                 border: '1px solid rgba(111, 66, 193, 0.45)',
                                 borderRadius: '4px',
                                 cursor:

@@ -10,7 +10,7 @@ const OVERLAY_STYLE: React.CSSProperties = {
   left: 0,
   right: 0,
   bottom: 0,
-  background: 'rgba(0, 0, 0, 0.85)',
+  background: 'var(--modal-overlay-bg)',
   backdropFilter: 'blur(8px)',
   WebkitBackdropFilter: 'blur(8px)',
   display: 'flex',
@@ -20,7 +20,7 @@ const OVERLAY_STYLE: React.CSSProperties = {
 }
 
 const CONTENT_BASE: React.CSSProperties = {
-  background: 'rgba(20, 20, 30, 0.98)',
+  background: 'var(--modal-content-bg)',
   backdropFilter: 'blur(20px)',
   WebkitBackdropFilter: 'blur(20px)',
   padding: '2rem',
@@ -28,7 +28,7 @@ const CONTENT_BASE: React.CSSProperties = {
   maxHeight: '90vh',
   overflow: 'auto',
   border: '1px solid var(--glass-border-dark)',
-  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+  boxShadow: 'var(--shadow-dark)',
 }
 
 export interface ModalProps {

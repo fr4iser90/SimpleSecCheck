@@ -109,7 +109,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0, 0, 0, 0.85)',
+        background: 'var(--modal-overlay-bg)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
@@ -126,12 +126,12 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
     >
       <div
         style={{
-          background: 'rgba(20, 20, 30, 0.95)',
+          background: 'var(--modal-content-bg)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRadius: '8px',
           border: '1px solid var(--glass-border-dark)',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+          boxShadow: 'var(--shadow-dark)',
           padding: '2rem',
           maxWidth: '900px',
           width: '100%',
@@ -210,11 +210,11 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                 style={{
                   flex: 1,
                   minHeight: '400px',
-                  background: '#000',
+                  background: 'var(--code-bg)',
                   border: '1px solid var(--glass-border-dark)',
                   borderRadius: '8px',
                   padding: '1rem',
-                  color: '#f8f9fa',
+                  color: 'var(--code-text)',
                   fontFamily: "'Courier New', monospace",
                   fontSize: '0.9rem',
                   resize: 'vertical',

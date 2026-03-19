@@ -182,21 +182,21 @@ export default function UserManagementPage() {
         }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Email</th>
-                <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Username</th>
-                <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Role</th>
-                <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Status</th>
-                <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Created</th>
-                <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-dark)' }}>Actions</th>
+              <tr className="table-head-row">
+                <th className="table-cell-head">Email</th>
+                <th className="table-cell-head">Username</th>
+                <th className="table-cell-head">Role</th>
+                <th className="table-cell-head">Status</th>
+                <th className="table-cell-head">Created</th>
+                <th className="table-cell-head">Actions</th>
               </tr>
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={user.id} style={{ borderBottom: '1px solid var(--glass-border-dark)' }}>
-                  <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{user.email}</td>
-                  <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{user.username}</td>
-                  <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
+                <tr key={user.id} className="table-row-divider">
+                  <td className="table-cell">{user.email}</td>
+                  <td className="table-cell">{user.username}</td>
+                  <td className="table-cell">
                     <span style={{
                       padding: '0.25rem 0.5rem',
                       borderRadius: '4px',
@@ -206,13 +206,13 @@ export default function UserManagementPage() {
                       {user.role}
                     </span>
                   </td>
-                  <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
-                    {user.is_active ? 'Active' : <span style={{ color: 'var(--color-warning)' }}>Pending approval</span>}
+                  <td className="table-cell">
+                    {user.is_active ? 'Active' : <span style={{ color: 'var(--color-medium)' }}>Pending approval</span>}
                   </td>
-                  <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
+                  <td className="table-cell">
                     {new Date(user.created_at).toLocaleDateString()}
                   </td>
-                  <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
+                  <td className="table-cell">
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       {!user.is_active && (
                         <button
@@ -254,7 +254,7 @@ export default function UserManagementPage() {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
+          background: 'var(--modal-overlay-bg)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -329,7 +329,7 @@ export default function UserManagementPage() {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
+          background: 'var(--modal-overlay-bg)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

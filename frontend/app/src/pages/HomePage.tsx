@@ -41,7 +41,7 @@ export default function HomePage() {
             display: 'flex',
             gap: '0.5rem',
             marginBottom: '2rem',
-            borderBottom: '2px solid #e9ecef'
+            borderBottom: '1px solid var(--glass-border-dark)'
           }}>
             <button
               type="button"
@@ -50,8 +50,8 @@ export default function HomePage() {
                 padding: '0.75rem 1.5rem',
                 border: 'none',
                 background: 'transparent',
-                borderBottom: activeTab === 'single' ? '2px solid #007bff' : '2px solid transparent',
-                color: activeTab === 'single' ? '#007bff' : '#6c757d',
+                borderBottom: activeTab === 'single' ? '2px solid var(--accent)' : '2px solid transparent',
+                color: activeTab === 'single' ? 'var(--accent)' : 'var(--text-secondary)',
                 fontWeight: activeTab === 'single' ? 'bold' : 'normal',
                 cursor: 'pointer',
                 marginBottom: '-2px'
@@ -66,8 +66,8 @@ export default function HomePage() {
                 padding: '0.75rem 1.5rem',
                 border: 'none',
                 background: 'transparent',
-                borderBottom: activeTab === 'bulk' ? '2px solid #007bff' : '2px solid transparent',
-                color: activeTab === 'bulk' ? '#007bff' : '#6c757d',
+                borderBottom: activeTab === 'bulk' ? '2px solid var(--accent)' : '2px solid transparent',
+                color: activeTab === 'bulk' ? 'var(--accent)' : 'var(--text-secondary)',
                 fontWeight: activeTab === 'bulk' ? 'bold' : 'normal',
                 cursor: 'pointer',
                 marginBottom: '-2px'
@@ -80,7 +80,7 @@ export default function HomePage() {
 
         {/* Tab Content */}
         {loading ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
             Loading configuration...
           </div>
         ) : showBulkScan && activeTab === 'bulk' ? (

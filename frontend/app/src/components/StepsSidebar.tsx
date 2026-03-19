@@ -118,7 +118,7 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
+          background: 'var(--modal-overlay-bg)',
           zIndex: 999,
         }}
         onClick={onClose}
@@ -135,7 +135,7 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
           background: 'var(--glass-bg-dark)',
           backdropFilter: 'blur(20px)',
           borderLeft: '1px solid var(--glass-border-dark)',
-          boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.3)',
+          boxShadow: 'var(--shadow-dark)',
           zIndex: 1000,
           display: 'flex',
           flexDirection: 'column',
@@ -228,7 +228,7 @@ export default function StepsSidebar({ isOpen, onClose, scanId }: StepsSidebarPr
                     {step.substeps && step.substeps.length > 0 && (
                       <SubstepSlot
                         current={step.substeps[step.substeps.length - 1]}
-                        typeStyle={{ badge: '⚙️', bgColor: 'rgba(0, 0, 0, 0.2)', borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                        typeStyle={{ badge: '⚙️', bgColor: 'var(--surface-muted)', borderColor: 'var(--glass-border-dark)' }}
                         getSubStepColor={(s) => getSubStepColor(s.status)}
                         getSubStepIcon={(s) => getSubStepIcon(s.status)}
                       />

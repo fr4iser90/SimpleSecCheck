@@ -136,11 +136,6 @@ export default function Header() {
           <h1 style={{ margin: 0 }}>🛡️ SimpleSecCheck</h1>
         </Link>
         {getStatusBadge()}
-        {scanStatus.scan_id && (
-          <span style={{ opacity: 0.7, fontSize: '0.9rem' }}>
-            Scan ID: {scanStatus.scan_id}
-          </span>
-        )}
       </div>
       <nav className="nav-links">
         <Link to="/" className="nav-pill nav-pill-primary">

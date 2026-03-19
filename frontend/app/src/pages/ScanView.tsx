@@ -440,7 +440,7 @@ export default function ScanView() {
             <div style={{
               width: '100%',
               height: '8px',
-              background: 'rgba(255, 255, 255, 0.1)',
+              background: 'var(--surface-muted)',
               borderRadius: '4px',
               overflow: 'hidden',
             }}>
@@ -511,7 +511,7 @@ export default function ScanView() {
               <div style={{
                 width: '100%',
                 height: '12px',
-                background: 'rgba(255, 255, 255, 0.1)',
+                background: 'var(--surface-muted)',
                 borderRadius: '6px',
                 overflow: 'hidden',
               }}>
@@ -763,7 +763,7 @@ export default function ScanView() {
             <div style={{ 
               marginTop: '1rem', 
               padding: '1rem', 
-              background: 'rgba(0, 0, 0, 0.2)', 
+              background: 'var(--surface-muted)',
               borderRadius: '4px',
               fontFamily: 'monospace',
               fontSize: '0.9rem',
@@ -889,7 +889,7 @@ export default function ScanView() {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                background: 'rgba(0, 0, 0, 0.5)',
+                background: 'var(--modal-overlay-bg)',
                 zIndex: 999,
               }}
               onClick={() => setIsLogsSidebarOpen(false)}
@@ -905,7 +905,7 @@ export default function ScanView() {
                 background: 'var(--glass-bg-dark)',
                 backdropFilter: 'blur(20px)',
                 borderLeft: '1px solid var(--glass-border-dark)',
-                boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.3)',
+                boxShadow: 'var(--shadow-dark)',
                 zIndex: 1000,
                 display: 'flex',
                 flexDirection: 'column',
