@@ -2,46 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.1.0] - 2026-03-19
 
-### Fixed
-- **Checkov** — Text report (`report.txt`) is generated from the single JSON run instead of running Checkov a second time with `--output cli` (roughly halves Checkov wall time).
-- **CodeQL text report** — `codeql database interpret-results` was called with the SARIF file as if it were a query; it now uses the same query suite as `analyze` (e.g. `codeql/python-queries`) and `--format=text` so the per-language `.txt` report is generated correctly.
-- **Safety dependency file discovery** — Removed `setup.py` from the discovered dependency files so paths like `backend/api/routes/setup.py` are no longer treated as requirements (false positive).
-- **OWASP Dependency Check (exit 14)** — `env.example` documents NVD_API_KEY and adds a note on Sonatype OSS Index / "Failed to request component-reports"; optional token or URL if supported by your OWASP DC version.
-- **Safety scanner (manifest install)** — After `pip3 install safety`, manifest now runs `pip3 install --upgrade "click>=8.1.3"` (fixes Typer `click.Choice[...]` on Python 3.10) and `pip3 install pip-audit` for the Safety plugin fallback. No Dockerfile change; rebuild scanner image so `install_assets` re-runs for the updated safety manifest.
-- **AI Prompt (HTML report)** — Removed dependency on `/api/scan/ai-prompt`. Prompt is built only from embedded `findings-data` in `summary.html` (works offline / without WebUI on port 8080).
-- **AI Prompt (WebUI modal)** — Added `GET /api/results/{scan_id}/ai-prompt` so the modal in the scan view loads the prompt from the server (same access as report; builds prompt from report’s findings).
-- **Worker DB `max_concurrent_jobs`** — The worker image does not ship backend ORM models; importing `infrastructure.database.models` always failed and was ignored, so parallel slots stayed at **1** regardless of admin/DB. Worker now reads `system_state` via raw SQL (`worker/infrastructure/system_state_reader.py`).
-- **Worker queue** — Pro Loop werden alle freien Slots mit Jobs aus der Queue befüllt (nicht nur ein Job pro Sekunde).
-- **Worker parallel jobs** — Only `MAX_CONCURRENT_JOBS` (env override) or DB `max_concurrent_jobs` (admin/setup). Removed `WORKER_CONCURRENCY`. If DB has no value yet, default **1** parallel job. Removed unused `WORKER_MAX_RETRIES` from compose (was never read by code).
+### Summary
 
-### Changed
-- **Checkov** — Runs on **discovered infra files only** (`-f` per file, batched) instead of `checkov -d` on the whole tree — less RAM, fewer OOM (137) kills on large repos. **File discovery** limited to real infra types (Terraform, Dockerfile, docker-compose*, CloudFormation, serverless, K8s/Helm naming) — no generic `*.yml`/`*.json` so Semgrep rules, package.json, manifests are not scanned (avoids long runs/hangs).
-- **Setup wizard** — Removed global “scanner timeout” (per-tool timeouts remain via admin/manifest). Replaced “Max concurrent scans” with **max concurrent scan jobs**: stored in system config and used by the worker as parallel **complete** scans (queue holds the rest). Optional override: env `MAX_CONCURRENT_JOBS`. Admin: `GET/PUT /api/admin/config/worker-jobs`.
-
-### Removed
-- **Auto-shutdown (Web UI + `/api/shutdown/status`)** — Stub feature removed; use `docker compose down` / hosting controls to stop the stack.
-
-### Security
-- **Owner-based results access** — HTML report at `/api/results/.../report` requires owner session, `report_shared_with_user_ids`, or `?share_token=` (`report_share_token`). Scan APIs (GET by id, status, steps, results) use the same read rules; update/delete/cancel/retry are **owner-only**. List/recent scans scoped to current user or guest session. See `docs/SCAN_RESULT_ACCESS.md`.
+**Platform / full-stack** release on top of the **2.0.0** scanner plugin engine: PostgreSQL + Redis + FastAPI backend + worker, **first-run Setup wizard**, authentication (**guest / basic / JWT**), **RBAC** (e.g. admin vs user), **Admin** area (dashboard, system & auth settings, execution & parallel jobs, queue strategy, security policies, scanner registry & assets, tool duration/settings, system health, audit log, IP/abuse, user management, feature flags), and **WebUI** flows (My Scans, public queue, My Targets, scan progress, statistics, profile, API keys, capabilities). Includes scan enforcement, guest session controls, owner-scoped results & share links, and **HTTPS reverse-proxy** hardening below.
 
 ### Added
-- **Scan enforcement** — Optional hourly + concurrent limits per user/guest/global; max scanner container wall time (worker). Policies: blocked target globs/`regex:` patterns, blocked scan types, require-auth-for-git. `GET/PUT /api/admin/config/scan-enforcement`. UI: **Execution** (limits + duration), **Security policies** (target/type rules). See `docs/SCAN_ENFORCEMENT.md`. Scan retry skips rate limits but still applies policies.
-- **Admin → Execution** (`/admin/execution`) — parallel scan jobs (`max_concurrent_jobs`), queue strategy, editable admin/user/guest priorities, and enforced limits above. `/admin/queue` redirects here.
-- **Admin Dashboard layout** — Grouped sections: System, Users, Execution, Scan Engine (scanners & assets, tool settings, tool duration), Security (policies, abuse protection), Observability (audit, health). Removed duplicate standalone cards (vuln DB, notifications) from the grid; those remain future work.
-- **Execution → live queue** — `GET /api/admin/execution/queue-overview`: pending/running counts, Redis job length, running scans, next 15 pending with ETA. Shown on `/admin/execution` (auto-refresh 10s). Links to scan view via router state.
-- **Observability → System Health** — `GET /api/admin/system-health` (DB + Redis + worker `GET /api/scanners/`). Page `/admin/health` with 15s refresh.
-- **Security → Policies** — `/admin/policies` edits enforced submission rules; `/admin/security` redirects there.
-- **System settings** — Intro links to Auth, Execution, feature flags, health.
-- **Scan Engine page** — Scanner registry table from `GET /api/scanners` (name, types, priority, enabled); copy clarifies assets vs tool settings.
-- **Plugin manifest `exit_codes`** — Every scanner plugin `manifest.yaml` includes an English `exit_codes` block (`binary`, `codes`, and optional `note` for script-only or base/test plugins). Use it to interpret CLI exit values per tool.
-- **Runtime manifest hints** — On non-zero exit, `BaseScanner.run_command` logs a line from that plugin’s `exit_codes` when the failed command’s binary matches `exit_codes.binary` (e.g. OWASP exit 14 → OSS Index). Undocumented codes log a short INFO; plugins with only `note` log it once per scan.
-- **Report share link (UI + API)** — `POST /api/v1/scans/{scan_id}/report-share-link` (owner) returns `share_path`; **My Scans** copies link; **Scan view** uses **Copy share link** in the generated report toolbar (next to CSV), via `postMessage`; button hidden for `file:` or non-iframe (standalone HTML).
-- **Checkpoint for CodeQL, OWASP Dependency-Check, Snyk, SonarQube** – `checkpoint:` in manifests + `report.json` for resume/skip like other tools. SonarQube writes `report.json` on server-unreachable skip and after successful analysis (stub when the CLI leaves no local JSON).
-- **Checkpoint for all remaining scanners** – android, anchore, burp, clair, docker_bench, ios, ios_plist, kube_bench, kube_hunter, nikto, nuclei, wapiti, zap (`report.xml` / `any`). Excludes only `base` and `test` manifests.
-- **Scan heartbeat recovery** – Worker updates `last_heartbeat_at` while the scanner container runs. API recovers only **stale** `running` scans (no more “reset all running on startup”). Background sweep re-enqueues stale jobs without restarting the API. Env: `SCAN_HEARTBEAT_STALE_SECONDS`, `SCAN_HEARTBEAT_NULL_GRACE_SECONDS`, `SCAN_STALE_SWEEP_INTERVAL_SECONDS`, `SCAN_STALE_SWEEP_DISABLE`. Docs: `docs/SCAN_HEARTBEAT_RECOVERY.md`.
-- **Scan status `interrupted`** – Enum for explicit / future use; retry also allowed from `interrupted`.
+
+- **Setup wizard** — First-run bootstrap (`/setup`), DB/system checks, initialization until the stack is ready for normal routes.
+- **Admin** — Grouped dashboard; **Execution** (`/admin/execution`: parallel jobs, queue strategy FIFO/priority/round-robin, role priorities); queue settings; **Security policies**; **System health** (DB/Redis/worker); **User management**; **Auth settings**; **Feature flags**; **Audit log**; **IP & abuse**; **Scan engine** (scanner list, assets, tool duration, per-tool DB overrides); placeholders for vuln DB / notifications where applicable.
+- **Authentication & RBAC** — Login, signup, email verification, password reset; roles (e.g. **admin**); access modes (public / mixed / private); optional API keys; guest vs signed-in behavior.
+- **WebUI** — My Scans, My Targets, public **Queue**, live **Scan** view with steps, **Statistics**, **Capabilities**, profile; header scan-status badge where enabled.
+- **Scan enforcement & limits** — Configurable limits, blocked targets/types, policies (see `docs/SCAN_ENFORCEMENT.md`); worker parallel job slots from DB/admin.
+- **Results & sharing** — Owner-based read access to reports and APIs; optional **share link** / token for HTML report (see `docs/SCAN_RESULT_ACCESS.md`).
+- **Observability** — Admin queue overview (pending/running, ETAs), system health endpoint/page.
+- **Scanner / worker refinements** — Plugin `exit_codes` in manifests, runtime log hints, checkpoints and heartbeat recovery for long runs, `interrupted` status (see commits around this release for full list).
+
+### Security
+
+- **Owner-based results access** — Reports and scan detail APIs respect owner, share token, and optional share lists (see `docs/SCAN_RESULT_ACCESS.md`).
+
+### Fixed
+
+- **WebUI behind Traefik / nginx (HTTPS)** — List routes use canonical trailing slashes (`/api/queue/?…`, `/api/v1/scans/?…`) so FastAPI/Starlette does not emit slash redirects with `Location: http://…` (mixed content). Backend Docker image runs Uvicorn with `--proxy-headers` and `--forwarded-allow-ips='*'` so `X-Forwarded-Proto` from the reverse proxy is respected when building absolute redirect URLs.
+
+### Notes
+
+- **2.0.0** = **scanner** rewrite (Python + **plugin system** + CLI/Docker behaviour). **2.1.0** = **product** layer: DB-backed app, wizard, admin, RBAC, WebUI, and production HTTPS/proxy behaviour.
 
 ## [2.0.0] - 2026-03-16
 
