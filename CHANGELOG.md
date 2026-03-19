@@ -30,6 +30,7 @@ All notable changes to this project will be documented in this file.
 ### Notes
 
 - **2.0.0** = **scanner** rewrite (Python + **plugin system** + CLI/Docker behaviour). **2.1.0** = **product** layer: DB-backed app, wizard, admin, RBAC, WebUI, and production HTTPS/proxy behaviour.
+- **Documentation** — Root `README.md` describes the **full stack** (frontend, backend, worker, scanner image, Postgres, Redis). **Configuration** reference: `docs/CONFIGURATION.md`. **Roadmap** (e.g. SonarQube, integrations): `docs/ROADMAP.md`. **CLI** examples updated for `docker compose` (scanner service must run `python3 -m scanner.core.orchestrator` explicitly).
 
 ## [2.0.0] - 2026-03-16
 
