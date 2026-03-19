@@ -573,7 +573,7 @@ export default function SetupWizard() {
             style={{ cursor: 'pointer', width: '1.2rem', height: '1.2rem' }}
           />
           <span>
-            <strong>Auto-Login nach Setup</strong>
+            <strong>Automatic login after setup</strong>
             <span style={{ display: 'block', color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
               Log in automatically with your admin data so you can immediately use the admin and user menus.
             </span>
