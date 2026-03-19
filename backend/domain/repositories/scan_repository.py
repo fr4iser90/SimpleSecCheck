@@ -138,3 +138,94 @@ class ScanRepository(ABC):
         guest_session_id: Optional[str] = None,
     ) -> int:
         """Count scans in pending or running for the given user or guest session."""
+
+    @abstractmethod
+    async def find_active_scan_by_user_and_target(
+        self, user_id: str, target_url_contains: str
+    ) -> Optional[Scan]:
+        """Find one active (pending/running) scan for user where target_url contains the given substring."""
+        pass
+
+    @abstractmethod
+    async def find_latest_finished_scan_by_user_and_target(
+        self, user_id: str, target_url: str
+    ) -> Optional[Scan]:
+        """Latest scan for user+target_url with status in completed/failed/cancelled/interrupted (for interval scheduling)."""
+        pass
+
+    @abstractmethod
+    async def get_queue_position(self, scan_id: str, user_id: str) -> Optional[int]:
+        """Get 1-based queue position among user's pending scans. None if not pending."""
+        pass
+
+    @abstractmethod
+    async def get_queue_items(
+        self,
+        status_filter: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Scan]:
+        """Get scans for queue view: by status (default pending+running), ordered by priority desc, created_at asc."""
+        pass
+
+    @abstractmethod
+    async def count_by_statuses(self, statuses: List[str]) -> int:
+        """Count scans with status in statuses."""
+        pass
+
+    @abstractmethod
+    async def get_latest_scans_by_target_urls(
+        self, user_id: str, target_urls: List[str]
+    ) -> Dict[str, Scan]:
+        """Latest scan per target_url for user. Keys are target_url."""
+        pass
+
+    @abstractmethod
+    async def get_position_in_queue(self, scan_id: str) -> Optional[int]:
+        """1-based position of scan among all pending+running (by priority desc, created_at asc). None if not found or not pending/running."""
+        pass
+
+    @abstractmethod
+    async def list_scans_for_actor(
+        self,
+        user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+        status_filter: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Scan]:
+        """List scans for user or guest, ordered by priority desc, created_at desc (for my-scans view)."""
+        pass
+
+    @abstractmethod
+    async def get_scans_before_in_queue(self, scan_id: str) -> List[Scan]:
+        """Scans that are before this one in the queue (pending+running). For estimated wait time."""
+        pass
+
+    @abstractmethod
+    async def get_running_scans(self, limit: int = 50) -> List[Scan]:
+        """Running scans ordered by started_at asc (for admin queue overview)."""
+        pass
+
+    @abstractmethod
+    async def count_today_by_filters(
+        self,
+        status: Optional[str] = None,
+        error_message_contains: Optional[str] = None,
+    ) -> int:
+        """Count scans created today matching status and/or error_message fragment."""
+        pass
+
+    @abstractmethod
+    async def get_avg_duration_completed_today(self) -> Optional[float]:
+        """Average duration in seconds for scans completed today (with non-null duration)."""
+        pass
+
+    @abstractmethod
+    async def get_stale_running_scan_ids(
+        self,
+        stale_cutoff: "datetime",
+        null_cutoff: "datetime",
+        limit: int = 200,
+    ) -> List[str]:
+        """Ids of running scans with stale or missing heartbeat (for recovery)."""
+        pass

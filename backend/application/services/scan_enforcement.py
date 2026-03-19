@@ -10,8 +10,6 @@ import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import select
-
 from application.dtos.request_dto import ScanRequestDTO
 from domain.entities.target_type import TargetType
 from domain.exceptions.scan_exceptions import (
@@ -19,10 +17,13 @@ from domain.exceptions.scan_exceptions import (
     ScanPolicyBlockedException,
 )
 from domain.repositories.scan_repository import ScanRepository
-from infrastructure.database.adapter import db_adapter
-from infrastructure.database.models import SystemState
 
 logger = logging.getLogger(__name__)
+
+
+def _get_system_state_repository():
+    from infrastructure.container import get_system_state_repository
+    return get_system_state_repository()
 
 
 def _target_matches_blocked_pattern(target_url: str, pattern: str) -> bool:
@@ -63,12 +64,10 @@ def _check_policies(request: ScanRequestDTO, policies: Dict[str, Any]) -> None:
 
 async def _load_limits_and_policies() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     try:
-        await db_adapter.ensure_initialized()
-        async with db_adapter.async_session() as session:
-            r = await session.execute(select(SystemState).limit(1))
-            ss = r.scalar_one_or_none()
-            cfg = (ss.config or {}) if ss else {}
-            return (cfg.get("execution_limits") or {}, cfg.get("policies") or {})
+        repo = _get_system_state_repository()
+        state = await repo.get_singleton()
+        cfg = (state.config or {}) if state else {}
+        return (cfg.get("execution_limits") or {}, cfg.get("policies") or {})
     except Exception as e:
         logger.warning("scan enforcement: could not load SystemState: %s", e)
         return {}, {}
@@ -164,16 +163,14 @@ async def get_max_scan_wall_seconds() -> int:
     """Worker container wait timeout (seconds), from execution_limits.max_scan_duration_seconds."""
     default = 3600
     try:
-        await db_adapter.ensure_initialized()
-        async with db_adapter.async_session() as session:
-            r = await session.execute(select(SystemState).limit(1))
-            ss = r.scalar_one_or_none()
-            if not ss:
-                return default
-            el = (ss.config or {}).get("execution_limits") or {}
-            v = _positive_int(el.get("max_scan_duration_seconds"))
-            if v is None:
-                return default
-            return max(300, min(86400, v))
+        repo = _get_system_state_repository()
+        state = await repo.get_singleton()
+        if not state:
+            return default
+        el = (state.config or {}).get("execution_limits") or {}
+        v = _positive_int(el.get("max_scan_duration_seconds"))
+        if v is None:
+            return default
+        return max(300, min(86400, v))
     except Exception:
         return default

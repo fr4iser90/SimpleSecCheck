@@ -128,15 +128,12 @@ class QueueService:
             }
             # DB overrides merged with manifest (timeouts, env e.g. SONAR_HOST_URL)
             try:
-                from infrastructure.database.adapter import db_adapter
                 from application.services.scanner_tool_overrides_service import (
                     build_merged_tool_overrides,
                     overrides_map_to_json,
                 )
-                await db_adapter.ensure_initialized()
-                async with db_adapter.async_session() as session:
-                    merged = await build_merged_tool_overrides(session)
-                    queue_message["scanner_tool_overrides_json"] = overrides_map_to_json(merged)
+                merged = await build_merged_tool_overrides()
+                queue_message["scanner_tool_overrides_json"] = overrides_map_to_json(merged)
             except Exception as ex:
                 logger.warning("scanner_tool_overrides merge skipped: %s", ex)
                 queue_message["scanner_tool_overrides_json"] = "{}"

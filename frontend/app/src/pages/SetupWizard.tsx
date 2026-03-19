@@ -363,11 +363,12 @@ export default function SetupWizard() {
         })
       })
 
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const msg = (data?.detail ?? data?.message ?? `HTTP ${response.status}`) as string
+        setError(msg || 'Setup failed. Please try again.')
+        return
       }
-      
-      const data = await response.json()
       if (data.success) {
         // Setup completed successfully
         // Clear setup session
@@ -397,10 +398,10 @@ export default function SetupWizard() {
           }
         }
       } else {
-        setError('Setup failed. Please try again.')
+        setError((data?.detail as string) || 'Setup failed. Please try again.')
       }
     } catch (err: any) {
-      setError('Setup failed. Please try again.')
+      setError(err?.message || 'Setup failed. Please try again.')
       console.error('Setup initialization failed:', err)
     } finally {
       setLoading(false)

@@ -4,7 +4,7 @@ Webhook API Routes
 Handles webhooks from GitHub, GitLab, and other services for triggering scans.
 """
 from typing import Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Request, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Header, status  # noqa: F401
 from pydantic import BaseModel
 import hmac
 import hashlib
@@ -14,10 +14,8 @@ from api.deps.actor_context import get_actor_context, ActorContext
 from domain.services.auto_scan_service import AutoScanService
 from domain.services.audit_log_service import AuditLogService
 from domain.services.repo_scan_helper import create_repo_scan
-from infrastructure.database.adapter import db_adapter
-from infrastructure.database.models import UserGitHubRepo
-from sqlalchemy import select
-from uuid import UUID
+from application.services.github_repo_service import GitHubRepoService
+from infrastructure.container import get_github_repo_service
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +44,11 @@ def verify_github_signature(payload: bytes, signature: str, secret: str) -> bool
         payload,
         hashlib.sha256
     ).hexdigest()
-    
     return hmac.compare_digest(f"sha256={expected_signature}", signature)
+
+
+def get_github_repo_service_dependency() -> GitHubRepoService:
+    return get_github_repo_service()
 
 
 @router.post("/github")
@@ -56,6 +57,7 @@ async def github_webhook(
     x_github_event: str = Header(..., alias="X-GitHub-Event"),
     x_github_delivery: str = Header(..., alias="X-GitHub-Delivery"),
     x_hub_signature_256: Optional[str] = Header(None, alias="X-Hub-Signature-256"),
+    github_repo_service: GitHubRepoService = Depends(get_github_repo_service_dependency),
 ) -> Dict[str, str]:
     """
     Handle GitHub webhook events.
@@ -90,85 +92,59 @@ async def github_webhook(
                     detail="Repository URL not found in payload"
                 )
             
-            # Find repository in database
-            async with db_adapter.async_session() as session:
-                result = await session.execute(
-                    select(UserGitHubRepo).where(
-                        UserGitHubRepo.repo_url == repo_url,
-                        UserGitHubRepo.auto_scan_enabled == True,
-                        UserGitHubRepo.scan_on_push == True
+            repo = await github_repo_service.get_by_repo_url_with_auto_scan(repo_url)
+            if not repo:
+                logger.warning(f"Repository not found or auto-scan disabled: {repo_url}")
+                return {"message": "Repository not found or auto-scan disabled"}
+            
+            if repo.webhook_secret and x_hub_signature_256:
+                if not verify_github_signature(body, x_hub_signature_256, repo.webhook_secret):
+                    logger.warning(f"Invalid webhook signature for repo: {repo_url}")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Invalid webhook signature"
                     )
-                )
-                repo = result.scalar_one_or_none()
-                
-                if not repo:
-                    logger.warning(f"Repository not found or auto-scan disabled: {repo_url}")
-                    return {"message": "Repository not found or auto-scan disabled"}
-                
-                # Verify webhook secret if configured
-                if repo.webhook_secret and x_hub_signature_256:
-                    if not verify_github_signature(body, x_hub_signature_256, repo.webhook_secret):
-                        logger.warning(f"Invalid webhook signature for repo: {repo_url}")
-                        raise HTTPException(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Invalid webhook signature"
-                        )
-                
-                # Log webhook event
-                await AuditLogService.log_event(
-                    user_id=str(repo.user_id),
-                    action_type="WEBHOOK_RECEIVED",
-                    target=repo_url,
-                    details={
-                        "event": x_github_event,
-                        "branch": branch,
-                        "commit": commit_hash
-                    },
-                    ip_address=request.client.host if request.client else None,
-                    user_agent=request.headers.get("User-Agent")
-                )
-                
-                # Check if branch matches repo's configured branch
-                if branch != repo.branch:
-                    logger.info(f"Webhook branch {branch} does not match repo branch {repo.branch}, skipping scan")
-                    return {
-                        "message": "Branch mismatch, scan skipped",
-                        "repo_id": str(repo.id),
-                        "branch": branch,
-                        "expected_branch": repo.branch
-                    }
-                
-                # Create and queue scan
-                scan_id = await create_repo_scan(
-                    repo_url=repo_url,
-                    repo_name=repo.repo_name,
-                    branch=branch,
-                    user_id=str(repo.user_id),
-                    scanners=repo.scanners if repo.scanners else None,  # Use repo-specific scanners if set
-                    commit_hash=commit_hash,
-                    metadata={
-                        "webhook_event": x_github_event,
-                        "webhook_delivery": x_github_delivery
-                    }
-                )
-                
-                if scan_id:
-                    logger.info(f"Webhook triggered scan {scan_id} for {repo_url} (branch: {branch})")
-                    return {
-                        "message": "Scan triggered successfully",
-                        "repo_id": str(repo.id),
-                        "scan_id": scan_id,
-                        "branch": branch,
-                        "commit": commit_hash,
-                        "status": "queued"
-                    }
-                else:
-                    logger.error(f"Failed to create scan for {repo_url}")
-                    return {
-                        "message": "Failed to create scan",
-                        "repo_id": str(repo.id),
-                        "branch": branch
-                    }
+            
+            await AuditLogService.log_event(
+                user_id=repo.user_id,
+                action_type="WEBHOOK_RECEIVED",
+                target=repo_url,
+                details={"event": x_github_event, "branch": branch, "commit": commit_hash},
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("User-Agent")
+            )
+            
+            if branch != repo.branch:
+                logger.info(f"Webhook branch {branch} does not match repo branch {repo.branch}, skipping scan")
+                return {
+                    "message": "Branch mismatch, scan skipped",
+                    "repo_id": repo.id,
+                    "branch": branch,
+                    "expected_branch": repo.branch
+                }
+            
+            scan_id = await create_repo_scan(
+                repo_url=repo_url,
+                repo_name=repo.repo_name,
+                branch=branch,
+                user_id=repo.user_id,
+                scanners=repo.scanners if repo.scanners else None,
+                commit_hash=commit_hash,
+                metadata={"webhook_event": x_github_event, "webhook_delivery": x_github_delivery}
+            )
+            
+            if scan_id:
+                logger.info(f"Webhook triggered scan {scan_id} for {repo_url} (branch: {branch})")
+                return {
+                    "message": "Scan triggered successfully",
+                    "repo_id": repo.id,
+                    "scan_id": scan_id,
+                    "branch": branch,
+                    "commit": commit_hash,
+                    "status": "queued"
+                }
+            logger.error(f"Failed to create scan for {repo_url}")
+            return {"message": "Failed to create scan", "repo_id": repo.id, "branch": branch}
         
         # Unknown event type
         logger.info(f"Unhandled GitHub event: {x_github_event}")
@@ -202,6 +178,7 @@ async def generic_webhook(
     request: Request,
     webhook_data: GenericWebhookRequest,
     actor_context: ActorContext = Depends(get_actor_context),
+    github_repo_service: GitHubRepoService = Depends(get_github_repo_service_dependency),
 ) -> Dict[str, Any]:
     """
     Handle generic webhook events.
@@ -219,79 +196,57 @@ async def generic_webhook(
                 detail="Authentication required (API key or user session)"
             )
         
-        # Find repository
-        async with db_adapter.async_session() as session:
-            user_uuid = UUID(user_id)
-            result = await session.execute(
-                select(UserGitHubRepo).where(
-                    UserGitHubRepo.repo_url == webhook_data.repo_url,
-                    UserGitHubRepo.user_id == user_uuid,
-                    UserGitHubRepo.auto_scan_enabled == True
-                )
+        repo = await github_repo_service.get_by_user_and_url(user_id, webhook_data.repo_url)
+        if not repo or not repo.auto_scan_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Repository not found or auto-scan disabled"
             )
-            repo = result.scalar_one_or_none()
-            
-            if not repo:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Repository not found or auto-scan disabled"
-                )
-            
-            # Log webhook event
-            await AuditLogService.log_event(
-                user_id=user_id,
-                action_type="WEBHOOK_RECEIVED",
-                target=webhook_data.repo_url,
-                details={
-                    "event": webhook_data.event,
-                    "branch": webhook_data.branch,
-                    "commit": webhook_data.commit
-                },
-                ip_address=request.client.host if request.client else None,
-                user_agent=request.headers.get("User-Agent")
-            )
-            
-            # Check if branch matches repo's configured branch
-            if webhook_data.branch != repo.branch:
-                logger.info(f"Webhook branch {webhook_data.branch} does not match repo branch {repo.branch}, skipping scan")
-                return {
-                    "message": "Branch mismatch, scan skipped",
-                    "repo_id": str(repo.id),
-                    "branch": webhook_data.branch,
-                    "expected_branch": repo.branch
-                }
-            
-            # Create and queue scan
-            scan_id = await create_repo_scan(
-                repo_url=webhook_data.repo_url,
-                repo_name=repo.repo_name,
-                branch=webhook_data.branch,
-                user_id=user_id,
-                scanners=repo.scanners if repo.scanners else None,  # Use repo-specific scanners if set
-                commit_hash=webhook_data.commit,
-                metadata={
-                    "webhook_event": webhook_data.event,
-                    "webhook_type": "generic"
-                }
-            )
-            
-            if scan_id:
-                logger.info(f"Generic webhook triggered scan {scan_id} for {webhook_data.repo_url}")
-                return {
-                    "message": "Scan triggered successfully",
-                    "repo_id": str(repo.id),
-                    "scan_id": scan_id,
-                    "branch": webhook_data.branch,
-                    "commit": webhook_data.commit,
-                    "status": "queued"
-                }
-            else:
-                logger.error(f"Failed to create scan for {webhook_data.repo_url}")
-                return {
-                    "message": "Failed to create scan",
-                    "repo_id": str(repo.id),
-                    "branch": webhook_data.branch
-                }
+        
+        await AuditLogService.log_event(
+            user_id=user_id,
+            action_type="WEBHOOK_RECEIVED",
+            target=webhook_data.repo_url,
+            details={
+                "event": webhook_data.event,
+                "branch": webhook_data.branch,
+                "commit": webhook_data.commit
+            },
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("User-Agent")
+        )
+        
+        if webhook_data.branch != repo.branch:
+            logger.info(f"Webhook branch {webhook_data.branch} does not match repo branch {repo.branch}, skipping scan")
+            return {
+                "message": "Branch mismatch, scan skipped",
+                "repo_id": repo.id,
+                "branch": webhook_data.branch,
+                "expected_branch": repo.branch
+            }
+        
+        scan_id = await create_repo_scan(
+            repo_url=webhook_data.repo_url,
+            repo_name=repo.repo_name,
+            branch=webhook_data.branch,
+            user_id=user_id,
+            scanners=repo.scanners if repo.scanners else None,
+            commit_hash=webhook_data.commit,
+            metadata={"webhook_event": webhook_data.event, "webhook_type": "generic"}
+        )
+        
+        if scan_id:
+            logger.info(f"Generic webhook triggered scan {scan_id} for {webhook_data.repo_url}")
+            return {
+                "message": "Scan triggered successfully",
+                "repo_id": repo.id,
+                "scan_id": scan_id,
+                "branch": webhook_data.branch,
+                "commit": webhook_data.commit,
+                "status": "queued"
+            }
+        logger.error(f"Failed to create scan for {webhook_data.repo_url}")
+        return {"message": "Failed to create scan", "repo_id": repo.id, "branch": webhook_data.branch}
     except HTTPException:
         raise
     except Exception as e:

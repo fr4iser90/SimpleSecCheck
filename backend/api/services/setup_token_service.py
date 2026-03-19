@@ -3,30 +3,24 @@ Setup Token Service
 
 This service handles the generation, verification, and management of setup tokens
 for the Enterprise-grade Setup Security System.
+Uses SystemStateRepository (DDD).
 """
 import hashlib
 import hmac
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from typing import Optional, TYPE_CHECKING
 
-from infrastructure.database.models import SystemState, SetupStatusEnum
-from infrastructure.database.adapter import db_adapter
+if TYPE_CHECKING:
+    from domain.repositories.system_state_repository import SystemStateRepository
 
 
 class SetupTokenService:
     """Service for managing setup tokens with enterprise security features."""
-    
-    def __init__(self, ttl_hours: int = 24):
-        """
-        Initialize SetupTokenService.
-        
-        Args:
-            ttl_hours: Token time-to-live in hours (default: 24)
-        """
+
+    def __init__(self, ttl_hours: int = 24, system_state_repository: Optional["SystemStateRepository"] = None):
         self.ttl_hours = ttl_hours
+        self._system_state_repository = system_state_repository
     
     def generate_token(self) -> str:
         """
@@ -75,105 +69,51 @@ class SetupTokenService:
         computed_hash = hashlib.sha256(token.encode()).hexdigest()
         return hmac.compare_digest(computed_hash, token_hash)
     
-    async def store_setup_token(self, token_hash: str, created_at: datetime) -> bool:
-        """
-        Store setup token hash in the database.
-        
-        Args:
-            token_hash: Hashed token to store
-            created_at: When the token was created
-            
-        Returns:
-            True if stored successfully, False otherwise
-        """
-        try:
-            # Check if system_state table exists
-            if not await db_adapter.check_table_exists("system_state"):
-                # Table doesn't exist yet - this is expected during initial setup
-                return False
-            
-            session = await db_adapter.get_session()
-            async with session:
-                # Get or create system state (singleton - only one record should exist)
-                result = await session.execute(
-                    select(SystemState).limit(1)
-                )
-                system_state = result.scalar_one_or_none()
-                
-                if not system_state:
-                    # Create new system state
-                    system_state = SystemState()
-                    system_state.setup_token_hash = token_hash
-                    system_state.setup_token_created_at = created_at
-                    system_state.setup_status = SetupStatusEnum.TOKEN_GENERATED
-                    system_state.updated_at = datetime.utcnow()
-                    session.add(system_state)
-                else:
-                    # Update existing system state
-                    system_state.setup_token_hash = token_hash
-                    system_state.setup_token_created_at = created_at
-                    system_state.setup_status = SetupStatusEnum.TOKEN_GENERATED
-                    system_state.updated_at = datetime.utcnow()
-                
-                await session.commit()
-                return True
+    def _get_repo(self):
+        if self._system_state_repository is not None:
+            return self._system_state_repository
+        from infrastructure.container import get_system_state_repository
+        return get_system_state_repository()
 
+    async def store_setup_token(self, token_hash: str, created_at: datetime) -> bool:
+        """Store setup token hash via SystemStateRepository."""
+        try:
+            repo = self._get_repo()
+            if not await repo.table_exists():
+                return False
+            state = await repo.get_singleton()
+            if not state:
+                from domain.entities.system_state import SystemState
+                state = SystemState()
+            state.generate_setup_token(token_hash, created_at)
+            await repo.save(state)
+            return True
         except Exception as e:
             if "does not exist" not in str(e) and "relation" not in str(e).lower():
                 print(f"Error storing setup token: {e}")
             return False
     
     async def invalidate_setup_token(self) -> bool:
-        """
-        Invalidate setup token by removing it from the database.
-        
-        Returns:
-            True if invalidated successfully, False otherwise
-        """
+        """Invalidate setup token via SystemStateRepository."""
         try:
-            session = await db_adapter.get_session()
-            async with session:
-                # Get system state (singleton - only one record should exist)
-                result = await session.execute(
-                    select(SystemState).limit(1)
-                )
-                system_state = result.scalar_one_or_none()
-                
-                if system_state:
-                    system_state.setup_token_hash = None
-                    system_state.setup_token_created_at = None
-                    system_state.updated_at = datetime.utcnow()
-                    await session.commit()
-                
-                return True
-                
+            repo = self._get_repo()
+            state = await repo.get_singleton()
+            if state:
+                state.invalidate_setup_token()
+                await repo.save(state)
+            return True
         except Exception as e:
             print(f"Error invalidating setup token: {e}")
             return False
     
     async def get_setup_token_info(self) -> Optional[dict]:
-        """
-        Get current setup token information from database.
-        
-        Returns:
-            Dictionary with token_hash and created_at, or None if not found
-        """
+        """Get current setup token information via SystemStateRepository."""
         try:
-            session = await db_adapter.get_session()
-            async with session:
-                # Get system state (singleton - only one record should exist)
-                result = await session.execute(
-                    select(SystemState).limit(1)
-                )
-                system_state = result.scalar_one_or_none()
-
-                if system_state and system_state.setup_token_hash:
-                    return {
-                        "token_hash": system_state.setup_token_hash,
-                        "created_at": system_state.setup_token_created_at
-                    }
-                return None
-
+            repo = self._get_repo()
+            state = await repo.get_singleton()
+            if state and state.setup_token_hash:
+                return {"token_hash": state.setup_token_hash, "created_at": state.setup_token_created_at}
+            return None
         except Exception as e:
             print(f"Error getting setup token info: {e}")
             return None

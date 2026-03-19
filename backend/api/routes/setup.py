@@ -13,13 +13,20 @@ from pydantic import BaseModel, EmailStr, Field, validator
 from datetime import datetime
 import httpx
 
+from sqlalchemy.exc import IntegrityError
+
 from api.deps.actor_context import get_actor_context, ActorContext
 from config.settings import settings
-from infrastructure.database.adapter import get_database_health, check_setup_status, db_adapter
 from infrastructure.redis.client import redis_client
-from infrastructure.database.models import User, UserRoleEnum, SetupStatusEnum, SystemState
+from infrastructure.container import (
+    get_database_health,
+    get_setup_status_service,
+    run_database_migrations,
+)
 from infrastructure.logging_config import get_logger
-from sqlalchemy import select
+from domain.entities.system_state import SystemState as SystemStateEntity, SetupStatus
+from domain.entities.user import User as UserEntity, UserRole
+from infrastructure.container import get_system_state_repository, get_user_service
 
 # Import new services
 from api.services.setup_token_service import SetupTokenService
@@ -146,7 +153,7 @@ async def get_setup_status(
     """
     try:
         # Get comprehensive setup status first
-        setup_status = await check_setup_status()
+        setup_status = await get_setup_status_service().get_setup_status()
         
         # If setup is complete, don't require session validation (public info)
         if setup_status.get("setup_complete", False):
@@ -246,17 +253,13 @@ async def initialize_setup(
             )
         
         # Check if setup is already completed and locked
-        async with db_adapter.async_session() as session:
-            result = await session.execute(
-                select(SystemState).limit(1)
+        repo = get_system_state_repository()
+        state = await repo.get_singleton()
+        if state and state.setup_locked:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Setup has already been completed and locked"
             )
-            system_state = result.scalar_one_or_none()
-            
-            if system_state and system_state.setup_locked:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Setup has already been completed and locked"
-                )
         
         # Validate system requirements
         db_health = await get_database_health()
@@ -267,7 +270,7 @@ async def initialize_setup(
             )
         
         # Create database tables
-        await db_adapter.create_tables()
+        await run_database_migrations()
         
         # Create admin user
         admin_user_id = await _create_admin_user(setup_request.admin_user)
@@ -307,6 +310,7 @@ async def initialize_setup(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Setup initialization failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Setup initialization failed: {str(e)}"
@@ -623,6 +627,7 @@ async def create_admin_user(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Admin user creation failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Admin user creation failed: {str(e)}"
@@ -693,6 +698,7 @@ async def complete_setup(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Setup completion failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Setup completion failed: {str(e)}"
@@ -735,59 +741,75 @@ async def skip_setup(
 
 # Helper functions
 
+def _is_duplicate_key_error(e: Exception) -> bool:
+    """True if exception indicates duplicate key / unique constraint violation."""
+    msg = (str(e) or "").lower()
+    return "duplicate key" in msg or "unique constraint" in msg or "already exists" in msg
+
+
 async def _create_admin_user(admin_data: AdminUserRequest) -> str:
-    """Create admin user in database."""
+    """Create admin user in database. Idempotent: if username/email already exists, returns that user's id."""
     try:
         from api.services.password_policy_service import PasswordPolicyService
-        
         password_policy_service = PasswordPolicyService()
-        
-        async with db_adapter.async_session() as session:
-            # Hash password with Argon2 (secure)
-            password_hash = password_policy_service.hash_password(admin_data.password)
-            
-            # Create admin user
-            admin_user = User(
-                username=admin_data.username,
-                email=admin_data.email,
-                password_hash=password_hash,
-                role=UserRoleEnum.ADMIN,
-                is_active=True,
-                is_verified=True,
-            )
-            
-            session.add(admin_user)
-            await session.commit()
-            await session.refresh(admin_user)
-            
-            return str(admin_user.id)
-        
+        password_hash = password_policy_service.hash_password(admin_data.password)
+        user_service = get_user_service()
+        admin_user = UserEntity(
+            username=admin_data.username,
+            email=admin_data.email,
+            password_hash=password_hash,
+            role=UserRole.ADMIN,
+            is_active=True,
+            is_verified=True,
+        )
+        admin_user = await user_service.create(admin_user)
+        return admin_user.id
+    except IntegrityError:
+        pass  # fall through to duplicate handling below
     except Exception as e:
-        raise Exception(f"Failed to create admin user: {str(e)}")
+        if not _is_duplicate_key_error(e):
+            logger.exception("Create admin user error: %s", e)
+            raise Exception(f"Failed to create admin user: {str(e)}")
+    # Duplicate username/email (e.g. double-click). Return existing user so wizard continues.
+    user_service = get_user_service()
+    existing = await user_service.get_by_username(admin_data.username)
+    if existing:
+        return existing.id
+    existing = await user_service.get_by_email(admin_data.email, active_only=False)
+    if existing:
+        return existing.id
+    raise Exception("Username or email already taken. Please use different credentials or try logging in.")
 
 
 async def _create_admin_user_with_hash(username: str, email: str, password_hash: str) -> str:
-    """Create admin user with pre-hashed password."""
+    """Create admin user with pre-hashed password. Idempotent: if username/email already exists, returns that user's id."""
     try:
-        async with db_adapter.async_session() as session:
-            # Create admin user
-            admin_user = User(
-                username=username,
-                email=email,
-                password_hash=password_hash,
-                role=UserRoleEnum.ADMIN,
-                is_active=True,
-                is_verified=True,
-            )
-            
-            session.add(admin_user)
-            await session.commit()
-            await session.refresh(admin_user)
-            
-            return str(admin_user.id)
-        
+        user_service = get_user_service()
+        admin_user = UserEntity(
+            username=username,
+            email=email,
+            password_hash=password_hash,
+            role=UserRole.ADMIN,
+            is_active=True,
+            is_verified=True,
+        )
+        admin_user = await user_service.create(admin_user)
+        return admin_user.id
+    except IntegrityError:
+        pass  # fall through to duplicate handling below
     except Exception as e:
-        raise Exception(f"Failed to create admin user: {str(e)}")
+        if not _is_duplicate_key_error(e):
+            logger.exception("Create admin user (with hash) error: %s", e)
+            raise Exception(f"Failed to create admin user: {str(e)}")
+    # Duplicate (e.g. double-click). Return existing user id so wizard continues.
+    user_service = get_user_service()
+    existing = await user_service.get_by_username(username)
+    if existing:
+        return existing.id
+    existing = await user_service.get_by_email(email, active_only=False)
+    if existing:
+        return existing.id
+    raise Exception("Username or email already taken. Try logging in with your credentials.")
 
 
 async def _finalize_setup(config: Dict[str, Any]):
@@ -808,25 +830,20 @@ async def _finalize_setup(config: Dict[str, Any]):
         await _mark_setup_completed()
         
     except Exception as e:
+        logger.exception("Finalize setup error: %s", e)
         raise Exception(f"Failed to finalize setup: {str(e)}")
 
 
 async def _lock_setup_permanently():
     """Lock setup permanently in database."""
     try:
-        async with db_adapter.async_session() as session:
-            # Get system state (singleton - only one record should exist)
-            result = await session.execute(
-                select(SystemState).limit(1)
-            )
-            system_state = result.scalar_one_or_none()
-            
-            if system_state:
-                system_state.setup_status = SetupStatusEnum.LOCKED
-                system_state.setup_locked = True
-                system_state.updated_at = datetime.utcnow()
-                await session.commit()
-            
+        repo = get_system_state_repository()
+        state = await repo.get_singleton()
+        if state:
+            state.setup_status = SetupStatus.LOCKED
+            state.setup_locked = True
+            state.updated_at = datetime.utcnow()
+            await repo.save(state)
     except Exception as e:
         raise Exception(f"Failed to lock setup permanently: {str(e)}")
 
@@ -837,9 +854,10 @@ async def _create_system_state(config: Dict[str, Any]):
         from domain.services.security_policy_service import SecurityPolicyService
         
         # Check actual system state
-        tables_exist = await db_adapter.check_tables_exist()
+        setup_status = await get_setup_status_service().get_setup_status()
+        tables_exist = setup_status.get("tables", {})
         all_tables_exist = len(tables_exist) > 0 and all(tables_exist.values())
-        admin_exists = await db_adapter.check_admin_user_exists()
+        admin_exists = setup_status.get("admin_user_exists", False)
         
         # Apply use case configuration if provided
         use_case = config.get("use_case")
@@ -871,39 +889,30 @@ async def _create_system_state(config: Dict[str, Any]):
         if cfg.get("max_concurrent_jobs") is None:
             cfg["max_concurrent_jobs"] = 3
 
-        async with db_adapter.async_session() as session:
-            # Check if system state already exists
-            result = await session.execute(
-                select(SystemState).limit(1)
-            )
-            system_state = result.scalar_one_or_none()
-            
-            if system_state:
-                # Update existing system state with actual values
-                system_state.setup_status = SetupStatusEnum.COMPLETED
-                system_state.version = "1.0.0"
-                system_state.auth_mode = cfg.get("auth_mode", settings.AUTH_MODE)
-                system_state.config = cfg
-                system_state.database_initialized = all_tables_exist
-                system_state.admin_user_created = admin_exists
-                system_state.system_configured = True  # Always True when setup is completed
-                system_state.setup_completed_at = datetime.utcnow()
-                system_state.updated_at = datetime.utcnow()
-            else:
-                # Create new system state with actual values
-                system_state = SystemState()
-                system_state.setup_status = SetupStatusEnum.COMPLETED
-                system_state.version = "1.0.0"
-                system_state.auth_mode = cfg.get("auth_mode", settings.AUTH_MODE)
-                system_state.config = cfg
-                system_state.database_initialized = all_tables_exist
-                system_state.admin_user_created = admin_exists
-                system_state.system_configured = True  # Always True when setup is completed
-                system_state.setup_completed_at = datetime.utcnow()
-                session.add(system_state)
-            
-            await session.commit()
-            
+        repo = get_system_state_repository()
+        state = await repo.get_singleton()
+        if state:
+            state.setup_status = SetupStatus.COMPLETED
+            state.version = "1.0.0"
+            state.auth_mode = cfg.get("auth_mode", settings.AUTH_MODE)
+            state.config = cfg
+            state.database_initialized = all_tables_exist
+            state.admin_user_created = admin_exists
+            state.system_configured = True
+            state.setup_completed_at = datetime.utcnow()
+            state.updated_at = datetime.utcnow()
+        else:
+            state = SystemStateEntity()
+            state.setup_status = SetupStatus.COMPLETED
+            state.version = "1.0.0"
+            state.auth_mode = cfg.get("auth_mode", settings.AUTH_MODE)
+            state.config = cfg
+            state.database_initialized = all_tables_exist
+            state.admin_user_created = admin_exists
+            state.system_configured = True
+            state.setup_completed_at = datetime.utcnow()
+            state.updated_at = datetime.utcnow()
+        await repo.save(state)
     except Exception as e:
         raise Exception(f"Failed to create/update system state: {str(e)}")
 

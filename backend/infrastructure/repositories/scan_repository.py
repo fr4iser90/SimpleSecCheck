@@ -9,11 +9,11 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, text
+from sqlalchemy import select, and_, or_, func, text, cast
 
 from domain.repositories.scan_repository import ScanRepository
 from domain.entities.scan import Scan, ScanStatus, ScanType
-from infrastructure.database.models import Scan as ScanModel
+from infrastructure.database.models import Scan as ScanModel, ScanStatusEnumType
 from infrastructure.database.adapter import db_adapter
 
 logger = logging.getLogger(__name__)
@@ -177,7 +177,7 @@ class DatabaseScanRepository(ScanRepository):
             try:
                 result = await session.execute(
                     select(ScanModel)
-                    .where(ScanModel.status == status.value)
+                    .where(ScanModel.status == cast(status.value, ScanStatusEnumType))
                     .order_by(ScanModel.created_at.desc())
                     .limit(limit)
                     .offset(offset)
@@ -309,7 +309,7 @@ class DatabaseScanRepository(ScanRepository):
                 if project_id:
                     conditions.append(ScanModel.project_id == project_id)
                 if status:
-                    conditions.append(ScanModel.status == status.value)
+                    conditions.append(ScanModel.status == cast(status.value, ScanStatusEnumType))
                 if scan_type:
                     conditions.append(ScanModel.scan_type == scan_type.value)
                 if tags:
@@ -355,7 +355,7 @@ class DatabaseScanRepository(ScanRepository):
                 if project_id:
                     conditions.append(ScanModel.project_id == project_id)
                 if status:
-                    conditions.append(ScanModel.status == status.value)
+                    conditions.append(ScanModel.status == cast(status.value, ScanStatusEnumType))
                 if scan_type:
                     conditions.append(ScanModel.scan_type == scan_type.value)
                 if tags:
@@ -618,8 +618,8 @@ class DatabaseScanRepository(ScanRepository):
         async with self.db_adapter.async_session() as session:
             try:
                 st = or_(
-                    ScanModel.status == ScanStatus.PENDING.value,
-                    ScanModel.status == ScanStatus.RUNNING.value,
+                    ScanModel.status == cast(ScanStatus.PENDING.value, ScanStatusEnumType),
+                    ScanModel.status == cast(ScanStatus.RUNNING.value, ScanStatusEnumType),
                 )
                 query = select(func.count(ScanModel.id)).where(st)
                 extra_params: Dict[str, Any] = {}
@@ -641,4 +641,337 @@ class DatabaseScanRepository(ScanRepository):
                 return int(result.scalar() or 0)
             except Exception as e:
                 logger.error(f"count_active_scans_for_actor failed: {e}")
+                raise
+
+    async def find_active_scan_by_user_and_target(
+        self, user_id: str, target_url_contains: str
+    ) -> Optional[Scan]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(ScanModel)
+                    .where(
+                        and_(
+                            ScanModel.user_id == UUID(user_id),
+                            ScanModel.status.in_(["pending", "running"]),
+                            ScanModel.target_url.contains(target_url_contains),
+                        )
+                    )
+                    .order_by(ScanModel.created_at.desc())
+                    .limit(1)
+                )
+                model = result.scalar_one_or_none()
+                return await self._model_to_entity(model) if model else None
+            except Exception as e:
+                logger.error(f"find_active_scan_by_user_and_target failed: {e}")
+                raise
+
+    async def find_latest_finished_scan_by_user_and_target(
+        self, user_id: str, target_url: str
+    ) -> Optional[Scan]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(ScanModel)
+                    .where(
+                        and_(
+                            ScanModel.user_id == UUID(user_id),
+                            ScanModel.target_url == target_url,
+                            ScanModel.status.in_(
+                                ["completed", "failed", "cancelled", "interrupted"]
+                            ),
+                        )
+                    )
+                    .order_by(ScanModel.created_at.desc())
+                    .limit(1)
+                )
+                model = result.scalar_one_or_none()
+                return await self._model_to_entity(model) if model else None
+            except Exception as e:
+                logger.error(
+                    f"find_latest_finished_scan_by_user_and_target failed: {e}"
+                )
+                raise
+
+    async def get_queue_position(self, scan_id: str, user_id: str) -> Optional[int]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                scan_result = await session.execute(
+                    select(ScanModel).where(
+                        ScanModel.id == UUID(scan_id),
+                        ScanModel.user_id == UUID(user_id),
+                    )
+                )
+                scan = scan_result.scalar_one_or_none()
+                if not scan or scan.status != "pending":
+                    return None
+                position_query = select(func.count(ScanModel.id)).where(
+                    and_(
+                        ScanModel.status == cast("pending", ScanStatusEnumType),
+                        ScanModel.user_id == UUID(user_id),
+                        or_(
+                            ScanModel.priority > scan.priority,
+                            and_(
+                                ScanModel.priority == scan.priority,
+                                ScanModel.created_at < scan.created_at,
+                            ),
+                        ),
+                    )
+                )
+                pos_result = await session.execute(position_query)
+                return (pos_result.scalar() or 0) + 1
+            except Exception as e:
+                logger.error(f"get_queue_position failed: {e}")
+                raise
+
+    async def get_queue_items(
+        self,
+        status_filter: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Scan]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                query = select(ScanModel)
+                if status_filter:
+                    query = query.where(ScanModel.status.ilike(f"%{status_filter}%"))
+                else:
+                    query = query.where(ScanModel.status.in_(["pending", "running"]))
+                query = (
+                    query.order_by(ScanModel.priority.desc(), ScanModel.created_at.asc())
+                    .limit(limit)
+                    .offset(offset)
+                )
+                result = await session.execute(query)
+                models = result.scalars().all()
+                return [await self._model_to_entity(m) for m in models]
+            except Exception as e:
+                logger.error(f"get_queue_items failed: {e}")
+                raise
+
+    async def count_by_statuses(self, statuses: List[str]) -> int:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(func.count(ScanModel.id)).where(ScanModel.status.in_(statuses))
+                )
+                return int(result.scalar() or 0)
+            except Exception as e:
+                logger.error(f"count_by_statuses failed: {e}")
+                raise
+
+    async def get_latest_scans_by_target_urls(
+        self, user_id: str, target_urls: List[str]
+    ) -> Dict[str, Scan]:
+        if not target_urls:
+            return {}
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(ScanModel)
+                    .where(
+                        ScanModel.user_id == UUID(user_id),
+                        ScanModel.target_url.in_(target_urls),
+                    )
+                    .order_by(ScanModel.created_at.desc())
+                )
+                rows = result.scalars().all()
+                out: Dict[str, Scan] = {}
+                for r in rows:
+                    url = r.target_url or ""
+                    if url not in out:
+                        out[url] = await self._model_to_entity(r)
+                return out
+            except Exception as e:
+                logger.error(f"get_latest_scans_by_target_urls failed: {e}")
+                raise
+
+    async def get_position_in_queue(self, scan_id: str) -> Optional[int]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                scan_result = await session.execute(
+                    select(ScanModel).where(ScanModel.id == UUID(scan_id))
+                )
+                scan = scan_result.scalar_one_or_none()
+                if not scan or scan.status not in ("pending", "running"):
+                    return None
+                position_query = select(func.count(ScanModel.id)).where(
+                    and_(
+                        ScanModel.status.in_(["pending", "running"]),
+                        or_(
+                            ScanModel.priority > scan.priority,
+                            and_(
+                                ScanModel.priority == scan.priority,
+                                ScanModel.created_at < scan.created_at,
+                            ),
+                        ),
+                    )
+                )
+                pos_result = await session.execute(position_query)
+                return (pos_result.scalar() or 0) + 1
+            except Exception as e:
+                logger.error(f"get_position_in_queue failed: {e}")
+                raise
+
+    async def list_scans_for_actor(
+        self,
+        user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+        status_filter: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Scan]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                query = select(ScanModel)
+                if guest_session_id:
+                    query = query.where(
+                        text("scans.scan_metadata->>'session_id' = :gsid")
+                    ).params(gsid=guest_session_id)
+                elif user_id:
+                    query = query.where(ScanModel.user_id == UUID(user_id))
+                else:
+                    return []
+                if status_filter:
+                    query = query.where(ScanModel.status.ilike(f"%{status_filter}%"))
+                query = (
+                    query.order_by(ScanModel.priority.desc(), ScanModel.created_at.desc())
+                    .limit(limit)
+                )
+                result = await session.execute(query)
+                models = result.scalars().all()
+                return [await self._model_to_entity(m) for m in models]
+            except Exception as e:
+                logger.error(f"list_scans_for_actor failed: {e}")
+                raise
+
+    async def get_scans_before_in_queue(self, scan_id: str) -> List[Scan]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                scan_result = await session.execute(
+                    select(ScanModel).where(ScanModel.id == UUID(scan_id))
+                )
+                scan = scan_result.scalar_one_or_none()
+                if not scan or scan.status not in ("pending", "running"):
+                    return []
+                before_query = (
+                    select(ScanModel)
+                    .where(ScanModel.status.in_(["pending", "running"]))
+                    .where(
+                        or_(
+                            ScanModel.priority > scan.priority,
+                            and_(
+                                ScanModel.priority == scan.priority,
+                                ScanModel.created_at < scan.created_at,
+                            ),
+                        )
+                    )
+                    .order_by(ScanModel.priority.desc(), ScanModel.created_at.asc())
+                )
+                result = await session.execute(before_query)
+                models = result.scalars().all()
+                return [await self._model_to_entity(m) for m in models]
+            except Exception as e:
+                logger.error(f"get_scans_before_in_queue failed: {e}")
+                raise
+
+    async def get_running_scans(self, limit: int = 50) -> List[Scan]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(ScanModel)
+                    .where(ScanModel.status == cast("running", ScanStatusEnumType))
+                    .order_by(ScanModel.started_at.asc())
+                    .limit(limit)
+                )
+                return [await self._model_to_entity(m) for m in result.scalars().all()]
+            except Exception as e:
+                logger.error(f"get_running_scans failed: {e}")
+                raise
+
+    async def count_today_by_filters(
+        self,
+        status: Optional[str] = None,
+        error_message_contains: Optional[str] = None,
+    ) -> int:
+        await self.db_adapter.ensure_initialized()
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        async with self.db_adapter.async_session() as session:
+            try:
+                q = select(func.count(ScanModel.id)).where(ScanModel.created_at >= today)
+                if status is not None:
+                    q = q.where(ScanModel.status == cast(status, ScanStatusEnumType))
+                if error_message_contains is not None:
+                    q = q.where(ScanModel.error_message.ilike(f"%{error_message_contains}%"))
+                r = await session.execute(q)
+                return int(r.scalar() or 0)
+            except Exception as e:
+                logger.error(f"count_today_by_filters failed: {e}")
+                raise
+
+    async def get_avg_duration_completed_today(self) -> Optional[float]:
+        await self.db_adapter.ensure_initialized()
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        async with self.db_adapter.async_session() as session:
+            try:
+                r = await session.execute(
+                    select(func.avg(ScanModel.duration)).where(
+                        and_(
+                            ScanModel.created_at >= today,
+                            ScanModel.status == cast("completed", ScanStatusEnumType),
+                            ScanModel.duration.isnot(None),
+                        )
+                    )
+                )
+                v = r.scalar()
+                return float(v) if v is not None else None
+            except Exception as e:
+                logger.error(f"get_avg_duration_completed_today failed: {e}")
+                raise
+
+    async def get_stale_running_scan_ids(
+        self,
+        stale_cutoff: datetime,
+        null_cutoff: datetime,
+        limit: int = 200,
+    ) -> List[str]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                from sqlalchemy import or_
+                q = (
+                    select(ScanModel.id)
+                    .where(ScanModel.status == cast("running", ScanStatusEnumType))
+                    .where(
+                        or_(
+                            and_(
+                                ScanModel.last_heartbeat_at.isnot(None),
+                                ScanModel.last_heartbeat_at < stale_cutoff,
+                            ),
+                            and_(
+                                ScanModel.last_heartbeat_at.is_(None),
+                                ScanModel.started_at.isnot(None),
+                                ScanModel.started_at < null_cutoff,
+                            ),
+                            and_(
+                                ScanModel.last_heartbeat_at.is_(None),
+                                ScanModel.started_at.is_(None),
+                            ),
+                        )
+                    )
+                    .limit(limit)
+                )
+                r = await session.execute(q)
+                return [str(row[0]) for row in r.fetchall()]
+            except Exception as e:
+                logger.error("get_stale_running_scan_ids failed: %s", e)
                 raise

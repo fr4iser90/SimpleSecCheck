@@ -234,28 +234,23 @@ async def startup_event():
     # Check setup status early to configure logging
     setup_complete = False
     try:
-        from infrastructure.database.adapter import db_adapter
-        await db_adapter.init_database()
+        from infrastructure.container import init_database
+        await init_database()
         
         # Check if setup is complete before logging anything
         try:
-            from infrastructure.database.models import SystemState, SetupStatusEnum
-            from sqlalchemy import select
-            table_exists = await db_adapter.check_table_exists("system_state")
-            if table_exists:
-                session = await db_adapter.get_session()
-                async with session:
-                    result = await session.execute(select(SystemState).limit(1))
-                    system_state = result.scalar_one_or_none()
-                    if system_state:
-                        setup_complete = (
-                            (system_state.setup_status == SetupStatusEnum.COMPLETED or
-                             system_state.setup_status == SetupStatusEnum.LOCKED) and
-                            system_state.setup_locked and
-                            system_state.database_initialized and
-                            system_state.admin_user_created and
-                            system_state.system_configured
-                        )
+            from domain.entities.system_state import SetupStatus
+            from infrastructure.container import get_system_state_repository
+            repo = get_system_state_repository()
+            state = await repo.get_singleton()
+            if state:
+                setup_complete = (
+                    (state.setup_status == SetupStatus.COMPLETED or state.setup_status == SetupStatus.LOCKED) and
+                    state.setup_locked and
+                    state.database_initialized and
+                    state.admin_user_created and
+                    state.system_configured
+                )
         except Exception:
             pass  # If we can't check, assume setup is not complete
         
@@ -275,18 +270,13 @@ async def startup_event():
         if setup_complete:
             logger.info("Database connected")
         
-        # Create tables if they don't exist
+        # Schema: only Alembic (no create_all, no _migrate_existing_tables)
         try:
-            tables_exist = await db_adapter.check_tables_exist()
-            if not all(tables_exist.values()):
-                await db_adapter.create_tables()
-            else:
-                # Tables exist, but run migrations for schema updates
-                await db_adapter._migrate_existing_tables()
+            from infrastructure.database.alembic_runner import run_alembic_upgrade
+            await run_alembic_upgrade()
         except Exception as e:
-            # If table creation fails, log but don't fail startup
             if setup_complete:
-                logger.error("Failed to create database tables", error=str(e))
+                logger.error("Alembic upgrade failed", error=str(e))
         
         # Load settings from database if setup is completed
         try:
@@ -308,37 +298,25 @@ async def startup_event():
     # Generate setup token only if setup is not complete
     try:
         from api.services.setup_token_service import SetupTokenService
-        from infrastructure.database.models import SystemState, SetupStatusEnum
-        from sqlalchemy import select
-        from datetime import datetime
+        from domain.entities.system_state import SetupStatus
+        from infrastructure.container import get_system_state_repository
         
-        # Check if system is already set up (silently, no logging during setup)
         setup_required = True
         try:
-            # Check if system_state table exists
-            table_exists = await db_adapter.check_table_exists("system_state")
-            
-            if table_exists:
-                session = await db_adapter.get_session()
-                async with session:
-                    result = await session.execute(select(SystemState).limit(1))
-                    system_state = result.scalar_one_or_none()
-                    
-                    if system_state:
-                        # Check if setup is complete - must have all flags set
-                        setup_complete_check = (
-                            (system_state.setup_status == SetupStatusEnum.COMPLETED or
-                             system_state.setup_status == SetupStatusEnum.LOCKED) and
-                            system_state.setup_locked and
-                            system_state.database_initialized and
-                            system_state.admin_user_created and
-                            system_state.system_configured
-                        )
-                        
-                        if setup_complete_check:
-                            setup_required = False
-                            # Only log if setup is complete (normal operation)
-                            logger.info("System setup already complete, skipping token generation")
+            repo = get_system_state_repository()
+            state = await repo.get_singleton()
+            if state:
+                setup_complete_check = (
+                    (state.setup_status == SetupStatus.COMPLETED or state.setup_status == SetupStatus.LOCKED) and
+                    state.setup_locked and
+                    state.database_initialized and
+                    state.admin_user_created and
+                    state.system_configured
+                )
+                if setup_complete_check:
+                    setup_required = False
+                    if setup_complete:
+                        logger.info("System setup already complete, skipping token generation")
         except Exception as e:
             # If we can't check, assume setup is required (safer)
             # Only log errors if setup is complete
@@ -347,6 +325,7 @@ async def startup_event():
         
         # Only generate token if setup is required
         if setup_required:
+            from datetime import datetime
             token_service = SetupTokenService()
             token = token_service.generate_token()
             token_hash = token_service.hash_token(token)

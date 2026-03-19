@@ -6,7 +6,7 @@ This module provides health check endpoints for monitoring the backend service.
 from fastapi import APIRouter, HTTPException, Response
 from typing import Dict, Any
 
-from infrastructure.database.adapter import get_database_health
+from infrastructure.container import get_database_health
 from infrastructure.redis.client import get_redis_health
 
 router = APIRouter()

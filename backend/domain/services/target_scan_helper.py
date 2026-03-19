@@ -15,7 +15,6 @@ from domain.entities.target_type import TargetType
 from domain.services.target_handlers import get_target_handler
 from application.dtos.request_dto import ScanRequestDTO
 from application.services.scan_service import ScanService
-from infrastructure.container import get_scan_service
 
 logger = logging.getLogger(__name__)
 
@@ -33,28 +32,21 @@ TARGET_TYPE_TO_SCAN_TYPE = {
 
 
 async def _get_default_scanners_for_scan_type(scan_type: ScanType) -> list[str]:
-    """Load default enabled scanners for the given scan type from DB."""
-    from infrastructure.database.adapter import db_adapter
-    from infrastructure.database.models import Scanner
-    from sqlalchemy import select
-
-    await db_adapter.ensure_initialized()
-    async with db_adapter.async_session() as session:
-        result = await session.execute(
-            select(Scanner)
-            .where(Scanner.enabled == True)
-            .order_by(Scanner.priority.desc())
-        )
-        scanners = result.scalars().all()
+    """Load default enabled scanners for the given scan type from repository."""
+    from infrastructure.container import get_scanner_repository
+    repo = get_scanner_repository()
+    scanners = await repo.list_all()
+    enabled = [s for s in scanners if s.enabled]
+    ordered = sorted(enabled, key=lambda x: -x.priority)
     scan_type_str = scan_type.value.lower()
     names = [
-        s.name for s in scanners
+        s.name for s in ordered
         if s.scan_types and scan_type_str in [st.lower() for st in (s.scan_types or [])]
     ]
     if not names:
-        logger.warning(f"No scanners found for scan_type={scan_type.value}, using code as fallback")
+        logger.warning("No scanners found for scan_type=%s, using code as fallback", scan_type.value)
         names = [
-            s.name for s in scanners
+            s.name for s in ordered
             if s.scan_types and "code" in [st.lower() for st in (s.scan_types or [])]
         ]
     return names
@@ -117,6 +109,7 @@ async def create_scan_from_target(
     )
 
     try:
+        from infrastructure.container import get_scan_service
         scan_service: ScanService = get_scan_service()
         scan_dto = await scan_service.create_scan(
             request,

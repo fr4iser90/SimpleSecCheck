@@ -139,61 +139,47 @@ async def load_settings_from_database(settings_instance: Settings) -> None:
     Overrides environment variables with database values.
     """
     try:
-        from infrastructure.database.adapter import db_adapter
-        from infrastructure.database.models import SystemState
-        from sqlalchemy import select
-        
-        async with db_adapter.async_session() as session:
-            result = await session.execute(select(SystemState).limit(1))
-            system_state = result.scalar_one_or_none()
-            
-            if system_state and system_state.config:
-                config = system_state.config
-                
-                # Load USE_CASE, AUTH_MODE, ACCESS_MODE from database
-                if "use_case" in config:
-                    settings_instance.USE_CASE = config["use_case"]
-                if "AUTH_MODE" in config:
-                    settings_instance.AUTH_MODE = config["AUTH_MODE"]
-                auth_cfg = config.get("auth") or {}
-                if isinstance(auth_cfg, dict):
-                    if "access_mode" in auth_cfg:
-                        settings_instance.ACCESS_MODE = auth_cfg["access_mode"]
-                    else:
-                        # Backward compat: derive from AUTH_MODE
-                        settings_instance.ACCESS_MODE = "public" if (config.get("AUTH_MODE") or settings_instance.AUTH_MODE) == "free" else "private"
-                    if "allow_self_registration" in auth_cfg:
-                        settings_instance.ALLOW_SELF_REGISTRATION = auth_cfg["allow_self_registration"]
-                    if "bulk_scan_allow_guests" in auth_cfg:
-                        settings_instance.BULK_SCAN_ALLOW_GUESTS = auth_cfg["bulk_scan_allow_guests"]
-                # Queue config (strategy and default priorities)
-                queue_cfg = config.get("queue") or {}
-                if isinstance(queue_cfg, dict):
-                    if "queue_strategy" in queue_cfg and queue_cfg["queue_strategy"] in ("fifo", "priority", "round_robin"):
-                        settings_instance.QUEUE_STRATEGY = queue_cfg["queue_strategy"]
-                    if "priority_admin" in queue_cfg:
-                        settings_instance.QUEUE_PRIORITY_ADMIN = int(queue_cfg["priority_admin"])
-                    if "priority_user" in queue_cfg:
-                        settings_instance.QUEUE_PRIORITY_USER = int(queue_cfg["priority_user"])
-                    if "priority_guest" in queue_cfg:
-                        settings_instance.QUEUE_PRIORITY_GUEST = int(queue_cfg["priority_guest"])
-                settings_instance.LOGIN_REQUIRED = settings_instance.ACCESS_MODE == "private"
-                
-                # Load feature flags from database (single source: ALL_SCAN_FEATURE_FLAG_KEYS)
-                if "feature_flags" in config:
-                    feature_flags = config["feature_flags"]
-                    if isinstance(feature_flags, dict):
-                        from domain.services.target_permission_policy import ALL_SCAN_FEATURE_FLAG_KEYS
-                        for key in ALL_SCAN_FEATURE_FLAG_KEYS:
-                            if key in feature_flags:
-                                setattr(settings_instance, key, feature_flags[key])
-                
-                # Scanner assets: auto-update (future: per-asset or health e.g. SonarQube reachable, Docker)
-                scanner_cfg = config.get("scanner") or config.get("scanner_assets") or {}
-                if isinstance(scanner_cfg, dict) and "auto_update_enabled" in scanner_cfg:
-                    settings_instance.SCANNER_ASSETS_AUTO_UPDATE_ENABLED = bool(scanner_cfg["auto_update_enabled"])
-                
-    except Exception as e:
+        from infrastructure.container import get_system_state_repository
+        repo = get_system_state_repository()
+        state = await repo.get_singleton()
+        if state and state.config:
+            config = state.config
+            if "use_case" in config:
+                settings_instance.USE_CASE = config["use_case"]
+            if "AUTH_MODE" in config:
+                settings_instance.AUTH_MODE = config["AUTH_MODE"]
+            auth_cfg = config.get("auth") or {}
+            if isinstance(auth_cfg, dict):
+                if "access_mode" in auth_cfg:
+                    settings_instance.ACCESS_MODE = auth_cfg["access_mode"]
+                else:
+                    settings_instance.ACCESS_MODE = "public" if (config.get("AUTH_MODE") or settings_instance.AUTH_MODE) == "free" else "private"
+                if "allow_self_registration" in auth_cfg:
+                    settings_instance.ALLOW_SELF_REGISTRATION = auth_cfg["allow_self_registration"]
+                if "bulk_scan_allow_guests" in auth_cfg:
+                    settings_instance.BULK_SCAN_ALLOW_GUESTS = auth_cfg["bulk_scan_allow_guests"]
+            queue_cfg = config.get("queue") or {}
+            if isinstance(queue_cfg, dict):
+                if "queue_strategy" in queue_cfg and queue_cfg["queue_strategy"] in ("fifo", "priority", "round_robin"):
+                    settings_instance.QUEUE_STRATEGY = queue_cfg["queue_strategy"]
+                if "priority_admin" in queue_cfg:
+                    settings_instance.QUEUE_PRIORITY_ADMIN = int(queue_cfg["priority_admin"])
+                if "priority_user" in queue_cfg:
+                    settings_instance.QUEUE_PRIORITY_USER = int(queue_cfg["priority_user"])
+                if "priority_guest" in queue_cfg:
+                    settings_instance.QUEUE_PRIORITY_GUEST = int(queue_cfg["priority_guest"])
+            settings_instance.LOGIN_REQUIRED = settings_instance.ACCESS_MODE == "private"
+            if "feature_flags" in config:
+                feature_flags = config["feature_flags"]
+                if isinstance(feature_flags, dict):
+                    from domain.services.target_permission_policy import ALL_SCAN_FEATURE_FLAG_KEYS
+                    for key in ALL_SCAN_FEATURE_FLAG_KEYS:
+                        if key in feature_flags:
+                            setattr(settings_instance, key, feature_flags[key])
+            scanner_cfg = config.get("scanner") or config.get("scanner_assets") or {}
+            if isinstance(scanner_cfg, dict) and "auto_update_enabled" in scanner_cfg:
+                settings_instance.SCANNER_ASSETS_AUTO_UPDATE_ENABLED = bool(scanner_cfg["auto_update_enabled"])
+    except Exception:
         # If database is not available or setup not completed, use ENV defaults
         # This is expected during initial setup
         pass

@@ -9,12 +9,12 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as fastapi_status
-from sqlalchemy import select, func, and_, or_
-from sqlalchemy.orm import selectinload
 
 from api.deps.actor_context import get_actor_context, ActorContext
-from infrastructure.database.adapter import db_adapter
-from infrastructure.database.models import Scan
+from infrastructure.container import get_scan_repository, get_user_service
+from domain.repositories.scan_repository import ScanRepository
+from domain.entities.user import UserRole
+from application.services.user_service import UserService
 from infrastructure.logging_config import get_logger
 from domain.services.scanner_duration_service import ScannerDurationService
 
@@ -58,52 +58,56 @@ def _extract_branch_from_config(config: Dict[str, Any]) -> Optional[str]:
     return config.get("git_branch") or config.get("branch")
 
 
-async def _scan_to_queue_item(scan: Scan, position: Optional[int] = None, show_branch: bool = False) -> Dict[str, Any]:
+def _scan_status_str(scan: Any) -> str:
+    """Normalize scan status to lowercase string (works with DB model or domain entity)."""
+    s = getattr(scan, "status", None)
+    raw = getattr(s, "value", s) if s is not None else None
+    return str(raw or "pending").lower()
+
+
+async def _scan_to_queue_item(scan: Any, position: Optional[int] = None, show_branch: bool = False) -> Dict[str, Any]:
     """
-    Convert Scan model to queue item format.
-    
-    Args:
-        scan: Scan model
-        position: Position in queue
-        show_branch: Whether to include branch name (only for authenticated users, not guests)
+    Convert Scan model or entity to queue item format.
     """
-    repository_name = _extract_repository_name(scan.target_url)
-    branch = _extract_branch_from_config(scan.config if scan.config else {}) if show_branch else None
+    repository_name = _extract_repository_name(getattr(scan, "target_url", None) or "")
+    config = getattr(scan, "config", None) or {}
+    branch = _extract_branch_from_config(config) if show_branch else None
     
-    # Map status to queue status format
     status_map = {
         "pending": "pending",
         "running": "running",
         "completed": "completed",
         "failed": "failed",
-        "cancelled": "failed",  # Treat cancelled as failed for queue view
+        "cancelled": "failed",
     }
-    queue_status = status_map.get(scan.status.lower(), scan.status.lower())
+    queue_status = status_map.get(_scan_status_str(scan), _scan_status_str(scan))
     
-    # Calculate estimated time for pending/running scans
+    scanners = getattr(scan, "scanners", None) or []
     estimated_time_seconds = None
-    if queue_status in ["pending", "running"] and scan.scanners:
-        estimated_time_seconds = await ScannerDurationService.get_estimated_time(scan.scanners)
+    if queue_status in ["pending", "running"] and scanners:
+        estimated_time_seconds = await ScannerDurationService.get_estimated_time(scanners)
     
-    # Get actual duration for completed/running scans
     duration_seconds = None
-    if scan.duration is not None:
+    if getattr(scan, "duration", None) is not None:
         duration_seconds = scan.duration
-    elif scan.started_at and scan.completed_at:
-        duration_seconds = int((scan.completed_at - scan.started_at).total_seconds())
-    elif scan.started_at and queue_status == "running":
-        # Calculate current duration for running scans
-        from datetime import datetime
-        duration_seconds = int((datetime.utcnow() - scan.started_at).total_seconds())
+    else:
+        started_at = getattr(scan, "started_at", None)
+        completed_at = getattr(scan, "completed_at", None)
+        if started_at and completed_at:
+            duration_seconds = int((completed_at - started_at).total_seconds())
+        elif started_at and queue_status == "running":
+            from datetime import datetime
+            duration_seconds = int((datetime.utcnow() - started_at).total_seconds())
     
+    created_at = getattr(scan, "created_at", None)
     result = {
         "queue_id": str(scan.id),
         "repository_name": repository_name,
         "status": queue_status,
-        "scanners": scan.scanners if scan.scanners else [],
+        "scanners": scanners,
         "position": position,
-        "created_at": scan.created_at.isoformat() if scan.created_at else None,
-        "scan_id": str(scan.id),  # For compatibility
+        "created_at": created_at.isoformat() if created_at else None,
+        "scan_id": str(scan.id),
         "estimated_time_seconds": estimated_time_seconds,
         "duration_seconds": duration_seconds,
     }
@@ -115,89 +119,74 @@ async def _scan_to_queue_item(scan: Scan, position: Optional[int] = None, show_b
     return result
 
 
-async def _scan_to_my_scan_item(scan: Scan, position: Optional[int] = None) -> Dict[str, Any]:
-    """
-    Convert Scan model to my-scans item format.
+async def _scan_to_my_scan_item(scan: Any, position: Optional[int] = None) -> Dict[str, Any]:
+    """Convert Scan model or entity to my-scans item format."""
+    target_url = getattr(scan, "target_url", None) or ""
+    config = getattr(scan, "config", None) or {}
+    repository_name = _extract_repository_name(target_url)
+    branch = _extract_branch_from_config(config)
     
-    This is for "My Scans" endpoint, so branch is always shown (user's own scans).
-    """
-    repository_name = _extract_repository_name(scan.target_url)
-    branch = _extract_branch_from_config(scan.config if scan.config else {})
-    
-    # Extract commit hash from metadata or config
     commit_hash = None
-    if scan.scan_metadata:
-        commit_hash = scan.scan_metadata.get("commit_hash") or scan.scan_metadata.get("commit")
-    if not commit_hash and scan.config:
-        commit_hash = scan.config.get("commit_hash") or scan.config.get("commit")
+    metadata = getattr(scan, "scan_metadata", None) or {}
+    if metadata:
+        commit_hash = metadata.get("commit_hash") or metadata.get("commit")
+    if not commit_hash and config:
+        commit_hash = config.get("commit_hash") or config.get("commit")
     
-    status_map = {
-        "pending": "pending",
-        "running": "running",
-        "completed": "completed",
-        "failed": "failed",
-        "cancelled": "failed",
-    }
-    queue_status = status_map.get(scan.status.lower(), scan.status.lower())
-    
-    # Calculate estimated time for pending/running scans
+    queue_status = {"pending": "pending", "running": "running", "completed": "completed", "failed": "failed", "cancelled": "failed"}.get(_scan_status_str(scan), _scan_status_str(scan))
+    scanners = getattr(scan, "scanners", None) or []
     estimated_time_seconds = None
-    if queue_status in ["pending", "running"] and scan.scanners:
-        estimated_time_seconds = await ScannerDurationService.get_estimated_time(scan.scanners)
+    if queue_status in ["pending", "running"] and scanners:
+        estimated_time_seconds = await ScannerDurationService.get_estimated_time(scanners)
     
-    # Get actual duration for completed/running scans
     duration_seconds = None
-    if scan.duration is not None:
+    if getattr(scan, "duration", None) is not None:
         duration_seconds = scan.duration
-    elif scan.started_at and scan.completed_at:
-        duration_seconds = int((scan.completed_at - scan.started_at).total_seconds())
-    elif scan.started_at and queue_status == "running":
-        # Calculate current duration for running scans
-        from datetime import datetime
-        duration_seconds = int((datetime.utcnow() - scan.started_at).total_seconds())
+    else:
+        started_at = getattr(scan, "started_at", None)
+        completed_at = getattr(scan, "completed_at", None)
+        if started_at and completed_at:
+            duration_seconds = int((completed_at - started_at).total_seconds())
+        elif started_at and queue_status == "running":
+            from datetime import datetime
+            duration_seconds = int((datetime.utcnow() - started_at).total_seconds())
     
+    created_at = getattr(scan, "created_at", None)
+    started_at = getattr(scan, "started_at", None)
+    completed_at = getattr(scan, "completed_at", None)
     return {
         "queue_id": str(scan.id),
-        "repository_url": scan.target_url,
+        "repository_url": target_url,
         "repository_name": repository_name,
         "branch": branch,
         "commit_hash": commit_hash,
         "status": queue_status,
         "scan_id": str(scan.id),
         "position": position,
-        "created_at": scan.created_at.isoformat() if scan.created_at else None,
-        "started_at": scan.started_at.isoformat() if scan.started_at else None,
-        "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
-        "scanners": scan.scanners if scan.scanners else [],
+        "created_at": created_at.isoformat() if created_at else None,
+        "started_at": started_at.isoformat() if started_at else None,
+        "completed_at": completed_at.isoformat() if completed_at else None,
+        "scanners": scanners,
         "estimated_time_seconds": estimated_time_seconds,
         "duration_seconds": duration_seconds,
     }
 
 
-async def _is_admin_user(actor_context: ActorContext) -> bool:
+async def _is_admin_user(actor_context: ActorContext, user_service: Optional[UserService] = None) -> bool:
     """Check if the current user is an admin."""
     if not actor_context.is_authenticated or not actor_context.user_id:
         return False
-    
     try:
-        await db_adapter.ensure_initialized()
-        
-        async with db_adapter.async_session() as session:
-            from uuid import UUID
-            from infrastructure.database.models import User, UserRoleEnum
-            
-            user_uuid = UUID(actor_context.user_id)
-            result = await session.execute(
-                select(User).where(User.id == user_uuid)
-            )
-            user = result.scalar_one_or_none()
-            
-            if user and user.role == UserRoleEnum.ADMIN:
-                return True
+        svc = user_service or get_user_service()
+        user = await svc.get_by_id(actor_context.user_id)
+        return user is not None and user.role == UserRole.ADMIN
     except Exception as e:
         logger.warning(f"Failed to check admin status: {e}")
-    
     return False
+
+
+def get_scan_repository_dependency() -> ScanRepository:
+    return get_scan_repository()
 
 
 @router.get(
@@ -209,83 +198,24 @@ async def get_queue(
     limit: int = Query(100, ge=1, le=1000, description="Limit results"),
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status (pending, running, completed, failed)"),
     actor_context: ActorContext = Depends(get_actor_context),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> Dict[str, Any]:
     """
     Get queue status with scans (Public Queue - anonymized).
-    
-    Returns scans from PostgreSQL database in queue format.
-    - Everyone (guests, users, admins): See all scans anonymized
-    - No user filtering - this is the public queue view
-    - User-specific scans are available via /api/queue/my-scans
     """
     try:
-        is_admin = await _is_admin_user(actor_context)
-        await db_adapter.ensure_initialized()
-        
-        async with db_adapter.async_session() as session:
-            # Build query
-            query = select(Scan)
-            
-            # Public Queue: Show ALL scans (anonymized) for everyone
-            # No user filter - everyone sees all scans in the public queue
-            # User-specific scans are available via /api/queue/my-scans
-            
-            # Filter by status if provided
-            if status_filter:
-                query = query.where(Scan.status.ilike(f"%{status_filter}%"))
-            else:
-                # Default: show only active queue (pending + running)
-                query = query.where(Scan.status.in_(["pending", "running"]))
-            
-            # Order by priority (higher first), then created_at (oldest first)
-            query = query.order_by(Scan.priority.desc(), Scan.created_at.asc())
-            
-            # Limit results
-            query = query.limit(limit)
-            
-            result = await session.execute(query)
-            scans = result.scalars().all()
-            
-            # Count total queue length (pending + running)
-            count_query = select(func.count(Scan.id)).where(
-                Scan.status.in_(["pending", "running"])
-            )
-            count_result = await session.execute(count_query)
-            queue_length = count_result.scalar() or 0
-            
-            # Convert to queue items
-            # Public queue: Never show branch (anonymized for all users, including authenticated)
-            # Only "My Scans" shows branch (because those are the user's own scans)
-            items = []
-            for idx, scan in enumerate(scans):
-                # Calculate position only for pending/running scans
-                position = None
-                if scan.status.lower() in ["pending", "running"]:
-                    # Count how many scans are before this one (higher priority or same priority but earlier created_at)
-                    position_query = select(func.count(Scan.id)).where(
-                        and_(
-                            Scan.status == scan.status,
-                            or_(
-                                Scan.priority > scan.priority,
-                                and_(
-                                    Scan.priority == scan.priority,
-                                    Scan.created_at < scan.created_at
-                                )
-                            )
-                        )
-                    )
-                    pos_result = await session.execute(position_query)
-                    position = (pos_result.scalar() or 0) + 1
-                
-                # Public queue: never show branch (anonymized)
-                items.append(await _scan_to_queue_item(scan, position, show_branch=False))
-            
-            return {
-                "items": items,
-                "queue_length": queue_length,
-                "max_queue_length": 100,  # TODO: Make configurable
-            }
-            
+        scans = await scan_repository.get_queue_items(status_filter=status_filter, limit=limit, offset=0)
+        statuses = [status_filter] if status_filter else ["pending", "running"]
+        queue_length = await scan_repository.count_by_statuses(statuses)
+        items = []
+        for scan in scans:
+            position = await scan_repository.get_position_in_queue(scan.id)
+            items.append(await _scan_to_queue_item(scan, position, show_branch=False))
+        return {
+            "items": items,
+            "queue_length": queue_length,
+            "max_queue_length": 100,
+        }
     except Exception as e:
         logger.error(f"Failed to get queue: {e}", exc_info=True)
         raise HTTPException(
@@ -303,80 +233,34 @@ async def get_my_scans(
     limit: int = Query(100, ge=1, le=1000, description="Limit results"),
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
     actor_context: ActorContext = Depends(get_actor_context),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> Dict[str, Any]:
-    """
-    Get scans for the current user/session.
-    
-    Returns scans from PostgreSQL database filtered by user_id or session_id.
-    """
+    """Get scans for the current user/session."""
     try:
-        user_identifier = actor_context.get_identifier()
-        await db_adapter.ensure_initialized()
-        
-        async with db_adapter.async_session() as session:
-            # Build query - filter by user_id or session_id in metadata
-            query = select(Scan)
-            
-            # For authenticated users: match by user_id
-            if actor_context.is_authenticated and actor_context.user_id:
-                try:
-                    from uuid import UUID
-                    user_uuid = UUID(actor_context.user_id)
-                    query = query.where(Scan.user_id == user_uuid)
-                except (ValueError, TypeError):
-                    # Invalid UUID format
-                    return {"scans": []}
-            else:
-                # For guest sessions: match by session_id in metadata
-                if actor_context.session_id:
-                    # Filter scans where metadata contains session_id
-                    # PostgreSQL JSON query: scans.metadata->>'session_id' = session_id
-                    from sqlalchemy import text
-                    query = query.where(
-                        text("scans.scan_metadata->>'session_id' = :session_id")
-                    ).params(session_id=actor_context.session_id)
-                else:
-                    # No session_id available
-                    return {"scans": []}
-            
-            # Filter by status if provided
-            if status_filter:
-                query = query.where(Scan.status.ilike(f"%{status_filter}%"))
-            
-            # Order by priority (higher first), then created_at (newest first)
-            query = query.order_by(Scan.priority.desc(), Scan.created_at.desc())
-            
-            # Limit results
-            query = query.limit(limit)
-            
-            result = await session.execute(query)
-            scans = result.scalars().all()
-            
-            # Convert to my-scans items
-            items = []
-            for idx, scan in enumerate(scans):
-                # Calculate position for pending/running scans
-                position = None
-                if scan.status.lower() in ["pending", "running"]:
-                    position_query = select(func.count(Scan.id)).where(
-                        and_(
-                            Scan.status == scan.status,
-                            or_(
-                                Scan.priority > scan.priority,
-                                and_(
-                                    Scan.priority == scan.priority,
-                                    Scan.created_at < scan.created_at
-                                )
-                            )
-                        )
-                    )
-                    pos_result = await session.execute(position_query)
-                    position = (pos_result.scalar() or 0) + 1
-                
-                items.append(await _scan_to_my_scan_item(scan, position))
-            
-            return {"scans": items}
-            
+        user_id = None
+        guest_session_id = None
+        if actor_context.is_authenticated and actor_context.user_id:
+            try:
+                from uuid import UUID
+                UUID(actor_context.user_id)
+                user_id = actor_context.user_id
+            except (ValueError, TypeError):
+                return {"scans": []}
+        elif actor_context.session_id:
+            guest_session_id = actor_context.session_id
+        else:
+            return {"scans": []}
+        scans = await scan_repository.list_scans_for_actor(
+            user_id=user_id,
+            guest_session_id=guest_session_id,
+            status_filter=status_filter,
+            limit=limit,
+        )
+        items = []
+        for scan in scans:
+            position = await scan_repository.get_position_in_queue(scan.id)
+            items.append(await _scan_to_my_scan_item(scan, position))
+        return {"scans": items}
     except Exception as e:
         logger.error(f"Failed to get my scans: {e}", exc_info=True)
         raise HTTPException(
@@ -393,108 +277,55 @@ async def get_my_scans(
 async def get_scan_queue_status(
     scan_id: str,
     actor_context: ActorContext = Depends(get_actor_context),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> Dict[str, Any]:
-    """
-    Get queue status for a specific scan.
-    
-    Returns scan status in queue format from PostgreSQL database.
-    """
+    """Get queue status for a specific scan."""
     try:
-        await db_adapter.ensure_initialized()
-        
-        async with db_adapter.async_session() as session:
+        try:
             from uuid import UUID
-            
-            try:
-                scan_uuid = UUID(scan_id)
-            except ValueError:
-                raise HTTPException(
-                    status_code=fastapi_status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid scan ID format"
-                )
-            
-            query = select(Scan).where(Scan.id == scan_uuid)
-            result = await session.execute(query)
-            scan = result.scalar_one_or_none()
-            
-            if not scan:
-                raise HTTPException(
-                    status_code=fastapi_status.HTTP_404_NOT_FOUND,
-                    detail=f"Scan {scan_id} not found"
-                )
-            
-            # Calculate position if pending/running
-            position = None
-            if scan.status.lower() in ["pending", "running"]:
-                position_query = select(func.count(Scan.id)).where(
-                    and_(
-                        Scan.status == scan.status,
-                        or_(
-                            Scan.priority > scan.priority,
-                            and_(
-                                Scan.priority == scan.priority,
-                                Scan.created_at < scan.created_at
-                            )
-                        )
-                    )
-                )
-                pos_result = await session.execute(position_query)
-                position = (pos_result.scalar() or 0) + 1
-            
-            status_map = {
-                "pending": "pending",
-                "running": "running",
-                "completed": "completed",
-                "failed": "failed",
-                "cancelled": "failed",
-            }
-            queue_status = status_map.get(scan.status.lower(), scan.status.lower())
-
-            # Estimated duration of THIS scan (from its tools)
-            estimated_time_seconds = None
-            if queue_status in ["pending", "running"] and scan.scanners:
-                estimated_time_seconds = await ScannerDurationService.get_estimated_time(scan.scanners)
-
-            # Estimated wait = sum of estimated durations of all scans BEFORE this one in queue (by tools, not average)
-            estimated_wait_seconds = None
-            if queue_status in ["pending", "running"] and position and position > 1:
-                # Scans before this one: higher priority, or same priority and older created_at
-                before_query = (
-                    select(Scan)
-                    .where(Scan.status.in_(["pending", "running"]))
-                    .where(
-                        or_(
-                            Scan.priority > scan.priority,
-                            and_(
-                                Scan.priority == scan.priority,
-                                Scan.created_at < scan.created_at,
-                            ),
-                        )
-                    )
-                    .order_by(Scan.priority.desc(), Scan.created_at.asc())
-                )
-                before_result = await session.execute(before_query)
-                scans_before = before_result.scalars().all()
-                wait_total = 0.0
-                for s in scans_before:
-                    if s.scanners:
-                        wait_total += await ScannerDurationService.get_estimated_time(s.scanners)
-                estimated_wait_seconds = int(wait_total) if wait_total else 0
-
-            return {
-                "queue_id": str(scan.id),
-                "scan_id": str(scan.id),
-                "repository_name": _extract_repository_name(scan.target_url),
-                "status": queue_status,
-                "position": position,
-                "created_at": scan.created_at.isoformat() if scan.created_at else None,
-                "started_at": scan.started_at.isoformat() if scan.started_at else None,
-                "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
-                "scanners": scan.scanners if scan.scanners else [],
-                "estimated_time_seconds": estimated_time_seconds,
-                "estimated_wait_seconds": estimated_wait_seconds,
-            }
-            
+            UUID(scan_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+                detail="Invalid scan ID format"
+            )
+        scan = await scan_repository.get_by_id(scan_id)
+        if not scan:
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_404_NOT_FOUND,
+                detail=f"Scan {scan_id} not found"
+            )
+        position = await scan_repository.get_position_in_queue(scan_id)
+        queue_status = {"pending": "pending", "running": "running", "completed": "completed", "failed": "failed", "cancelled": "failed"}.get(_scan_status_str(scan), _scan_status_str(scan))
+        scanners = getattr(scan, "scanners", None) or []
+        estimated_time_seconds = None
+        if queue_status in ["pending", "running"] and scanners:
+            estimated_time_seconds = await ScannerDurationService.get_estimated_time(scanners)
+        estimated_wait_seconds = None
+        if queue_status in ["pending", "running"] and position and position > 1:
+            scans_before = await scan_repository.get_scans_before_in_queue(scan_id)
+            wait_total = 0.0
+            for s in scans_before:
+                sc = getattr(s, "scanners", None) or []
+                if sc:
+                    wait_total += await ScannerDurationService.get_estimated_time(sc)
+            estimated_wait_seconds = int(wait_total) if wait_total else 0
+        created_at = getattr(scan, "created_at", None)
+        started_at = getattr(scan, "started_at", None)
+        completed_at = getattr(scan, "completed_at", None)
+        return {
+            "queue_id": scan.id,
+            "scan_id": scan.id,
+            "repository_name": _extract_repository_name(getattr(scan, "target_url", None) or ""),
+            "status": queue_status,
+            "position": position,
+            "created_at": created_at.isoformat() if created_at else None,
+            "started_at": started_at.isoformat() if started_at else None,
+            "completed_at": completed_at.isoformat() if completed_at else None,
+            "scanners": scanners,
+            "estimated_time_seconds": estimated_time_seconds,
+            "estimated_wait_seconds": estimated_wait_seconds,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -513,121 +344,53 @@ async def get_scan_queue_status(
 async def delete_scan_from_queue(
     scan_id: str,
     actor_context: ActorContext = Depends(get_actor_context),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> Dict[str, Any]:
-    """
-    Delete a scan from the queue.
-    
-    - **User**: Can only delete own scans (if pending)
-    - **Admin**: Can delete any scan
-    - Removes scan from Redis queue and sets status to 'cancelled' in database
-    """
+    """Delete a scan from the queue; removes from Redis and sets status to cancelled."""
     try:
-        await db_adapter.ensure_initialized()
-        is_admin = await _is_admin_user(actor_context)
-        
-        async with db_adapter.async_session() as session:
+        try:
             from uuid import UUID
-            from infrastructure.services.queue_service import QueueService
-            from application.services.scan_orchestration_service import ScanOrchestrationService
-            
-            try:
-                scan_uuid = UUID(scan_id)
-            except ValueError:
-                raise HTTPException(
-                    status_code=fastapi_status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid scan ID format"
-                )
-            
-            # Get scan
-            query = select(Scan).where(Scan.id == scan_uuid)
-            result = await session.execute(query)
-            scan = result.scalar_one_or_none()
-            
-            if not scan:
-                raise HTTPException(
-                    status_code=fastapi_status.HTTP_404_NOT_FOUND,
-                    detail=f"Scan {scan_id} not found"
-                )
-            
-            # Check permissions
-            if not is_admin:
-                # Regular user: can only delete own scans
-                user_identifier = actor_context.get_identifier()
-                
-                # Check if scan belongs to user
-                if actor_context.is_authenticated and actor_context.user_id:
-                    try:
-                        user_uuid = UUID(actor_context.user_id)
-                        if scan.user_id != user_uuid:
-                            raise HTTPException(
-                                status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                                detail="You can only delete your own scans"
-                            )
-                    except (ValueError, TypeError):
-                        raise HTTPException(
-                            status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                            detail="Invalid user context"
-                        )
-                elif actor_context.session_id:
-                    # Guest session: check session_id in metadata
-                    scan_session_id = scan.scan_metadata.get("session_id") if scan.scan_metadata else None
-                    if scan_session_id != actor_context.session_id:
-                        raise HTTPException(
-                            status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                            detail="You can only delete your own scans"
-                        )
-                else:
-                    raise HTTPException(
-                        status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                        detail="Authentication required"
-                    )
-                
-                # Regular users can only delete pending scans
-                if scan.status.lower() not in ["pending"]:
-                    raise HTTPException(
-                        status_code=fastapi_status.HTTP_400_BAD_REQUEST,
-                        detail="You can only delete pending scans. Use cancel for running scans."
-                    )
-            
-            # Remove from Redis queue
-            queue_service = QueueService()
-            removed_from_queue = await queue_service.remove_scan_from_queue(scan_id)
-            
-            if scan.status.lower() == "running":
-                await queue_service.signal_worker_cancel(scan_id)
-                orchestration_service = ScanOrchestrationService()
-                await orchestration_service.cancel_scan(scan_id)
-            
-            # Update scan status to cancelled
-            scan.status = "cancelled"
-            scan.updated_at = datetime.utcnow()
-            
-            # Add cancellation metadata
-            if not scan.scan_metadata:
-                scan.scan_metadata = {}
-            scan.scan_metadata["cancelled_at"] = datetime.utcnow().isoformat()
-            scan.scan_metadata["cancelled_by"] = actor_context.get_identifier()
-            
-            await session.commit()
-            
-            logger.info(f"Deleted scan {scan_id} from queue (removed from Redis: {removed_from_queue})")
-            
-            return {
-                "success": True,
-                "scan_id": scan_id,
-                "removed_from_queue": removed_from_queue,
-                "status": "cancelled",
-                "message": "Scan deleted from queue successfully"
-            }
-            
+            UUID(scan_id)
+        except ValueError:
+            raise HTTPException(status_code=fastapi_status.HTTP_400_BAD_REQUEST, detail="Invalid scan ID format")
+        scan = await scan_repository.get_by_id(scan_id)
+        if not scan:
+            raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail=f"Scan {scan_id} not found")
+        is_admin = await _is_admin_user(actor_context)
+        if not is_admin:
+            if actor_context.is_authenticated and actor_context.user_id:
+                if str(scan.user_id) != actor_context.user_id:
+                    raise HTTPException(status_code=fastapi_status.HTTP_403_FORBIDDEN, detail="You can only delete your own scans")
+            elif actor_context.session_id:
+                meta = getattr(scan, "scan_metadata", None) or {}
+                if meta.get("session_id") != actor_context.session_id:
+                    raise HTTPException(status_code=fastapi_status.HTTP_403_FORBIDDEN, detail="You can only delete your own scans")
+            else:
+                raise HTTPException(status_code=fastapi_status.HTTP_403_FORBIDDEN, detail="Authentication required")
+            if _scan_status_str(scan) != "pending":
+                raise HTTPException(status_code=fastapi_status.HTTP_400_BAD_REQUEST, detail="You can only delete pending scans. Use cancel for running scans.")
+        from infrastructure.services.queue_service import QueueService
+        from application.services.scan_orchestration_service import ScanOrchestrationService
+        from domain.entities.scan import ScanStatus
+        queue_service = QueueService()
+        removed_from_queue = await queue_service.remove_scan_from_queue(scan_id)
+        if _scan_status_str(scan) == "running":
+            await queue_service.signal_worker_cancel(scan_id)
+            orch = ScanOrchestrationService()
+            await orch.cancel_scan(scan_id)
+        scan.status = ScanStatus.CANCELLED
+        scan.updated_at = datetime.utcnow()
+        scan.scan_metadata = dict(scan.scan_metadata or {})
+        scan.scan_metadata["cancelled_at"] = datetime.utcnow().isoformat()
+        scan.scan_metadata["cancelled_by"] = actor_context.get_identifier()
+        await scan_repository.update(scan)
+        logger.info(f"Deleted scan {scan_id} from queue (removed from Redis: {removed_from_queue})")
+        return {"success": True, "scan_id": scan_id, "removed_from_queue": removed_from_queue, "status": "cancelled", "message": "Scan deleted from queue successfully"}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to delete scan from queue: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete scan from queue: {str(e)}"
-        )
+        raise HTTPException(status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete scan from queue: {str(e)}")
 
 
 @router.post(
@@ -686,134 +449,55 @@ async def remove_scan_from_redis_queue(
 @router.patch(
     "/{scan_id}/position",
     summary="Change scan position in queue",
-    description="Change the position of a scan in the queue by setting its priority. Admin only. Higher priority = earlier in queue.",
+    description="Change the position of a scan in the queue by setting its priority. Admin only.",
 )
 async def change_scan_position(
     scan_id: str,
     position: int = Query(..., ge=1, description="New position in queue (1 = first)"),
     actor_context: ActorContext = Depends(get_actor_context),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> Dict[str, Any]:
-    """
-    Change the position of a scan in the queue.
-    
-    - **Admin only**
-    - Sets priority based on position (higher position = higher priority)
-    - Only works for pending scans
-    - Position 1 = highest priority (will be processed first)
-    """
+    """Change the position of a scan in the queue (admin only)."""
     try:
         is_admin = await _is_admin_user(actor_context)
         if not is_admin:
-            raise HTTPException(
-                status_code=fastapi_status.HTTP_403_FORBIDDEN,
-                detail="Admin privileges required"
-            )
-        
-        await db_adapter.ensure_initialized()
-        
-        async with db_adapter.async_session() as session:
+            raise HTTPException(status_code=fastapi_status.HTTP_403_FORBIDDEN, detail="Admin privileges required")
+        try:
             from uuid import UUID
-            
-            try:
-                scan_uuid = UUID(scan_id)
-            except ValueError:
-                raise HTTPException(
-                    status_code=fastapi_status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid scan ID format"
-                )
-            
-            # Get scan
-            query = select(Scan).where(Scan.id == scan_uuid)
-            result = await session.execute(query)
-            scan = result.scalar_one_or_none()
-            
-            if not scan:
-                raise HTTPException(
-                    status_code=fastapi_status.HTTP_404_NOT_FOUND,
-                    detail=f"Scan {scan_id} not found"
-                )
-            
-            # Only allow position change for pending scans
-            if scan.status.lower() != "pending":
-                raise HTTPException(
-                    status_code=fastapi_status.HTTP_400_BAD_REQUEST,
-                    detail=f"Cannot change position for scan with status '{scan.status}'. Only pending scans can be reordered."
-                )
-            
-            # Get all pending scans ordered by current priority
-            pending_query = select(Scan).where(
-                Scan.status == "pending"
-            ).order_by(Scan.priority.desc(), Scan.created_at.asc())
-            
-            pending_result = await session.execute(pending_query)
-            pending_scans = pending_result.scalars().all()
-            
-            if position > len(pending_scans):
-                raise HTTPException(
-                    status_code=fastapi_status.HTTP_400_BAD_REQUEST,
-                    detail=f"Position {position} is out of range. There are only {len(pending_scans)} pending scans."
-                )
-            
-            # Calculate new priority
-            # Position 1 = highest priority (1000), position 2 = 999, etc.
-            # This ensures higher priority values = earlier in queue
-            max_priority = 1000
-            new_priority = max_priority - (position - 1)
-            
-            # If there are other scans with the same priority, we need to adjust
-            # Find the target scan's current position
-            current_position = None
-            for idx, s in enumerate(pending_scans):
-                if s.id == scan_uuid:
-                    current_position = idx + 1
-                    break
-            
-            if current_position is None:
-                raise HTTPException(
-                    status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Could not determine current position"
-                )
-            
-            # If moving to same position, no change needed
-            if current_position == position:
-                return {
-                    "success": True,
-                    "scan_id": scan_id,
-                    "position": position,
-                    "priority": scan.priority,
-                    "message": "Scan already at requested position"
-                }
-            
-            # Update priority
-            scan.priority = new_priority
-            scan.updated_at = datetime.utcnow()
-            
-            # Add metadata about position change
-            if not scan.scan_metadata:
-                scan.scan_metadata = {}
-            scan.scan_metadata["position_changed_at"] = datetime.utcnow().isoformat()
-            scan.scan_metadata["position_changed_by"] = actor_context.get_identifier()
-            scan.scan_metadata["previous_position"] = current_position
-            scan.scan_metadata["new_position"] = position
-            
-            await session.commit()
-            
-            logger.info(f"Admin changed scan {scan_id} position from {current_position} to {position} (priority: {new_priority})")
-            
-            return {
-                "success": True,
-                "scan_id": scan_id,
-                "position": position,
-                "priority": new_priority,
-                "previous_position": current_position,
-                "message": f"Scan position changed from {current_position} to {position}"
-            }
-            
+            UUID(scan_id)
+        except ValueError:
+            raise HTTPException(status_code=fastapi_status.HTTP_400_BAD_REQUEST, detail="Invalid scan ID format")
+        scan = await scan_repository.get_by_id(scan_id)
+        if not scan:
+            raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail=f"Scan {scan_id} not found")
+        if _scan_status_str(scan) != "pending":
+            raise HTTPException(status_code=fastapi_status.HTTP_400_BAD_REQUEST, detail=f"Cannot change position for scan with status '{_scan_status_str(scan)}'. Only pending scans can be reordered.")
+        pending_scans = await scan_repository.get_queue_items(status_filter="pending", limit=1000, offset=0)
+        if position > len(pending_scans):
+            raise HTTPException(status_code=fastapi_status.HTTP_400_BAD_REQUEST, detail=f"Position {position} is out of range. There are only {len(pending_scans)} pending scans.")
+        max_priority = 1000
+        new_priority = max_priority - (position - 1)
+        current_position = None
+        for idx, s in enumerate(pending_scans):
+            if s.id == scan_id:
+                current_position = idx + 1
+                break
+        if current_position is None:
+            raise HTTPException(status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not determine current position")
+        if current_position == position:
+            return {"success": True, "scan_id": scan_id, "position": position, "priority": getattr(scan, "priority", 0), "message": "Scan already at requested position"}
+        scan.priority = new_priority
+        scan.updated_at = datetime.utcnow()
+        scan.scan_metadata = dict(scan.scan_metadata or {})
+        scan.scan_metadata["position_changed_at"] = datetime.utcnow().isoformat()
+        scan.scan_metadata["position_changed_by"] = actor_context.get_identifier()
+        scan.scan_metadata["previous_position"] = current_position
+        scan.scan_metadata["new_position"] = position
+        await scan_repository.update(scan)
+        logger.info(f"Admin changed scan {scan_id} position from {current_position} to {position} (priority: {new_priority})")
+        return {"success": True, "scan_id": scan_id, "position": position, "priority": new_priority, "previous_position": current_position, "message": f"Scan position changed from {current_position} to {position}"}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to change scan position: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to change scan position: {str(e)}"
-        )
+        raise HTTPException(status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to change scan position: {str(e)}")

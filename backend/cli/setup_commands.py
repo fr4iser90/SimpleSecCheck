@@ -11,9 +11,10 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from config.settings import settings
-from infrastructure.database.adapter import db_adapter
-from infrastructure.database.models import SystemState, SetupStatusEnum
 from infrastructure.redis.client import redis_client
+from infrastructure.container import run_database_migrations
+from domain.entities.system_state import SystemState as SystemStateEntity, SetupStatus
+from infrastructure.container import get_system_state_repository
 from api.services.setup_token_service import SetupTokenService
 from api.services.setup_expiry_service import SetupExpiryService
 from api.services.security_event_service import SecurityEventService
@@ -185,28 +186,19 @@ async def _async_init_setup(force: bool, admin_email: Optional[str], admin_passw
     """Initialize setup system asynchronously."""
     security_logger = SecurityEventService()
     
-    # Check if setup already exists
+    repo = get_system_state_repository()
     if not force:
-        async with db_adapter.get_session() as session:
-            result = await session.execute(
-                select(SystemState).where(SystemState.id == "system_state")
-            )
-            existing_state = result.scalar_one_or_none()
-            
-            if existing_state and existing_state.setup_status != SetupStatusEnum.NOT_INITIALIZED:
-                raise Exception("Setup already initialized. Use --force to override.")
+        existing = await repo.get_singleton()
+        if existing and existing.setup_status != SetupStatus.NOT_INITIALIZED:
+            raise Exception("Setup already initialized. Use --force to override.")
     
-    # Create database tables
-    await db_adapter.create_tables()
+    await run_database_migrations()
     
-    # Create system state
-    system_state = SystemState()
-    system_state.id = "system_state"
-    system_state.setup_status = SetupStatusEnum.TOKEN_GENERATED
-    
-    async with db_adapter.get_session() as session:
-        session.add(system_state)
-        await session.commit()
+    state = await repo.get_singleton()
+    if not state:
+        state = SystemStateEntity()
+    state.setup_status = SetupStatus.TOKEN_GENERATED
+    await repo.save(state)
     
     # Generate setup token
     token_service = SetupTokenService()
@@ -229,13 +221,9 @@ async def _async_init_setup(force: bool, admin_email: Optional[str], admin_passw
 
 async def _async_check_status() -> dict:
     """Check setup status asynchronously."""
-    async with db_adapter.get_session() as session:
-        result = await session.execute(
-            select(SystemState).where(SystemState.id == "system_state")
-        )
-        system_state = result.scalar_one_or_none()
-    
-    if not system_state:
+    repo = get_system_state_repository()
+    state = await repo.get_singleton()
+    if not state:
         return {
             "setup_required": True,
             "setup_complete": False,
@@ -245,19 +233,18 @@ async def _async_check_status() -> dict:
             "system_configured": False,
             "setup_locked": False
         }
-    
     return {
-        "setup_required": not system_state.is_setup_complete(),
-        "setup_complete": system_state.is_setup_complete(),
-        "status": system_state.setup_status.value,
-        "database_initialized": system_state.database_initialized,
-        "admin_user_created": system_state.admin_user_created,
-        "system_configured": system_state.system_configured,
-        "setup_locked": system_state.setup_locked,
-        "setup_attempts": system_state.setup_attempts,
-        "last_setup_attempt": system_state.last_setup_attempt.isoformat() if system_state.last_setup_attempt else None,
-        "setup_completed_at": system_state.setup_completed_at.isoformat() if system_state.setup_completed_at else None,
-        "token_created_at": system_state.setup_token_created_at.isoformat() if system_state.setup_token_created_at else None,
+        "setup_required": not state.is_setup_complete(),
+        "setup_complete": state.is_setup_complete(),
+        "status": state.setup_status.value,
+        "database_initialized": state.database_initialized,
+        "admin_user_created": state.admin_user_created,
+        "system_configured": state.system_configured,
+        "setup_locked": state.setup_locked,
+        "setup_attempts": state.setup_attempts,
+        "last_setup_attempt": state.last_setup_attempt.isoformat() if state.last_setup_attempt else None,
+        "setup_completed_at": state.setup_completed_at.isoformat() if state.setup_completed_at else None,
+        "token_created_at": state.setup_token_created_at.isoformat() if state.setup_token_created_at else None,
     }
 
 
@@ -295,41 +282,24 @@ async def _async_show_token_info():
 async def _async_lock_setup(reason: Optional[str]) -> bool:
     """Lock setup permanently."""
     security_logger = SecurityEventService()
-    
-    async with db_adapter.get_session() as session:
-        result = await session.execute(
-            select(SystemState).where(SystemState.id == "system_state")
-        )
-        system_state = result.scalar_one_or_none()
-        
-        if not system_state:
-            return False
-        
-        system_state.lock_setup_permanently()
-        await session.commit()
-    
-    # Log setup lock
-    security_logger.log_setup_locked(
-        ip="cli",
-        user_agent="setup-cli"
-    )
-    
+    repo = get_system_state_repository()
+    state = await repo.get_singleton()
+    if not state:
+        return False
+    state.lock_setup_permanently()
+    await repo.save(state)
+    security_logger.log_setup_locked(ip="cli", user_agent="setup-cli")
     return True
 
 
 async def _async_reset_setup() -> bool:
     """Reset setup to initial state."""
     security_logger = SecurityEventService()
-    
-    async with db_adapter.get_session() as session:
-        result = await session.execute(
-            select(SystemState).where(SystemState.id == "system_state")
-        )
-        system_state = result.scalar_one_or_none()
-        
-        if system_state:
-            system_state.reset_setup()
-            await session.commit()
+    repo = get_system_state_repository()
+    state = await repo.get_singleton()
+    if state:
+        state.reset_setup()
+        await repo.save(state)
     
     # Generate new token
     token_service = SetupTokenService()

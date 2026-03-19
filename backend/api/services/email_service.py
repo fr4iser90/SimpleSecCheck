@@ -22,45 +22,37 @@ class EmailService:
         self._load_smtp_config_from_db()
     
     def _load_smtp_config_from_db(self):
-        """Load SMTP config from database if available."""
+        """Load SMTP config from SystemState via repository if available."""
         try:
-            from infrastructure.database.adapter import db_adapter
-            from infrastructure.database.models import SystemState
-            from sqlalchemy import select
             import asyncio
-            
-            # Try to get SMTP config from DB
+
             async def get_config():
                 try:
-                    async with db_adapter.async_session() as session:
-                        result = await session.execute(select(SystemState).limit(1))
-                        system_state = result.scalar_one_or_none()
-                        if system_state and system_state.config:
-                            smtp_config = system_state.config.get("smtp")
-                            if smtp_config and smtp_config.get("enabled"):
-                                # Override settings with DB config
-                                self.settings.SMTP_ENABLED = True
-                                self.settings.SMTP_HOST = smtp_config.get("host", self.settings.SMTP_HOST)
-                                self.settings.SMTP_PORT = smtp_config.get("port", self.settings.SMTP_PORT)
-                                self.settings.SMTP_USER = smtp_config.get("user", self.settings.SMTP_USER)
-                                self.settings.SMTP_PASSWORD = smtp_config.get("password", self.settings.SMTP_PASSWORD)
-                                self.settings.SMTP_USE_TLS = smtp_config.get("use_tls", self.settings.SMTP_USE_TLS)
-                                self.settings.SMTP_FROM_EMAIL = smtp_config.get("from_email", self.settings.SMTP_FROM_EMAIL)
-                                self.settings.SMTP_FROM_NAME = smtp_config.get("from_name", self.settings.SMTP_FROM_NAME)
-                                self.enabled = True
+                    from infrastructure.container import get_system_state_repository
+                    repo = get_system_state_repository()
+                    state = await repo.get_singleton()
+                    if state and state.config:
+                        smtp_config = state.config.get("smtp")
+                        if smtp_config and smtp_config.get("enabled"):
+                            self.settings.SMTP_ENABLED = True
+                            self.settings.SMTP_HOST = smtp_config.get("host", self.settings.SMTP_HOST)
+                            self.settings.SMTP_PORT = smtp_config.get("port", self.settings.SMTP_PORT)
+                            self.settings.SMTP_USER = smtp_config.get("user", self.settings.SMTP_USER)
+                            self.settings.SMTP_PASSWORD = smtp_config.get("password", self.settings.SMTP_PASSWORD)
+                            self.settings.SMTP_USE_TLS = smtp_config.get("use_tls", self.settings.SMTP_USE_TLS)
+                            self.settings.SMTP_FROM_EMAIL = smtp_config.get("from_email", self.settings.SMTP_FROM_EMAIL)
+                            self.settings.SMTP_FROM_NAME = smtp_config.get("from_name", self.settings.SMTP_FROM_NAME)
+                            self.enabled = True
                 except Exception as e:
                     logger.debug("Could not load SMTP config from DB", error=str(e))
-            
-            # Try to run async function (if event loop exists)
+
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # If loop is running, schedule it
                     asyncio.create_task(get_config())
                 else:
                     loop.run_until_complete(get_config())
             except RuntimeError:
-                # No event loop, skip DB config loading
                 pass
         except Exception as e:
             logger.debug("Could not load SMTP config from DB", error=str(e))

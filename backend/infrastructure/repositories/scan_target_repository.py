@@ -93,6 +93,25 @@ class DatabaseScanTargetRepository(ScanTargetRepository):
             r = await session.execute(q)
             return [_model_to_entity(m) for m in r.scalars().all()]
 
+    async def list_with_auto_scan_interval(self, limit: int = 500) -> List[ScanTarget]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            q = (
+                select(UserScanTarget)
+                .order_by(UserScanTarget.updated_at.desc())
+                .limit(limit * 2)
+            )
+            r = await session.execute(q)
+            rows = r.scalars().all()
+        out = []
+        for m in rows:
+            t = _model_to_entity(m)
+            if t.auto_scan.enabled and t.auto_scan.mode == "interval" and (t.auto_scan.interval_seconds or 0) > 0:
+                out.append(t)
+                if len(out) >= limit:
+                    break
+        return out
+
     async def update(self, target: ScanTarget) -> ScanTarget:
         await self.db_adapter.ensure_initialized()
         async with self.db_adapter.async_session() as session:

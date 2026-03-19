@@ -5,7 +5,7 @@ This module defines the SQLAlchemy models for the refactored backend.
 Models represent the database schema and provide ORM functionality.
 """
 from sqlalchemy import Column, String, DateTime, Boolean, Integer, Text, JSON, Enum as SQLEnum, ForeignKey, ARRAY
-from sqlalchemy.dialects.postgresql import UUID, INET
+from sqlalchemy.dialects.postgresql import UUID, INET, ENUM as PG_ENUM
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -17,6 +17,9 @@ from domain.entities.user import UserRole
 from domain.entities.system_state import SetupStatus
 
 Base = declarative_base()
+
+# Singleton row id for system_state (enforced by DB CHECK in migration)
+SYSTEM_STATE_SINGLETON_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 class UserRoleEnum(str, Enum):
@@ -35,6 +38,19 @@ class SetupStatusEnum(str, Enum):
     LOCKED = "locked"
 
 
+# PostgreSQL enums (created in 001 migration; use create_type=False)
+UserRoleEnumType = PG_ENUM(
+    "admin", "user", "guest",
+    name="user_role_enum",
+    create_type=False,
+)
+ScanStatusEnumType = PG_ENUM(
+    "pending", "running", "completed", "failed", "cancelled", "interrupted",
+    name="scan_status_enum",
+    create_type=False,
+)
+
+
 class User(Base):
     """User database model."""
     
@@ -44,7 +60,7 @@ class User(Base):
     username = Column(String(100), unique=True, nullable=False, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(SQLEnum(UserRoleEnum), default=UserRoleEnum.USER, nullable=False)
+    role = Column(UserRoleEnumType, nullable=False, server_default="user")
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
     
@@ -83,12 +99,12 @@ class PasswordResetToken(Base):
 
 
 class SystemState(Base):
-    """System state database model."""
+    """System state database model (singleton row, one row per instance)."""
     
     __tablename__ = "system_state"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    setup_status = Column(SQLEnum(SetupStatusEnum), default=SetupStatusEnum.NOT_INITIALIZED, nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: SYSTEM_STATE_SINGLETON_ID)
+    setup_status = Column(String(50), nullable=False, server_default="not_initialized")
     version = Column(String(20), default="1.0.0", nullable=False)
     auth_mode = Column(String(20), default="free", nullable=False)
     
@@ -130,7 +146,7 @@ class Scan(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text, default="")
     scan_type = Column(String(50), nullable=False)
-    status = Column(String(50), nullable=False)
+    status = Column(ScanStatusEnumType, nullable=False, server_default="pending")
     target_url = Column(String(500), nullable=False)
     target_type = Column(String(50), nullable=False)
     
@@ -182,7 +198,7 @@ class Vulnerability(Base):
     __tablename__ = "vulnerabilities"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    scan_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    scan_id = Column(UUID(as_uuid=True), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Vulnerability details
     title = Column(String(255), nullable=False)

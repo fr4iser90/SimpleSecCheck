@@ -11,7 +11,6 @@ from domain.entities.scan import ScanType
 from domain.entities.target_type import TargetType
 from application.dtos.request_dto import ScanRequestDTO
 from application.services.scan_service import ScanService
-from infrastructure.container import get_scan_service
 
 logger = logging.getLogger(__name__)
 
@@ -41,34 +40,25 @@ async def create_repo_scan(
         Scan ID if successful, None otherwise
     """
     try:
-        # If scanners not provided, get all enabled code scanners from database
+        # If scanners not provided, get all enabled code scanners from repository
         if scanners is None:
-            from infrastructure.database.adapter import db_adapter
-            from infrastructure.database.models import Scanner
-            from sqlalchemy import select
-            
-            await db_adapter.ensure_initialized()
-            async with db_adapter.async_session() as session:
-                # Get all enabled scanners that support "code" scan type
-                result = await session.execute(
-                    select(Scanner)
-                    .where(Scanner.enabled == True)
-                    .order_by(Scanner.priority.desc())
-                )
-                db_scanners = result.scalars().all()
-                
-                # Filter scanners that support "code" scan type
-                code_scanners = []
-                for scanner in db_scanners:
-                    scan_types = scanner.scan_types if isinstance(scanner.scan_types, list) else []
-                    if "code" in [st.lower() for st in scan_types]:
-                        code_scanners.append(scanner.name)
-                
-                if not code_scanners:
-                    raise ValueError("No code scanners found in database. Please ensure scanners are discovered.")
-                
-                scanners = code_scanners
-                logger.info(f"Using {len(scanners)} code scanners from database for repo {repo_name}: {', '.join(scanners)}")
+            from infrastructure.container import get_scanner_repository
+            repo = get_scanner_repository()
+            all_scanners = await repo.list_all()
+            code_scanners = [
+                s.name for s in all_scanners
+                if s.enabled and s.scan_types and "code" in [st.lower() for st in s.scan_types]
+            ]
+            # Sort by priority desc (higher first)
+            ordered = sorted(
+                [s for s in all_scanners if s.name in code_scanners],
+                key=lambda x: -x.priority,
+            )
+            code_scanners = [s.name for s in ordered]
+            if not code_scanners:
+                raise ValueError("No code scanners found in database. Please ensure scanners are discovered.")
+            scanners = code_scanners
+            logger.info("Using %s code scanners from database for repo %s: %s", len(scanners), repo_name, ", ".join(scanners))
         
         # Build scan name
         scan_name = f"Scan: {repo_name} ({branch})"
@@ -112,6 +102,7 @@ async def create_repo_scan(
         )
         
         # Get scan service and create scan
+        from infrastructure.container import get_scan_service
         scan_service = get_scan_service()
         scan_dto = await scan_service.create_scan(scan_request)
         

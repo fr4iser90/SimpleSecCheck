@@ -34,6 +34,11 @@ class ScanTargetRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_with_auto_scan_interval(self, limit: int = 500) -> List[ScanTarget]:
+        """List all targets that have auto_scan.enabled and mode=interval (for scheduler)."""
+        pass
+
+    @abstractmethod
     async def update(self, target: ScanTarget) -> ScanTarget:
         """Update existing target. Target must belong to user."""
         pass

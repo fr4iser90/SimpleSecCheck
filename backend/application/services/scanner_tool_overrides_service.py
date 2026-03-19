@@ -2,16 +2,15 @@
 Merge scanners table (manifest defaults in metadata) with scanner_tool_settings.
 
 PK scanner_tool_settings.scanner_key = tools_key slug only (semgrep, sonarqube).
+Uses ScannerRepository + ScannerToolSettingsRepository (DDD, no session).
 """
 import json
 import logging
 import re
 from typing import Any, Dict, Optional
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from infrastructure.database.models import Scanner, ScannerToolSettings
+from domain.entities.scanner import Scanner
+from domain.entities.scanner_tool_settings import ScannerToolSettings
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ _ENV_KEY_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 def tools_key_from_scanner_row(sc: Scanner) -> Optional[str]:
-    """Canonical key = metadata.tools_key = manifest.id only. No slugify, no name fallback."""
+    """Canonical key = metadata.tools_key = manifest.id only."""
     meta = sc.scanner_metadata if isinstance(sc.scanner_metadata, dict) else {}
     tk = meta.get("tools_key")
     if tk and str(tk).strip():
@@ -28,7 +27,7 @@ def tools_key_from_scanner_row(sc: Scanner) -> Optional[str]:
 
 
 def execution_timeout_from_meta(meta: Dict[str, Any]) -> int:
-    """Only metadata.execution.timeout (synced from manifest). No other keys."""
+    """Only metadata.execution.timeout (synced from manifest)."""
     ex = meta.get("execution")
     if isinstance(ex, dict) and ex.get("timeout") is not None:
         try:
@@ -58,17 +57,17 @@ def build_env_from_config(config: Optional[Dict[str, Any]]) -> Dict[str, str]:
 def _entry(
     default_timeout: int,
     discovery_enabled: bool,
-    db_row: Optional[ScannerToolSettings],
+    settings_row: Optional[ScannerToolSettings],
     tools_key: str,
 ) -> Dict[str, Any]:
     timeout = default_timeout
     enabled = discovery_enabled
-    config: Dict[str, Any] = dict(db_row.config) if db_row and db_row.config else {}
-    if db_row:
-        if db_row.timeout_seconds is not None and db_row.timeout_seconds > 0:
-            timeout = int(db_row.timeout_seconds)
-        if db_row.enabled is not None:
-            enabled = bool(db_row.enabled)
+    config: Dict[str, Any] = dict(settings_row.config) if settings_row and settings_row.config else {}
+    if settings_row:
+        if settings_row.timeout_seconds is not None and settings_row.timeout_seconds > 0:
+            timeout = int(settings_row.timeout_seconds)
+        if settings_row.enabled is not None:
+            enabled = bool(settings_row.enabled)
     return {
         "timeout": timeout,
         "enabled": enabled,
@@ -78,16 +77,16 @@ def _entry(
     }
 
 
-async def build_merged_tool_overrides(session: AsyncSession) -> Dict[str, Dict[str, Any]]:
-    """tools_key -> merged. Empty scanners table => {} (no error)."""
-    result = await session.execute(select(Scanner))
-    scanners = list(result.scalars().all())
+async def build_merged_tool_overrides() -> Dict[str, Dict[str, Any]]:
+    """tools_key -> merged. Uses repositories (no session). Empty scanners => {}."""
+    from infrastructure.container import get_scanner_repository, get_scanner_tool_settings_repository
+    scanner_repo = get_scanner_repository()
+    settings_repo = get_scanner_tool_settings_repository()
+    scanners = await scanner_repo.list_all()
     if not scanners:
         return {}
-
-    result2 = await session.execute(select(ScannerToolSettings))
-    settings_map = {r.scanner_key: r for r in result2.scalars().all()}
-
+    settings_list = await settings_repo.list_all()
+    settings_map = {s.scanner_key: s for s in settings_list}
     out: Dict[str, Dict[str, Any]] = {}
     for sc in scanners:
         tk = tools_key_from_scanner_row(sc)
@@ -107,16 +106,3 @@ async def build_merged_tool_overrides(session: AsyncSession) -> Dict[str, Dict[s
 
 def overrides_map_to_json(overrides: Dict[str, Dict[str, Any]]) -> str:
     return json.dumps(overrides, separators=(",", ":"))
-
-
-async def find_scanner_by_tools_key(session: AsyncSession, tools_key: str) -> Optional[Scanner]:
-    """Resolve admin URL segment to Scanner row."""
-    want = (tools_key or "").strip().lower()
-    if not want:
-        return None
-    result = await session.execute(select(Scanner))
-    for sc in result.scalars().all():
-        tk = tools_key_from_scanner_row(sc)
-        if tk and tk.strip().lower() == want:
-            return sc
-    return None

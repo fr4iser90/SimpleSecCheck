@@ -12,7 +12,7 @@ import logging
 
 from config.settings import settings
 from infrastructure.redis.client import redis_client
-from infrastructure.database.adapter import check_setup_status
+from infrastructure.container import get_setup_status_service
 
 # Create logger
 logger = logging.getLogger("api.middleware.setup_middleware")
@@ -115,7 +115,7 @@ class SetupMiddleware(BaseHTTPMiddleware):
         When USE_CASE is solo and DB is not connected, allow skip so UI can load.
         """
         try:
-            setup_status = await check_setup_status()
+            setup_status = await get_setup_status_service().get_setup_status()
             if setup_status.get("setup_complete", False):
                 return False
             if settings.USE_CASE == "solo" and not setup_status.get("database_connected", False):
@@ -137,7 +137,7 @@ class SetupStatusChecker:
     async def is_setup_required() -> bool:
         """Check if setup is required."""
         try:
-            setup_status = await check_setup_status()
+            setup_status = await get_setup_status_service().get_setup_status()
             return not setup_status.get("setup_complete", False)
         except Exception:
             return True

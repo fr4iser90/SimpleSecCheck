@@ -59,7 +59,7 @@ import re
 
 
 # Import dependency injection container
-from infrastructure.container import get_scan_service
+from infrastructure.container import get_scan_service, get_scan_steps_repository
 from domain.entities.target_type import TargetType
 
 
@@ -356,101 +356,6 @@ def _enrich_step_duration_fields(step: Dict[str, Any]) -> None:
             step["timeout_seconds"] = int(to)
         except (ValueError, TypeError):
             step["timeout_seconds"] = None
-
-
-def _dt_to_iso_z(dt: Any) -> Optional[str]:
-    if dt is None:
-        return None
-    from datetime import datetime, timezone
-    if isinstance(dt, datetime):
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        else:
-            dt = dt.astimezone(timezone.utc)
-        return dt.isoformat().replace("+00:00", "Z")
-    if isinstance(dt, str):
-        return dt
-    return None
-
-
-async def _read_steps_from_database(scan_id: str) -> Optional[tuple[List[Dict[str, Any]], int, int]]:
-    """
-    Load steps from scan_steps when the scanner has mirrored state (DATABASE_URL in scan container).
-    Returns None to fall back to steps.log.
-    """
-    from sqlalchemy import text
-    from infrastructure.database.adapter import db_adapter
-    try:
-        await db_adapter.ensure_initialized()
-    except Exception:
-        return None
-    try:
-        async with db_adapter.async_session() as session:
-            result = await session.execute(
-                text(
-                    """
-                    SELECT step_number, step_name, status, message,
-                           started_at, completed_at, substeps, timeout_seconds
-                    FROM scan_steps
-                    WHERE scan_id = :sid
-                    ORDER BY step_number ASC
-                    """
-                ),
-                {"sid": scan_id},
-            )
-            rows = result.fetchall()
-    except Exception:
-        return None
-    if not rows:
-        return None
-    steps: List[Dict[str, Any]] = []
-    for row in rows:
-        sn, sname, st, msg, sa, ca, subs, to = (
-            row[0],
-            row[1],
-            row[2],
-            row[3],
-            row[4],
-            row[5],
-            row[6],
-            row[7],
-        )
-        substeps: List[Dict[str, Any]] = []
-        if subs is not None:
-            if isinstance(subs, str):
-                try:
-                    substeps = json.loads(subs) if subs else []
-                except json.JSONDecodeError:
-                    substeps = []
-            elif isinstance(subs, list):
-                substeps = subs
-        step = {
-            "number": int(sn),
-            "name": sname or "Unknown",
-            "status": st or "pending",
-            "message": msg or "",
-            "started_at": _dt_to_iso_z(sa),
-            "completed_at": _dt_to_iso_z(ca),
-            "substeps": [
-                {
-                    "name": (ss.get("name") or "") if isinstance(ss, dict) else "",
-                    "status": (ss.get("status") or "pending") if isinstance(ss, dict) else "pending",
-                    "message": (ss.get("message") or "") if isinstance(ss, dict) else "",
-                    "started_at": ss.get("started_at") if isinstance(ss, dict) else None,
-                    "completed_at": ss.get("completed_at") if isinstance(ss, dict) else None,
-                    "type": (ss.get("type") or "action") if isinstance(ss, dict) else "action",
-                }
-                for ss in substeps
-            ],
-            "timeout_seconds": int(to) if to is not None else None,
-        }
-        _enrich_step_duration_fields(step)
-        steps.append(step)
-    total_steps = len(steps)
-    completed_steps = sum(
-        1 for s in steps if s.get("status") in ("completed", "failed")
-    )
-    return steps, total_steps, completed_steps
 
 
 @router.post(
@@ -1148,13 +1053,19 @@ async def get_scan_steps(
         scan_dto = await scan_service.get_scan_by_id(scan_id)
         _require_scan_read(scan_dto, actor_context)
 
-        db_bundle = await _read_steps_from_database(scan_id)
-        if db_bundle is not None:
-            steps, total_steps, completed_steps = db_bundle
+        steps_repo = get_scan_steps_repository()
+        steps_raw = await steps_repo.get_steps_for_scan(scan_id)
+        if steps_raw is not None and len(steps_raw) > 0:
+            for step in steps_raw:
+                _enrich_step_duration_fields(step)
+            total_steps = len(steps_raw)
+            completed_steps = sum(
+                1 for s in steps_raw if s.get("status") in ("completed", "failed")
+            )
             progress_percentage = int((completed_steps / total_steps * 100)) if total_steps > 0 else 0
             return {
                 "scan_id": scan_id,
-                "steps": steps,
+                "steps": steps_raw,
                 "total_steps": total_steps,
                 "completed_steps": completed_steps,
                 "progress_percentage": progress_percentage,

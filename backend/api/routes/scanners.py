@@ -11,7 +11,6 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from api.deps.actor_context import get_actor_context, ActorContext
-from sqlalchemy import select
 import httpx
 
 from config.settings import get_settings
@@ -24,10 +23,14 @@ from domain.services.target_permission_policy import (
     get_allowed_targets_display,
 )
 from infrastructure.logging_config import get_logger
-from infrastructure.database.adapter import db_adapter
-from infrastructure.database.models import Scanner
+from infrastructure.container import get_scanner_repository, run_database_migrations
+from domain.repositories.scanner_repository import ScannerRepository
 
 logger = get_logger("api.scanners")
+
+
+def get_scanner_repository_dependency() -> ScannerRepository:
+    return get_scanner_repository()
 
 router = APIRouter(prefix="/api/scanners", tags=["scanners"])
 config_router = APIRouter(prefix="/api", tags=["config"])
@@ -110,38 +113,11 @@ async def _get_scanners_from_worker(scan_type: Optional[str] = None) -> List[Dic
         )
 
 
-async def _sync_scanners_to_db(scanners_data: List[Dict[str, Any]]):
-    """Sync scanners from worker to database."""
+async def _sync_scanners_to_db(scanners_data: List[Dict[str, Any]], scanner_repository: ScannerRepository):
+    """Sync scanners from worker to database via ScannerRepository."""
     try:
-        async with db_adapter.async_session() as session:
-            for scanner_data in scanners_data:
-                # Check if scanner exists
-                result = await session.execute(
-                    select(Scanner).where(Scanner.name == scanner_data["name"])
-                )
-                scanner = result.scalar_one_or_none()
-                
-                if scanner:
-                    # Update existing scanner
-                    scanner.scan_types = scanner_data.get("scan_types", [])
-                    scanner.priority = scanner_data.get("priority", 0)
-                    scanner.requires_condition = scanner_data.get("requires_condition")
-                    scanner.enabled = scanner_data.get("enabled", True)
-                    scanner.last_discovered_at = datetime.utcnow()
-                else:
-                    # Create new scanner
-                    scanner = Scanner(
-                        name=scanner_data["name"],
-                        scan_types=scanner_data.get("scan_types", []),
-                        priority=scanner_data.get("priority", 0),
-                        requires_condition=scanner_data.get("requires_condition"),
-                        enabled=scanner_data.get("enabled", True),
-                        last_discovered_at=datetime.utcnow()
-                    )
-                    session.add(scanner)
-            
-            await session.commit()
-            logger.info(f"Synced {len(scanners_data)} scanners to database")
+        await scanner_repository.sync_all(scanners_data)
+        logger.info(f"Synced {len(scanners_data)} scanners to database")
     except Exception as e:
         logger.error(f"Failed to sync scanners to database: {e}")
         raise
@@ -149,70 +125,41 @@ async def _sync_scanners_to_db(scanners_data: List[Dict[str, Any]]):
 
 @router.get("/", response_model=Dict[str, List[ScannerResponse]])
 async def get_scanners(
-    scan_type: Optional[str] = Query(None, description="Filter by scan type (code, image, website, network)")
+    scan_type: Optional[str] = Query(None, description="Filter by scan type (code, image, website, network)"),
+    scanner_repository: ScannerRepository = Depends(get_scanner_repository_dependency),
 ):
-    """
-    Get list of available scanners from database, optionally filtered by scan type.
-    If database is empty or stale (older than 1 hour), fetches from worker and syncs to database.
-    """
+    """Get list of available scanners from database, optionally filtered by scan type."""
     try:
-        # Check if scanners table exists, if not create it
-        scanners_table_exists = await db_adapter.check_table_exists("scanners")
-        if not scanners_table_exists:
+        if not await scanner_repository.table_exists():
             logger.info("Scanners table does not exist, creating tables...")
-            await db_adapter.create_tables()
-        
-        # First, try to get from database
-        async with db_adapter.async_session() as session:
-            result = await session.execute(select(Scanner))
-            db_scanners = result.scalars().all()
-        
-        # If database is empty or stale (older than 1 hour), trigger scanner container to refresh
+            await run_database_migrations()
+        db_scanners = await scanner_repository.list_all()
         needs_refresh = False
         if not db_scanners:
             needs_refresh = True
             logger.info("No scanners in database, triggering scanner container to populate")
         elif db_scanners[0].last_discovered_at:
             age_seconds = (datetime.utcnow() - db_scanners[0].last_discovered_at).total_seconds()
-            if age_seconds > 3600:  # 1 hour
+            if age_seconds > 3600:
                 needs_refresh = True
-                logger.info(f"Scanners in database are stale ({age_seconds:.0f}s old), triggering scanner container to refresh")
-        
+                logger.info(f"Scanners in database are stale ({age_seconds:.0f}s old), triggering refresh")
         if needs_refresh:
             try:
-                # Trigger worker to refresh scanners (worker triggers scanner container)
                 worker_url = os.getenv("WORKER_API_URL", "http://worker:8081")
                 async with httpx.AsyncClient() as client:
                     response = await client.post(f"{worker_url}/api/scanners/refresh", timeout=30.0)
                     if response.status_code != 200:
                         logger.warning(f"Failed to refresh scanners via worker: {response.status_code}")
-                
-                # Re-fetch from DB after refresh
-                async with db_adapter.async_session() as session:
-                    result = await session.execute(select(Scanner))
-                    db_scanners = result.scalars().all()
+                db_scanners = await scanner_repository.list_all()
             except Exception as e:
                 logger.warning(f"Failed to refresh scanners, using cached data: {e}")
-                # Continue with existing DB data if refresh fails
-        
-        # Filter by scan_type if provided and build response from DB (includes metadata)
         scanner_list = []
         for scanner in db_scanners:
-            # Check if scanner matches scan_type filter
             if scan_type:
                 if scan_type.lower() not in [st.lower() for st in scanner.scan_types]:
                     continue
-            
-            # Extract metadata from DB (description, categories, icon, assets)
-            # Handle case where scanner_metadata column doesn't exist yet (migration pending)
             try:
-                scanner_metadata = getattr(scanner, 'scanner_metadata', None)
-                if scanner_metadata is None:
-                    metadata = {}
-                elif isinstance(scanner_metadata, dict):
-                    metadata = scanner_metadata
-                else:
-                    metadata = {}
+                metadata = scanner.scanner_metadata if isinstance(scanner.scanner_metadata, dict) else {}
             except (AttributeError, KeyError):
                 metadata = {}
             

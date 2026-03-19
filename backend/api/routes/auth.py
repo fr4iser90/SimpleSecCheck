@@ -5,11 +5,9 @@ This module defines the FastAPI routes for authentication operations.
 Supports both JWT authentication and guest session management.
 """
 from typing import Optional
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
 
 from api.deps.actor_context import (
     get_actor_context,
@@ -19,6 +17,8 @@ from api.deps.actor_context import (
     ActorContextDependency,
 )
 from config.settings import settings
+from infrastructure.container import get_user_service
+from application.services.user_service import UserService
 
 
 class LoginRequest(BaseModel):
@@ -89,6 +89,11 @@ router = APIRouter(
 )
 
 
+def get_user_service_dependency() -> UserService:
+    """FastAPI dependency for UserService (DDD)."""
+    return get_user_service()
+
+
 @router.post(
     "/login",
     response_model=LoginResponse,
@@ -101,17 +106,14 @@ async def login(
     response: Response,
     actor_context: ActorContext = Depends(get_actor_context),
     actor_context_dependency: ActorContextDependency = Depends(get_actor_context_dependency),
+    user_service: UserService = Depends(get_user_service_dependency),
 ) -> LoginResponse:
     """
     Authenticates against the database (bcrypt password hash), issues JWT + refresh cookie,
     clears guest session cookie when upgrading from guest.
     """
     try:
-        from datetime import datetime
-
         from api.services.password_service import PasswordService
-        from infrastructure.database.adapter import db_adapter
-        from infrastructure.database.models import User
 
         email = login_request.email
         password = login_request.password
@@ -123,31 +125,25 @@ async def login(
             )
 
         password_service = PasswordService()
+        user = await user_service.get_by_email(email, active_only=True)
 
-        async with db_adapter.async_session() as session:
-            result = await session.execute(
-                select(User).where(User.email == email, User.is_active == True)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
             )
-            user = result.scalar_one_or_none()
 
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid email or password",
-                )
+        if not password_service.verify_password(password, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
 
-            if not password_service.verify_password(password, user.password_hash):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid email or password",
-                )
+        await user_service.update_last_login(user.id)
 
-            user.last_login = datetime.utcnow()
-            await session.commit()
-
-            user_id = str(user.id)
-            name = user.username or email.split("@")[0].title()
-            role = user.role.value if user.role else "user"
+        user_id = user.id
+        name = user.username or email.split("@")[0].title()
+        role = user.role.value if user.role else "user"
 
         access_token = actor_context_dependency.create_jwt_token(
             user_id=user_id,
@@ -270,6 +266,7 @@ async def refresh_token(
     response: Response,
     actor_context: ActorContext = Depends(get_authenticated_user),
     actor_context_dependency: ActorContextDependency = Depends(get_actor_context_dependency),
+    user_service: UserService = Depends(get_user_service_dependency),
 ) -> LoginResponse:
     """
     Refresh JWT token.
@@ -286,24 +283,16 @@ async def refresh_token(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication required"
             )
-        
-        from infrastructure.database.adapter import db_adapter
-        from infrastructure.database.models import User
-
         role = actor_context.role
         if not role and actor_context.user_id:
             try:
-                async with db_adapter.async_session() as session:
-                    user_uuid = UUID(actor_context.user_id)
-                    result = await session.execute(
-                        select(User).where(User.id == user_uuid)
-                    )
-                    user = result.scalar_one_or_none()
-                    if user:
-                        role = user.role.value if user.role else "user"
+                user = await user_service.get_by_id(actor_context.user_id)
+                if user:
+                    role = user.role.value
             except Exception:
-                role = "user"  # Default fallback
-        
+                role = "user"
+        if not role:
+            role = "user"
         # Create new JWT token
         access_token = actor_context_dependency.create_jwt_token(
             user_id=actor_context.user_id,
@@ -340,6 +329,7 @@ async def refresh_token(
 )
 async def get_current_user(
     actor_context: ActorContext = Depends(get_authenticated_user),
+    user_service: UserService = Depends(get_user_service_dependency),
 ) -> LoginResponse:
     """
     Get current user information.
@@ -354,24 +344,16 @@ async def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication required"
             )
-        
         role = actor_context.role
         if not role and actor_context.user_id:
-            from infrastructure.database.adapter import db_adapter
-            from infrastructure.database.models import User
-
             try:
-                async with db_adapter.async_session() as session:
-                    user_uuid = UUID(actor_context.user_id)
-                    result = await session.execute(
-                        select(User).where(User.id == user_uuid)
-                    )
-                    user = result.scalar_one_or_none()
-                    if user:
-                        role = user.role.value if user.role else "user"
+                user = await user_service.get_by_id(actor_context.user_id)
+                if user:
+                    role = user.role.value
             except Exception:
                 role = "user"
-
+        if not role:
+            role = "user"
         return LoginResponse(
             access_token="",
             token_type="bearer",
@@ -454,6 +436,7 @@ async def create_guest_session(
 )
 async def request_password_reset(
     reset_request: PasswordResetRequest,
+    user_service: UserService = Depends(get_user_service_dependency),
 ) -> PasswordResetResponse:
     """
     Request password reset.
@@ -464,37 +447,25 @@ async def request_password_reset(
     If email exists and SMTP is configured, sends reset email.
     """
     try:
-        from infrastructure.database.adapter import db_adapter
         from api.services.password_service import PasswordService
         from api.services.email_service import EmailService
         
         password_service = PasswordService()
         email_service = EmailService()
-        
-        # Get user by email
-        async with db_adapter.async_session() as session:
-            user = await password_service.get_user_by_email(session, reset_request.email)
-            
-            if user:
-                # Create reset token
-                plain_token, token_model = await password_service.create_reset_token(
-                    session, str(user.id)
+        user = await user_service.get_by_email(reset_request.email, active_only=False)
+        if user:
+            plain_token, _token_entity = await password_service.create_reset_token(user.id)
+            if email_service.is_enabled():
+                reset_url = email_service.get_reset_url(plain_token)
+                email_sent = await email_service.send_password_reset_email(
+                    to_email=user.email,
+                    reset_token=plain_token,
+                    reset_url=reset_url
                 )
-                
-                # Send email if SMTP is enabled
-                if email_service.is_enabled():
-                    reset_url = email_service.get_reset_url(plain_token)
-                    email_sent = await email_service.send_password_reset_email(
-                        to_email=user.email,
-                        reset_token=plain_token,
-                        reset_url=reset_url
-                    )
-                    
-                    if not email_sent:
-                        # Log warning but don't fail the request
-                        from infrastructure.logging_config import get_logger
-                        logger = get_logger("api.routes.auth")
-                        logger.warning("Failed to send password reset email", email=user.email)
+                if not email_sent:
+                    from infrastructure.logging_config import get_logger
+                    logger = get_logger("api.routes.auth")
+                    logger.warning("Failed to send password reset email", email=user.email)
         
         # Always return success (security: don't reveal if email exists)
         return PasswordResetResponse(
@@ -520,6 +491,7 @@ async def request_password_reset(
 )
 async def confirm_password_reset(
     reset_confirm: PasswordResetConfirm,
+    user_service: UserService = Depends(get_user_service_dependency),
 ) -> PasswordResetResponse:
     """
     Confirm password reset.
@@ -529,51 +501,28 @@ async def confirm_password_reset(
     Validates token, checks expiration, updates password, and invalidates token.
     """
     try:
-        from infrastructure.database.adapter import db_adapter
         from api.services.password_service import PasswordService
-        from sqlalchemy import select
-        from infrastructure.database.models import User
-        
+
         if not reset_confirm.token or len(reset_confirm.token) < 10:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid reset token"
             )
-        
         password_service = PasswordService()
-        
-        async with db_adapter.async_session() as session:
-            # Verify token
-            token_model = await password_service.verify_reset_token(
-                session, reset_confirm.token
+        token_entity = await password_service.verify_reset_token(reset_confirm.token)
+        if not token_entity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token"
             )
-            
-            if not token_model:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid or expired reset token"
-                )
-            
-            # Get user
-            result = await session.execute(
-                select(User).where(User.id == token_model.user_id)
+        new_hash = password_service.hash_password(reset_confirm.new_password)
+        updated = await user_service.update_password(token_entity.user_id, new_hash)
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
             )
-            user = result.scalar_one_or_none()
-            
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found"
-                )
-            
-            # Update password
-            await password_service.update_user_password(
-                session, user, reset_confirm.new_password
-            )
-            
-            # Mark token as used
-            await password_service.mark_token_used(session, token_model)
-        
+        await password_service.mark_token_used(token_entity)
         return PasswordResetResponse(
             message="Password has been reset successfully. You can now login with your new password."
         )
