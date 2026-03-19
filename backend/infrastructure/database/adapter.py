@@ -271,6 +271,7 @@ class DatabaseAdapter:
                 logger.info("Successfully migrated scan_type values")
 
                 await self._ensure_scan_steps_table(session)
+                await self._ensure_user_scan_targets_table(session)
                 await session.commit()
                         
         except Exception as e:
@@ -325,6 +326,40 @@ class DatabaseAdapter:
                     logger.info(f"Added column {column_name} to scan_steps")
         except Exception as e:
             logger.warning(f"scan_steps migration: {e}")
+
+    async def _ensure_user_scan_targets_table(self, session) -> None:
+        """Create user_scan_targets table if missing (My Targets)."""
+        if await self.check_table_exists("user_scan_targets"):
+            return
+        try:
+            await session.execute(
+                text("""
+                    CREATE TABLE user_scan_targets (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        user_id UUID NOT NULL REFERENCES users(id),
+                        type VARCHAR(50) NOT NULL,
+                        source VARCHAR(1000) NOT NULL,
+                        display_name VARCHAR(255),
+                        auto_scan JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        config JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+                    )
+                """)
+            )
+            await session.execute(
+                text("CREATE INDEX idx_user_scan_targets_user_id ON user_scan_targets (user_id)")
+            )
+            await session.execute(
+                text("CREATE INDEX idx_user_scan_targets_type ON user_scan_targets (type)")
+            )
+            await session.execute(
+                text("CREATE INDEX idx_user_scan_targets_user_source ON user_scan_targets (user_id, source)")
+            )
+            await session.commit()
+            logger.info("Created user_scan_targets table")
+        except Exception as e:
+            logger.warning(f"user_scan_targets migration: {e}")
 
     async def check_admin_user_exists(self) -> bool:
         """Check if an admin user exists in the database."""

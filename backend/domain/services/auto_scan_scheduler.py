@@ -1,7 +1,10 @@
 """
 Auto-Scan Scheduler
 
-Background scheduler that creates scans for new repositories and adds them to the queue.
+Background scheduler that creates scans for:
+1. UserGitHubRepo (new repos, initial scan)
+2. UserScanTarget with auto_scan.enabled and mode=interval (saved targets)
+
 The actual scan execution is handled by the worker that polls the queue.
 """
 import asyncio
@@ -11,8 +14,11 @@ from typing import Optional
 from sqlalchemy import select, and_
 
 from infrastructure.database.adapter import db_adapter
-from infrastructure.database.models import UserGitHubRepo, RepoScanHistory
+from infrastructure.database.models import UserGitHubRepo, UserScanTarget, RepoScanHistory, Scan
 from domain.services.repo_scan_helper import create_repo_scan
+from domain.entities.scan_target import ScanTarget
+from domain.value_objects.auto_scan_config import AutoScanConfig
+from domain.services.target_scan_helper import create_scan_from_target
 
 logger = logging.getLogger(__name__)
 
@@ -65,10 +71,11 @@ class AutoScanScheduler:
         logger.info("Auto-scan scheduler stopped")
     
     async def _monitor_loop(self):
-        """Background loop to check for new repositories that need scans."""
+        """Background loop to check for new repositories and interval-based saved targets."""
         while self._running:
             try:
                 await self._check_and_schedule_initial_scans()
+                await self._check_and_schedule_target_scans()
                 await asyncio.sleep(self.check_interval_seconds)
             except asyncio.CancelledError:
                 break
@@ -155,3 +162,81 @@ class AutoScanScheduler:
                         
         except Exception as e:
             logger.error(f"Error checking for initial scans: {e}", exc_info=True)
+
+    async def _check_and_schedule_target_scans(self):
+        """
+        Check UserScanTarget with auto_scan.enabled and mode=interval.
+        Create scan if interval_seconds elapsed since last scan (or never scanned).
+        """
+        try:
+            async with db_adapter.async_session() as session:
+                result = await session.execute(
+                    select(UserScanTarget).order_by(UserScanTarget.updated_at.desc())
+                )
+                all_targets = result.scalars().all()
+            # Filter: auto_scan.enabled and mode=interval and interval_seconds set
+            for row in all_targets:
+                auto = row.auto_scan if isinstance(row.auto_scan, dict) else {}
+                if not auto.get("enabled"):
+                    continue
+                if auto.get("mode") != "interval":
+                    continue
+                interval_sec = auto.get("interval_seconds")
+                if not interval_sec or int(interval_sec) <= 0:
+                    continue
+                interval_sec = int(interval_sec)
+                # Build domain entity for create_scan_from_target
+                target = ScanTarget(
+                    id=str(row.id),
+                    user_id=str(row.user_id),
+                    type=row.type or "",
+                    source=row.source or "",
+                    display_name=row.display_name or "",
+                    auto_scan=AutoScanConfig.from_dict(auto),
+                    config=dict(row.config or {}),
+                    created_at=row.created_at or datetime.utcnow(),
+                    updated_at=row.updated_at or datetime.utcnow(),
+                )
+                # Last scan for this user + source
+                async with db_adapter.async_session() as session:
+                    last_result = await session.execute(
+                        select(Scan)
+                        .where(
+                            Scan.user_id == row.user_id,
+                            Scan.target_url == row.source,
+                            Scan.status.in_(["completed", "failed", "cancelled", "interrupted"]),
+                        )
+                        .order_by(Scan.created_at.desc())
+                        .limit(1)
+                    )
+                    last_scan = last_result.scalar_one_or_none()
+                    # Pending/running: don't create another
+                    pending_result = await session.execute(
+                        select(Scan.id)
+                        .where(
+                            Scan.user_id == row.user_id,
+                            Scan.target_url == row.source,
+                            Scan.status.in_(["pending", "running"]),
+                        )
+                        .limit(1)
+                    )
+                    if pending_result.scalar_one_or_none():
+                        continue
+                last_time = last_scan.completed_at or last_scan.created_at if last_scan else None
+                if last_time:
+                    if (datetime.utcnow() - last_time.replace(tzinfo=None)).total_seconds() < interval_sec:
+                        continue
+                logger.info(
+                    f"Scheduling interval scan for target {target.id} ({target.type}: {target.source[:50]}), interval={interval_sec}s"
+                )
+                scan_id = await create_scan_from_target(
+                    target,
+                    metadata_extra={"trigger": "auto_scan_scheduler", "interval_seconds": interval_sec},
+                    enforcement_mode="full",
+                )
+                if scan_id:
+                    logger.info(f"Scan {scan_id} created for target {target.id}")
+                else:
+                    logger.error(f"Failed to create scan for target {target.id}")
+        except Exception as e:
+            logger.error(f"Error checking for target scans: {e}", exc_info=True)

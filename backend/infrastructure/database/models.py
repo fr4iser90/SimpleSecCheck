@@ -472,6 +472,33 @@ class UserGitHubRepo(Base):
         return f"<UserGitHubRepo(id={self.id}, repo_url='{self.repo_url}', user_id={self.user_id})>"
 
 
+class UserScanTarget(Base):
+    """
+    User-saved scan target (generic). Single source of truth for My Targets.
+    source = primary identifier (URL, path, image name); config = type-specific JSON.
+    """
+    __tablename__ = "user_scan_targets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    type = Column(String(50), nullable=False, index=True)  # git_repo | container_registry | local_mount | ...
+    source = Column(String(1000), nullable=False)  # repo URL, image name, path
+    display_name = Column(String(255), nullable=True)
+
+    auto_scan = Column(JSON, default=dict, nullable=False)  # {enabled, mode, interval_seconds, event}
+    config = Column(JSON, default=dict, nullable=False)  # type-specific (branch, tag, path, ...)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+
+    def __repr__(self):
+        src = (self.source[:50] + "...") if len((self.source or "")) > 50 else (self.source or "")
+        return f"<UserScanTarget(id={self.id}, type='{self.type}', source='{src}', user_id={self.user_id})>"
+
+
 class RepoScanHistory(Base):
     """Repository scan history database model."""
     
@@ -541,6 +568,9 @@ Index('idx_ip_activity_ip_address', IPActivity.ip_address)
 Index('idx_ip_activity_event_type', IPActivity.event_type)
 Index('idx_ip_activity_window', IPActivity.window_start, IPActivity.window_end)
 Index('idx_user_github_repos_user_id', UserGitHubRepo.user_id)
+Index('idx_user_scan_targets_user_id', UserScanTarget.user_id)
+Index('idx_user_scan_targets_type', UserScanTarget.type)
+Index('idx_user_scan_targets_user_source', UserScanTarget.user_id, UserScanTarget.source)
 Index('idx_repo_scan_history_repo_id', RepoScanHistory.repo_id)
 Index('idx_repo_scan_history_created_at', RepoScanHistory.created_at)
 Index('idx_scanner_duration_stats_scanner_name', ScannerDurationStats.scanner_name)

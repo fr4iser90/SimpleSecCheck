@@ -1,3 +1,5 @@
+import Modal from './Modal'
+
 interface DiscoverReposModalProps {
   isOpen: boolean
   onClose: () => void
@@ -29,38 +31,9 @@ export default function DiscoverReposModal({
   onAddSelected,
   loading
 }: DiscoverReposModalProps) {
-  if (!isOpen) return null
-
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0, 0, 0, 0.85)',
-      backdropFilter: 'blur(8px)',
-      WebkitBackdropFilter: 'blur(8px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000
-    }}>
-      <div style={{
-        background: 'rgba(20, 20, 30, 0.95)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        padding: '2rem',
-        borderRadius: '8px',
-        width: '90%',
-        maxWidth: '800px',
-        maxHeight: '90vh',
-        overflow: 'auto',
-        border: '1px solid var(--glass-border-dark)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
-      }}>
-        <h2 style={{ marginTop: 0 }}>🔍 Discover GitHub Repositories</h2>
-        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+    <Modal isOpen={isOpen} onClose={onClose} title="🔍 Discover GitHub Repositories" size="lg">
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
           Enter a GitHub username or organization name to find all their repositories.
         </p>
         
@@ -177,12 +150,11 @@ export default function DiscoverReposModal({
           </>
         )}
 
-        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-          <button type="button" onClick={onClose}>
-            Close
-          </button>
-        </div>
+      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+        <button type="button" onClick={onClose}>
+          Close
+        </button>
       </div>
-    </div>
+    </Modal>
   )
 }

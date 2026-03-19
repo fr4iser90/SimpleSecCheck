@@ -1265,3 +1265,343 @@ async def get_repo_scan_history(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get scan history: {str(e)}"
         )
+
+
+# ============================================================================
+# Scan Targets (My Targets) – generic saved targets
+# ============================================================================
+
+class ScanTargetCreateRequest(BaseModel):
+    """Request for creating a scan target."""
+    type: str = Field(..., description="Target type: git_repo, container_registry, local_mount, ...")
+    source: str = Field(..., min_length=1, max_length=1000, description="Primary identifier: URL, image name, path")
+    display_name: Optional[str] = Field(None, max_length=255)
+    auto_scan: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    config: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
+
+class ScanTargetUpdateRequest(BaseModel):
+    """Request for updating a scan target."""
+    display_name: Optional[str] = None
+    auto_scan: Optional[Dict[str, Any]] = None
+    config: Optional[Dict[str, Any]] = None
+
+
+class LastScanSummary(BaseModel):
+    """Summary of the latest scan for a target (for dashboard overview)."""
+    scan_id: str
+    status: str
+    completed_at: Optional[str] = None
+    total_vulnerabilities: int = 0
+    critical_vulnerabilities: int = 0
+    high_vulnerabilities: int = 0
+    medium_vulnerabilities: int = 0
+    low_vulnerabilities: int = 0
+
+
+class ScanTargetResponse(BaseModel):
+    """Response for a scan target."""
+    id: str
+    user_id: str
+    type: str
+    source: str
+    display_name: Optional[str] = None
+    auto_scan: Dict[str, Any]
+    config: Dict[str, Any]
+    created_at: str
+    updated_at: str
+    scanners: List[str] = []
+    last_scan: Optional[LastScanSummary] = None
+
+
+def _target_repo():
+    from infrastructure.repositories.scan_target_repository import DatabaseScanTargetRepository
+    return DatabaseScanTargetRepository()
+
+
+def _last_scan_to_summary(scan_row: Any) -> Optional[LastScanSummary]:
+    """Build LastScanSummary from a Scan model row or None."""
+    if not scan_row:
+        return None
+    return LastScanSummary(
+        scan_id=str(scan_row.id),
+        status=scan_row.status,
+        completed_at=scan_row.completed_at.isoformat() if getattr(scan_row, "completed_at", None) else None,
+        total_vulnerabilities=getattr(scan_row, "total_vulnerabilities", 0) or 0,
+        critical_vulnerabilities=getattr(scan_row, "critical_vulnerabilities", 0) or 0,
+        high_vulnerabilities=getattr(scan_row, "high_vulnerabilities", 0) or 0,
+        medium_vulnerabilities=getattr(scan_row, "medium_vulnerabilities", 0) or 0,
+        low_vulnerabilities=getattr(scan_row, "low_vulnerabilities", 0) or 0,
+    )
+
+
+@router.get("/targets", response_model=List[ScanTargetResponse])
+async def list_scan_targets(
+    target_type: Optional[str] = None,
+    actor_context: ActorContext = Depends(get_authenticated_user),
+) -> List[ScanTargetResponse]:
+    """
+    List all scan targets for the current user (My Targets).
+    Includes scanners (default for target type) and last_scan summary for dashboard overview.
+    Optional filter by target_type.
+    """
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    repo = _target_repo()
+    targets = await repo.list_by_user(actor_context.user_id, target_type=target_type)
+    if not targets:
+        return []
+
+    from infrastructure.database.models import Scan
+    from domain.services.target_scan_helper import get_default_scanner_names_for_target_type
+
+    sources = [t.source for t in targets]
+    await db_adapter.ensure_initialized()
+    latest_by_url: Dict[str, Any] = {}
+    async with db_adapter.async_session() as session:
+        from sqlalchemy import desc
+        result = await session.execute(
+            select(Scan)
+            .where(Scan.user_id == actor_context.user_id, Scan.target_url.in_(sources))
+            .order_by(desc(Scan.created_at))
+        )
+        for row in result.scalars().all():
+            if row.target_url not in latest_by_url:
+                latest_by_url[row.target_url] = row
+
+    scanner_cache: Dict[str, List[str]] = {}
+    for t in targets:
+        if t.type not in scanner_cache:
+            scanner_cache[t.type] = await get_default_scanner_names_for_target_type(t.type)
+
+    return [
+        ScanTargetResponse(
+            id=str(t.id),
+            user_id=str(t.user_id),
+            type=t.type,
+            source=t.source,
+            display_name=t.display_name or None,
+            auto_scan=t.auto_scan.to_dict(),
+            config=t.config,
+            created_at=t.created_at.isoformat(),
+            updated_at=t.updated_at.isoformat(),
+            scanners=scanner_cache.get(t.type, []),
+            last_scan=_last_scan_to_summary(latest_by_url.get(t.source)),
+        )
+        for t in targets
+    ]
+
+
+@router.post("/targets", response_model=ScanTargetResponse)
+async def create_scan_target(
+    request: Request,
+    body: ScanTargetCreateRequest,
+    actor_context: ActorContext = Depends(get_authenticated_user),
+) -> ScanTargetResponse:
+    """
+    Create a new scan target. Validates source and config per target_type.
+    Dangerous types (e.g. local_mount) require admin.
+    """
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+    from domain.entities.target_type import TargetType
+    from config.settings import get_settings
+    from domain.services.target_permission_policy import check_can_scan_target, get_allow_flags_from_settings
+    from domain.services.target_handlers import validate_target_source_and_config
+    from domain.entities.scan_target import ScanTarget
+    from domain.value_objects.auto_scan_config import AutoScanConfig
+
+    if not TargetType.is_valid(body.type):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid target type: {body.type!r}. Valid types: {', '.join(TargetType.get_all_values())}",
+        )
+    settings = get_settings()
+    allow_flags = get_allow_flags_from_settings(settings)
+    is_admin = actor_context.role == "admin"
+    try:
+        check_can_scan_target(
+            target_type=body.type,
+            allow_flags=allow_flags,
+            is_admin=is_admin,
+            target_url=body.source,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    try:
+        config = validate_target_source_and_config(body.type, body.source.strip(), body.config or {})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    repo = _target_repo()
+    if await repo.exists_for_user(actor_context.user_id, body.source.strip(), body.type):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Target with this source already added")
+
+    target = ScanTarget(
+        user_id=actor_context.user_id,
+        type=body.type,
+        source=body.source.strip(),
+        display_name=(body.display_name or "").strip() or None,
+        auto_scan=AutoScanConfig.from_dict(body.auto_scan or {}),
+        config=config,
+    )
+    created = await repo.create(target)
+    await AuditLogService.log_event(
+        user_id=actor_context.user_id,
+        user_email=actor_context.email,
+        action_type="TARGET_ADDED",
+        target=created.source,
+        details={"target_type": created.type, "target_id": created.id},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("User-Agent"),
+    )
+    return ScanTargetResponse(
+        id=created.id,
+        user_id=created.user_id,
+        type=created.type,
+        source=created.source,
+        display_name=created.display_name,
+        auto_scan=created.auto_scan.to_dict(),
+        config=created.config,
+        created_at=created.created_at.isoformat(),
+        updated_at=created.updated_at.isoformat(),
+    )
+
+
+@router.get("/targets/{target_id}", response_model=ScanTargetResponse)
+async def get_scan_target(
+    target_id: str,
+    actor_context: ActorContext = Depends(get_authenticated_user),
+) -> ScanTargetResponse:
+    """Get a single scan target by id."""
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    repo = _target_repo()
+    target = await repo.get_by_id(target_id, actor_context.user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
+    return ScanTargetResponse(
+        id=target.id,
+        user_id=target.user_id,
+        type=target.type,
+        source=target.source,
+        display_name=target.display_name,
+        auto_scan=target.auto_scan.to_dict(),
+        config=target.config,
+        created_at=target.created_at.isoformat(),
+        updated_at=target.updated_at.isoformat(),
+    )
+
+
+@router.put("/targets/{target_id}", response_model=ScanTargetResponse)
+async def update_scan_target(
+    request: Request,
+    target_id: str,
+    body: ScanTargetUpdateRequest,
+    actor_context: ActorContext = Depends(get_authenticated_user),
+) -> ScanTargetResponse:
+    """Update a scan target. Config is validated per target_type."""
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    from domain.services.target_handlers import get_target_handler
+    from domain.entities.scan_target import ScanTarget
+    from domain.value_objects.auto_scan_config import AutoScanConfig
+
+    repo = _target_repo()
+    target = await repo.get_by_id(target_id, actor_context.user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
+
+    if body.config is not None:
+        handler = get_target_handler(target.type)
+        if handler:
+            target.config = handler.validate_config(body.config)
+    if body.auto_scan is not None:
+        target.auto_scan = AutoScanConfig.from_dict(body.auto_scan)
+    if body.display_name is not None:
+        target.display_name = (body.display_name or "").strip() or None
+
+    updated = await repo.update(target)
+    await AuditLogService.log_event(
+        user_id=actor_context.user_id,
+        user_email=actor_context.email,
+        action_type="TARGET_UPDATED",
+        target=updated.source,
+        details={"target_id": updated.id},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("User-Agent"),
+    )
+    return ScanTargetResponse(
+        id=updated.id,
+        user_id=updated.user_id,
+        type=updated.type,
+        source=updated.source,
+        display_name=updated.display_name,
+        auto_scan=updated.auto_scan.to_dict(),
+        config=updated.config,
+        created_at=updated.created_at.isoformat(),
+        updated_at=updated.updated_at.isoformat(),
+    )
+
+
+@router.post("/targets/{target_id}/scan")
+async def trigger_scan_target(
+    request: Request,
+    target_id: str,
+    actor_context: ActorContext = Depends(get_authenticated_user),
+) -> Dict[str, Any]:
+    """Trigger a scan for a saved target. Creates scan and enqueues it. Returns scan_id."""
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    from domain.services.target_scan_helper import create_scan_from_target
+
+    repo = _target_repo()
+    target = await repo.get_by_id(target_id, actor_context.user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
+
+    scan_id = await create_scan_from_target(
+        target,
+        metadata_extra={"trigger": "user_scan_now"},
+        enforcement_mode="full",
+    )
+    if not scan_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create scan for target",
+        )
+    await AuditLogService.log_event(
+        user_id=actor_context.user_id,
+        user_email=actor_context.email,
+        action_type="TARGET_SCAN_TRIGGERED",
+        target=target_id,
+        details={"scan_id": scan_id},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("User-Agent"),
+    )
+    return {"scan_id": scan_id }
+
+
+@router.delete("/targets/{target_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_scan_target(
+    request: Request,
+    target_id: str,
+    actor_context: ActorContext = Depends(get_authenticated_user),
+) -> None:
+    """Delete a scan target."""
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    repo = _target_repo()
+    deleted = await repo.delete(target_id, actor_context.user_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
+    await AuditLogService.log_event(
+        user_id=actor_context.user_id,
+        user_email=actor_context.email,
+        action_type="TARGET_REMOVED",
+        target=target_id,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("User-Agent"),
+    )

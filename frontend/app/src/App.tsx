@@ -28,7 +28,7 @@ import AdminToolDurationPage from './pages/AdminToolDurationPage'
 import AdminScannerToolSettingsPage from './pages/AdminScannerToolSettingsPage'
 import ProfilePage from './pages/ProfilePage'
 import APIKeysPage from './pages/APIKeysPage'
-import MyReposPage from './pages/MyReposPage'
+import MyTargetsPage from './pages/MyTargetsPage'
 import './App.css'
 
 /**
@@ -257,7 +257,7 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
       <Route path="/my-targets" element={
         <ProtectedRoute>
           <Header />
-          <MyReposPage />
+          <MyTargetsPage />
         </ProtectedRoute>
       } />
       <Route path="/api-keys" element={
