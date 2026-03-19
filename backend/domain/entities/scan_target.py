@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from domain.entities.target_type import TargetType
 from domain.value_objects.auto_scan_config import AutoScanConfig
+from domain.datetime_serialization import isoformat_utc
 
 
 def _validate_target_type(value: str) -> None:
@@ -50,8 +51,8 @@ class ScanTarget:
             "display_name": self.display_name or self.source,
             "auto_scan": self.auto_scan.to_dict(),
             "config": self.config,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": isoformat_utc(self.created_at),
+            "updated_at": isoformat_utc(self.updated_at),
         }
 
     @classmethod

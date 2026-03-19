@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from config.settings import settings
+from domain.datetime_serialization import isoformat_utc
 
 
 class SecurityEventService:
@@ -67,7 +68,7 @@ class SecurityEventService:
         
         # Create structured event
         event = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": isoformat_utc(datetime.utcnow()),
             "event_type": event_type,
             "severity": severity,
             "source": "setup_wizard",
@@ -255,10 +256,10 @@ class SecurityEventService:
         # This would typically query a log aggregation system
         # For now, return a placeholder
         export_data = {
-            "export_time": datetime.utcnow().isoformat(),
+            "export_time": isoformat_utc(datetime.utcnow()),
             "time_period": {
-                "start": start_time.isoformat(),
-                "end": end_time.isoformat()
+                "start": isoformat_utc(start_time),
+                "end": isoformat_utc(end_time),
             },
             "format": format,
             "events": [],

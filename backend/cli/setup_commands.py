@@ -14,6 +14,7 @@ from config.settings import settings
 from infrastructure.redis.client import redis_client
 from infrastructure.container import run_database_migrations
 from domain.entities.system_state import SystemState as SystemStateEntity, SetupStatus
+from domain.datetime_serialization import isoformat_utc
 from infrastructure.container import get_system_state_repository
 from api.services.setup_token_service import SetupTokenService
 from api.services.setup_expiry_service import SetupExpiryService
@@ -242,9 +243,9 @@ async def _async_check_status() -> dict:
         "system_configured": state.system_configured,
         "setup_locked": state.setup_locked,
         "setup_attempts": state.setup_attempts,
-        "last_setup_attempt": state.last_setup_attempt.isoformat() if state.last_setup_attempt else None,
-        "setup_completed_at": state.setup_completed_at.isoformat() if state.setup_completed_at else None,
-        "token_created_at": state.setup_token_created_at.isoformat() if state.setup_token_created_at else None,
+        "last_setup_attempt": isoformat_utc(state.last_setup_attempt),
+        "setup_completed_at": isoformat_utc(state.setup_completed_at),
+        "token_created_at": isoformat_utc(state.setup_token_created_at),
     }
 
 

@@ -9,6 +9,7 @@ from datetime import datetime
 import logging
 
 from domain.entities.scan import Scan, ScanStatus, ScanType
+from domain.datetime_serialization import isoformat_utc
 from domain.value_objects.scan_config import ScanConfig
 from domain.domain_services.scan_validation_service import ScanValidationService
 from domain.services.scanner_duration_service import ScannerDurationService
@@ -161,8 +162,8 @@ class ScanService:
                 'scan_id': scan_id,
                 'status': scan.status.value,
                 'progress': self._calculate_scan_progress(scan),
-                'started_at': scan.started_at.isoformat() if scan.started_at else None,
-                'completed_at': scan.completed_at.isoformat() if scan.completed_at else None,
+                'started_at': isoformat_utc(scan.started_at),
+                'completed_at': isoformat_utc(scan.completed_at),
                 'duration': self._calculate_duration(scan),
                 'vulnerabilities_found': scan.total_vulnerabilities,
                 'metadata': scan.scan_metadata,
@@ -222,7 +223,7 @@ class ScanService:
                 raise ScanValidationException(str(e))
             if request.cancelled_by:
                 scan.scan_metadata = scan.scan_metadata or {}
-                scan.scan_metadata["cancelled_at"] = datetime.utcnow().isoformat()
+                scan.scan_metadata["cancelled_at"] = isoformat_utc(datetime.utcnow())
                 scan.scan_metadata["cancelled_by"] = request.cancelled_by
                 if request.reason:
                     scan.scan_metadata["cancellation_reason"] = request.reason

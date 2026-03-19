@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 import secrets
+
+from api.json_datetime import isoformat_utc
 import hashlib
 
 from api.deps.actor_context import get_authenticated_user, ActorContext
@@ -79,8 +81,8 @@ def _github_repo_to_response(
         scan_on_push=repo.scan_on_push,
         scan_frequency=repo.scan_frequency,
         scanners=repo.scanners,
-        created_at=repo.created_at.isoformat(),
-        updated_at=repo.updated_at.isoformat(),
+        created_at=isoformat_utc(repo.created_at),
+        updated_at=isoformat_utc(repo.updated_at),
         last_scan=last_scan,
         score=score,
         vulnerabilities=vulnerabilities,
@@ -162,9 +164,9 @@ async def list_api_keys(
                 id=key.id,
                 name=key.name,
                 key_prefix=key.key_hash[:8],
-                created_at=key.created_at.isoformat(),
-                last_used_at=key.last_used_at.isoformat() if key.last_used_at else None,
-                expires_at=key.expires_at.isoformat() if key.expires_at else None,
+                created_at=isoformat_utc(key.created_at),
+                last_used_at=isoformat_utc(key.last_used_at),
+                expires_at=isoformat_utc(key.expires_at),
                 is_active=key.is_active,
             )
             for key in keys
@@ -217,8 +219,8 @@ async def create_api_key(
             id=created.id,
             name=created.name,
             api_key=plain_key,
-            created_at=created.created_at.isoformat(),
-            expires_at=created.expires_at.isoformat() if created.expires_at else None
+            created_at=isoformat_utc(created.created_at),
+            expires_at=isoformat_utc(created.expires_at),
         )
     except HTTPException:
         raise
@@ -307,8 +309,8 @@ async def get_api_key_usage(
         return {
             "key_id": key.id,
             "name": key.name,
-            "created_at": key.created_at.isoformat(),
-            "last_used_at": key.last_used_at.isoformat() if key.last_used_at else None,
+            "created_at": isoformat_utc(key.created_at),
+            "last_used_at": isoformat_utc(key.last_used_at),
             "total_requests": 0,  # TODO: Track requests
             "requests_today": 0,  # TODO: Track requests
             "requests_this_week": 0,  # TODO: Track requests
@@ -373,8 +375,8 @@ async def get_profile(
             role=user.role.value,
             is_active=user.is_active,
             is_verified=user.is_verified,
-            created_at=user.created_at.isoformat(),
-            last_login=user.last_login.isoformat() if user.last_login else None
+            created_at=isoformat_utc(user.created_at),
+            last_login=isoformat_utc(user.last_login),
         )
     except HTTPException:
         raise
@@ -588,7 +590,7 @@ async def list_github_repos(
                 last_scan=last_scans[repo.id].to_last_scan_dict() if repo.id in last_scans else None,
                 score=last_scans[repo.id].score if repo.id in last_scans else None,
                 vulnerabilities=last_scans[repo.id].vulnerabilities if repo.id in last_scans else None,
-                last_webhook_triggered_at=last_webhook[repo.id].isoformat() if repo.id in last_webhook else None,
+                last_webhook_triggered_at=isoformat_utc(last_webhook[repo.id]) if repo.id in last_webhook else None,
             )
             for repo in repos
         ]
@@ -696,7 +698,7 @@ async def get_github_repo(
             last_scan=entry.to_last_scan_dict() if entry else None,
             score=entry.score if entry else None,
             vulnerabilities=entry.vulnerabilities if entry else None,
-            last_webhook_triggered_at=last_webhook[repo.id].isoformat() if repo.id in last_webhook else None,
+            last_webhook_triggered_at=isoformat_utc(last_webhook[repo.id]) if repo.id in last_webhook else None,
         )
     except HTTPException:
         raise
@@ -760,7 +762,7 @@ async def update_github_repo(
             last_scan=entry.to_last_scan_dict() if entry else None,
             score=entry.score if entry else None,
             vulnerabilities=entry.vulnerabilities if entry else None,
-            last_webhook_triggered_at=last_webhook[updated.id].isoformat() if updated.id in last_webhook else None,
+            last_webhook_triggered_at=isoformat_utc(last_webhook[updated.id]) if updated.id in last_webhook else None,
         )
     except HTTPException:
         raise
@@ -927,7 +929,7 @@ async def get_repo_scan_status(
             "status": active_scan.status.value.lower(),
             "scan_id": active_scan.id,
             "queue_position": queue_position,
-            "created_at": active_scan.created_at.isoformat() if active_scan.created_at else None
+            "created_at": isoformat_utc(active_scan.created_at),
         }
     except HTTPException:
         raise
@@ -975,7 +977,7 @@ async def get_repo_scan_history(
                     "commit_hash": h.commit_hash,
                     "score": h.score,
                     "vulnerabilities": h.vulnerabilities,
-                    "created_at": h.created_at.isoformat()
+                    "created_at": isoformat_utc(h.created_at),
                 }
                 for h in entries
             ],
@@ -1054,7 +1056,7 @@ def _last_scan_to_summary(scan_row: Any) -> Optional[LastScanSummary]:
     return LastScanSummary(
         scan_id=str(scan_row.id),
         status=status,
-        completed_at=scan_row.completed_at.isoformat() if getattr(scan_row, "completed_at", None) else None,
+        completed_at=isoformat_utc(getattr(scan_row, "completed_at", None)),
         total_vulnerabilities=getattr(scan_row, "total_vulnerabilities", 0) or 0,
         critical_vulnerabilities=getattr(scan_row, "critical_vulnerabilities", 0) or 0,
         high_vulnerabilities=getattr(scan_row, "high_vulnerabilities", 0) or 0,
@@ -1087,7 +1089,7 @@ def _next_scan_at(auto_scan: Dict[str, Any], last_summary: Optional[LastScanSumm
     except (ValueError, TypeError):
         return None
     next_at = completed + timedelta(seconds=int(interval_seconds))
-    return next_at.isoformat()
+    return isoformat_utc(next_at)
 
 
 @router.get("/targets/initial-scan-config")
@@ -1152,8 +1154,8 @@ async def list_scan_targets(
             display_name=t.display_name or None,
             auto_scan=t.auto_scan.to_dict(),
             config=t.config,
-            created_at=t.created_at.isoformat(),
-            updated_at=t.updated_at.isoformat(),
+            created_at=isoformat_utc(t.created_at),
+            updated_at=isoformat_utc(t.updated_at),
             scanners=_scanners_for_target(t),
             last_scan=_last_scan_to_summary(latest_by_url.get(t.source)),
             next_scan_at=_next_scan_at(t.auto_scan.to_dict(), _last_scan_to_summary(latest_by_url.get(t.source))),
@@ -1223,8 +1225,8 @@ async def create_scan_target(
         display_name=created.display_name,
         auto_scan=created.auto_scan.to_dict(),
         config=created.config,
-        created_at=created.created_at.isoformat(),
-        updated_at=created.updated_at.isoformat(),
+        created_at=isoformat_utc(created.created_at),
+        updated_at=isoformat_utc(created.updated_at),
         scanners=_scanners,
         last_scan=None,
         next_scan_at=None,
@@ -1259,8 +1261,8 @@ async def get_scan_target(
         display_name=target.display_name,
         auto_scan=target.auto_scan.to_dict(),
         config=target.config,
-        created_at=target.created_at.isoformat(),
-        updated_at=target.updated_at.isoformat(),
+        created_at=isoformat_utc(target.created_at),
+        updated_at=isoformat_utc(target.updated_at),
         scanners=_scanners,
         last_scan=_last,
         next_scan_at=_next_scan_at(target.auto_scan.to_dict(), _last),
@@ -1326,8 +1328,8 @@ async def update_scan_target(
         display_name=updated.display_name,
         auto_scan=updated.auto_scan.to_dict(),
         config=updated.config,
-        created_at=updated.created_at.isoformat(),
-        updated_at=updated.updated_at.isoformat(),
+        created_at=isoformat_utc(updated.created_at),
+        updated_at=isoformat_utc(updated.updated_at),
         scanners=_scanners,
         last_scan=_last,
         next_scan_at=_next_scan_at(updated.auto_scan.to_dict(), _last),

@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from domain.datetime_serialization import isoformat_utc
+
 
 @dataclass
 class RepoScanHistoryEntry:
@@ -21,5 +23,5 @@ class RepoScanHistoryEntry:
             "scan_id": self.scan_id,
             "score": self.score,
             "vulnerabilities": self.vulnerabilities,
-            "created_at": self.created_at.isoformat(),
+            "created_at": isoformat_utc(self.created_at),
         }

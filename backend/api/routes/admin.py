@@ -39,6 +39,7 @@ from domain.services.role_capabilities_merge import (
     default_role_capabilities,
     merge_role_capabilities_raw,
 )
+from domain.datetime_serialization import isoformat_utc
 from domain.services.finding_policy_defaults import (
     DEFAULT_FINDING_POLICY_APPLY_BY_DEFAULT,
     DEFAULT_FINDING_POLICY_PATH,
@@ -519,7 +520,7 @@ async def get_execution_queue_overview(
                 "name": s.name or "",
                 "target": (s.target_url or "")[:200],
                 "priority": s.priority or 0,
-                "started_at": s.started_at.isoformat() if s.started_at else None,
+                "started_at": isoformat_utc(s.started_at),
             }
             for s in running_rows
         ]
@@ -536,7 +537,7 @@ async def get_execution_queue_overview(
                     "name": s.name or "",
                     "target": (s.target_url or "")[:200],
                     "priority": s.priority or 0,
-                    "created_at": s.created_at.isoformat() if s.created_at else None,
+                    "created_at": isoformat_utc(s.created_at),
                     "estimated_time_seconds": est,
                 }
             )
@@ -1330,8 +1331,8 @@ async def list_users(
                 role=u.role.value,
                 is_active=u.is_active,
                 is_verified=u.is_verified,
-                created_at=u.created_at.isoformat(),
-                last_login=u.last_login.isoformat() if u.last_login else None
+                created_at=isoformat_utc(u.created_at),
+                last_login=isoformat_utc(u.last_login),
             )
             for u in users
         ]
@@ -1390,7 +1391,7 @@ async def create_user(
             role=new_user.role.value,
             is_active=new_user.is_active,
             is_verified=new_user.is_verified,
-            created_at=new_user.created_at.isoformat(),
+            created_at=isoformat_utc(new_user.created_at),
             last_login=None
         )
     except HTTPException:
@@ -1450,8 +1451,8 @@ async def update_user(
             role=user.role.value,
             is_active=user.is_active,
             is_verified=user.is_verified,
-            created_at=user.created_at.isoformat(),
-            last_login=user.last_login.isoformat() if user.last_login else None
+            created_at=isoformat_utc(user.created_at),
+            last_login=isoformat_utc(user.last_login),
         )
     except HTTPException:
         raise
@@ -1623,8 +1624,8 @@ async def get_ip_control(
                     "id": ip.id,
                     "ip_address": ip.ip_address,
                     "reason": ip.reason,
-                    "blocked_at": ip.blocked_at.isoformat(),
-                    "expires_at": ip.expires_at.isoformat() if ip.expires_at else None
+                    "blocked_at": isoformat_utc(ip.blocked_at),
+                    "expires_at": isoformat_utc(ip.expires_at),
                 }
                 for ip in blocked_list
             ],
@@ -1791,7 +1792,7 @@ async def get_scanner_status(
                 "scan_id": s.id,
                 "name": s.name,
                 "target": s.target_url,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "created_at": isoformat_utc(s.created_at),
                 "priority": s.priority
             }
             for s in pending

@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import select, func
 
 from domain.repositories.blocked_ip_repository import BlockedIPRepository
+from domain.datetime_serialization import isoformat_utc
 from domain.entities.blocked_ip import BlockedIP
 from infrastructure.database.models import BlockedIP as BlockedIPModel
 from infrastructure.database.models import IPActivity
@@ -117,7 +118,7 @@ class DatabaseBlockedIPRepository(BlockedIPRepository):
                     "ip_address": str(a.ip_address),
                     "event_type": a.event_type,
                     "count": a.count,
-                    "window_start": a.window_start.isoformat(),
+                    "window_start": isoformat_utc(a.window_start),
                     "metadata": a.activity_metadata or {},
                 }
                 for a in rows

@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 
 from domain.entities.scan import Scan, ScanStatus
+from domain.datetime_serialization import isoformat_utc
 from domain.domain_services.scan_validation_service import ScanValidationService
 from domain.exceptions.scan_exceptions import (
     ScanNotFoundException,
@@ -58,7 +59,7 @@ class CancelScanUseCase:
                 'cancelled_by': 'user',
                 'reason': request.reason,
                 'force_cancelled': request.force,
-                'cancelled_at': datetime.utcnow().isoformat(),
+                'cancelled_at': isoformat_utc(datetime.utcnow()),
             }
         )
     

@@ -10,6 +10,7 @@ from datetime import datetime
 from uuid import UUID
 
 from domain.entities.scan import ScanStatus, ScanType
+from domain.datetime_serialization import isoformat_utc
 from domain.value_objects.scan_config import ScanConfig
 from domain.value_objects.vulnerability_severity import VulnerabilitySeverity
 
@@ -98,10 +99,10 @@ class ScanDTO:
             'config': self.config.to_dict() if self.config else None,
             'scanners': self.scanners,
             'status': self.status.value,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'started_at': self.started_at.isoformat() if self.started_at else None,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
-            'scheduled_at': self.scheduled_at.isoformat() if self.scheduled_at else None,
+            'created_at': isoformat_utc(self.created_at),
+            'started_at': isoformat_utc(self.started_at),
+            'completed_at': isoformat_utc(self.completed_at),
+            'scheduled_at': isoformat_utc(self.scheduled_at),
             'tags': self.tags,
             'results': self.results,
             'total_vulnerabilities': self.total_vulnerabilities,
@@ -197,9 +198,9 @@ class ScanSummaryDTO:
             'target_url': self.target_url,
             'target_type': self.target_type,
             'status': self.status.value,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'started_at': self.started_at.isoformat() if self.started_at else None,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'created_at': isoformat_utc(self.created_at),
+            'started_at': isoformat_utc(self.started_at),
+            'completed_at': isoformat_utc(self.completed_at),
             'total_vulnerabilities': self.total_vulnerabilities,
             'critical_vulnerabilities': self.critical_vulnerabilities,
             'high_vulnerabilities': self.high_vulnerabilities,

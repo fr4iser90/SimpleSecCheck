@@ -10,6 +10,8 @@ from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import NullPool
 
+from worker.config.db_url import postgres_connect_args
+
 
 class PostgreSQLAdapter:
     """Database adapter for worker operations."""
@@ -33,7 +35,8 @@ class PostgreSQLAdapter:
                 self.database_url,
                 echo=False,
                 poolclass=NullPool,
-                future=True
+                future=True,
+                connect_args=postgres_connect_args(),
             )
             
             # Create async session factory

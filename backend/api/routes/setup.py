@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from starlette.requests import Request
 from pydantic import BaseModel, EmailStr, Field, validator
-from datetime import datetime
+from datetime import datetime, timedelta
 import httpx
 
 from sqlalchemy.exc import IntegrityError
@@ -26,6 +26,7 @@ from infrastructure.container import (
 from infrastructure.logging_config import get_logger
 from domain.entities.system_state import SystemState as SystemStateEntity, SetupStatus
 from domain.entities.user import User as UserEntity, UserRole
+from domain.datetime_serialization import isoformat_utc
 from infrastructure.container import get_system_state_repository, get_user_service
 
 # Import new services
@@ -356,8 +357,10 @@ async def start_setup_token(
             "success": True,
             "message": "Setup token generated successfully",
             "token_hash": token_hash,
-            "created_at": created_at.isoformat(),
-            "expires_at": (created_at + setup_token_service.ttl_hours).isoformat()
+            "created_at": isoformat_utc(created_at),
+            "expires_at": isoformat_utc(
+                created_at + timedelta(hours=setup_token_service.ttl_hours)
+            ),
         }
         
     except Exception as e:

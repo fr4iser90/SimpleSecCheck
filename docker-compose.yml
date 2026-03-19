@@ -71,16 +71,14 @@ services:
       - SIMPLESECCHECK_ROOT=/app
       - UPLOAD_STORAGE_PATH=/app/uploads
       - PYTHONUNBUFFERED=1
-      - SCANNER_WORKER_ENABLED=false  # Worker is now separate service
-      - SCANNER_PROXY_MODE=false
-      - DATABASE_TYPE=postgresql
-      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-ssc_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-simpleseccheck}
+      - POSTGRES_SSL=${POSTGRES_SSL:-false}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - QUEUE_ENABLED=true
-      - SESSION_MANAGEMENT=true
-      - METADATA_COLLECTION=always
-      - ONLY_GIT_SCANS=true
     ports:
       - "8080:8080"
     networks:
@@ -145,16 +143,13 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_TYPE=postgresql
-      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-ssc_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-simpleseccheck}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - QUEUE_TYPE=redis
       - QUEUE_CONNECTION=${REDIS_URL:-redis://redis:6379}
-      - SCANNER_WORKER_ENABLED=true
-      # Parallel jobs: DB max_concurrent_jobs (admin/setup); optional MAX_CONCURRENT_JOBS in .env
-      # NOTE: Logs are part of Results - Scanner creates results/{scan_id}/logs/ automatically
-      # RESULTS_DIR_HOST: Absolute path on HOST (where docker-compose runs) - needed for Worker to mount volumes to Scanner containers
-      # Docker API requires absolute paths when creating containers dynamically
       - RESULTS_DIR_HOST=${PWD}/results
       # Container paths (what Scanner container sees inside)
       - RESULTS_DIR_CONTAINER=/app/results
@@ -224,8 +219,12 @@ services:
       - SCAN_TARGET=${SCAN_TARGET:-}
       - TARGET_PATH_IN_CONTAINER=${TARGET_PATH_IN_CONTAINER:-/target}
       - RESULTS_DIR_IN_CONTAINER=/app/results
-      - DATABASE_TYPE=postgresql
-      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-ssc_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-simpleseccheck}}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-ssc_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-simpleseccheck}
+      - POSTGRES_SSL=${POSTGRES_SSL:-false}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - NVD_API_KEY=${NVD_API_KEY:-}
       - SNYK_TOKEN=${SNYK_TOKEN:-}

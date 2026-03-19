@@ -6,9 +6,10 @@ with enterprise-grade security features including IP and User-Agent binding.
 """
 import json
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 
+from domain.datetime_serialization import isoformat_utc, parse_api_datetime
 from infrastructure.redis.client import redis_client
 
 
@@ -39,14 +40,15 @@ class SetupSessionManager:
         """
         session_id = secrets.token_hex(16)
         
+        now = datetime.now(timezone.utc)
         session_data = {
             "session_id": session_id,
             "ip": ip,
             "user_agent": user_agent,
             "token_hash": self._hash_token(token),
-            "created_at": datetime.utcnow().isoformat(),
-            "last_seen": datetime.utcnow().isoformat(),
-            "expires_at": (datetime.utcnow() + timedelta(minutes=self.session_timeout_minutes)).isoformat(),
+            "created_at": isoformat_utc(now),
+            "last_seen": isoformat_utc(now),
+            "expires_at": isoformat_utc(now + timedelta(minutes=self.session_timeout_minutes)),
             "current_step": 1,
             "completed_steps": [],
             "is_active": True
@@ -88,8 +90,8 @@ class SetupSessionManager:
                 return False
             
             # Validate expiration
-            expires_at = datetime.fromisoformat(data["expires_at"])
-            if datetime.utcnow() > expires_at:
+            expires_at = parse_api_datetime(data["expires_at"])
+            if datetime.now(timezone.utc) > expires_at:
                 return False
             
             # Validate active status
@@ -97,7 +99,7 @@ class SetupSessionManager:
                 return False
             
             # Update last_seen for idle timeout
-            data["last_seen"] = datetime.utcnow().isoformat()
+            data["last_seen"] = isoformat_utc(datetime.now(timezone.utc))
             await redis_client.set(
                 redis_key,
                 json.dumps(data),
@@ -150,7 +152,7 @@ class SetupSessionManager:
         try:
             data = json.loads(session_data)
             data["current_step"] = step
-            data["last_seen"] = datetime.utcnow().isoformat()
+            data["last_seen"] = isoformat_utc(datetime.now(timezone.utc))
             
             await redis_client.set(
                 redis_key,
@@ -184,7 +186,7 @@ class SetupSessionManager:
             data = json.loads(session_data)
             if step not in data["completed_steps"]:
                 data["completed_steps"].append(step)
-            data["last_seen"] = datetime.utcnow().isoformat()
+            data["last_seen"] = isoformat_utc(datetime.now(timezone.utc))
             
             await redis_client.set(
                 redis_key,
@@ -229,8 +231,9 @@ class SetupSessionManager:
         
         try:
             data = json.loads(session_data)
-            data["expires_at"] = (datetime.utcnow() + timedelta(minutes=self.session_timeout_minutes)).isoformat()
-            data["last_seen"] = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc)
+            data["expires_at"] = isoformat_utc(now + timedelta(minutes=self.session_timeout_minutes))
+            data["last_seen"] = isoformat_utc(now)
             
             await redis_client.set(
                 redis_key,
@@ -261,8 +264,8 @@ class SetupSessionManager:
         
         try:
             data = json.loads(session_data)
-            expires_at = datetime.fromisoformat(data["expires_at"])
-            return datetime.utcnow() > expires_at
+            expires_at = parse_api_datetime(data["expires_at"])
+            return datetime.now(timezone.utc) > expires_at
             
         except (json.JSONDecodeError, KeyError, ValueError):
             return True

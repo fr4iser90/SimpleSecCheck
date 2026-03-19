@@ -10,6 +10,8 @@ from enum import Enum
 from typing import Dict, Any, Optional
 from uuid import uuid4
 
+from domain.datetime_serialization import isoformat_utc
+
 
 class SetupStatus(str, Enum):
     """Setup status enumeration."""
@@ -158,17 +160,17 @@ class SystemState:
             'version': self.version,
             'auth_mode': self.auth_mode,
             'config': self.config,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
-            'setup_completed_at': self.setup_completed_at.isoformat() if self.setup_completed_at else None,
+            'created_at': isoformat_utc(self.created_at),
+            'updated_at': isoformat_utc(self.updated_at),
+            'setup_completed_at': isoformat_utc(self.setup_completed_at),
             'database_initialized': self.database_initialized,
             'admin_user_created': self.admin_user_created,
             'system_configured': self.system_configured,
             'setup_attempts': self.setup_attempts,
-            'last_setup_attempt': self.last_setup_attempt.isoformat() if self.last_setup_attempt else None,
+            'last_setup_attempt': isoformat_utc(self.last_setup_attempt),
             'setup_locked': self.setup_locked,
             'setup_token_hash': self.setup_token_hash,
-            'setup_token_created_at': self.setup_token_created_at.isoformat() if self.setup_token_created_at else None,
+            'setup_token_created_at': isoformat_utc(self.setup_token_created_at),
         }
     
     @classmethod

@@ -163,8 +163,10 @@ class StepRegistry:
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.steps_log = self.logs_dir / "steps.log"
 
-        # Optional DB mirror when DATABASE_URL is set (no prod/dev gate)
-        self.database_url = os.getenv("DATABASE_URL")
+        # Optional DB mirror when POSTGRES_* is set (built URL; no DATABASE_URL env)
+        from scanner.config.db_url import database_url_from_postgres_env
+
+        self.database_url = database_url_from_postgres_env()
         self._db_pool = None
         
         # Initialize steps.log (JSON Lines format - one JSON object per line)
@@ -183,7 +185,11 @@ class StepRegistry:
         if self._db_pool is None:
             try:
                 import asyncpg
-                self._db_pool = await asyncpg.create_pool(self.database_url, min_size=1, max_size=4)
+                from scanner.config.db_url import asyncpg_connect_kwargs
+
+                self._db_pool = await asyncpg.create_pool(
+                    self.database_url, min_size=1, max_size=4, **asyncpg_connect_kwargs()
+                )
             except Exception as e:
                 print(f"[Step Registry] DB pool init failed: {e}")
                 self._db_pool = None
@@ -686,7 +692,7 @@ class StepRegistry:
             import traceback
             traceback.print_exc()
 
-        # Mirror to DB when DATABASE_URL is set (non-blocking)
+        # Mirror to DB when POSTGRES_* is set (non-blocking)
         if self.database_url:
             try:
                 asyncio.create_task(self._upsert_step_db(step))

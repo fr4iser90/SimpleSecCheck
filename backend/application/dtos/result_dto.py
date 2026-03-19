@@ -10,6 +10,7 @@ from datetime import datetime
 from uuid import UUID
 
 from domain.entities.vulnerability import Vulnerability
+from domain.datetime_serialization import isoformat_utc
 from domain.value_objects.vulnerability_severity import VulnerabilitySeverity
 
 
@@ -204,7 +205,7 @@ class ScanResultDTO:
             'status': self.status,
             'message': self.message,
             'duration': self.duration,
-            'timestamp': self.timestamp.isoformat(),
+            'timestamp': isoformat_utc(self.timestamp),
             'vulnerabilities': [vuln.to_dict() for vuln in self.vulnerabilities],
             'total_vulnerabilities': self.total_vulnerabilities,
             'critical_vulnerabilities': self.critical_vulnerabilities,
@@ -270,7 +271,7 @@ class ResultSummaryDTO:
             'low_vulnerabilities': self.low_vulnerabilities,
             'info_vulnerabilities': self.info_vulnerabilities,
             'duration': self.duration,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'timestamp': isoformat_utc(self.timestamp),
         }
 
 

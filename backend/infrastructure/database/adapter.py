@@ -31,7 +31,8 @@ class DatabaseAdapter:
             database_url = settings.DATABASE_URL
             if database_url.startswith("postgresql://") and "+asyncpg" not in database_url:
                 database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-            
+
+            connect_args = {"ssl": True} if settings.POSTGRES_SSL else {"ssl": False}
             # Create async engine
             self.engine = create_async_engine(
                 database_url,
@@ -39,6 +40,7 @@ class DatabaseAdapter:
                 max_overflow=settings.DATABASE_MAX_OVERFLOW,
                 pool_pre_ping=True,
                 pool_recycle=3600,
+                connect_args=connect_args,
             )
             
             # Create session factory

@@ -14,7 +14,7 @@ if _backend not in sys.path:
 from logging.config import fileConfig
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 
 config = context.config
@@ -47,12 +47,14 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     """Run migrations with async engine; run_sync for actual migration steps."""
-    cfg = config.get_section(config.config_ini_section, {}) or {}
-    cfg["sqlalchemy.url"] = get_url()
-    connectable = async_engine_from_config(
-        cfg,
-        prefix="sqlalchemy.",
+    from config.settings import get_settings
+
+    s = get_settings()
+    connect_args = {"ssl": True} if s.POSTGRES_SSL else {"ssl": False}
+    connectable = create_async_engine(
+        get_url(),
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

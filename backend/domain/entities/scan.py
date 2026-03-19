@@ -9,6 +9,8 @@ from enum import Enum
 from typing import Dict, List, Optional, Any
 from uuid import uuid4
 
+from domain.datetime_serialization import isoformat_utc
+
 
 class ScanStatus(str, Enum):
     """Scan status enumeration."""
@@ -195,10 +197,10 @@ class Scan:
             'target_type': self.target_type,
             'scanners': self.scanners,
             'config': self.config,
-            'created_at': self.created_at.isoformat(),
-            'started_at': self.started_at.isoformat() if self.started_at else None,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
-            'updated_at': self.updated_at.isoformat(),
+            'created_at': isoformat_utc(self.created_at),
+            'started_at': isoformat_utc(self.started_at),
+            'completed_at': isoformat_utc(self.completed_at),
+            'updated_at': isoformat_utc(self.updated_at),
             'results': self.results,
             'total_vulnerabilities': self.total_vulnerabilities,
             'duration': self.get_duration(),
@@ -207,10 +209,8 @@ class Scan:
             'user_id': self.user_id,
             'project_id': self.project_id,
             'tags': self.tags,
-            'scheduled_at': self.scheduled_at.isoformat() if self.scheduled_at else None,
-            'last_heartbeat_at': (
-                self.last_heartbeat_at.isoformat() if self.last_heartbeat_at else None
-            ),
+            'scheduled_at': isoformat_utc(self.scheduled_at),
+            'last_heartbeat_at': isoformat_utc(self.last_heartbeat_at),
             'scan_metadata': self.scan_metadata,
             'critical_vulnerabilities': self.critical_vulnerabilities,
             'high_vulnerabilities': self.high_vulnerabilities,

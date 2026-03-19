@@ -11,6 +11,7 @@ from typing import Optional
 from datetime import datetime
 
 from domain.entities.scan import Scan
+from domain.datetime_serialization import isoformat_utc
 from infrastructure.redis.client import redis_client
 from config.settings import get_settings
 from application.services.upload_service import resolve_upload_mount_path
@@ -122,8 +123,8 @@ class QueueService:
                 "user_id": scan.user_id,
                 "project_id": scan.project_id,
                 "scan_metadata": getattr(scan, "scan_metadata", None) or {},
-                "scheduled_at": scan.scheduled_at.isoformat() if scan.scheduled_at else None,
-                "enqueued_at": datetime.utcnow().isoformat(),
+                "scheduled_at": isoformat_utc(scan.scheduled_at),
+                "enqueued_at": isoformat_utc(datetime.utcnow()),
                 "max_scan_wall_seconds": max_wall,
             }
             # DB overrides merged with manifest (timeouts, env e.g. SONAR_HOST_URL)

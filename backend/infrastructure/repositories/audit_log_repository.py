@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import select, desc, and_, or_, func
 
 from domain.repositories.audit_log_repository import AuditLogRepository
+from domain.datetime_serialization import isoformat_utc
 from infrastructure.database.models import AuditLog as AuditLogModel
 from infrastructure.database.adapter import db_adapter
 
@@ -90,7 +91,7 @@ class DatabaseAuditLogRepository(AuditLogRepository):
                     "ip_address": str(e.ip_address) if e.ip_address else None,
                     "user_agent": e.user_agent,
                     "result": e.result,
-                    "created_at": e.created_at.isoformat(),
+                    "created_at": isoformat_utc(e.created_at),
                 }
                 for e in rows
             ]

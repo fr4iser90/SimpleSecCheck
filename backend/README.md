@@ -163,8 +163,15 @@ ruff check backend_refactored/
 ### Environment Variables
 
 ```bash
-# Database
-DATABASE_URL=postgresql://user:password@host:port/database
+# Database (no DATABASE_URL — backend builds URL from POSTGRES_*)
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_USER=ssc_user
+POSTGRES_PASSWORD=...
+POSTGRES_DB=simpleseccheck
+POSTGRES_SSL=false
+
+# Remote/managed Postgres with TLS: POSTGRES_SSL=true
 
 # Redis
 REDIS_URL=redis://localhost:6379

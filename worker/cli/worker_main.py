@@ -14,6 +14,7 @@ from pathlib import Path
 # Add worker to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from worker.config.db_url import build_database_url_from_postgres_env
 from worker.domain.job_execution.services.job_orchestration_service import JobOrchestrationService
 from worker.infrastructure.docker.docker_job_executor import DockerJobExecutor
 from worker.domain.job_execution.services.result_processing_service import ResultProcessingService
@@ -43,8 +44,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--queue-type",
         choices=["redis", "memory"],
-        default=os.environ.get("QUEUE_TYPE"),
-        help="Queue type (from QUEUE_TYPE env var)"
+        default="redis",
+        help="Queue backend (default: redis; memory only for local debugging — no QUEUE_TYPE env)",
     )
     
     parser.add_argument(
@@ -55,8 +56,8 @@ def parse_arguments() -> argparse.Namespace:
     
     parser.add_argument(
         "--db-connection",
-        default=os.environ.get("DATABASE_URL"),
-        help="Database connection string (from DATABASE_URL env var)"
+        default=None,
+        help="Override DB URL (default: built from POSTGRES_* env — no DATABASE_URL)",
     )
     
     parser.add_argument(
@@ -129,15 +130,9 @@ async def main():
     args = parse_arguments()
     
     # Validate required environment variables
-    if not args.queue_type:
-        raise ValueError("QUEUE_TYPE environment variable is required")
-    
     if not args.queue_connection:
         raise ValueError("REDIS_URL or QUEUE_CONNECTION environment variable is required")
-    
-    if not args.db_connection:
-        raise ValueError("DATABASE_URL environment variable is required")
-    
+
     # Set up logging FIRST with ERROR level (will be adjusted after setup check)
     # This prevents any logs during initialization before we can check setup status
     import structlog
@@ -168,7 +163,10 @@ async def main():
     structlog.get_logger().setLevel(logging.ERROR)
     
     # Initialize database adapter to check setup status
-    db_url = args.db_connection
+    try:
+        db_url = args.db_connection or build_database_url_from_postgres_env()
+    except ValueError as e:
+        raise SystemExit(f"Database configuration: {e}") from e
     if db_url.startswith("postgresql://") and "+asyncpg" not in db_url:
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     

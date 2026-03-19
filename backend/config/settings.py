@@ -5,14 +5,19 @@ This module defines all configuration settings for the refactored backend.
 Settings are loaded from environment variables initially, then from database (SystemState)
 after setup is completed.
 """
-from typing import List, Optional
-from pydantic_settings import BaseSettings
-from pydantic import Field, model_validator
+from typing import List
+from urllib.parse import quote_plus
+
+from pydantic import Field, computed_field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables, then from database after setup."""
-    
+
+    # Connection string is only from POSTGRES_* (@computed_field). Ignore stray DATABASE_URL in env.
+    model_config = SettingsConfigDict(extra="ignore", env_ignore=("DATABASE_URL",))
+
     # Application
     DEBUG: bool = Field(default=False, description="Enable debug mode")
     USE_CASE: str = Field(default="solo", description="Use case: solo|network_intern|public_web|enterprise (loaded from database after setup)")
@@ -26,13 +31,28 @@ class Settings(BaseSettings):
     # Optional: single app URL (e.g. from compose). If set, appended to CORS_ORIGINS when not already present.
     APP_URL: str = Field(default="", description="Public app URL (e.g. https://scan.example.com); added to CORS origins when set")
     
-    # Database
-    DATABASE_URL: str = Field(
-        default="postgresql://postgres:password@localhost:5432/simpleseccheck",
-        description="PostgreSQL database connection URL"
+    # Database — only POSTGRES_* (no DATABASE_URL env)
+    POSTGRES_HOST: str = Field(default="postgres", description="PostgreSQL host")
+    POSTGRES_PORT: str = Field(default="5432", description="PostgreSQL port")
+    POSTGRES_USER: str = Field(default="ssc_user", description="PostgreSQL user")
+    POSTGRES_PASSWORD: str = Field(description="PostgreSQL password (env POSTGRES_PASSWORD)")
+    POSTGRES_DB: str = Field(default="simpleseccheck", description="PostgreSQL database name")
+    # Internal Docker: false (avoids ~/.postgresql client cert paths). Remote/managed DB: true.
+    POSTGRES_SSL: bool = Field(
+        default=False,
+        description="Use TLS to PostgreSQL (env POSTGRES_SSL). false = plain TCP (typical in Compose).",
     )
     DATABASE_POOL_SIZE: int = Field(default=20, description="Database connection pool size")
     DATABASE_MAX_OVERFLOW: int = Field(default=30, description="Database max overflow connections")
+
+    @computed_field
+    @property
+    def DATABASE_URL(self) -> str:
+        """Built from POSTGRES_* only."""
+        u = quote_plus(self.POSTGRES_USER)
+        p = quote_plus(self.POSTGRES_PASSWORD)
+        d = quote_plus(self.POSTGRES_DB)
+        return f"postgresql://{u}:{p}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{d}"
     
     # Redis
     REDIS_URL: str = Field(

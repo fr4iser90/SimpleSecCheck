@@ -102,9 +102,8 @@ OPTIONAL ENVIRONMENT VARIABLES:
                                  Valid values: DEBUG, INFO, WARNING, ERROR
                                  Default: INFO
 
-  DATABASE_URL                   Database connection string (for --list command)
-                                 Required when using --list to sync scanners
-                                 Example: DATABASE_URL=postgresql://user:pass@host:5432/db
+  POSTGRES_HOST, POSTGRES_PORT   PostgreSQL (for --list DB sync; no DATABASE_URL)
+  POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
 
 ═══════════════════════════════════════════════════════════════════════════════
 
@@ -188,7 +187,9 @@ EXAMPLES:
 
 5. List all scanners:
    docker run --rm \\
-     -e DATABASE_URL=postgresql://user:pass@host:5432/db \\
+     -e POSTGRES_HOST=postgres -e POSTGRES_PORT=5432 \\
+     -e POSTGRES_USER=ssc_user -e POSTGRES_PASSWORD=secret \\
+     -e POSTGRES_DB=simpleseccheck \\
      <image> python3 -m scanner.core.orchestrator --list
 
 ═══════════════════════════════════════════════════════════════════════════════

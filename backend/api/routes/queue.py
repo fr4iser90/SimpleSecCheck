@@ -17,6 +17,7 @@ from domain.entities.user import UserRole
 from application.services.user_service import UserService
 from infrastructure.logging_config import get_logger
 from domain.services.scanner_duration_service import ScannerDurationService
+from domain.datetime_serialization import isoformat_utc
 
 logger = get_logger("api.queue")
 
@@ -106,7 +107,7 @@ async def _scan_to_queue_item(scan: Any, position: Optional[int] = None, show_br
         "status": queue_status,
         "scanners": scanners,
         "position": position,
-        "created_at": created_at.isoformat() if created_at else None,
+        "created_at": isoformat_utc(created_at),
         "scan_id": str(scan.id),
         "estimated_time_seconds": estimated_time_seconds,
         "duration_seconds": duration_seconds,
@@ -163,9 +164,9 @@ async def _scan_to_my_scan_item(scan: Any, position: Optional[int] = None) -> Di
         "status": queue_status,
         "scan_id": str(scan.id),
         "position": position,
-        "created_at": created_at.isoformat() if created_at else None,
-        "started_at": started_at.isoformat() if started_at else None,
-        "completed_at": completed_at.isoformat() if completed_at else None,
+        "created_at": isoformat_utc(created_at),
+        "started_at": isoformat_utc(started_at),
+        "completed_at": isoformat_utc(completed_at),
         "scanners": scanners,
         "estimated_time_seconds": estimated_time_seconds,
         "duration_seconds": duration_seconds,
@@ -319,9 +320,9 @@ async def get_scan_queue_status(
             "repository_name": _extract_repository_name(getattr(scan, "target_url", None) or ""),
             "status": queue_status,
             "position": position,
-            "created_at": created_at.isoformat() if created_at else None,
-            "started_at": started_at.isoformat() if started_at else None,
-            "completed_at": completed_at.isoformat() if completed_at else None,
+            "created_at": isoformat_utc(created_at),
+            "started_at": isoformat_utc(started_at),
+            "completed_at": isoformat_utc(completed_at),
             "scanners": scanners,
             "estimated_time_seconds": estimated_time_seconds,
             "estimated_wait_seconds": estimated_wait_seconds,
@@ -381,7 +382,7 @@ async def delete_scan_from_queue(
         scan.status = ScanStatus.CANCELLED
         scan.updated_at = datetime.utcnow()
         scan.scan_metadata = dict(scan.scan_metadata or {})
-        scan.scan_metadata["cancelled_at"] = datetime.utcnow().isoformat()
+        scan.scan_metadata["cancelled_at"] = isoformat_utc(datetime.utcnow())
         scan.scan_metadata["cancelled_by"] = actor_context.get_identifier()
         await scan_repository.update(scan)
         logger.info(f"Deleted scan {scan_id} from queue (removed from Redis: {removed_from_queue})")
@@ -489,7 +490,7 @@ async def change_scan_position(
         scan.priority = new_priority
         scan.updated_at = datetime.utcnow()
         scan.scan_metadata = dict(scan.scan_metadata or {})
-        scan.scan_metadata["position_changed_at"] = datetime.utcnow().isoformat()
+        scan.scan_metadata["position_changed_at"] = isoformat_utc(datetime.utcnow())
         scan.scan_metadata["position_changed_by"] = actor_context.get_identifier()
         scan.scan_metadata["previous_position"] = current_position
         scan.scan_metadata["new_position"] = position

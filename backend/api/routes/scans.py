@@ -1031,7 +1031,7 @@ async def get_scan_status(
     summary="Get scan steps status",
     description=(
         "Step progress: read from PostgreSQL scan_steps when the scanner mirrors there "
-        "(DATABASE_URL in scan container); otherwise steps.log."
+        "(POSTGRES_* in scan container for DB mirror); otherwise steps.log."
     ),
     response_description="Step status information",
 )

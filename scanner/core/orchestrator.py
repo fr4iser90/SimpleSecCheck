@@ -1014,10 +1014,13 @@ async def list_scanners():
         
         scanners = ScannerRegistry.get_all_scanners()
         
-        # Get database URL
-        database_url = os.getenv("DATABASE_URL")
-        if not database_url:
-            logger.error("DATABASE_URL not set, cannot write scanners to database")
+        # DB URL from POSTGRES_* only (no DATABASE_URL)
+        from scanner.config.db_url import require_database_url_from_postgres_env
+
+        try:
+            database_url = require_database_url_from_postgres_env()
+        except RuntimeError as e:
+            logger.error("%s", e)
             sys.exit(1)
         
         # Convert postgresql:// to postgresql+asyncpg:// if needed
@@ -1031,7 +1034,9 @@ async def list_scanners():
             if database_url.startswith("postgresql+asyncpg://"):
                 database_url = database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
             
-            conn = await asyncpg.connect(database_url)
+            from scanner.config.db_url import asyncpg_connect_kwargs
+
+            conn = await asyncpg.connect(database_url, **asyncpg_connect_kwargs())
             logger.info("Connected to database for scanner sync")
         except Exception as e:
             logger.error(f"Failed to connect to database: {e}")

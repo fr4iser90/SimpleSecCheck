@@ -88,7 +88,11 @@ docker run -d \
   --name simpleseccheck-worker \
   --restart unless-stopped \
   -e REDIS_URL=redis://redis:6379 \
-  -e DATABASE_URL=postgresql://user:pass@db:5432/simpleseccheck \
+  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_USER=ssc_user \
+  -e POSTGRES_PASSWORD=secret \
+  -e POSTGRES_DB=simpleseccheck \
   -e MAX_CONCURRENT_JOBS=3 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /app/results:/app/results \
@@ -99,10 +103,9 @@ docker run -d \
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `REDIS_URL` | `redis://localhost:6379` | Redis connection string |
-| `DATABASE_URL` | `postgresql://localhost/simpleseccheck` | Database connection |
+| `REDIS_URL` | `redis://localhost:6379` | Redis connection string (queue is always Redis) |
+| `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | — | Database (no `DATABASE_URL`) |
 | `MAX_CONCURRENT_JOBS` | `3` | Maximum parallel job executions |
-| `QUEUE_TYPE` | `redis` | Queue backend (redis/memory) |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
 | `RESULTS_DIR` | `/app/results` | Directory for scan results |
 
@@ -112,7 +115,11 @@ worker:
   build: ./worker
   environment:
     - REDIS_URL=redis://redis:6379
-    - DATABASE_URL=postgresql://simpleseccheck:simpleseccheck@postgres:5432/simpleseccheck
+    - POSTGRES_HOST=postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_USER=ssc_user
+    - POSTGRES_PASSWORD=changeme
+    - POSTGRES_DB=simpleseccheck
     - MAX_CONCURRENT_JOBS=3
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
@@ -125,8 +132,8 @@ worker:
 ## Configuration
 
 ### Queue Configuration
-- **Redis**: multi-worker queue backend
-- **Memory**: single-process queue (tests / minimal setups)
+- **Redis**: always used in production (`REDIS_URL` / `QUEUE_CONNECTION`). No `QUEUE_TYPE` env.
+- **Memory**: optional via CLI `--queue-type memory` for local debugging only.
 
 ### Database Configuration
 - **PostgreSQL**: recommended for durable jobs

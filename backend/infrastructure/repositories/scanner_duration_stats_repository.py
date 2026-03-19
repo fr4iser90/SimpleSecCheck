@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import select
 
 from domain.repositories.scanner_duration_stats_repository import ScannerDurationStatsRepository
+from domain.datetime_serialization import isoformat_utc
 from infrastructure.database.models import ScannerDurationStats as ScannerDurationStatsModel
 from infrastructure.database.adapter import db_adapter
 
@@ -87,7 +88,7 @@ class DatabaseScannerDurationStatsRepository(ScannerDurationStatsRepository):
                     "min_duration_seconds": s.min_duration_seconds,
                     "max_duration_seconds": s.max_duration_seconds,
                     "sample_count": s.sample_count,
-                    "last_updated": s.last_updated.isoformat() if s.last_updated else None,
+                    "last_updated": isoformat_utc(s.last_updated),
                 }
                 for s in r.scalars().all()
             ]

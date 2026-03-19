@@ -10,6 +10,8 @@ from typing import Optional, Dict, Any
 from uuid import uuid4
 import hashlib
 
+from domain.datetime_serialization import isoformat_utc
+
 
 class UserRole(str, Enum):
     """User role enumeration."""
@@ -96,9 +98,9 @@ class User:
             'role': self.role.value,
             'is_active': self.is_active,
             'is_verified': self.is_verified,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
-            'last_login': self.last_login.isoformat() if self.last_login else None,
+            'created_at': isoformat_utc(self.created_at),
+            'updated_at': isoformat_utc(self.updated_at),
+            'last_login': isoformat_utc(self.last_login),
             'metadata': self.metadata,
         }
     

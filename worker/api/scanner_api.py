@@ -254,14 +254,19 @@ async def _refresh_scanners_from_container() -> None:
         raise HTTPException(status_code=503, detail="Docker not available")
     
     try:
-        import os
         scanner_image = "simpleseccheck-scanner:local"
-        
-        # Get DATABASE_URL from environment (passed to scanner container)
-        database_url = os.getenv("DATABASE_URL")
-        if not database_url:
-            raise HTTPException(status_code=503, detail="DATABASE_URL not set")
-        
+
+        environment_vars: Dict[str, str] = {}
+        for k in ("POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"):
+            v = (os.environ.get(k) or "").strip()
+            if not v:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Missing {k} in worker environment (required for scanner refresh).",
+                )
+            environment_vars[k] = v
+        environment_vars["POSTGRES_SSL"] = (os.environ.get("POSTGRES_SSL") or "false").strip().lower()
+
         logger.info(f"Starting scanner container to refresh scanner list in database")
         container_name = f"scanner-refresh-{int(time.time())}"
         
@@ -294,8 +299,6 @@ async def _refresh_scanners_from_container() -> None:
         
         # Automatically detect PUID/PGID from /project mount (same as container_spec.py)
         # This ensures scanner container uses correct UID/GID for file permissions
-        environment_vars = {"DATABASE_URL": database_url}
-        
         from worker.infrastructure.system_state_reader import read_worker_system_state
 
         setup_complete, _ = await read_worker_system_state(_database_adapter)
@@ -305,7 +308,6 @@ async def _refresh_scanners_from_container() -> None:
             environment_vars["LOG_LEVEL"] = "ERROR"
         
         try:
-            import os
             project_path = "/project"
             if os.path.exists(project_path):
                 project_root_stat = os.stat(project_path)
@@ -315,7 +317,7 @@ async def _refresh_scanners_from_container() -> None:
         except (OSError, AttributeError) as e:
             logger.warning(f"Could not detect host UID/GID from /project mount: {e}. Scanner will use default (1000:1000)")
         
-        # Create container with --list command and DATABASE_URL
+        # Create container with --list and POSTGRES_* (scanner builds DB URL internally)
         # Use same network as DB so scanner can resolve 'postgres' hostname
         container = await asyncio.to_thread(
             docker_adapter.client.containers.create,

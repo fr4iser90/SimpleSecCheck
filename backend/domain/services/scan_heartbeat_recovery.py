@@ -12,9 +12,10 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 from domain.entities.scan import ScanStatus
+from domain.datetime_serialization import isoformat_utc
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ async def recover_stale_running_scans() -> int:
         entity.scan_metadata = {
             **(entity.scan_metadata or {}),
             "heartbeat_recovery": {
-                "at": now.isoformat() + "Z",
+                "at": isoformat_utc(now),
                 "reason": "stale_heartbeat",
             },
         }

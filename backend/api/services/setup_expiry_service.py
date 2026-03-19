@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Optional, TYPE_CHECKING
 
 from domain.entities.system_state import SystemState, SetupStatus
+from domain.datetime_serialization import isoformat_utc
 from api.services.security_event_service import SecurityEventService
 
 if TYPE_CHECKING:
@@ -94,8 +95,12 @@ class SetupExpiryService:
         """Disable an expired setup and log the event."""
         self.security_logger.log_event("SETUP_EXPIRED", {
             "setup_status": state.setup_status.value,
-            "token_created_at": state.setup_token_created_at.isoformat() if state.setup_token_created_at else None,
-            "expiry_date": (state.setup_token_created_at + timedelta(days=self.setup_window_days)).isoformat() if state.setup_token_created_at else None,
+            "token_created_at": isoformat_utc(state.setup_token_created_at),
+            "expiry_date": isoformat_utc(
+                state.setup_token_created_at + timedelta(days=self.setup_window_days)
+            )
+            if state.setup_token_created_at
+            else None,
             "action": "setup_disabled_due_to_expiry",
         })
         state.lock_setup_permanently()
@@ -132,7 +137,9 @@ class SetupExpiryService:
             await repo.save(state)
             self.security_logger.log_event("SETUP_WINDOW_EXTENDED", {
                 "extended_by_days": days,
-                "new_expiry_date": (new_creation_time + timedelta(days=self.setup_window_days)).isoformat(),
+                "new_expiry_date": isoformat_utc(
+                    new_creation_time + timedelta(days=self.setup_window_days)
+                ),
                 "action": "setup_window_extended",
             })
             return True
@@ -151,8 +158,8 @@ class SetupExpiryService:
             time_remaining = expiry_date - datetime.utcnow()
             return {
                 "setup_status": state.setup_status.value,
-                "token_created_at": state.setup_token_created_at.isoformat(),
-                "expiry_date": expiry_date.isoformat(),
+                "token_created_at": isoformat_utc(state.setup_token_created_at),
+                "expiry_date": isoformat_utc(expiry_date),
                 "time_remaining_days": max(0, time_remaining.days),
                 "time_remaining_hours": max(0, time_remaining.seconds // 3600),
                 "setup_window_days": self.setup_window_days,
@@ -173,7 +180,9 @@ class SetupExpiryService:
             state.updated_at = datetime.utcnow()
             await repo.save(state)
             self.security_logger.log_event("SETUP_EXPIRY_RESET", {
-                "new_expiry_date": (datetime.utcnow() + timedelta(days=self.setup_window_days)).isoformat(),
+                "new_expiry_date": isoformat_utc(
+                    datetime.utcnow() + timedelta(days=self.setup_window_days)
+                ),
                 "action": "setup_expiry_reset",
             })
             return True

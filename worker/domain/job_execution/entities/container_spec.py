@@ -228,7 +228,13 @@ class ContainerSpec:
             # CI mode: for local_mount (local code) always scan only Git-tracked files
             "CI_MODE": "true" if target_type == "local_mount" else "false",
         }
-        
+        # DB step mirror / optional features: POSTGRES_* only (no DATABASE_URL)
+        for _pg in ("POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"):
+            _pv = os.environ.get(_pg)
+            if _pv is not None and str(_pv).strip():
+                environment[_pg] = str(_pv).strip()
+        environment["POSTGRES_SSL"] = (os.environ.get("POSTGRES_SSL") or "false").strip().lower()
+
         # Add selected scanners if provided (from backend/queue message)
         # This allows backend to control which scanners run, instead of scanner filtering
         # If scanners is None or empty, scanner will filter by scan_type (fallback)

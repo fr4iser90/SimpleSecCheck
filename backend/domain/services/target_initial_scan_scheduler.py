@@ -16,6 +16,7 @@ from infrastructure.container import (
     get_system_state_repository,
 )
 from domain.services.target_scan_helper import create_scan_from_target
+from domain.datetime_serialization import isoformat_utc
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ class TargetInitialScanScheduler:
                 )
                 if scan_id:
                     target.config = dict(target.config or {})
-                    target.config["initial_scan_triggered_at"] = datetime.utcnow().isoformat()
+                    target.config["initial_scan_triggered_at"] = isoformat_utc(datetime.utcnow())
                     await target_repo.update(target)
                     logger.info(
                         "Enqueued initial scan %s for target %s (%s)",

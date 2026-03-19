@@ -9,6 +9,7 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 from domain.entities.scan import ScanType
+from domain.datetime_serialization import isoformat_utc
 from domain.entities.target_type import TargetType
 from domain.value_objects.scan_config import ScanConfig
 
@@ -87,7 +88,7 @@ class ScanRequestDTO:
             'project_id': self.project_id,
             'config': self.config,
             'scanners': self.scanners,
-            'scheduled_at': self.scheduled_at.isoformat() if self.scheduled_at else None,
+            'scheduled_at': isoformat_utc(self.scheduled_at),
             'tags': self.tags,
             'metadata': self.metadata,
         }
@@ -253,7 +254,7 @@ class ResultRequestDTO:
             'status': self.status,
             'message': self.message,
             'duration': self.duration,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'timestamp': isoformat_utc(self.timestamp),
             'vulnerabilities': self.vulnerabilities,
             'raw_output': self.raw_output,
             'raw_output_format': self.raw_output_format,
