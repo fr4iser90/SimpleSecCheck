@@ -81,7 +81,11 @@ async def create_scan_from_target(
     target_url = params.get("target_url", target.source)
     config = params.get("config") or target.config
 
-    scanners = await _get_default_scanners_for_scan_type(scan_type)
+    custom_scanners = target.config.get("scanners") if isinstance(target.config, dict) else None
+    if isinstance(custom_scanners, list) and custom_scanners:
+        scanners = custom_scanners
+    else:
+        scanners = await _get_default_scanners_for_scan_type(scan_type)
     if not scanners:
         logger.error(f"No scanners for scan_type={scan_type.value}, cannot create scan for target {target.id}")
         return None

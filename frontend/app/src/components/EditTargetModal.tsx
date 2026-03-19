@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react'
 import Modal from './Modal'
+import ScannerSelection from './ScannerSelection'
+import { useScanners } from '../hooks/useScanners'
 import type { ScanTargetItem, AutoScanConfig } from '../hooks/useTargets'
+
+/** Map target type to API scan_type for fetching scanners. */
+const targetTypeToScanType = (type: string): string =>
+  type === 'container_registry' ? 'container' : 'code'
 
 interface EditTargetModalProps {
   isOpen: boolean
@@ -10,6 +16,7 @@ interface EditTargetModalProps {
     display_name?: string
     config?: Record<string, unknown>
     auto_scan?: AutoScanConfig
+    scanners?: string[]
   }) => Promise<void>
 }
 
@@ -24,8 +31,12 @@ export default function EditTargetModal({
   const [tag, setTag] = useState('latest')
   const [autoScanEnabled, setAutoScanEnabled] = useState(false)
   const [intervalSeconds, setIntervalSeconds] = useState('21600')
+  const [selectedScanners, setSelectedScanners] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const scanType = target ? targetTypeToScanType(target.type) : 'code'
+  const { scanners: availableScanners, loading: scannersLoading } = useScanners(scanType)
 
   useEffect(() => {
     if (target && isOpen) {
@@ -34,6 +45,7 @@ export default function EditTargetModal({
       setTag(target.type === 'container_registry' ? String(target.config?.tag ?? 'latest') : 'latest')
       setAutoScanEnabled(target.auto_scan?.enabled ?? false)
       setIntervalSeconds(String(target.auto_scan?.interval_seconds ?? 21600))
+      setSelectedScanners(Array.isArray(target.scanners) ? [...target.scanners] : [])
     }
   }, [target, isOpen])
 
@@ -56,6 +68,7 @@ export default function EditTargetModal({
           interval_seconds: autoScanEnabled ? parseInt(intervalSeconds, 10) || 21600 : undefined,
           event: target.auto_scan?.event ?? null,
         },
+        scanners: selectedScanners,
       })
       onClose()
     } catch (err) {
@@ -127,6 +140,18 @@ export default function EditTargetModal({
               />
             </div>
           )}
+          <div style={{ marginBottom: '1rem' }}>
+            {scannersLoading ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Loading scanners…</p>
+            ) : (
+              <ScannerSelection
+                availableScanners={availableScanners}
+                selectedScanners={selectedScanners}
+                onSelectionChange={setSelectedScanners}
+                maxHeight="200px"
+              />
+            )}
+          </div>
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
             <button type="button" onClick={onClose}>
               Cancel

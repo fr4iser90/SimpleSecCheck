@@ -65,6 +65,7 @@ def _github_repo_to_response(
     last_scan: Optional[Dict[str, Any]] = None,
     score: Optional[int] = None,
     vulnerabilities: Optional[Dict[str, int]] = None,
+    last_webhook_triggered_at: Optional[str] = None,
 ) -> "GitHubRepoResponse":
     """Build GitHubRepoResponse from domain entity and optional last_scan."""
     return GitHubRepoResponse(
@@ -82,6 +83,7 @@ def _github_repo_to_response(
         last_scan=last_scan,
         score=score,
         vulnerabilities=vulnerabilities,
+        last_webhook_triggered_at=last_webhook_triggered_at,
     )
 
 
@@ -473,6 +475,7 @@ class GitHubRepoResponse(BaseModel):
     last_scan: Optional[Dict[str, Any]] = None
     score: Optional[int] = None
     vulnerabilities: Optional[Dict[str, int]] = None
+    last_webhook_triggered_at: Optional[str] = None  # ISO datetime of last scan triggered by webhook (push/PR)
 
 
 def extract_repo_owner(repo_url: str) -> Optional[str]:
@@ -577,12 +580,14 @@ async def list_github_repos(
         repos = await github_repo_service.list_by_user(actor_context.user_id)
         repo_ids = [r.id for r in repos]
         last_scans = await repo_scan_history_repository.get_latest_by_repo_ids(repo_ids)
+        last_webhook = await repo_scan_history_repository.get_last_webhook_triggered_at(repo_ids)
         return [
             _github_repo_to_response(
                 repo,
                 last_scan=last_scans[repo.id].to_last_scan_dict() if repo.id in last_scans else None,
                 score=last_scans[repo.id].score if repo.id in last_scans else None,
                 vulnerabilities=last_scans[repo.id].vulnerabilities if repo.id in last_scans else None,
+                last_webhook_triggered_at=last_webhook[repo.id].isoformat() if repo.id in last_webhook else None,
             )
             for repo in repos
         ]
@@ -684,11 +689,13 @@ async def get_github_repo(
             )
         last_scans = await repo_scan_history_repository.get_latest_by_repo_ids([repo.id])
         entry = last_scans.get(repo.id)
+        last_webhook = await repo_scan_history_repository.get_last_webhook_triggered_at([repo.id])
         return _github_repo_to_response(
             repo,
             last_scan=entry.to_last_scan_dict() if entry else None,
             score=entry.score if entry else None,
             vulnerabilities=entry.vulnerabilities if entry else None,
+            last_webhook_triggered_at=last_webhook[repo.id].isoformat() if repo.id in last_webhook else None,
         )
     except HTTPException:
         raise
@@ -746,11 +753,13 @@ async def update_github_repo(
         )
         last_scans = await repo_scan_history_repository.get_latest_by_repo_ids([updated.id])
         entry = last_scans.get(updated.id)
+        last_webhook = await repo_scan_history_repository.get_last_webhook_triggered_at([updated.id])
         return _github_repo_to_response(
             updated,
             last_scan=entry.to_last_scan_dict() if entry else None,
             score=entry.score if entry else None,
             vulnerabilities=entry.vulnerabilities if entry else None,
+            last_webhook_triggered_at=last_webhook[updated.id].isoformat() if updated.id in last_webhook else None,
         )
     except HTTPException:
         raise
@@ -993,6 +1002,7 @@ class ScanTargetCreateRequest(BaseModel):
     display_name: Optional[str] = Field(None, max_length=255)
     auto_scan: Optional[Dict[str, Any]] = Field(default_factory=dict)
     config: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    scanners: Optional[List[str]] = Field(default=None, description="Scanner names for this target; empty/None = use defaults")
 
 
 class ScanTargetUpdateRequest(BaseModel):
@@ -1000,6 +1010,7 @@ class ScanTargetUpdateRequest(BaseModel):
     display_name: Optional[str] = None
     auto_scan: Optional[Dict[str, Any]] = None
     config: Optional[Dict[str, Any]] = None
+    scanners: Optional[List[str]] = None
 
 
 class LastScanSummary(BaseModel):
@@ -1027,6 +1038,7 @@ class ScanTargetResponse(BaseModel):
     updated_at: str
     scanners: List[str] = []
     last_scan: Optional[LastScanSummary] = None
+    next_scan_at: Optional[str] = None  # ISO datetime when next interval scan is due (null if not auto-interval)
 
 
 def _last_scan_to_summary(scan_row: Any) -> Optional[LastScanSummary]:
@@ -1044,6 +1056,24 @@ def _last_scan_to_summary(scan_row: Any) -> Optional[LastScanSummary]:
         medium_vulnerabilities=getattr(scan_row, "medium_vulnerabilities", 0) or 0,
         low_vulnerabilities=getattr(scan_row, "low_vulnerabilities", 0) or 0,
     )
+
+
+def _next_scan_at(auto_scan: Dict[str, Any], last_summary: Optional[LastScanSummary]) -> Optional[str]:
+    """Compute next scan time for interval-based auto_scan. Returns ISO datetime or None."""
+    if not auto_scan or not auto_scan.get("enabled") or auto_scan.get("mode") != "interval":
+        return None
+    interval_seconds = (auto_scan or {}).get("interval_seconds")
+    if not interval_seconds or int(interval_seconds) <= 0:
+        return None
+    if not last_summary or not last_summary.completed_at:
+        return None
+    from datetime import datetime, timedelta
+    try:
+        completed = datetime.fromisoformat(last_summary.completed_at.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    next_at = completed + timedelta(seconds=int(interval_seconds))
+    return next_at.isoformat()
 
 
 @router.get("/targets", response_model=List[ScanTargetResponse])
@@ -1074,6 +1104,10 @@ async def list_scan_targets(
         if t.type not in scanner_cache:
             scanner_cache[t.type] = await get_default_scanner_names_for_target_type(t.type)
 
+    def _scanners_for_target(t) -> List[str]:
+        custom = t.config.get("scanners") if isinstance(t.config, dict) else None
+        return custom if isinstance(custom, list) else scanner_cache.get(t.type, [])
+
     return [
         ScanTargetResponse(
             id=str(t.id),
@@ -1085,8 +1119,9 @@ async def list_scan_targets(
             config=t.config,
             created_at=t.created_at.isoformat(),
             updated_at=t.updated_at.isoformat(),
-            scanners=scanner_cache.get(t.type, []),
+            scanners=_scanners_for_target(t),
             last_scan=_last_scan_to_summary(latest_by_url.get(t.source)),
+            next_scan_at=_next_scan_at(t.auto_scan.to_dict(), _last_scan_to_summary(latest_by_url.get(t.source))),
         )
         for t in targets
     ]
@@ -1105,12 +1140,15 @@ async def create_scan_target(
     """
     if not actor_context.user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    config = dict(body.config or {})
+    if body.scanners is not None:
+        config["scanners"] = body.scanners
     try:
         created = await scan_target_service.create_target(
             actor_context.user_id,
             body.type,
             body.source,
-            body.config or {},
+            config,
             display_name=body.display_name,
             auto_scan=body.auto_scan,
             actor_role=actor_context.role or "user",
@@ -1134,6 +1172,19 @@ async def create_scan_target(
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("User-Agent"),
     )
+    # Enqueue one initial scan so the new target gets a first run without waiting for interval
+    try:
+        await scan_target_service.trigger_scan(
+            created.id,
+            actor_context.user_id,
+            metadata_extra={"trigger": "initial_scan"},
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger("api.user").warning("Initial scan enqueue failed for target %s: %s", created.id, e)
+    from domain.services.target_scan_helper import get_default_scanner_names_for_target_type
+    _custom = created.config.get("scanners") if isinstance(created.config, dict) else None
+    _scanners = _custom if isinstance(_custom, list) else await get_default_scanner_names_for_target_type(created.type)
     return ScanTargetResponse(
         id=created.id,
         user_id=created.user_id,
@@ -1144,6 +1195,9 @@ async def create_scan_target(
         config=created.config,
         created_at=created.created_at.isoformat(),
         updated_at=created.updated_at.isoformat(),
+        scanners=_scanners,
+        last_scan=None,
+        next_scan_at=None,
     )
 
 
@@ -1152,6 +1206,7 @@ async def get_scan_target(
     target_id: str,
     actor_context: ActorContext = Depends(get_authenticated_user),
     scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> ScanTargetResponse:
     """Get a single scan target by id."""
     if not actor_context.user_id:
@@ -1159,6 +1214,11 @@ async def get_scan_target(
     target = await scan_target_service.get_by_id(target_id, actor_context.user_id)
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
+    from domain.services.target_scan_helper import get_default_scanner_names_for_target_type
+    _custom = target.config.get("scanners") if isinstance(target.config, dict) else None
+    _scanners = _custom if isinstance(_custom, list) else await get_default_scanner_names_for_target_type(target.type)
+    latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_context.user_id, [target.source])
+    _last = _last_scan_to_summary(latest_by_url.get(target.source))
     return ScanTargetResponse(
         id=target.id,
         user_id=target.user_id,
@@ -1169,6 +1229,9 @@ async def get_scan_target(
         config=target.config,
         created_at=target.created_at.isoformat(),
         updated_at=target.updated_at.isoformat(),
+        scanners=_scanners,
+        last_scan=_last,
+        next_scan_at=_next_scan_at(target.auto_scan.to_dict(), _last),
     )
 
 
@@ -1178,6 +1241,7 @@ async def update_scan_target(
     target_id: str,
     body: ScanTargetUpdateRequest,
     actor_context: ActorContext = Depends(get_authenticated_user),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> ScanTargetResponse:
     """Update a scan target. Config is validated per target_type."""
     if not actor_context.user_id:
@@ -1191,10 +1255,13 @@ async def update_scan_target(
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
 
-    if body.config is not None:
+    if body.config is not None or body.scanners is not None:
         handler = get_target_handler(target.type)
+        config_to_validate = dict(body.config if body.config is not None else target.config)
+        if body.scanners is not None:
+            config_to_validate["scanners"] = body.scanners
         if handler:
-            target.config = handler.validate_config(body.config)
+            target.config = handler.validate_config(config_to_validate)
     if body.auto_scan is not None:
         target.auto_scan = AutoScanConfig.from_dict(body.auto_scan)
     if body.display_name is not None:
@@ -1210,6 +1277,11 @@ async def update_scan_target(
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("User-Agent"),
     )
+    from domain.services.target_scan_helper import get_default_scanner_names_for_target_type
+    _custom = updated.config.get("scanners") if isinstance(updated.config, dict) else None
+    _scanners = _custom if isinstance(_custom, list) else await get_default_scanner_names_for_target_type(updated.type)
+    latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_context.user_id, [updated.source])
+    _last = _last_scan_to_summary(latest_by_url.get(updated.source))
     return ScanTargetResponse(
         id=updated.id,
         user_id=updated.user_id,
@@ -1220,6 +1292,9 @@ async def update_scan_target(
         config=updated.config,
         created_at=updated.created_at.isoformat(),
         updated_at=updated.updated_at.isoformat(),
+        scanners=_scanners,
+        last_scan=_last,
+        next_scan_at=_next_scan_at(updated.auto_scan.to_dict(), _last),
     )
 
 

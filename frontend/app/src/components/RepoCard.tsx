@@ -10,6 +10,18 @@ interface RepoCardProps {
   onRemove: (repoId: string, repoName: string) => void
 }
 
+function formatRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  const now = Date.now()
+  const min = Math.floor((now - then) / 60000)
+  if (min < 1) return 'just now'
+  if (min < 60) return `${min} min ago`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `${h} h ago`
+  const d = Math.floor(h / 24)
+  return `${d} day${d !== 1 ? 's' : ''} ago`
+}
+
 export default function RepoCard({ repo, scanStatus, onScanNow, onEdit, onRemove }: RepoCardProps) {
   const status = getRepoStatus(repo, scanStatus)
   const warnings = getWarnings(repo, scanStatus)
@@ -70,6 +82,9 @@ export default function RepoCard({ repo, scanStatus, onScanNow, onEdit, onRemove
             <span>🔄 Auto-scan: <strong>{repo.auto_scan_enabled ? 'ON' : 'OFF'}</strong></span>
             {repo.auto_scan_enabled && (
               <span>📤 Scan on push: <strong>{repo.scan_on_push ? 'ON' : 'OFF'}</strong></span>
+            )}
+            {repo.scan_on_push && repo.last_webhook_triggered_at && (
+              <span>🔗 Last webhook: <strong>{formatRelativeTime(repo.last_webhook_triggered_at)}</strong></span>
             )}
             {repo.last_scan && (
               <span>📊 Last scan: <strong>{daysSince !== null ? `${daysSince} day${daysSince !== 1 ? 's' : ''} ago` : new Date(repo.last_scan.created_at).toLocaleString()}</strong></span>

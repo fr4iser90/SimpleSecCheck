@@ -18,6 +18,8 @@ export interface GitHubRepo {
   } | null
   score: number | null
   vulnerabilities: { critical: number, high: number, medium: number, low: number } | null
+  /** ISO datetime of last scan triggered by webhook (push/PR). */
+  last_webhook_triggered_at?: string | null
 }
 
 export interface RepoScanStatus {

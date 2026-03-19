@@ -90,6 +90,21 @@ export default function TargetCard({ target, onScanNow, onEdit, onRemove, scanLo
                 : target.auto_scan.event || 'on'}
             </div>
           )}
+          {target.next_scan_at && (
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+              <strong>Next scan:</strong>{' '}
+              {(() => {
+                const next = new Date(target.next_scan_at!)
+                const now = new Date()
+                if (next.getTime() <= now.getTime()) return 'due'
+                const min = Math.round((next.getTime() - now.getTime()) / 60000)
+                if (min < 60) return `in ${min} min`
+                const h = Math.floor(min / 60)
+                if (h < 24) return `in ${h} h`
+                return `at ${next.toLocaleString()}`
+              })()}
+            </div>
+          )}
           {target.scanners && target.scanners.length > 0 && (
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
               <strong>Scanners:</strong> {target.scanners.join(', ')}

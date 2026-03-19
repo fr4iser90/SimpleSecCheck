@@ -1,12 +1,15 @@
 """Database RepoScanHistory repository (DDD)."""
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, desc, func
+from sqlalchemy import cast, desc, select, func
+from sqlalchemy.dialects.postgresql import JSONB
 
 from domain.entities.repo_scan_history_entry import RepoScanHistoryEntry
 from domain.repositories.repo_scan_history_repository import RepoScanHistoryRepository
 from infrastructure.database.models import RepoScanHistory as RepoScanHistoryModel
+from infrastructure.database.models import Scan as ScanModel
 from infrastructure.database.adapter import db_adapter
 
 
@@ -28,6 +31,31 @@ class DatabaseRepoScanHistoryRepository(RepoScanHistoryRepository):
 
     def __init__(self, db_adapter_instance=None):
         self.db_adapter = db_adapter_instance or db_adapter
+
+    async def get_last_webhook_triggered_at(self, repo_ids: List[str]) -> Dict[str, datetime]:
+        """Last scan created_at per repo where that scan was triggered by a webhook."""
+        if not repo_ids:
+            return {}
+        await self.db_adapter.ensure_initialized()
+        uuids = [UUID(rid) for rid in repo_ids]
+        async with self.db_adapter.async_session() as session:
+            # Join repo_scan_history with scans where scan_metadata has key 'webhook_event'
+            webhook_triggered = cast(ScanModel.scan_metadata, JSONB).has_key("webhook_event")
+            q = (
+                select(RepoScanHistoryModel.repo_id, ScanModel.created_at)
+                .join(ScanModel, ScanModel.id == RepoScanHistoryModel.scan_id)
+                .where(RepoScanHistoryModel.repo_id.in_(uuids))
+                .where(webhook_triggered)
+                .order_by(desc(ScanModel.created_at))
+            )
+            result = await session.execute(q)
+            rows = result.all()
+        out: Dict[str, datetime] = {}
+        for repo_id, created_at in rows:
+            rid = str(repo_id)
+            if rid not in out and created_at:
+                out[rid] = created_at
+        return out
 
     async def add(
         self,

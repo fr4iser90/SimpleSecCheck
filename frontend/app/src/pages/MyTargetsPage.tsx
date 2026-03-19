@@ -54,6 +54,7 @@ export default function MyTargetsPage() {
       display_name?: string
       config?: Record<string, unknown>
       auto_scan?: AutoScanConfig
+      scanners?: string[]
     }
   ) => {
     const res = await apiFetch(`/api/user/targets/${targetId}`, {

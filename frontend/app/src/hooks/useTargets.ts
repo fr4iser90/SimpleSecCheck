@@ -31,6 +31,8 @@ export interface ScanTargetItem {
   updated_at: string
   scanners?: string[]
   last_scan?: LastScanSummary | null
+  /** ISO datetime when next interval scan is due (null if not auto-interval or no last scan). */
+  next_scan_at?: string | null
 }
 
 export function useTargets(targetType?: string | null) {
