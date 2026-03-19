@@ -188,7 +188,81 @@ SimpleSecCheck Team
         Returns:
             Full URL for password reset
         """
-        # Use configured domain from settings when sending real mail
-        # For now, use localhost (will be replaced by frontend URL)
-        base_url = "http://localhost:8080"  # TODO: Get from settings
+        base_url = getattr(self.settings, "FRONTEND_BASE_URL", None) or "http://localhost:8080"
         return f"{base_url}/password-reset?token={token}"
+
+    def get_verify_email_url(self, token: str) -> str:
+        """
+        Generate email verification URL (for sign-up verification email).
+        
+        Args:
+            token: Email verification token
+            
+        Returns:
+            Full URL for verify-email page
+        """
+        base_url = getattr(self.settings, "FRONTEND_BASE_URL", None) or "http://localhost:8080"
+        return f"{base_url}/verify-email?token={token}"
+
+    async def send_verification_email(
+        self,
+        to_email: str,
+        verify_url: str,
+        expiry_hours: int = 24,
+    ) -> bool:
+        """
+        Send email verification email (after sign-up).
+        
+        Args:
+            to_email: Recipient email address
+            verify_url: Full URL for verification link
+            expiry_hours: Token expiry in hours (for message text)
+            
+        Returns:
+            True if email sent successfully, False otherwise
+        """
+        if not self.is_enabled():
+            logger.warning("Email service not enabled, cannot send verification email")
+            return False
+
+        subject = "Verify your email - SimpleSecCheck"
+        body = f"""
+Hello,
+
+Thank you for signing up for SimpleSecCheck.
+
+Please verify your email address by clicking the link below:
+{verify_url}
+
+This link will expire in {expiry_hours} hour(s).
+
+If you did not create an account, please ignore this email.
+
+Best regards,
+SimpleSecCheck Team
+"""
+        html_body = f"""
+<html>
+  <body>
+    <h2>Verify your email</h2>
+    <p>Thank you for signing up for SimpleSecCheck.</p>
+    <p>Please verify your email address by clicking the button below:</p>
+    <p>
+      <a href="{verify_url}" style="background-color: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+        Verify Email
+      </a>
+    </p>
+    <p>Or copy and paste this link into your browser:</p>
+    <p style="word-break: break-all;">{verify_url}</p>
+    <p>This link will expire in {expiry_hours} hour(s).</p>
+    <p>If you did not create an account, please ignore this email.</p>
+    <p>Best regards,<br>SimpleSecCheck Team</p>
+  </body>
+</html>
+"""
+        return await self._send_email(
+            to_email=to_email,
+            subject=subject,
+            text_body=body,
+            html_body=html_body,
+        )

@@ -162,6 +162,9 @@ export default function Header() {
         <Link to="/statistics" className="nav-pill">
           Statistics
         </Link>
+        <Link to="/capabilities" className="nav-pill" title="What guests vs signed-in users can do">
+          Guest vs account
+        </Link>
         {isAuthenticated && user && isAdmin && (
           <div className="dropdown" ref={adminMenuRef}>
             <button

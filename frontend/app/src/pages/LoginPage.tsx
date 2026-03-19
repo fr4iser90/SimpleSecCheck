@@ -91,9 +91,17 @@ export default function LoginPage() {
           </button>
         </form>
 
-          <div style={{ marginTop: '16px', textAlign: 'center' }}>
-            <Link to="/password-reset" style={{ color: '#667eea', textDecoration: 'none', fontSize: '14px' }}>
+          <div style={{ marginTop: '16px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <Link to="/password-reset" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '14px' }}>
               Forgot password?
+            </Link>
+            {config?.features?.allow_self_registration && (
+              <Link to="/signup" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '14px' }}>
+                Create an account
+              </Link>
+            )}
+            <Link to="/capabilities" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: '14px' }}>
+              Guest vs account (live config)
             </Link>
           </div>
 

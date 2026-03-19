@@ -446,13 +446,25 @@ async def startup_event():
         import api.main as main_module
         auto_scan_scheduler = AutoScanScheduler(delay_seconds=45, check_interval_seconds=30)
         await auto_scan_scheduler.start()
-        # Store scheduler instance globally for shutdown
         main_module._auto_scan_scheduler = auto_scan_scheduler
         if setup_complete:
             logger.info("Auto-scan scheduler started")
     except Exception as e:
         if setup_complete:
             logger.error("Failed to start auto-scan scheduler", error=str(e), exc_info=True)
+
+    # Start target initial-scan scheduler (enqueues first scan after admin-configured delay)
+    try:
+        from domain.services.target_initial_scan_scheduler import TargetInitialScanScheduler
+        import api.main as main_module
+        target_initial_scheduler = TargetInitialScanScheduler(check_interval_seconds=30)
+        await target_initial_scheduler.start()
+        main_module._target_initial_scan_scheduler = target_initial_scheduler
+        if setup_complete:
+            logger.info("Target initial-scan scheduler started")
+    except Exception as e:
+        if setup_complete:
+            logger.error("Failed to start target initial-scan scheduler", error=str(e), exc_info=True)
 
 
 async def _re_enqueue_pending_scans():
@@ -527,8 +539,11 @@ async def shutdown_event():
         if hasattr(main_module, '_auto_scan_scheduler') and main_module._auto_scan_scheduler:
             await main_module._auto_scan_scheduler.stop()
             logger.info("Auto-scan scheduler stopped")
+        if hasattr(main_module, '_target_initial_scan_scheduler') and main_module._target_initial_scan_scheduler:
+            await main_module._target_initial_scan_scheduler.stop()
+            logger.info("Target initial-scan scheduler stopped")
     except Exception as e:
-        logger.error("Failed to stop auto-scan scheduler", error=str(e))
+        logger.error("Failed to stop schedulers", error=str(e))
     
     # Clean up services here
     # For example: close database connections, Redis connections, etc.

@@ -28,9 +28,11 @@ class UserService:
         """Get user by username."""
         return await self._repo.get_by_username(username)
 
-    async def list_all(self, limit: int = 500, offset: int = 0) -> List[User]:
-        """List all users (for admin)."""
-        return await self._repo.list_all(limit=limit, offset=offset)
+    async def list_all(
+        self, limit: int = 500, offset: int = 0, active_only: Optional[bool] = None
+    ) -> List[User]:
+        """List users (for admin). active_only: True=active, False=pending (awaiting approval), None=all."""
+        return await self._repo.list_all(limit=limit, offset=offset, active_only=active_only)
 
     async def create(self, user: User) -> User:
         """Create a new user."""

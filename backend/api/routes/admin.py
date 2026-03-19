@@ -30,7 +30,15 @@ from application.services.user_service import UserService
 from infrastructure.redis.client import get_redis_health
 from domain.services.audit_log_service import AuditLogService
 from domain.services.scanner_duration_service import ScannerDurationService
-from domain.services.target_permission_policy import ALL_SCAN_FEATURE_FLAG_KEYS
+from domain.services.target_permission_policy import (
+    ALL_SCAN_FEATURE_FLAG_KEYS,
+    ROLE_CAPABILITY_TARGET_TYPES,
+    ROLE_NAMES,
+)
+from domain.services.role_capabilities_merge import (
+    default_role_capabilities,
+    merge_role_capabilities_raw,
+)
 from datetime import datetime
 
 router = APIRouter(
@@ -105,6 +113,7 @@ def _default_execution_limits() -> Dict[str, Any]:
         "max_concurrent_scans_per_guest": 2,
         "rate_limit_admins": False,
         "max_scan_duration_seconds": 3600,
+        "initial_scan_delay_seconds": 300,  # Delay before auto-queuing first scan for new targets (default 5 min)
     }
 
 
@@ -132,10 +141,18 @@ class ScanEnforcementUpdate(BaseModel):
 
 
 class AuthConfigResponse(BaseModel):
-    """Auth config: AUTH_MODE = login mechanism; ACCESS_MODE = who may use the system; allow_self_registration; bulk_scan_allow_guests."""
+    """Auth config: AUTH_MODE = login mechanism; ACCESS_MODE = who may use the system; allow_self_registration; registration_approval; require_email_verification; bulk_scan_allow_guests."""
     auth_mode: str = Field(description="Authentication mode (login mechanism): free | basic | jwt")
     access_mode: str = Field(description="Who may use the system: public | mixed | private")
     allow_self_registration: bool = Field(description="Allow users to self-register (sign up)")
+    registration_approval: str = Field(
+        default="auto",
+        description="When self-registration is on: 'auto' = new users can log in immediately; 'admin_approval' = new users need admin to activate.",
+    )
+    require_email_verification: bool = Field(
+        default=False,
+        description="When enabled, users must verify their email (click link from sign-up mail) before they can log in.",
+    )
     bulk_scan_allow_guests: bool = Field(default=False, description="Allow guests to use bulk scan (admin override). Default: only logged-in users.")
 
 
@@ -144,7 +161,48 @@ class AuthConfigRequest(BaseModel):
     auth_mode: Optional[str] = Field(None, description="free | basic | jwt")
     access_mode: Optional[str] = Field(None, description="public | mixed | private")
     allow_self_registration: Optional[bool] = None
+    registration_approval: Optional[str] = Field(None, description="auto | admin_approval")
+    require_email_verification: Optional[bool] = Field(None, description="Require verified email to log in")
     bulk_scan_allow_guests: Optional[bool] = Field(None, description="Allow guests to use bulk scan (admin override)")
+
+
+# ---------------------------------------------------------------------------
+# Role capabilities (RBAC: allowed target types, scanners, My Targets per role)
+# Stored in SystemState.config["role_capabilities"]. See docs/ROLE_CAPABILITIES_SCHEMA.md.
+# ---------------------------------------------------------------------------
+
+class RoleCapabilityEntry(BaseModel):
+    """Per-role capabilities: which target types and scanners the role may use; whether My Targets is allowed."""
+    allowed_target_types: List[str] = Field(
+        default_factory=list,
+        description="Backend target type keys (e.g. git_repo, uploaded_code, container_registry). Empty = none allowed.",
+    )
+    allowed_scanner_tools_keys: List[str] = Field(
+        default_factory=list,
+        description="Scanner tools_key slugs (e.g. semgrep, trivy). Empty = no restriction (all scanners allowed).",
+    )
+    my_targets_allowed: bool = Field(
+        default=False,
+        description="Whether this role may use My Targets (create/list/delete own targets).",
+    )
+    my_targets_target_types: Optional[List[str]] = Field(
+        default=None,
+        description="If set, My Targets is restricted to these target types only; else allowed_target_types apply.",
+    )
+
+
+class RoleCapabilitiesResponse(BaseModel):
+    """Role capabilities for all roles. GET response and shape stored in config."""
+    guest: RoleCapabilityEntry = Field(default_factory=RoleCapabilityEntry)
+    user: RoleCapabilityEntry = Field(default_factory=RoleCapabilityEntry)
+    admin: RoleCapabilityEntry = Field(default_factory=RoleCapabilityEntry)
+
+
+class RoleCapabilitiesRequest(BaseModel):
+    """Request body for PUT /api/admin/config/role-capabilities. Same shape as response."""
+    guest: Optional[RoleCapabilityEntry] = None
+    user: Optional[RoleCapabilityEntry] = None
+    admin: Optional[RoleCapabilityEntry] = None
 
 
 class QueueConfigResponse(BaseModel):
@@ -302,6 +360,19 @@ async def put_scan_enforcement_config(
                             status_code=status.HTTP_400_BAD_REQUEST,
                             detail=f"{key} must be a positive integer or null",
                         )
+            # initial_scan_delay_seconds: 0 = immediate, or 60–86400 (1 min – 24 h)
+            delay = merged.get("initial_scan_delay_seconds")
+            if delay is not None:
+                try:
+                    d = int(delay)
+                    if d < 0 or d > 86400:
+                        raise ValueError()
+                    merged["initial_scan_delay_seconds"] = d
+                except (TypeError, ValueError):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="initial_scan_delay_seconds must be between 0 and 86400",
+                    )
             config["execution_limits"] = merged
         if body.policies is not None:
             pol = dict(_default_policies())
@@ -542,10 +613,15 @@ async def get_auth_config(
         if not isinstance(auth_cfg, dict):
             auth_cfg = {}
         am = state.auth_mode or config.get("AUTH_MODE", "free")
+        approval = auth_cfg.get("registration_approval") or "auto"
+        if approval not in ("auto", "admin_approval"):
+            approval = "auto"
         return AuthConfigResponse(
             auth_mode=am,
             access_mode=auth_cfg.get("access_mode") or ("public" if am == "free" else "private"),
             allow_self_registration=auth_cfg.get("allow_self_registration", False),
+            registration_approval=approval,
+            require_email_verification=auth_cfg.get("require_email_verification", False),
             bulk_scan_allow_guests=auth_cfg.get("bulk_scan_allow_guests", False),
         )
     except HTTPException:
@@ -586,6 +662,15 @@ async def update_auth_config(
             auth_cfg["access_mode"] = body.access_mode
         if body.allow_self_registration is not None:
             auth_cfg["allow_self_registration"] = body.allow_self_registration
+        if body.registration_approval is not None:
+            if body.registration_approval not in ("auto", "admin_approval"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="registration_approval must be 'auto' or 'admin_approval'",
+                )
+            auth_cfg["registration_approval"] = body.registration_approval
+        if body.require_email_verification is not None:
+            auth_cfg["require_email_verification"] = body.require_email_verification
         if body.bulk_scan_allow_guests is not None:
             auth_cfg["bulk_scan_allow_guests"] = body.bulk_scan_allow_guests
         config["auth"] = auth_cfg
@@ -599,14 +684,17 @@ async def update_auth_config(
             user_email=actor_context.email,
             action_type="AUTH_CONFIG_CHANGED",
             target="auth_config",
-            details={"access_mode": auth_cfg.get("access_mode"), "allow_self_registration": auth_cfg.get("allow_self_registration"), "bulk_scan_allow_guests": auth_cfg.get("bulk_scan_allow_guests"), "auth_mode": state.auth_mode},
+            details={"access_mode": auth_cfg.get("access_mode"), "allow_self_registration": auth_cfg.get("allow_self_registration"), "registration_approval": auth_cfg.get("registration_approval"), "require_email_verification": auth_cfg.get("require_email_verification"), "bulk_scan_allow_guests": auth_cfg.get("bulk_scan_allow_guests"), "auth_mode": state.auth_mode},
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("User-Agent")
         )
+        approval = auth_cfg.get("registration_approval") or "auto"
         return AuthConfigResponse(
             auth_mode=state.auth_mode,
             access_mode=auth_cfg.get("access_mode") or ("public" if state.auth_mode == "free" else "private"),
             allow_self_registration=auth_cfg.get("allow_self_registration", False),
+            registration_approval=approval,
+            require_email_verification=auth_cfg.get("require_email_verification", False),
             bulk_scan_allow_guests=auth_cfg.get("bulk_scan_allow_guests", False),
         )
     except HTTPException:
@@ -615,6 +703,122 @@ async def update_auth_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update auth config: {str(e)}"
+        )
+
+
+def _role_capability_entry_from_dict(data: Any) -> RoleCapabilityEntry:
+    """Build RoleCapabilityEntry from stored dict (with defaults for missing keys)."""
+    if not isinstance(data, dict):
+        return RoleCapabilityEntry()
+    return RoleCapabilityEntry(
+        allowed_target_types=list(data.get("allowed_target_types") or []),
+        allowed_scanner_tools_keys=list(data.get("allowed_scanner_tools_keys") or []),
+        my_targets_allowed=bool(data.get("my_targets_allowed", False)),
+        my_targets_target_types=data.get("my_targets_target_types"),
+    )
+
+
+def _validate_role_capability_entry(entry: RoleCapabilityEntry, role_name: str) -> None:
+    """Validate allowed_target_types and my_targets_target_types against ROLE_CAPABILITY_TARGET_TYPES."""
+    invalid = [t for t in entry.allowed_target_types if t not in ROLE_CAPABILITY_TARGET_TYPES]
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"role_capabilities.{role_name}.allowed_target_types: invalid types: {invalid}. Valid: {sorted(ROLE_CAPABILITY_TARGET_TYPES)}",
+        )
+    if entry.my_targets_target_types is not None:
+        invalid_mt = [t for t in entry.my_targets_target_types if t not in ROLE_CAPABILITY_TARGET_TYPES]
+        if invalid_mt:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"role_capabilities.{role_name}.my_targets_target_types: invalid types: {invalid_mt}. Valid: {sorted(ROLE_CAPABILITY_TARGET_TYPES)}",
+            )
+
+
+@router.get("/config/role-capabilities", response_model=RoleCapabilitiesResponse)
+async def get_role_capabilities(
+    actor_context: ActorContext = Depends(get_admin_user),
+    system_state_repo: SystemStateRepository = Depends(get_system_state_repository_dependency),
+) -> RoleCapabilitiesResponse:
+    """
+    Get role capabilities (allowed target types, scanners, My Targets per role).
+    Stored in SystemState.config["role_capabilities"]. Returns defaults for missing keys.
+    Requires admin privileges.
+    """
+    try:
+        state = await system_state_repo.get_singleton()
+        if not state:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System state not found")
+        config = state.config or {}
+        merged_by_role = merge_role_capabilities_raw(config)
+        out = {role: _role_capability_entry_from_dict(merged_by_role[role]) for role in ROLE_NAMES}
+        return RoleCapabilitiesResponse(**out)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get role capabilities: {str(e)}",
+        )
+
+
+@router.put("/config/role-capabilities", response_model=RoleCapabilitiesResponse)
+async def update_role_capabilities(
+    request: Request,
+    body: RoleCapabilitiesRequest,
+    actor_context: ActorContext = Depends(get_admin_user),
+    system_state_repo: SystemStateRepository = Depends(get_system_state_repository_dependency),
+) -> RoleCapabilitiesResponse:
+    """
+    Update role capabilities. Partial update: only provided roles are updated; others unchanged.
+    Requires admin privileges.
+    """
+    try:
+        state = await system_state_repo.get_singleton()
+        if not state:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System state not found")
+        config = dict(state.config or {})
+        raw = config.get("role_capabilities") or {}
+        if not isinstance(raw, dict):
+            raw = {}
+        defaults = default_role_capabilities()
+        # Merge current + defaults so we have full entries, then apply body
+        for role in ROLE_NAMES:
+            current = {**(defaults.get(role) or {}), **(raw.get(role) or {})}
+            entry = body.guest if role == "guest" else (body.user if role == "user" else body.admin)
+            if entry is not None:
+                _validate_role_capability_entry(entry, role)
+                raw[role] = {
+                    "allowed_target_types": entry.allowed_target_types,
+                    "allowed_scanner_tools_keys": entry.allowed_scanner_tools_keys,
+                    "my_targets_allowed": entry.my_targets_allowed,
+                    "my_targets_target_types": entry.my_targets_target_types,
+                }
+            else:
+                raw[role] = current
+        config["role_capabilities"] = raw
+        state.config = config
+        state.updated_at = datetime.utcnow()
+        await system_state_repo.save(state)
+        await AuditLogService.log_event(
+            user_id=actor_context.user_id,
+            user_email=actor_context.email,
+            action_type="ROLE_CAPABILITIES_CHANGED",
+            target="role_capabilities",
+            details={"roles_updated": [r for r in ROLE_NAMES if getattr(body, r) is not None]},
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("User-Agent"),
+        )
+        out = {}
+        for role in ROLE_NAMES:
+            out[role] = _role_capability_entry_from_dict(raw.get(role) or {})
+        return RoleCapabilitiesResponse(**out)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update role capabilities: {str(e)}",
         )
 
 
@@ -1093,16 +1297,22 @@ async def list_users(
     request: Request,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    status: Optional[str] = Query(None, description="Filter: all (default), active, pending (awaiting admin approval)"),
     actor_context: ActorContext = Depends(get_admin_user),
     user_service: UserService = Depends(lambda: get_user_service()),
 ) -> List[UserResponse]:
     """
-    List all users with pagination.
+    List users with pagination. Use status=pending to list users awaiting admin approval.
     
     Requires admin privileges.
     """
     try:
-        users = await user_service.list_all(limit=limit, offset=offset)
+        active_only = None
+        if status == "active":
+            active_only = True
+        elif status == "pending":
+            active_only = False
+        users = await user_service.list_all(limit=limit, offset=offset, active_only=active_only)
         await AuditLogService.log_event(
             user_id=actor_context.user_id,
             user_email=actor_context.email,

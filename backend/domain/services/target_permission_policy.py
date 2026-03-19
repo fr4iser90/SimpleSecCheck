@@ -77,6 +77,27 @@ FEATURE_FLAG_FOR_TARGET: Dict[str, str] = {
 # All flag keys used for scan-target checks (FEATURE_FLAG_FOR_TARGET values + ALLOW_LOCAL_CONTAINERS for container local case).
 ALL_SCAN_FEATURE_FLAG_KEYS: frozenset = frozenset(FEATURE_FLAG_FOR_TARGET.values()) | {"ALLOW_LOCAL_CONTAINERS"}
 
+# Role names for RBAC (guest, user, admin). Used by role_capabilities config.
+ROLE_NAMES: tuple = ("guest", "user", "admin")
+
+# Valid target type keys for role_capabilities.allowed_target_types (backend enum values; same as TARGET_PERMISSION_MAP).
+ROLE_CAPABILITY_TARGET_TYPES: frozenset = frozenset(TARGET_PERMISSION_MAP.keys())
+
+# Human-readable labels per backend target type (public capabilities / admin UI).
+TARGET_TYPE_DISPLAY_LABEL: Dict[str, str] = {
+    "git_repo": "Git repos",
+    "uploaded_code": "ZIP upload",
+    "local_mount": "Local paths",
+    "container_registry": "Remote containers",
+    "website": "Website",
+    "api_endpoint": "API endpoint",
+    "network_host": "Network host",
+    "kubernetes_cluster": "Kubernetes",
+    "apk": "APK",
+    "ipa": "IPA",
+    "openapi_spec": "OpenAPI spec",
+}
+
 # Frontend allowed_targets keys (single source for API response shape).
 _FLAG_TO_FRONTEND_KEY: Dict[str, str] = {
     "ALLOW_LOCAL_PATHS": "local_paths",
@@ -198,6 +219,29 @@ def get_allowed_targets_display(allow_flags: Dict[str, bool]) -> List[str]:
         for key in _ALLOWED_TARGETS_DISPLAY_ORDER
         if allowed.get(key, False)
     ]
+
+
+def effective_target_labels_for_role(
+    allowed_target_types_for_role: List[str],
+    allow_flags: Dict[str, bool],
+) -> List[str]:
+    """
+    Human-readable target labels a role may use, intersected with instance feature flags.
+    Types without a dedicated flag (e.g. apk) are included when listed for the role.
+    """
+    labels: List[str] = []
+    seen: Set[str] = set()
+    for tt in sorted(set(allowed_target_types_for_role)):
+        if tt not in TARGET_PERMISSION_MAP:
+            continue
+        flag_key = FEATURE_FLAG_FOR_TARGET.get(tt)
+        if flag_key and not allow_flags.get(flag_key, True):
+            continue
+        label = TARGET_TYPE_DISPLAY_LABEL.get(tt)
+        if label and label not in seen:
+            seen.add(label)
+            labels.append(label)
+    return labels
 
 
 def check_can_scan_target(

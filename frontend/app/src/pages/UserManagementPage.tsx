@@ -12,9 +12,12 @@ interface User {
   last_login: string | null
 }
 
+type ListFilter = 'all' | 'active' | 'pending'
+
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<ListFilter>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [formData, setFormData] = useState({
@@ -27,7 +30,11 @@ export default function UserManagementPage() {
   const loadUsers = async () => {
     setLoading(true)
     try {
-      const response = await apiFetch('/api/admin/users')
+      const params = new URLSearchParams()
+      if (filter === 'pending') params.set('status', 'pending')
+      if (filter === 'active') params.set('status', 'active')
+      const url = params.toString() ? `/api/admin/users?${params}` : '/api/admin/users'
+      const response = await apiFetch(url)
       if (response.ok) {
         const data = await response.json()
         setUsers(data)
@@ -41,7 +48,7 @@ export default function UserManagementPage() {
 
   useEffect(() => {
     loadUsers()
-  }, [])
+  }, [filter])
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -110,14 +117,54 @@ export default function UserManagementPage() {
     }
   }
 
+  const handleAccept = async (user: User) => {
+    try {
+      const response = await apiFetch(`/api/admin/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: true })
+      })
+      if (response.ok) {
+        loadUsers()
+      } else {
+        const error = await response.json()
+        alert(error.detail || 'Failed to activate user')
+      }
+    } catch (error) {
+      console.error('Failed to activate user:', error)
+      alert('Failed to activate user')
+    }
+  }
+
   return (
     <div className="container" style={{ padding: '2rem' }}>
-      <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1>User Management</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
             Manage user accounts, roles, and permissions
           </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ marginRight: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Show:</span>
+          {(['all', 'active', 'pending'] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={filter === f ? 'primary' : ''}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '6px',
+                border: filter === f ? 'none' : '1px solid var(--glass-border-dark)',
+                background: filter === f ? undefined : 'transparent',
+                cursor: 'pointer',
+                fontSize: '0.9rem'
+              }}
+            >
+              {f === 'all' ? 'All' : f === 'pending' ? 'Pending approval' : 'Active'}
+            </button>
+          ))}
         </div>
         <button className="primary" onClick={() => setShowCreateModal(true)}>
           + Create User
@@ -160,13 +207,21 @@ export default function UserManagementPage() {
                     </span>
                   </td>
                   <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
-                    {user.is_active ? 'Active' : 'Inactive'}
+                    {user.is_active ? 'Active' : <span style={{ color: 'var(--color-warning)' }}>Pending approval</span>}
                   </td>
                   <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
                     {new Date(user.created_at).toLocaleDateString()}
                   </td>
                   <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {!user.is_active && (
+                        <button
+                          onClick={() => handleAccept(user)}
+                          style={{ fontSize: '0.85rem', padding: '0.25rem 0.5rem', background: 'var(--color-pass)' }}
+                        >
+                          Accept
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setEditingUser(user)
@@ -180,7 +235,7 @@ export default function UserManagementPage() {
                         onClick={() => handleDelete(user.id)}
                         style={{ fontSize: '0.85rem', padding: '0.25rem 0.5rem', background: 'var(--color-critical)' }}
                       >
-                        Delete
+                        {user.is_active ? 'Delete' : 'Reject'}
                       </button>
                     </div>
                   </td>

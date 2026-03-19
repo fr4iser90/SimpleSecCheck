@@ -23,7 +23,9 @@ from domain.services.target_permission_policy import (
     get_allow_flags_from_settings,
     get_allowed_targets_for_frontend,
     get_allowed_targets_display,
+    effective_target_labels_for_role,
 )
+from domain.services.role_capabilities_merge import merge_role_capabilities_raw
 from infrastructure.logging_config import get_logger
 from infrastructure.container import get_scanner_repository, run_database_migrations
 from domain.repositories.scanner_repository import ScannerRepository
@@ -76,6 +78,33 @@ class FrontendConfigResponse(BaseModel):
     queue: Optional[Dict[str, Any]] = None
     rate_limits: Optional[Dict[str, Any]] = None
     scan_defaults: Optional[Dict[str, Any]] = None  # default_finding_policy_path, finding_policy_apply_by_default
+
+
+class RoleCapabilitiesSnapshot(BaseModel):
+    """Public snapshot for one role: effective capabilities on this instance."""
+    allowed_scan_targets: List[str] = Field(
+        description="Scan target types allowed (role config ∩ instance feature flags), human-readable labels",
+    )
+    my_targets: bool = Field(description="Whether this role may use My Targets (saved targets)")
+    bulk_scan: bool = Field(description="Whether bulk scan tab is available for this role")
+    scanner_access: str = Field(
+        description="all_enabled = any scanner the instance offers; limited = subset configured by admin",
+    )
+
+
+class PublicCapabilitiesAuthSnippet(BaseModel):
+    allow_self_registration: bool
+    login_required: bool
+    access_mode: str
+    auth_mode: str
+
+
+class PublicCapabilitiesResponse(BaseModel):
+    """Guest vs signed-in user capabilities for marketing / transparency (backend-driven)."""
+    guest: RoleCapabilitiesSnapshot
+    user: RoleCapabilitiesSnapshot
+    auth: PublicCapabilitiesAuthSnippet
+    help: str = Field(description="Short explanation for UI")
 
 
 async def _get_scanners_from_worker(scan_type: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -320,6 +349,62 @@ def _default_scan_defaults_for_config() -> Dict[str, Any]:
     }
 
 
+@config_router.get("/config/capabilities", response_model=PublicCapabilitiesResponse)
+async def get_public_capabilities(
+    system_state_repo: SystemStateRepository = Depends(get_system_state_repository_dependency),
+) -> PublicCapabilitiesResponse:
+    """
+    Public comparison: effective capabilities for guest (no login) vs signed-in user.
+    Merges role_capabilities from system config with instance feature flags.
+    """
+    try:
+        from config.settings import load_settings_from_database
+
+        settings = get_settings()
+        await load_settings_from_database(settings)
+        state = await system_state_repo.get_singleton()
+        cfg = state.config if state else None
+        merged = merge_role_capabilities_raw(cfg if isinstance(cfg, dict) else None)
+        allow_flags = get_allow_flags_from_settings(settings)
+        bulk_on = True  # matches features.bulk_scan in /api/config
+        bulk_guests = getattr(settings, "BULK_SCAN_ALLOW_GUESTS", False)
+
+        def _snapshot(role: str, is_guest: bool) -> RoleCapabilitiesSnapshot:
+            r = merged[role]
+            labels = effective_target_labels_for_role(r["allowed_target_types"], allow_flags)
+            keys = r.get("allowed_scanner_tools_keys") or []
+            scanner_access = "all_enabled" if not keys else "limited"
+            return RoleCapabilitiesSnapshot(
+                allowed_scan_targets=labels,
+                my_targets=bool(r.get("my_targets_allowed")),
+                bulk_scan=bulk_on and (not is_guest or bulk_guests),
+                scanner_access=scanner_access,
+            )
+
+        access_mode = getattr(settings, "ACCESS_MODE", "public")
+        return PublicCapabilitiesResponse(
+            guest=_snapshot("guest", True),
+            user=_snapshot("user", False),
+            auth=PublicCapabilitiesAuthSnippet(
+                allow_self_registration=getattr(settings, "ALLOW_SELF_REGISTRATION", False),
+                login_required=access_mode == "private",
+                access_mode=access_mode,
+                auth_mode=settings.AUTH_MODE.lower(),
+            ),
+            help=(
+                "Guest = using the app without an account. User = signed in. "
+                "Scan targets are the intersection of admin role settings and instance feature flags. "
+                "Admins may have additional options not shown here."
+            ),
+        )
+    except Exception as e:
+        logger.error("Failed to get public capabilities", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get capabilities: {str(e)}",
+        )
+
+
 @config_router.get("/config", response_model=FrontendConfigResponse)
 async def get_frontend_config(
     system_state_repo: SystemStateRepository = Depends(get_system_state_repository_dependency),
@@ -330,7 +415,9 @@ async def get_frontend_config(
     Uses dynamic settings - NO HARDCODING!
     """
     try:
+        from config.settings import load_settings_from_database
         settings = get_settings()
+        await load_settings_from_database(settings)
         scan_defaults = dict(_default_scan_defaults_for_config())
         try:
             state = await system_state_repo.get_singleton()
@@ -375,6 +462,7 @@ async def get_frontend_config(
             "metadata_collection": "optional",
             "zip_upload": settings.ALLOW_ZIP_UPLOAD,
             "scanner_assets_auto_update_enabled": getattr(settings, "SCANNER_ASSETS_AUTO_UPDATE_ENABLED", False),
+            "allow_self_registration": getattr(settings, "ALLOW_SELF_REGISTRATION", False),
         }
         # Allowed targets: from single source (target_permission_policy)
         _allow_flags = get_allow_flags_from_settings(settings)

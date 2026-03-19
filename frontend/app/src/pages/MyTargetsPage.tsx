@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import MessageBanner from '../components/MessageBanner'
 import TargetCard from '../components/TargetCard'
 import AddTargetModal from '../components/AddTargetModal'
@@ -13,6 +13,7 @@ import type { ScanTargetItem, AutoScanConfig } from '../hooks/useTargets'
 export default function MyTargetsPage() {
   const { targets, loading, loadTargets, triggerScan } = useTargets()
   const { config } = useConfig()
+  const [initialScanDelaySeconds, setInitialScanDelaySeconds] = useState<number>(300)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showDiscoverModal, setShowDiscoverModal] = useState(false)
@@ -35,6 +36,7 @@ export default function MyTargetsPage() {
     display_name?: string
     config: Record<string, unknown>
     auto_scan: AutoScanConfig
+    initial_scan_paused?: boolean
   }) => {
     const res = await apiFetch('/api/user/targets', {
       method: 'POST',
@@ -48,6 +50,21 @@ export default function MyTargetsPage() {
     loadTargets()
   }
 
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await apiFetch('/api/user/targets/initial-scan-config')
+        if (res.ok) {
+          const data = await res.json()
+          setInitialScanDelaySeconds(Number(data.initial_scan_delay_seconds) || 300)
+        }
+      } catch {
+        // keep default 300
+      }
+    }
+    load()
+  }, [])
+
   const handleUpdateTarget = async (
     targetId: string,
     payload: {
@@ -55,6 +72,7 @@ export default function MyTargetsPage() {
       config?: Record<string, unknown>
       auto_scan?: AutoScanConfig
       scanners?: string[]
+      initial_scan_paused?: boolean
     }
   ) => {
     const res = await apiFetch(`/api/user/targets/${targetId}`, {
@@ -77,6 +95,15 @@ export default function MyTargetsPage() {
       loadTargets()
     } else {
       showMessage('error', 'Failed to remove target')
+    }
+  }
+
+  const handlePauseInitialScan = async (targetId: string) => {
+    try {
+      await handleUpdateTarget(targetId, { initial_scan_paused: true })
+      showMessage('success', 'First scan paused. Edit scanners then click "Start first scan" when ready.')
+    } catch {
+      showMessage('error', 'Failed to pause')
     }
   }
 
@@ -223,7 +250,9 @@ export default function MyTargetsPage() {
             <TargetCard
               key={t.id}
               target={t}
+              initialScanDelaySeconds={initialScanDelaySeconds}
               onScanNow={handleScanNow}
+              onPauseInitialScan={handlePauseInitialScan}
               onEdit={setEditingTarget}
               onRemove={handleRemoveTarget}
               scanLoading={scanNowTargetId === t.id}

@@ -28,6 +28,7 @@ from infrastructure.repositories.scan_steps_repository import DatabaseScanStepsR
 from infrastructure.repositories.user_repository import DatabaseUserRepository
 from infrastructure.repositories.blocked_ip_repository import DatabaseBlockedIPRepository
 from infrastructure.repositories.password_reset_token_repository import DatabasePasswordResetTokenRepository
+from infrastructure.repositories.email_verification_token_repository import DatabaseEmailVerificationTokenRepository
 from infrastructure.repositories.audit_log_repository import DatabaseAuditLogRepository
 from infrastructure.repositories.scanner_duration_stats_repository import DatabaseScannerDurationStatsRepository
 from infrastructure.services.queue_service import QueueService
@@ -80,6 +81,12 @@ class Container(containers.DeclarativeContainer):
     )
     audit_log_repository = providers.Singleton(
         DatabaseAuditLogRepository
+    )
+    password_reset_token_repository = providers.Singleton(
+        DatabasePasswordResetTokenRepository
+    )
+    email_verification_token_repository = providers.Singleton(
+        DatabaseEmailVerificationTokenRepository
     )
     scanner_duration_stats_repository = providers.Singleton(
         DatabaseScannerDurationStatsRepository
@@ -202,6 +209,11 @@ def get_blocked_ip_repository():
 def get_password_reset_token_repository():
     """Get PasswordResetTokenRepository instance from container."""
     return container.password_reset_token_repository()
+
+
+def get_email_verification_token_repository():
+    """Get EmailVerificationTokenRepository instance from container."""
+    return container.email_verification_token_repository()
 
 
 def get_audit_log_repository():

@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     SESSION_SECRET: str = Field(description="Session secret (env SESSION_SECRET, no default)")
     # Auth config block (registration)
     ALLOW_SELF_REGISTRATION: bool = Field(default=False, description="Allow users to self-register (sign up)")
+    REGISTRATION_APPROVAL: str = Field(default="auto", description="When self-registration is on: 'auto' = new users active immediately; 'admin_approval' = new users need admin to activate")
+    REQUIRE_EMAIL_VERIFICATION: bool = Field(default=False, description="When True, users must verify their email before they can log in (admin setting)")
     
     # Feature Flags (granular control, set from use case or overridden in admin).
     # Keys must match domain.services.target_permission_policy.ALL_SCAN_FEATURE_FLAG_KEYS (single source of truth).
@@ -122,6 +124,9 @@ class Settings(BaseSettings):
     # Password Reset
     PASSWORD_RESET_TOKEN_EXPIRY_HOURS: int = Field(default=1, description="Password reset token expiry in hours")
 
+    # Email Verification (sign-up)
+    EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS: int = Field(default=24, description="Email verification token expiry in hours")
+
     @model_validator(mode="after")
     def set_login_required_from_access_mode(self) -> "Settings":
         """Keep LOGIN_REQUIRED in sync with ACCESS_MODE."""
@@ -156,6 +161,10 @@ async def load_settings_from_database(settings_instance: Settings) -> None:
                     settings_instance.ACCESS_MODE = "public" if (config.get("AUTH_MODE") or settings_instance.AUTH_MODE) == "free" else "private"
                 if "allow_self_registration" in auth_cfg:
                     settings_instance.ALLOW_SELF_REGISTRATION = auth_cfg["allow_self_registration"]
+                if "registration_approval" in auth_cfg and auth_cfg["registration_approval"] in ("auto", "admin_approval"):
+                    settings_instance.REGISTRATION_APPROVAL = auth_cfg["registration_approval"]
+                if "require_email_verification" in auth_cfg:
+                    settings_instance.REQUIRE_EMAIL_VERIFICATION = auth_cfg["require_email_verification"]
                 if "bulk_scan_allow_guests" in auth_cfg:
                     settings_instance.BULK_SCAN_ALLOW_GUESTS = auth_cfg["bulk_scan_allow_guests"]
             queue_cfg = config.get("queue") or {}

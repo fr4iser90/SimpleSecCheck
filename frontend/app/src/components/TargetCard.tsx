@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import type { ScanTargetItem } from '../hooks/useTargets'
 
@@ -31,17 +32,48 @@ const TYPE_ICONS: Record<string, string> = {
 
 interface TargetCardProps {
   target: ScanTargetItem
+  initialScanDelaySeconds?: number
   onScanNow: (targetId: string) => void
+  onPauseInitialScan?: (targetId: string) => void
   onEdit: (target: ScanTargetItem) => void
   onRemove: (targetId: string, label: string) => void
   scanLoading?: boolean
 }
 
-export default function TargetCard({ target, onScanNow, onEdit, onRemove, scanLoading }: TargetCardProps) {
+export default function TargetCard({
+  target,
+  initialScanDelaySeconds = 300,
+  onScanNow,
+  onPauseInitialScan,
+  onEdit,
+  onRemove,
+  scanLoading,
+}: TargetCardProps) {
   const label = target.display_name || target.source
   const typeLabel = TYPE_LABELS[target.type] || target.type
   const icon = TYPE_ICONS[target.type] || '🎯'
   const autoScanOn = target.auto_scan?.enabled && (target.auto_scan?.interval_seconds || target.auto_scan?.event)
+  const hasNoScanYet = !target.last_scan && !target.initial_scan_triggered_at
+  const [firstScanInSec, setFirstScanInSec] = useState<number | null>(null)
+  useEffect(() => {
+    if (!hasNoScanYet || target.initial_scan_paused || !target.created_at) {
+      setFirstScanInSec(null)
+      return
+    }
+    const run = () => {
+      const created = new Date(target.created_at!).getTime()
+      const due = created + initialScanDelaySeconds * 1000
+      const now = Date.now()
+      if (now >= due) {
+        setFirstScanInSec(0)
+        return
+      }
+      setFirstScanInSec(Math.ceil((due - now) / 1000))
+    }
+    run()
+    const t = setInterval(run, 1000)
+    return () => clearInterval(t)
+  }, [hasNoScanYet, target.initial_scan_paused, target.created_at, initialScanDelaySeconds])
 
   return (
     <div
@@ -105,6 +137,27 @@ export default function TargetCard({ target, onScanNow, onEdit, onRemove, scanLo
               })()}
             </div>
           )}
+          {hasNoScanYet && (
+            <div style={{ marginTop: '0.5rem', padding: '0.5rem', borderRadius: '6px', background: 'rgba(102, 126, 234, 0.12)', fontSize: '0.85rem', border: '1px solid rgba(102, 126, 234, 0.3)' }}>
+              {target.initial_scan_paused ? (
+                <span>First scan paused. Edit scanners above, then click <strong>Start first scan</strong> when ready.</span>
+              ) : firstScanInSec !== null ? (
+                <span>
+                  <strong>First scan:</strong>{' '}
+                  {firstScanInSec <= 0 ? 'queuing soon…' : `in ${Math.ceil(firstScanInSec / 60)} min`}
+                  {onPauseInitialScan && (
+                    <button
+                      type="button"
+                      onClick={() => onPauseInitialScan(target.id)}
+                      style={{ marginLeft: '0.5rem', fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+                    >
+                      Pause
+                    </button>
+                  )}
+                </span>
+              ) : null}
+            </div>
+          )}
           {target.scanners && target.scanners.length > 0 && (
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
               <strong>Scanners:</strong> {target.scanners.join(', ')}
@@ -159,7 +212,7 @@ export default function TargetCard({ target, onScanNow, onEdit, onRemove, scanLo
           onClick={() => onScanNow(target.id)}
           disabled={scanLoading}
         >
-          {scanLoading ? 'Starting…' : 'Scan now'}
+          {scanLoading ? 'Starting…' : hasNoScanYet && target.initial_scan_paused ? 'Start first scan' : 'Scan now'}
         </button>
         <button type="button" onClick={() => onEdit(target)}>
           Edit

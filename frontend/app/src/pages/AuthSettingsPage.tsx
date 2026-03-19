@@ -6,6 +6,8 @@ interface AuthConfig {
   auth_mode: 'free' | 'basic' | 'jwt'
   access_mode: 'public' | 'mixed' | 'private'
   allow_self_registration: boolean
+  registration_approval?: 'auto' | 'admin_approval'
+  require_email_verification?: boolean
   bulk_scan_allow_guests?: boolean
 }
 
@@ -16,6 +18,8 @@ export default function AuthSettingsPage() {
     auth_mode: 'free',
     access_mode: 'public',
     allow_self_registration: false,
+    registration_approval: 'auto',
+    require_email_verification: false,
     bulk_scan_allow_guests: false
   })
   const [loading, setLoading] = useState(true)
@@ -158,7 +162,39 @@ export default function AuthSettingsPage() {
                 Allow self-registration (sign up)
               </label>
               <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
-                Users can create their own account. If off, only admins can create users. Requires SMTP for verification/password reset if you use email verification later.
+                Users can create their own account. If off, only admins can create users. SMTP is used for password reset and (optional) verification emails.
+              </small>
+            </div>
+            {config.allow_self_registration && (
+              <div className="form-group" style={{ marginTop: '1rem' }}>
+                <label htmlFor="registration_approval">New user approval</label>
+                <select
+                  id="registration_approval"
+                  name="registration_approval"
+                  value={config.registration_approval ?? 'auto'}
+                  onChange={handleChange}
+                >
+                  <option value="auto">Auto accept — New users can log in immediately</option>
+                  <option value="admin_approval">Admin approval only — New users wait in User Management until you activate them</option>
+                </select>
+                <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
+                  With “Admin approval only”, new sign-ups appear under User Management → Pending approval. Use Accept to activate them.
+                </small>
+              </div>
+            )}
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  name="require_email_verification"
+                  checked={config.require_email_verification ?? false}
+                  onChange={handleChange}
+                  style={{ cursor: 'pointer' }}
+                />
+                Require email verification to log in
+              </label>
+              <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
+                When enabled, users must click the verification link from the sign-up email before they can sign in. Only applies if you send verification emails (SMTP configured).
               </small>
             </div>
           </div>

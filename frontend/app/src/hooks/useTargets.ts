@@ -33,6 +33,9 @@ export interface ScanTargetItem {
   last_scan?: LastScanSummary | null
   /** ISO datetime when next interval scan is due (null if not auto-interval or no last scan). */
   next_scan_at?: string | null
+  initial_scan_paused?: boolean
+  /** ISO datetime when initial scan was enqueued (null if not yet). */
+  initial_scan_triggered_at?: string | null
 }
 
 export function useTargets(targetType?: string | null) {

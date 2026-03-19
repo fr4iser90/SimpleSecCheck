@@ -13,6 +13,7 @@ import hashlib
 from api.deps.actor_context import get_authenticated_user, ActorContext
 from infrastructure.container import (
     get_scan_target_service,
+    get_system_state_repository,
     get_user_service,
     get_api_key_service,
     get_github_repo_service,
@@ -1003,6 +1004,7 @@ class ScanTargetCreateRequest(BaseModel):
     auto_scan: Optional[Dict[str, Any]] = Field(default_factory=dict)
     config: Optional[Dict[str, Any]] = Field(default_factory=dict)
     scanners: Optional[List[str]] = Field(default=None, description="Scanner names for this target; empty/None = use defaults")
+    initial_scan_paused: Optional[bool] = Field(default=False, description="If True, do not auto-queue first scan; user starts it manually")
 
 
 class ScanTargetUpdateRequest(BaseModel):
@@ -1011,6 +1013,7 @@ class ScanTargetUpdateRequest(BaseModel):
     auto_scan: Optional[Dict[str, Any]] = None
     config: Optional[Dict[str, Any]] = None
     scanners: Optional[List[str]] = None
+    initial_scan_paused: Optional[bool] = None
 
 
 class LastScanSummary(BaseModel):
@@ -1039,6 +1042,8 @@ class ScanTargetResponse(BaseModel):
     scanners: List[str] = []
     last_scan: Optional[LastScanSummary] = None
     next_scan_at: Optional[str] = None  # ISO datetime when next interval scan is due (null if not auto-interval)
+    initial_scan_paused: bool = False
+    initial_scan_triggered_at: Optional[str] = None  # ISO datetime when initial scan was enqueued (null if not yet)
 
 
 def _last_scan_to_summary(scan_row: Any) -> Optional[LastScanSummary]:
@@ -1058,6 +1063,15 @@ def _last_scan_to_summary(scan_row: Any) -> Optional[LastScanSummary]:
     )
 
 
+def _initial_scan_flags(config: Dict[str, Any]) -> tuple:
+    """Return (initial_scan_paused, initial_scan_triggered_at) from target config."""
+    if not isinstance(config, dict):
+        return False, None
+    paused = config.get("initial_scan_paused")
+    triggered = config.get("initial_scan_triggered_at")
+    return bool(paused), str(triggered) if triggered else None
+
+
 def _next_scan_at(auto_scan: Dict[str, Any], last_summary: Optional[LastScanSummary]) -> Optional[str]:
     """Compute next scan time for interval-based auto_scan. Returns ISO datetime or None."""
     if not auto_scan or not auto_scan.get("enabled") or auto_scan.get("mode") != "interval":
@@ -1074,6 +1088,27 @@ def _next_scan_at(auto_scan: Dict[str, Any], last_summary: Optional[LastScanSumm
         return None
     next_at = completed + timedelta(seconds=int(interval_seconds))
     return next_at.isoformat()
+
+
+@router.get("/targets/initial-scan-config")
+async def get_targets_initial_scan_config(
+    actor_context: ActorContext = Depends(get_authenticated_user),
+) -> Dict[str, Any]:
+    """Return config for initial scan delay (so UI can show countdown). Authenticated users only."""
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    try:
+        state_repo = get_system_state_repository()
+        state = await state_repo.get_singleton()
+        limits = (state.config or {}).get("execution_limits") or {}
+        delay = limits.get("initial_scan_delay_seconds", 300)
+        try:
+            delay = int(delay)
+        except (TypeError, ValueError):
+            delay = 300
+        return {"initial_scan_delay_seconds": max(0, min(86400, delay))}
+    except Exception:
+        return {"initial_scan_delay_seconds": 300}
 
 
 @router.get("/targets", response_model=List[ScanTargetResponse])
@@ -1122,6 +1157,8 @@ async def list_scan_targets(
             scanners=_scanners_for_target(t),
             last_scan=_last_scan_to_summary(latest_by_url.get(t.source)),
             next_scan_at=_next_scan_at(t.auto_scan.to_dict(), _last_scan_to_summary(latest_by_url.get(t.source))),
+            initial_scan_paused=_initial_scan_flags(t.config)[0],
+            initial_scan_triggered_at=_initial_scan_flags(t.config)[1],
         )
         for t in targets
     ]
@@ -1143,6 +1180,8 @@ async def create_scan_target(
     config = dict(body.config or {})
     if body.scanners is not None:
         config["scanners"] = body.scanners
+    if body.initial_scan_paused is not None:
+        config["initial_scan_paused"] = body.initial_scan_paused
     try:
         created = await scan_target_service.create_target(
             actor_context.user_id,
@@ -1172,16 +1211,7 @@ async def create_scan_target(
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("User-Agent"),
     )
-    # Enqueue one initial scan so the new target gets a first run without waiting for interval
-    try:
-        await scan_target_service.trigger_scan(
-            created.id,
-            actor_context.user_id,
-            metadata_extra={"trigger": "initial_scan"},
-        )
-    except Exception as e:
-        import logging
-        logging.getLogger("api.user").warning("Initial scan enqueue failed for target %s: %s", created.id, e)
+    # Initial scan is enqueued by TargetInitialScanScheduler after initial_scan_delay_seconds (admin-configurable)
     from domain.services.target_scan_helper import get_default_scanner_names_for_target_type
     _custom = created.config.get("scanners") if isinstance(created.config, dict) else None
     _scanners = _custom if isinstance(_custom, list) else await get_default_scanner_names_for_target_type(created.type)
@@ -1198,6 +1228,8 @@ async def create_scan_target(
         scanners=_scanners,
         last_scan=None,
         next_scan_at=None,
+        initial_scan_paused=_initial_scan_flags(created.config)[0],
+        initial_scan_triggered_at=None,
     )
 
 
@@ -1232,6 +1264,8 @@ async def get_scan_target(
         scanners=_scanners,
         last_scan=_last,
         next_scan_at=_next_scan_at(target.auto_scan.to_dict(), _last),
+        initial_scan_paused=_initial_scan_flags(target.config)[0],
+        initial_scan_triggered_at=_initial_scan_flags(target.config)[1],
     )
 
 
@@ -1255,11 +1289,13 @@ async def update_scan_target(
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
 
-    if body.config is not None or body.scanners is not None:
+    if body.config is not None or body.scanners is not None or body.initial_scan_paused is not None:
         handler = get_target_handler(target.type)
         config_to_validate = dict(body.config if body.config is not None else target.config)
         if body.scanners is not None:
             config_to_validate["scanners"] = body.scanners
+        if body.initial_scan_paused is not None:
+            config_to_validate["initial_scan_paused"] = body.initial_scan_paused
         if handler:
             target.config = handler.validate_config(config_to_validate)
     if body.auto_scan is not None:
@@ -1295,6 +1331,8 @@ async def update_scan_target(
         scanners=_scanners,
         last_scan=_last,
         next_scan_at=_next_scan_at(updated.auto_scan.to_dict(), _last),
+        initial_scan_paused=_initial_scan_flags(updated.config)[0],
+        initial_scan_triggered_at=_initial_scan_flags(updated.config)[1],
     )
 
 

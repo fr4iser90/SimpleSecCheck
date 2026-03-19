@@ -11,6 +11,7 @@ export interface FrontendConfig {
     metadata_collection: 'always' | 'optional'
     zip_upload: boolean
     scanner_assets_auto_update_enabled: boolean
+    allow_self_registration?: boolean
   }
   scan_types: {
     [key: string]: {

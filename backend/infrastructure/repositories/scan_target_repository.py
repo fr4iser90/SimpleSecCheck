@@ -112,6 +112,33 @@ class DatabaseScanTargetRepository(ScanTargetRepository):
                     break
         return out
 
+    async def list_pending_initial_scan(
+        self, created_before: datetime, limit: int = 100
+    ) -> List[ScanTarget]:
+        """List targets created before given time that have not yet had initial scan enqueued and are not paused."""
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            q = (
+                select(UserScanTarget)
+                .where(UserScanTarget.created_at < created_before)
+                .order_by(UserScanTarget.created_at.asc())
+                .limit(limit * 2)
+            )
+            r = await session.execute(q)
+            rows = r.scalars().all()
+        out = []
+        for m in rows:
+            t = _model_to_entity(m)
+            cfg = t.config or {}
+            if cfg.get("initial_scan_triggered_at"):
+                continue
+            if cfg.get("initial_scan_paused"):
+                continue
+            out.append(t)
+            if len(out) >= limit:
+                break
+        return out
+
     async def update(self, target: ScanTarget) -> ScanTarget:
         await self.db_adapter.ensure_initialized()
         async with self.db_adapter.async_session() as session:

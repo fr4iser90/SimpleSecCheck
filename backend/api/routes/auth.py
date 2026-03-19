@@ -4,9 +4,13 @@ Authentication API Routes
 This module defines the FastAPI routes for authentication operations.
 Supports both JWT authentication and guest session management.
 """
+import hashlib
+import secrets
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
 
 from api.deps.actor_context import (
@@ -76,6 +80,26 @@ class SessionInfo(BaseModel):
     expires_at: Optional[str] = Field(None, description="Session expiration time (ISO UTC)")
 
 
+class RegisterRequest(BaseModel):
+    """Schema for self-registration."""
+    email: EmailStr = Field(description="User email address")
+    username: str = Field(min_length=2, max_length=100, description="Username")
+    password: str = Field(min_length=8, max_length=128, description="Password")
+
+
+class RegisterResponse(BaseModel):
+    """Schema for registration response."""
+    message: str = Field(description="Success or info message")
+    requires_approval: bool = Field(
+        default=False,
+        description="If True, user must wait for admin to activate account before logging in.",
+    )
+    verification_email_sent: bool = Field(
+        default=False,
+        description="If True, a verification email was sent; user should check inbox and click the link.",
+    )
+
+
 router = APIRouter(
     prefix="/api/v1/auth",
     tags=["authentication"],
@@ -139,6 +163,20 @@ async def login(
                 detail="Invalid email or password",
             )
 
+        # Require verified email to log in when admin has enabled the setting (admins are exempt)
+        from config.settings import load_settings_from_database
+        from domain.entities.user import UserRole
+        await load_settings_from_database(settings)
+        if (
+            getattr(settings, "REQUIRE_EMAIL_VERIFICATION", False)
+            and user.role != UserRole.ADMIN
+            and not user.is_verified
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please verify your email address before logging in. Check your inbox for the verification link.",
+            )
+
         await user_service.update_last_login(user.id)
 
         user_id = user.id
@@ -179,6 +217,154 @@ async def login(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Login failed: {str(e)}",
         )
+
+
+@router.post(
+    "/register",
+    response_model=RegisterResponse,
+    summary="Self-register",
+    description="Create a new user account when self-registration is enabled.",
+)
+async def register(
+    body: RegisterRequest,
+    user_service: UserService = Depends(get_user_service_dependency),
+) -> RegisterResponse:
+    """
+    Self-registration. Requires ALLOW_SELF_REGISTRATION. New user is_active depends on
+    REGISTRATION_APPROVAL: 'auto' = can log in immediately; 'admin_approval' = must wait for admin.
+    """
+    from config.settings import get_settings, load_settings_from_database
+    from api.services.password_service import PasswordService
+    from domain.entities.user import User, UserRole
+
+    s = get_settings()
+    await load_settings_from_database(s)
+    if not s.ALLOW_SELF_REGISTRATION:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Self-registration is disabled. Contact an administrator.",
+        )
+    if await user_service.get_by_email(body.email, active_only=False):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email already exists.",
+        )
+    if await user_service.get_by_username(body.username):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already taken.",
+        )
+    approval = getattr(s, "REGISTRATION_APPROVAL", "auto") or "auto"
+    if approval not in ("auto", "admin_approval"):
+        approval = "auto"
+    is_active = approval == "auto"
+    password_service = PasswordService()
+    new_user = User(
+        email=body.email,
+        username=body.username.strip(),
+        password_hash=password_service.hash_password(body.password),
+        role=UserRole.USER,
+        is_active=is_active,
+        is_verified=False,
+    )
+    await user_service.create(new_user)
+
+    # Create email verification token and send verification email if SMTP enabled
+    expiry_hours = getattr(s, "EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS", 24)
+    from infrastructure.container import get_email_verification_token_repository
+    from domain.entities.email_verification_token import EmailVerificationToken
+    from api.services.email_service import EmailService
+
+    plain_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(plain_token.encode()).hexdigest()
+    created_at = datetime.utcnow()
+    expires_at = created_at + timedelta(hours=expiry_hours)
+    token_entity = EmailVerificationToken(
+        id="",
+        user_id=new_user.id,
+        token_hash=token_hash,
+        created_at=created_at,
+        expires_at=expires_at,
+        used_at=None,
+    )
+    token_repo = get_email_verification_token_repository()
+    await token_repo.create(token_entity)
+    email_service = EmailService()
+    verification_sent = False
+    if email_service.is_enabled():
+        verify_url = email_service.get_verify_email_url(plain_token)
+        verification_sent = await email_service.send_verification_email(
+            to_email=body.email,
+            verify_url=verify_url,
+            expiry_hours=expiry_hours,
+        )
+
+    return RegisterResponse(
+        message="Account created. You can log in." if is_active else "Account created. An administrator must approve your account before you can log in.",
+        requires_approval=not is_active,
+        verification_email_sent=verification_sent,
+    )
+
+
+class VerifyEmailResponse(BaseModel):
+    """Response after email verification."""
+    message: str = Field(description="Status message")
+    verified: bool = Field(description="Whether the email was verified successfully")
+
+
+@router.get(
+    "/verify-email",
+    response_model=VerifyEmailResponse,
+    summary="Verify email",
+    description="Verify user email using token from verification email. Redirects to login on success if redirect=true.",
+)
+async def verify_email(
+    token: Optional[str] = None,
+    redirect: bool = True,
+    user_service: UserService = Depends(get_user_service_dependency),
+) -> VerifyEmailResponse | RedirectResponse:
+    """
+    Verify email address using token sent after sign-up.
+    If token is valid and not expired, sets user is_verified=True and marks token used.
+    """
+    from infrastructure.container import get_email_verification_token_repository
+
+    if not token or len(token) < 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or missing verification token.",
+        )
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    token_repo = get_email_verification_token_repository()
+    token_entity = await token_repo.get_by_token_hash(token_hash)
+    if not token_entity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token.",
+        )
+    if datetime.utcnow() > token_entity.expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification token has expired.",
+        )
+    user = await user_service.get_by_id(token_entity.user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+    user.is_verified = True
+    user.updated_at = datetime.utcnow()
+    await user_service.update(user)
+    token_entity.used_at = datetime.utcnow()
+    await token_repo.update(token_entity)
+    if redirect:
+        base_url = getattr(settings, "FRONTEND_BASE_URL", None) or "http://localhost:8080"
+        return RedirectResponse(url=f"{base_url}/login?verified=1", status_code=302)
+    return VerifyEmailResponse(
+        message="Email verified successfully. You can now log in.",
+        verified=True,
+    )
 
 
 @router.post(

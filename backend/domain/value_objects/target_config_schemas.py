@@ -15,6 +15,8 @@ class GitTargetConfig(BaseModel):
     """Config for target_type=git_repo."""
     branch: str = Field(default="main", description="Branch to scan")
     scanners: Optional[List[str]] = Field(default=None, description="Scanner names to run; empty/None = use defaults")
+    initial_scan_paused: bool = Field(default=False, description="If True, do not auto-queue first scan until user starts it")
+    initial_scan_triggered_at: Optional[str] = Field(default=None, description="ISO datetime when initial scan was enqueued (set by scheduler)")
     # auth_token: optional, stored separately/encrypted in real impl
 
 
@@ -22,6 +24,8 @@ class ContainerTargetConfig(BaseModel):
     """Config for target_type=container_registry."""
     tag: str = Field(default="latest", description="Image tag")
     scanners: Optional[List[str]] = Field(default=None, description="Scanner names to run; empty/None = use defaults")
+    initial_scan_paused: bool = Field(default=False, description="If True, do not auto-queue first scan until user starts it")
+    initial_scan_triggered_at: Optional[str] = Field(default=None, description="ISO datetime when initial scan was enqueued (set by scheduler)")
     # registry inferred from source (docker.io, ghcr.io, etc.)
 
 
@@ -29,6 +33,8 @@ class LocalTargetConfig(BaseModel):
     """Config for target_type=local_mount. Admin-only; allowlist enforced elsewhere."""
     path: str = Field(..., description="Absolute path on host (subject to allowlist)")
     scanners: Optional[List[str]] = Field(default=None, description="Scanner names to run; empty/None = use defaults")
+    initial_scan_paused: bool = Field(default=False, description="If True, do not auto-queue first scan until user starts it")
+    initial_scan_triggered_at: Optional[str] = Field(default=None, description="ISO datetime when initial scan was enqueued (set by scheduler)")
 
 
 # Registry: target_type -> config model class (for validate_config)

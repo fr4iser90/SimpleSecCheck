@@ -76,6 +76,7 @@ export default function ExecutionSettingsPage() {
     max_concurrent_scans_per_user: '',
     max_concurrent_scans_per_guest: '',
     max_scan_duration_seconds: '3600',
+    initial_scan_delay_seconds: '300',
     rate_limit_admins: false,
   })
 
@@ -118,6 +119,7 @@ export default function ExecutionSettingsPage() {
             ? el.max_scan_duration_seconds
             : 3600,
         ),
+        initial_scan_delay_seconds: numOrEmpty(el.initial_scan_delay_seconds) || '300',
         rate_limit_admins: Boolean(el.rate_limit_admins),
       })
     } catch {
@@ -257,6 +259,10 @@ export default function ExecutionSettingsPage() {
       if (!Number.isFinite(maxWall) || maxWall < 300 || maxWall > 86400) {
         throw new Error('Max scan duration must be 300–86400 seconds')
       }
+      const delaySec = parseInt(enforceForm.initial_scan_delay_seconds, 10)
+      if (!Number.isFinite(delaySec) || delaySec < 0 || delaySec > 86400) {
+        throw new Error('Initial scan delay must be 0–86400 seconds (0 = as soon as scheduler runs)')
+      }
       const execution_limits = {
         max_scans_per_hour_global: parseLimit(enforceForm.max_scans_per_hour_global),
         max_scans_per_hour_per_user: parseLimit(enforceForm.max_scans_per_hour_per_user),
@@ -266,6 +272,7 @@ export default function ExecutionSettingsPage() {
         max_concurrent_scans_per_user: parseLimit(enforceForm.max_concurrent_scans_per_user),
         max_concurrent_scans_per_guest: parseLimit(enforceForm.max_concurrent_scans_per_guest),
         max_scan_duration_seconds: maxWall,
+        initial_scan_delay_seconds: delaySec,
         rate_limit_admins: enforceForm.rate_limit_admins,
       }
       const response = await apiFetch('/api/admin/config/scan-enforcement', {
@@ -684,6 +691,21 @@ export default function ExecutionSettingsPage() {
                 />
                 <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
                   Worker stops the scanner container after this many seconds (300–86400). New jobs only.
+                </small>
+              </div>
+              <div className="form-group">
+                <label>Initial scan delay (seconds)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={86400}
+                  value={enforceForm.initial_scan_delay_seconds}
+                  onChange={(e) =>
+                    setEnforceForm((p) => ({ ...p, initial_scan_delay_seconds: e.target.value }))
+                  }
+                />
+                <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
+                  Delay before the first scan is auto-queued for new targets (0–86400). Default 300 (5 min). Users can pause per target.
                 </small>
               </div>
               <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

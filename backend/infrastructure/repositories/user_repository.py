@@ -83,12 +83,17 @@ class DatabaseUserRepository(UserRepository):
             m = r.scalar_one_or_none()
             return _model_to_entity(m) if m else None
 
-    async def list_all(self, limit: int = 500, offset: int = 0) -> List[User]:
+    async def list_all(
+        self, limit: int = 500, offset: int = 0, active_only: Optional[bool] = None
+    ) -> List[User]:
         await self.db_adapter.ensure_initialized()
         async with self.db_adapter.async_session() as session:
-            r = await session.execute(
-                select(UserModel).order_by(UserModel.created_at.desc()).limit(limit).offset(offset)
-            )
+            q = select(UserModel).order_by(UserModel.created_at.desc()).limit(limit).offset(offset)
+            if active_only is True:
+                q = q.where(UserModel.is_active == True)
+            elif active_only is False:
+                q = q.where(UserModel.is_active == False)
+            r = await session.execute(q)
             return [_model_to_entity(m) for m in r.scalars().all()]
 
     async def create(self, user: User) -> User:

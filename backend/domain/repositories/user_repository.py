@@ -26,8 +26,10 @@ class UserRepository(ABC):
         pass
 
     @abstractmethod
-    async def list_all(self, limit: int = 500, offset: int = 0) -> List[User]:
-        """List all users (e.g. for admin). Order by created_at desc."""
+    async def list_all(
+        self, limit: int = 500, offset: int = 0, active_only: Optional[bool] = None
+    ) -> List[User]:
+        """List users (e.g. for admin). Order by created_at desc. active_only: True=active, False=pending, None=all."""
         pass
 
     @abstractmethod

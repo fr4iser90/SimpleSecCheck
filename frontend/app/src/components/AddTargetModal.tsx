@@ -11,6 +11,7 @@ interface AddTargetModalProps {
     display_name?: string
     config: Record<string, unknown>
     auto_scan: AutoScanConfig
+    initial_scan_paused?: boolean
   }) => Promise<void>
   allowedTargets: Record<string, boolean> | null
 }
@@ -34,6 +35,7 @@ export default function AddTargetModal({
   const [tag, setTag] = useState('latest')
   const [autoScanEnabled, setAutoScanEnabled] = useState(false)
   const [intervalSeconds, setIntervalSeconds] = useState('21600')
+  const [initialScanPaused, setInitialScanPaused] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -65,6 +67,7 @@ export default function AddTargetModal({
           interval_seconds: autoScanEnabled ? parseInt(intervalSeconds, 10) || 21600 : undefined,
           event: null,
         },
+        initial_scan_paused: initialScanPaused,
       })
       setSource('')
       setDisplayName('')
@@ -72,6 +75,7 @@ export default function AddTargetModal({
       setTag('latest')
       setAutoScanEnabled(false)
       setIntervalSeconds('21600')
+      setInitialScanPaused(false)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add target')
@@ -159,6 +163,16 @@ export default function AddTargetModal({
                 onChange={(e) => setAutoScanEnabled(e.target.checked)}
               />
               Auto-scan (interval)
+            </label>
+          </div>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={initialScanPaused}
+                onChange={(e) => setInitialScanPaused(e.target.checked)}
+              />
+              Pause first scan (edit scanners before first run)
             </label>
           </div>
           {autoScanEnabled && (

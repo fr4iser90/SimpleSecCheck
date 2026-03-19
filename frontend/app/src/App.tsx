@@ -11,6 +11,9 @@ import MyScansPage from './pages/MyScansPage'
 import StatisticsPage from './pages/StatisticsPage'
 import SetupWizard from './pages/SetupWizard'
 import LoginPage from './pages/LoginPage'
+import SignUpPage from './pages/SignUpPage'
+import VerifyEmailPage from './pages/VerifyEmailPage'
+import CapabilitiesPage from './pages/CapabilitiesPage'
 import PasswordResetPage from './pages/PasswordResetPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import AdminSettingsPage from './pages/AdminSettingsPage'
@@ -100,6 +103,9 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignUpPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/capabilities" element={<CapabilitiesPage />} />
       <Route path="/password-reset" element={<PasswordResetPage />} />
       <Route path="/" element={
         <ProtectedRoute>

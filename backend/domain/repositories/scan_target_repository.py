@@ -3,7 +3,10 @@ ScanTarget Repository Interface
 
 Single source of truth for user-saved targets (My Targets).
 """
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import List, Optional
 
 from domain.entities.scan_target import ScanTarget
@@ -36,6 +39,13 @@ class ScanTargetRepository(ABC):
     @abstractmethod
     async def list_with_auto_scan_interval(self, limit: int = 500) -> List[ScanTarget]:
         """List all targets that have auto_scan.enabled and mode=interval (for scheduler)."""
+        pass
+
+    @abstractmethod
+    async def list_pending_initial_scan(
+        self, created_before: "datetime", limit: int = 100
+    ) -> List[ScanTarget]:
+        """List targets created before given time that have not yet had initial scan enqueued and are not paused."""
         pass
 
     @abstractmethod
