@@ -79,6 +79,14 @@ export default function ExecutionSettingsPage() {
     rate_limit_admins: false,
   })
 
+  const [scanDefaultsLoading, setScanDefaultsLoading] = useState(true)
+  const [scanDefaultsSaving, setScanDefaultsSaving] = useState(false)
+  const [scanDefaultsSuccess, setScanDefaultsSuccess] = useState<string | null>(null)
+  const [scanDefaultsForm, setScanDefaultsForm] = useState({
+    default_finding_policy_path: '.scanning/finding-policy.json',
+    finding_policy_apply_by_default: true,
+  })
+
   const loadOverview = useCallback(async () => {
     try {
       setOverviewError(null)
@@ -119,11 +127,29 @@ export default function ExecutionSettingsPage() {
     }
   }
 
+  const loadScanDefaults = async () => {
+    try {
+      setScanDefaultsLoading(true)
+      const r = await apiFetch('/api/admin/config/scan-defaults')
+      if (!r.ok) throw new Error('Failed to load scan defaults')
+      const data = await r.json()
+      setScanDefaultsForm({
+        default_finding_policy_path: data.default_finding_policy_path ?? '.scanning/finding-policy.json',
+        finding_policy_apply_by_default: data.finding_policy_apply_by_default ?? true,
+      })
+    } catch {
+      /* non-fatal */
+    } finally {
+      setScanDefaultsLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!isAuthenticated) return
     void loadJobs()
     void loadQueue()
     void loadEnforcement()
+    void loadScanDefaults()
   }, [isAuthenticated])
 
   useEffect(() => {
@@ -259,6 +285,30 @@ export default function ExecutionSettingsPage() {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
       setEnforceSaving(false)
+    }
+  }
+
+  const saveScanDefaults = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setScanDefaultsSuccess(null)
+    setScanDefaultsSaving(true)
+    try {
+      const r = await apiFetch('/api/admin/config/scan-defaults', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(scanDefaultsForm),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        throw new Error((err as { detail?: string }).detail || 'Failed to save')
+      }
+      setScanDefaultsSuccess('Saved. New scans will use this default for the Finding Policy field.')
+      await loadScanDefaults()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save scan defaults')
+    } finally {
+      setScanDefaultsSaving(false)
     }
   }
 
@@ -657,6 +707,73 @@ export default function ExecutionSettingsPage() {
               <div style={{ marginTop: '1rem' }}>
                 <button type="submit" className="btn-primary" disabled={enforceSaving}>
                   {enforceSaving ? 'Saving…' : 'Save enforcement limits'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        <div
+          className="settings-section"
+          style={{
+            marginTop: '2rem',
+            padding: '1.25rem',
+            border: '1px solid var(--glass-border-dark)',
+            borderRadius: 12,
+            background: 'var(--glass-bg-dark)',
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>Scan form defaults (Finding Policy)</h3>
+          <p className="section-description" style={{ marginBottom: '1rem' }}>
+            When users start a scan, the &quot;Finding Policy (optional)&quot; field can be pre-filled so the policy
+            is applied automatically. Set the default path and whether to apply it by default.
+          </p>
+          {scanDefaultsLoading ? (
+            <p style={{ color: 'var(--text-secondary)' }}>Loading…</p>
+          ) : (
+            <form onSubmit={saveScanDefaults} className="settings-form">
+              <div className="form-group">
+                <label htmlFor="default_finding_policy_path">Default finding policy path</label>
+                <input
+                  id="default_finding_policy_path"
+                  type="text"
+                  value={scanDefaultsForm.default_finding_policy_path}
+                  onChange={(e) =>
+                    setScanDefaultsForm((p) => ({
+                      ...p,
+                      default_finding_policy_path: e.target.value,
+                    }))
+                  }
+                  placeholder=".scanning/finding-policy.json"
+                />
+                <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
+                  Relative path in the repo (e.g. .scanning/finding-policy.json). Used when &quot;Apply by default&quot; is on.
+                </small>
+              </div>
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input
+                  id="finding_policy_apply_by_default"
+                  type="checkbox"
+                  checked={scanDefaultsForm.finding_policy_apply_by_default}
+                  onChange={(e) =>
+                    setScanDefaultsForm((p) => ({
+                      ...p,
+                      finding_policy_apply_by_default: e.target.checked,
+                    }))
+                  }
+                />
+                <label htmlFor="finding_policy_apply_by_default" style={{ margin: 0 }}>
+                  Apply finding policy by default (pre-fill and send path in new scans)
+                </label>
+              </div>
+              {scanDefaultsSuccess && (
+                <div className="success-message" role="status" style={{ marginTop: '0.75rem' }}>
+                  {scanDefaultsSuccess}
+                </div>
+              )}
+              <div style={{ marginTop: '1rem' }}>
+                <button type="submit" className="btn-primary" disabled={scanDefaultsSaving}>
+                  {scanDefaultsSaving ? 'Saving…' : 'Save scan form defaults'}
                 </button>
               </div>
             </form>

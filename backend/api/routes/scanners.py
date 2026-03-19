@@ -14,6 +14,8 @@ from api.deps.actor_context import get_actor_context, ActorContext
 import httpx
 
 from config.settings import get_settings
+from api.routes.admin import get_system_state_repository_dependency
+from domain.repositories.system_state_repository import SystemStateRepository
 from domain.services.target_permission_policy import (
     DANGEROUS_TARGETS,
     TARGET_SECURITY_LEVEL,
@@ -73,6 +75,7 @@ class FrontendConfigResponse(BaseModel):
     permissions: Dict[str, Any]  # RBAC: dangerous_targets, target_security_level, target_permission_map
     queue: Optional[Dict[str, Any]] = None
     rate_limits: Optional[Dict[str, Any]] = None
+    scan_defaults: Optional[Dict[str, Any]] = None  # default_finding_policy_path, finding_policy_apply_by_default
 
 
 async def _get_scanners_from_worker(scan_type: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -310,8 +313,17 @@ async def start_asset_update(
     )
 
 
+def _default_scan_defaults_for_config() -> Dict[str, Any]:
+    return {
+        "default_finding_policy_path": ".scanning/finding-policy.json",
+        "finding_policy_apply_by_default": True,
+    }
+
+
 @config_router.get("/config", response_model=FrontendConfigResponse)
-async def get_frontend_config():
+async def get_frontend_config(
+    system_state_repo: SystemStateRepository = Depends(get_system_state_repository_dependency),
+):
     """
     Get frontend configuration from settings.
     
@@ -319,6 +331,13 @@ async def get_frontend_config():
     """
     try:
         settings = get_settings()
+        scan_defaults = dict(_default_scan_defaults_for_config())
+        try:
+            state = await system_state_repo.get_singleton()
+            if state and state.config and state.config.get("scan_defaults"):
+                scan_defaults.update(state.config["scan_defaults"])
+        except Exception:
+            pass
         
         # Build scan types with metadata (backend-driven, no hardcoding!)
         scan_types_config = {
@@ -387,7 +406,8 @@ async def get_frontend_config():
             allowed_targets_display=allowed_targets_display,
             permissions=permissions,
             queue=queue,
-            rate_limits=rate_limits
+            rate_limits=rate_limits,
+            scan_defaults=scan_defaults,
         )
         
     except Exception as e:

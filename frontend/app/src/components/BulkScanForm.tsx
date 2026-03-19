@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useConfig } from '../hooks/useConfig'
 import RateLimitIndicator from './RateLimitIndicator'
 import RepositorySelector, { Repository } from './RepositorySelector'
 
@@ -9,6 +10,10 @@ interface BulkScanFormProps {
 type InputMethod = 'github' | 'urls'
 
 export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
+  const { config } = useConfig()
+  const defaultFindingPolicyPath = config?.scan_defaults?.default_finding_policy_path ?? '.scanning/finding-policy.json'
+  const applyFindingPolicyByDefault = config?.scan_defaults?.finding_policy_apply_by_default ?? true
+
   const [scanType, setScanType] = useState<'code' | 'image' | 'website' | 'network'>('code')
   const [inputMethod, setInputMethod] = useState<InputMethod>('github')
   const [githubUsername, setGithubUsername] = useState('')
@@ -18,7 +23,7 @@ export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set())
   const [urlsText, setUrlsText] = useState('')
   const [gitBranch, setGitBranch] = useState('')
-  const [findingPolicy, setFindingPolicy] = useState('')
+  const [findingPolicy, setFindingPolicy] = useState(applyFindingPolicyByDefault ? defaultFindingPolicyPath : '')
   const [collectMetadata, setCollectMetadata] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -300,7 +305,7 @@ export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
           type="text"
           value={findingPolicy}
           onChange={(e) => setFindingPolicy(e.target.value)}
-          placeholder=".scanning/finding-policy.json"
+          placeholder={defaultFindingPolicyPath}
         />
         <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
           Path to finding policy file (relative to each repository root)

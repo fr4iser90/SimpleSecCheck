@@ -116,6 +116,14 @@ def _default_policies() -> Dict[str, Any]:
     }
 
 
+def _default_scan_defaults() -> Dict[str, Any]:
+    """Default for scan form: finding policy path and whether to apply by default."""
+    return {
+        "default_finding_policy_path": ".scanning/finding-policy.json",
+        "finding_policy_apply_by_default": True,
+    }
+
+
 class ScanEnforcementUpdate(BaseModel):
     """Partial update for scan rate limits, max duration, and policies."""
 
@@ -329,6 +337,77 @@ async def put_scan_enforcement_config(
         pl = dict(_default_policies())
         pl.update(pol)
         return {"execution_limits": el, "policies": pl}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+class ScanDefaultsResponse(BaseModel):
+    """Scan form defaults: finding policy path and whether to apply by default."""
+    default_finding_policy_path: str = Field(description="Default path for finding policy file (e.g. .scanning/finding-policy.json)")
+    finding_policy_apply_by_default: bool = Field(description="If True, scan form pre-fills and sends this path so the policy is applied automatically.")
+
+
+class ScanDefaultsRequest(BaseModel):
+    """Request to update scan form defaults."""
+    default_finding_policy_path: Optional[str] = Field(None, max_length=500)
+    finding_policy_apply_by_default: Optional[bool] = None
+
+
+@router.get("/config/scan-defaults", response_model=ScanDefaultsResponse)
+async def get_scan_defaults(
+    actor_context: ActorContext = Depends(get_admin_user),
+    system_state_repo: SystemStateRepository = Depends(get_system_state_repository_dependency),
+) -> ScanDefaultsResponse:
+    """Get scan form defaults (admin). Used by Execution Settings and by frontend config."""
+    try:
+        state = await system_state_repo.get_singleton()
+        defaults = dict(_default_scan_defaults())
+        if state and state.config:
+            defaults.update(state.config.get("scan_defaults") or {})
+        return ScanDefaultsResponse(
+            default_finding_policy_path=defaults.get("default_finding_policy_path", ".scanning/finding-policy.json"),
+            finding_policy_apply_by_default=defaults.get("finding_policy_apply_by_default", True),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.put("/config/scan-defaults", response_model=ScanDefaultsResponse)
+async def put_scan_defaults(
+    body: ScanDefaultsRequest,
+    actor_context: ActorContext = Depends(get_admin_user),
+    system_state_repo: SystemStateRepository = Depends(get_system_state_repository_dependency),
+) -> ScanDefaultsResponse:
+    """Update scan form defaults (admin)."""
+    try:
+        state = await system_state_repo.get_singleton()
+        if not state:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System state not found")
+        config = dict(state.config or {})
+        scan_defaults = dict(config.get("scan_defaults") or _default_scan_defaults())
+        if body.default_finding_policy_path is not None:
+            path = (body.default_finding_policy_path or "").strip() or ".scanning/finding-policy.json"
+            scan_defaults["default_finding_policy_path"] = path[:500]
+        if body.finding_policy_apply_by_default is not None:
+            scan_defaults["finding_policy_apply_by_default"] = body.finding_policy_apply_by_default
+        config["scan_defaults"] = scan_defaults
+        state.config = config
+        state.updated_at = datetime.utcnow()
+        await system_state_repo.save(state)
+        return ScanDefaultsResponse(
+            default_finding_policy_path=scan_defaults["default_finding_policy_path"],
+            finding_policy_apply_by_default=scan_defaults["finding_policy_apply_by_default"],
+        )
     except HTTPException:
         raise
     except Exception as e:

@@ -88,7 +88,9 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
     target_url: string
   } | null>(null)
   const [loadingTargetType, setLoadingTargetType] = useState(false)
-  const [findingPolicy, setFindingPolicy] = useState('')
+  const defaultFindingPolicyPath = config?.scan_defaults?.default_finding_policy_path ?? '.scanning/finding-policy.json'
+  const applyFindingPolicyByDefault = config?.scan_defaults?.finding_policy_apply_by_default ?? true
+  const [findingPolicy, setFindingPolicy] = useState(applyFindingPolicyByDefault ? defaultFindingPolicyPath : '')
   const [collectMetadata, setCollectMetadata] = useState(metadataCollection === 'always')
   const [selectedScanners, setSelectedScanners] = useState<string[]>([])
   const [scanners, setScanners] = useState<any[]>([])
@@ -678,7 +680,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
           value={findingPolicy}
           onChange={(e) => setFindingPolicy(e.target.value)}
           onBlur={(e) => setFindingPolicy(e.target.value.trim())} // Auto-trim on blur
-          placeholder=".scanning/finding-policy.json"
+          placeholder={defaultFindingPolicyPath}
         />
       </div>
 

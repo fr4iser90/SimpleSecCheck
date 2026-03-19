@@ -48,6 +48,11 @@ export interface FrontendConfig {
     scans_per_session: number
     requests_per_session: number
   } | null
+  /** Scan form defaults (finding policy path and whether to apply by default). */
+  scan_defaults?: {
+    default_finding_policy_path: string
+    finding_policy_apply_by_default: boolean
+  }
 }
 
 export function useConfig() {
