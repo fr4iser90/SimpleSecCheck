@@ -128,7 +128,7 @@ export default function ScanView() {
       }
 
       fetchQueueStatus()
-      const interval = setInterval(fetchQueueStatus, 3000) // Poll every 3 seconds
+      const interval = setInterval(fetchQueueStatus, 6000) // Poll every 6 seconds
       return () => clearInterval(interval)
     }
   }, [status.scan_id, status.status])

@@ -3,6 +3,8 @@ uploads/*
 logs/*
 .env
 .vscode/
+traefik.yml
+
 
 scanner/plugins/*/data/*
 scanner/plugins/*/cache/*

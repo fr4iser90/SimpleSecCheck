@@ -30,7 +30,7 @@ export default function Header() {
       try {
         const { apiFetch } = await import('../utils/apiClient')
         const running = await apiFetch(
-          '/api/v1/scans?status=running&limit=1&sort_by=created_at&sort_order=desc'
+          '/api/v1/scans/?status=running&limit=1&sort_by=created_at&sort_order=desc'
         )
         if (!running.ok || cancelled) return
         const runs = await running.json()
@@ -40,7 +40,7 @@ export default function Header() {
         }
         if (!scanId) {
           const pend = await apiFetch(
-            '/api/v1/scans?status=pending&limit=1&sort_by=created_at&sort_order=desc'
+            '/api/v1/scans/?status=pending&limit=1&sort_by=created_at&sort_order=desc'
           )
           if (!pend.ok || cancelled) return
           const ps = await pend.json()

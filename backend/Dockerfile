@@ -47,5 +47,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD gosu backend python -c "import requests; requests.get('http://localhost:8080/api/health', timeout=5)"
 
 # Start command
-CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port 8080"]
+# Trust X-Forwarded-Proto from nginx/Traefik so redirects use https:// in Location
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips='*'"]
 
