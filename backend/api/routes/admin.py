@@ -443,12 +443,12 @@ async def get_admin_system_health(
     redis_h: Dict[str, Any] = {}
     try:
         db_h = await get_database_health()
-    except Exception as e:
-        db_h = {"status": False, "error": str(e)[:300]}
+    except Exception:
+        db_h = {"status": False, "error": "Unavailable"}
     try:
         redis_h = await get_redis_health()
-    except Exception as e:
-        redis_h = {"status": False, "error": str(e)[:300]}
+    except Exception:
+        redis_h = {"status": False, "error": "Unavailable"}
 
     worker_url = (os.getenv("WORKER_API_URL") or "http://worker:8081").rstrip("/")
     worker: Dict[str, Any] = {"url": worker_url, "reachable": False}
@@ -457,8 +457,8 @@ async def get_admin_system_health(
             r = await client.get(f"{worker_url}/api/scanners/")
             worker["reachable"] = r.status_code < 500
             worker["http_status"] = r.status_code
-    except Exception as e:
-        worker["error"] = str(e)[:300]
+    except Exception:
+        worker["error"] = "Unavailable"
 
     overall = (
         "healthy"

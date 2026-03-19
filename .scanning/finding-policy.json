@@ -61,15 +61,21 @@
             },
             {
                 "rule_id": "dockerfile.security.missing-user-entrypoint.missing-user-entrypoint",
-                "path_regex": ".*/(scanner|worker)/Dockerfile$",
+                "path_regex": ".*/(scanner|worker|backend)/Dockerfile$",
                 "message_regex": "By not specifying a USER",
-                "reason": "USER is intentionally not set so the entrypoint runs as root for one-time setup (chown, usermod, groupadd). The process then drops to non-root (scanner/worker) via gosu. Industry-standard pattern for images that need runtime permission and UID/GID setup."
+                "reason": "USER is intentionally not set so the entrypoint runs as root for one-time setup (chown, usermod, groupadd). The process then drops to non-root (scanner/worker/backend) via gosu. Industry-standard pattern for images that need runtime permission and UID/GID setup."
             },
             {
                 "rule_id": "dockerfile.security.missing-user.missing-user",
-                "path_regex": ".*/(scanner|worker)/Dockerfile$",
+                "path_regex": ".*/(scanner|worker|backend)/Dockerfile$",
                 "message_regex": "By not specifying a USER",
-                "reason": "USER is intentionally not set so the entrypoint runs as root for one-time setup (chown, usermod, groupadd). The process then drops to non-root (scanner/worker) via gosu. Industry-standard pattern for images that need runtime permission and UID/GID setup."
+                "reason": "USER is intentionally not set so the entrypoint runs as root for one-time setup (chown, usermod, groupadd). The process then drops to non-root (scanner/worker/backend) via gosu. Industry-standard pattern for images that need runtime permission and UID/GID setup."
+            },
+            {
+                "rule_id": "generic.nginx.security.missing-internal.missing-internal",
+                "path_regex": ".*/frontend/nginx\\.conf$",
+                "message_regex": "proxy_pass|internal directive|missing-internal|SSRF",
+                "reason": "The /api/ location must be publicly reachable so the SPA can call the backend. proxy_pass target is fixed (backend:8080); no user-controlled URL. Adding 'internal' would block legitimate client requests. SSRF risk mitigated by fixed upstream."
             }
         ]
     },
@@ -178,6 +184,12 @@
                 "reason": "Plugin/processor discovery skips modules that fail to load; intentional and safe."
             },
             {
+                "rule_id": "B112",
+                "path_regex": ".*/worker/domain/job_execution/services/result_processing_service\\.py$",
+                "message_regex": "Try, Except, Continue detected",
+                "reason": "Parsing step timestamps from structured scan results (steps.log); skipping malformed or invalid date entries is intentional. No security-sensitive data; errors are non-fatal for duration stats."
+            },
+            {
                 "rule_id": "B310",
                 "path_regex": ".*/scanner/plugins/sonarqube/scanner\\.py$",
                 "message_regex": "Audit url open for permitted schemes",
@@ -231,9 +243,9 @@
         "accepted_findings": [
             {
                 "rule_id": "py/stack-trace-exposure",
-                "path_regex": "(.*/)?(backend/api/health\\.py|backend/api/middleware/setup_middleware\\.py)$",
+                "path_regex": "(.*/)?(backend/api/health\\.py|backend/api/middleware/setup_middleware\\.py|backend/api/routes/admin\\.py)$",
                 "message_regex": "Stack trace.*may be exposed",
-                "reason": "Only exception message str(e) is included in HTTPException detail, not full stack trace. Acceptable for health/setup error responses."
+                "reason": "Only exception message str(e) is included in HTTPException detail or health response, not full stack trace. Admin health now uses generic 'Unavailable'; this entry covers any residual tool reports."
             },
             {
                 "rule_id": "py/weak-sensitive-data-hashing",
@@ -252,6 +264,12 @@
                 "path_regex": "(.*/)?backend/api/routes/scans\\.py$",
                 "message_regex": "path depends on.*user-provided",
                 "reason": "scan_id is server-issued (UUID from scan creation); path is under results_dir and validated by scan service. No arbitrary path traversal."
+            },
+            {
+                "rule_id": "py/path-injection",
+                "path_regex": "(.*/)?backend/api/routes/results\\.py$",
+                "message_regex": "path depends on.*user-provided|user-provided value",
+                "reason": "scan_id is validated by get_scan_by_id (404 if missing) and can_read_scan_results (403 if denied). Path is RESULTS_DIR/scan_id/summary/summary.html; no path traversal. UUID from server-issued scan."
             }
         ]
     },
