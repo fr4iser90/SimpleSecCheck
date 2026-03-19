@@ -89,6 +89,28 @@ export default function FeatureFlagsPage() {
     setFlags({ ...flags, [key]: !flags[key] })
   }
 
+  /** Set policy: allow all target types (all flags on). */
+  const allowAllTargets = () => {
+    setFlags(
+      FEATURE_FLAG_ORDER.reduce((acc, key) => ({ ...acc, [key]: true }), {} as FeatureFlags)
+    )
+  }
+
+  /** Set policy: only safe targets (Git repos + ZIP upload). */
+  const safeTargetsOnly = () => {
+    setFlags({
+      ALLOW_LOCAL_PATHS: false,
+      ALLOW_WEBSITE_SCANS: false,
+      ALLOW_API_ENDPOINT_SCANS: false,
+      ALLOW_NETWORK_HOST_SCANS: false,
+      ALLOW_KUBERNETES_CLUSTER_SCANS: false,
+      ALLOW_REMOTE_CONTAINERS: false,
+      ALLOW_LOCAL_CONTAINERS: false,
+      ALLOW_GIT_REPOS: true,
+      ALLOW_ZIP_UPLOAD: true
+    })
+  }
+
   const flagDescriptions: Record<keyof FeatureFlags, { name: string, description: string; targets?: string; useCaseDefault?: string }> = {
     ALLOW_LOCAL_PATHS: {
       name: 'Local Paths',
@@ -151,7 +173,7 @@ export default function FeatureFlagsPage() {
       <div style={{ marginBottom: '2rem' }}>
         <h1>Feature Flags</h1>
         <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-          Granular control over which target types are allowed in the system
+          Allowed targets depend on this policy. Toggle individual target types or use a preset below.
         </p>
       </div>
 
@@ -177,6 +199,44 @@ export default function FeatureFlagsPage() {
           borderRadius: '8px',
           border: '1px solid var(--glass-border-dark)'
         }}>
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            marginBottom: '1.5rem',
+            paddingBottom: '1.5rem',
+            borderBottom: '1px solid var(--glass-border-dark)'
+          }}>
+            <span style={{ color: 'var(--text-secondary)', alignSelf: 'center', marginRight: '0.5rem' }}>Policy presets:</span>
+            <button
+              type="button"
+              onClick={allowAllTargets}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '6px',
+                border: '1px solid var(--glass-border-dark)',
+                background: 'rgba(255, 255, 255, 0.05)',
+                color: 'var(--text-dark)',
+                cursor: 'pointer'
+              }}
+            >
+              Allow all targets
+            </button>
+            <button
+              type="button"
+              onClick={safeTargetsOnly}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '6px',
+                border: '1px solid var(--glass-border-dark)',
+                background: 'rgba(255, 255, 255, 0.05)',
+                color: 'var(--text-dark)',
+                cursor: 'pointer'
+              }}
+            >
+              Safe targets only (Git + ZIP)
+            </button>
+          </div>
           {FEATURE_FLAG_ORDER.map((key) => (
             <div
               key={key}

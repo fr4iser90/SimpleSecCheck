@@ -254,7 +254,7 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
           <ProfilePage />
         </ProtectedRoute>
       } />
-      <Route path="/my-repos" element={
+      <Route path="/my-targets" element={
         <ProtectedRoute>
           <Header />
           <MyReposPage />

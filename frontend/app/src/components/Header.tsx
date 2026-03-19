@@ -155,8 +155,8 @@ export default function Header() {
           </Link>
         )}
         {isAuthenticated && (
-          <Link to="/my-repos" className="nav-pill">
-            My Repos
+          <Link to="/my-targets" className="nav-pill">
+            My Targets
           </Link>
         )}
         <Link to="/statistics" className="nav-pill">
@@ -241,8 +241,8 @@ export default function Header() {
               <Link to="/profile" className="dropdown-item" onClick={() => setShowUserMenu(false)}>
                 Profile
               </Link>
-              <Link to="/my-repos" className="dropdown-item" onClick={() => setShowUserMenu(false)}>
-                My GitHub Repos
+              <Link to="/my-targets" className="dropdown-item" onClick={() => setShowUserMenu(false)}>
+                My Targets
               </Link>
               <Link to="/api-keys" className="dropdown-item" onClick={() => setShowUserMenu(false)}>
                 API Keys

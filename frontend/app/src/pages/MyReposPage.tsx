@@ -208,9 +208,9 @@ export default function MyReposPage() {
     <div className="container" style={{ padding: '2rem' }}>
       <div style={{ marginBottom: '2rem' }}>
         <div>
-          <h1>My GitHub Repos</h1>
+          <h1>My Targets</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-            Manage your GitHub repositories with automatic scanning
+            Manage your scan targets and automatic scanning
           </p>
         </div>
       </div>

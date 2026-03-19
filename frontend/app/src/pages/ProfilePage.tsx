@@ -224,7 +224,7 @@ export default function ProfilePage() {
               <a href="/api-keys" style={{ color: 'var(--text-dark)', textDecoration: 'none' }}>
                 → Manage API Keys
               </a>
-              <a href="/my-repos" style={{ color: 'var(--text-dark)', textDecoration: 'none' }}>
+              <a href="/my-targets" style={{ color: 'var(--text-dark)', textDecoration: 'none' }}>
                 → My GitHub Repos
               </a>
               <a href="/my-scans" style={{ color: 'var(--text-dark)', textDecoration: 'none' }}>
