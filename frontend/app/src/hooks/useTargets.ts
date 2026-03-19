@@ -65,6 +65,10 @@ export function useTargets(targetType?: string | null) {
 
   useEffect(() => {
     loadTargets()
+    const t = setInterval(() => {
+      void loadTargets()
+    }, 10000)
+    return () => clearInterval(t)
   }, [targetType ?? ''])
 
   const triggerScan = async (targetId: string): Promise<{ success: boolean; scan_id?: string; error?: string }> => {

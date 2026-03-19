@@ -40,6 +40,17 @@ interface TargetCardProps {
   scanLoading?: boolean
 }
 
+function formatClock(date: Date): string {
+  return date.toLocaleString()
+}
+
+function formatMMSS(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds))
+  const m = Math.floor(s / 60)
+  const rem = s % 60
+  return `${m}:${String(rem).padStart(2, '0')}`
+}
+
 export default function TargetCard({
   target,
   initialScanDelaySeconds = 300,
@@ -53,27 +64,30 @@ export default function TargetCard({
   const typeLabel = TYPE_LABELS[target.type] || target.type
   const icon = TYPE_ICONS[target.type] || '🎯'
   const autoScanOn = target.auto_scan?.enabled && (target.auto_scan?.interval_seconds || target.auto_scan?.event)
-  const hasNoScanYet = !target.last_scan && !target.initial_scan_triggered_at
-  const [firstScanInSec, setFirstScanInSec] = useState<number | null>(null)
+  const hasNoScanYet = !target.last_scan
+  const [nowMs, setNowMs] = useState<number>(Date.now())
+
   useEffect(() => {
-    if (!hasNoScanYet || target.initial_scan_paused || !target.created_at) {
-      setFirstScanInSec(null)
-      return
-    }
-    const run = () => {
-      const created = new Date(target.created_at!).getTime()
-      const due = created + initialScanDelaySeconds * 1000
-      const now = Date.now()
-      if (now >= due) {
-        setFirstScanInSec(0)
-        return
-      }
-      setFirstScanInSec(Math.ceil((due - now) / 1000))
-    }
-    run()
-    const t = setInterval(run, 1000)
+    const t = setInterval(() => setNowMs(Date.now()), 1000)
     return () => clearInterval(t)
-  }, [hasNoScanYet, target.initial_scan_paused, target.created_at, initialScanDelaySeconds])
+  }, [])
+
+  const createdMs = target.created_at ? new Date(target.created_at).getTime() : NaN
+  const dueMs = Number.isNaN(createdMs) ? NaN : createdMs + initialScanDelaySeconds * 1000
+  const triggeredAt = target.initial_scan_triggered_at
+    ? new Date(target.initial_scan_triggered_at)
+    : null
+  const hasTriggered = Boolean(triggeredAt && !Number.isNaN(triggeredAt.getTime()))
+  const isDueKnown = !Number.isNaN(dueMs)
+  const secondsUntilDue = isDueKnown ? Math.ceil((dueMs - nowMs) / 1000) : null
+  const secondsPastDue = isDueKnown ? Math.max(0, Math.ceil((nowMs - dueMs) / 1000)) : null
+
+  const firstScanStatusBadge = (() => {
+    if (target.initial_scan_paused) return { text: 'Paused', color: 'rgba(173, 181, 189, 0.2)', border: 'rgba(173, 181, 189, 0.45)' }
+    if (hasTriggered) return { text: 'Queued', color: 'rgba(25, 135, 84, 0.2)', border: 'rgba(25, 135, 84, 0.45)' }
+    if (secondsUntilDue !== null && secondsUntilDue > 0) return { text: 'Auto-queue pending', color: 'rgba(13, 110, 253, 0.2)', border: 'rgba(13, 110, 253, 0.45)' }
+    return { text: 'Due, waiting for scheduler', color: 'rgba(255, 193, 7, 0.2)', border: 'rgba(255, 193, 7, 0.45)' }
+  })()
 
   return (
     <div
@@ -139,12 +153,52 @@ export default function TargetCard({
           )}
           {hasNoScanYet && (
             <div style={{ marginTop: '0.5rem', padding: '0.5rem', borderRadius: '6px', background: 'rgba(102, 126, 234, 0.12)', fontSize: '0.85rem', border: '1px solid rgba(102, 126, 234, 0.3)' }}>
+              <div style={{ marginBottom: '0.35rem' }}>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    padding: '0.12rem 0.45rem',
+                    borderRadius: '999px',
+                    fontSize: '0.72rem',
+                    background: firstScanStatusBadge.color,
+                    border: `1px solid ${firstScanStatusBadge.border}`,
+                    color: 'var(--text-dark)',
+                  }}
+                >
+                  {firstScanStatusBadge.text}
+                </span>
+              </div>
               {target.initial_scan_paused ? (
                 <span>First scan paused. Edit scanners above, then click <strong>Start first scan</strong> when ready.</span>
-              ) : firstScanInSec !== null ? (
+              ) : hasTriggered ? (
                 <span>
-                  <strong>First scan:</strong>{' '}
-                  {firstScanInSec <= 0 ? 'queuing soon…' : `in ${Math.ceil(firstScanInSec / 60)} min`}
+                  <strong>First scan:</strong> queued at {formatClock(triggeredAt!)}
+                  {onPauseInitialScan && (
+                    <button
+                      type="button"
+                      onClick={() => onPauseInitialScan(target.id)}
+                      style={{ marginLeft: '0.5rem', fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+                    >
+                      Pause
+                    </button>
+                  )}
+                </span>
+              ) : isDueKnown && secondsUntilDue !== null && secondsUntilDue > 0 ? (
+                <span>
+                  <strong>First scan:</strong> in {formatMMSS(secondsUntilDue)} (at {formatClock(new Date(dueMs))})
+                  {onPauseInitialScan && (
+                    <button
+                      type="button"
+                      onClick={() => onPauseInitialScan(target.id)}
+                      style={{ marginLeft: '0.5rem', fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+                    >
+                      Pause
+                    </button>
+                  )}
+                </span>
+              ) : isDueKnown && secondsPastDue !== null ? (
+                <span>
+                  <strong>First scan:</strong> due since {formatMMSS(secondsPastDue)} (target enqueue time was {formatClock(new Date(dueMs))})
                   {onPauseInitialScan && (
                     <button
                       type="button"
