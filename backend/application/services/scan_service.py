@@ -6,6 +6,7 @@ This service coordinates between use cases, repositories, and infrastructure.
 """
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+import logging
 
 from domain.entities.scan import Scan, ScanStatus, ScanType
 from domain.value_objects.scan_config import ScanConfig
@@ -17,6 +18,11 @@ from domain.exceptions.scan_exceptions import (
     ScanValidationException,
 )
 from application.services.scan_enforcement import enforce_scan_creation
+from infrastructure.container import get_system_state_repository
+from domain.services.finding_policy_defaults import (
+    DEFAULT_FINDING_POLICY_APPLY_BY_DEFAULT,
+    DEFAULT_FINDING_POLICY_PATH,
+)
 
 from application.use_cases.start_scan_use_case import StartScanUseCase
 from application.use_cases.process_result_use_case import ProcessResultUseCase
@@ -28,6 +34,9 @@ from application.dtos.request_dto import (
     ScanFilterDTO,
     CancelScanRequestDTO
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class ScanService:
@@ -60,6 +69,7 @@ class ScanService:
     ) -> ScanDTO:
         """Create and start a new scan."""
         try:
+            await self._apply_default_finding_policy(request)
             await enforce_scan_creation(
                 self.scan_repository,
                 request,
@@ -84,6 +94,48 @@ class ScanService:
             raise e
         except Exception as e:
             raise ScanValidationException(f"Failed to create scan: {str(e)}")
+
+    async def _apply_default_finding_policy(self, request: ScanRequestDTO) -> None:
+        """
+        Apply default finding policy path from SystemState scan_defaults when enabled.
+        This runs for all creation paths (manual + auto + queued) because everything
+        goes through ScanService.create_scan().
+        """
+        try:
+            # Do not override explicit per-scan setting.
+            cfg = dict(request.config or {})
+            existing = cfg.get("finding_policy")
+            if isinstance(existing, str) and existing.strip():
+                return
+
+            repo = get_system_state_repository()
+            state = await repo.get_singleton()
+            defaults = ((state.config or {}).get("scan_defaults") or {}) if state else {}
+
+            apply_default = bool(
+                defaults.get(
+                    "finding_policy_apply_by_default",
+                    DEFAULT_FINDING_POLICY_APPLY_BY_DEFAULT,
+                )
+            )
+            if not apply_default:
+                return
+
+            default_path = str(
+                defaults.get("default_finding_policy_path", DEFAULT_FINDING_POLICY_PATH)
+            ).strip()
+            if not default_path:
+                default_path = DEFAULT_FINDING_POLICY_PATH
+
+            cfg["finding_policy"] = default_path
+            request.config = cfg
+
+            request.metadata = dict(request.metadata or {})
+            request.metadata["finding_policy_default_applied"] = True
+            request.metadata["finding_policy_path"] = default_path
+        except Exception as e:
+            # Non-fatal: scan creation should continue even if default lookup fails.
+            logger.warning("Could not apply default finding policy path: %s", e)
     
     async def get_scan_by_id(self, scan_id: str) -> ScanDTO:
         """Get scan by ID."""

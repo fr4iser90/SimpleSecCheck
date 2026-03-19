@@ -25,6 +25,7 @@ from domain.services.target_permission_policy import (
     get_allowed_targets_display,
     effective_target_labels_for_role,
 )
+from domain.services.finding_policy_defaults import default_scan_defaults
 from domain.services.role_capabilities_merge import merge_role_capabilities_raw
 from infrastructure.logging_config import get_logger
 from infrastructure.container import get_scanner_repository, run_database_migrations
@@ -343,10 +344,7 @@ async def start_asset_update(
 
 
 def _default_scan_defaults_for_config() -> Dict[str, Any]:
-    return {
-        "default_finding_policy_path": ".scanning/finding-policy.json",
-        "finding_policy_apply_by_default": True,
-    }
+    return default_scan_defaults()
 
 
 @config_router.get("/config/capabilities", response_model=PublicCapabilitiesResponse)

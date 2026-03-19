@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from fastapi import status as fastapi_status
 
 from api.deps.actor_context import get_actor_context, ActorContext
+from domain.services.finding_policy_defaults import DEFAULT_FINDING_POLICY_PATH
 from application.services.scan_service import ScanService
 from domain.exceptions.scan_exceptions import ScanNotFoundException
 from domain.services.scan_result_access import can_read_scan_results
@@ -230,7 +231,7 @@ async def get_results_ai_prompt(
     scan_service: ScanService = Depends(_scan_svc),
     share_token: Optional[str] = Query(None),
     language: str = Query("english", description="Prompt language: english, chinese, german"),
-    policy_path: str = Query(".scanning/finding-policy.json", description="Policy file path in prompt"),
+    policy_path: str = Query(DEFAULT_FINDING_POLICY_PATH, description="Policy file path in prompt"),
 ):
     """Return AI prompt built from scan report findings (same access as report)."""
     try:
@@ -257,12 +258,12 @@ async def get_results_ai_prompt(
     prompt = _build_ai_prompt(
         findings,
         language=language,
-        policy_path=policy_path or ".scanning/finding-policy.json",
+        policy_path=policy_path or DEFAULT_FINDING_POLICY_PATH,
         max_findings=100,
     )
     return {
         "prompt": prompt,
         "findings_count": len(findings),
         "language": language,
-        "policy_path": policy_path or ".scanning/finding-policy.json",
+        "policy_path": policy_path or DEFAULT_FINDING_POLICY_PATH,
     }

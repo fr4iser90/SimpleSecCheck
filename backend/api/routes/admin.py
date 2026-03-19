@@ -39,6 +39,11 @@ from domain.services.role_capabilities_merge import (
     default_role_capabilities,
     merge_role_capabilities_raw,
 )
+from domain.services.finding_policy_defaults import (
+    DEFAULT_FINDING_POLICY_APPLY_BY_DEFAULT,
+    DEFAULT_FINDING_POLICY_PATH,
+    default_scan_defaults,
+)
 from datetime import datetime
 
 router = APIRouter(
@@ -127,10 +132,7 @@ def _default_policies() -> Dict[str, Any]:
 
 def _default_scan_defaults() -> Dict[str, Any]:
     """Default for scan form: finding policy path and whether to apply by default."""
-    return {
-        "default_finding_policy_path": ".scanning/finding-policy.json",
-        "finding_policy_apply_by_default": True,
-    }
+    return default_scan_defaults()
 
 
 class ScanEnforcementUpdate(BaseModel):
@@ -441,8 +443,8 @@ async def get_scan_defaults(
         if state and state.config:
             defaults.update(state.config.get("scan_defaults") or {})
         return ScanDefaultsResponse(
-            default_finding_policy_path=defaults.get("default_finding_policy_path", ".scanning/finding-policy.json"),
-            finding_policy_apply_by_default=defaults.get("finding_policy_apply_by_default", True),
+            default_finding_policy_path=defaults.get("default_finding_policy_path", DEFAULT_FINDING_POLICY_PATH),
+            finding_policy_apply_by_default=defaults.get("finding_policy_apply_by_default", DEFAULT_FINDING_POLICY_APPLY_BY_DEFAULT),
         )
     except HTTPException:
         raise
@@ -467,7 +469,7 @@ async def put_scan_defaults(
         config = dict(state.config or {})
         scan_defaults = dict(config.get("scan_defaults") or _default_scan_defaults())
         if body.default_finding_policy_path is not None:
-            path = (body.default_finding_policy_path or "").strip() or ".scanning/finding-policy.json"
+            path = (body.default_finding_policy_path or "").strip() or DEFAULT_FINDING_POLICY_PATH
             scan_defaults["default_finding_policy_path"] = path[:500]
         if body.finding_policy_apply_by_default is not None:
             scan_defaults["finding_policy_apply_by_default"] = body.finding_policy_apply_by_default
