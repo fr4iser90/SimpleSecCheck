@@ -300,7 +300,7 @@ export default function BulkScanForm({ onBatchStart }: BulkScanFormProps) {
           type="text"
           value={findingPolicy}
           onChange={(e) => setFindingPolicy(e.target.value)}
-          placeholder="config/finding-policy.json"
+          placeholder=".scanning/finding-policy.json"
         />
         <small style={{ display: 'block', marginTop: '0.5rem', color: '#6c757d', fontSize: '0.875rem' }}>
           Path to finding policy file (relative to each repository root)

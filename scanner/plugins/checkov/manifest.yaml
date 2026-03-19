@@ -10,7 +10,7 @@ icon: ☁️
 languages: null
 severity_supported: true
 execution:
-  timeout: 900
+  timeout: 1800
 checkpoint:
   primary_artifact: report.json
   artifact_format: json

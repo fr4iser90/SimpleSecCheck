@@ -29,7 +29,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
   
   // Prompt language (for backend API)
   const [promptLanguage, setPromptLanguage] = useState<Language>(uiLanguage)
-  const [policyPath, setPolicyPath] = useState('config/finding-policy.json')
+  const [policyPath, setPolicyPath] = useState('.scanning/finding-policy.json')
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -266,7 +266,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                   type="text"
                   value={policyPath}
                   onChange={(e) => setPolicyPath(e.target.value)}
-                  placeholder="config/finding-policy.json"
+                  placeholder=".scanning/finding-policy.json"
                   style={{
                     width: '100%',
                     padding: '0.75rem',

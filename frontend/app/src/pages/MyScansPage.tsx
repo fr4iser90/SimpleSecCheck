@@ -383,9 +383,12 @@ export default function MyScansPage() {
                                 state: {
                                   status: item.status,
                                   scan_id: item.scan_id || item.queue_id,
-                                  results_dir: null,
+                                  results_dir:
+                                    item.status === 'completed' && item.scan_id
+                                      ? item.scan_id
+                                      : null,
                                   started_at: item.started_at || null,
-                                }
+                                },
                               })
                             }}
                             style={{

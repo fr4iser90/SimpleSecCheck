@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     # Application
     DEBUG: bool = Field(default=False, description="Enable debug mode")
     USE_CASE: str = Field(default="solo", description="Use case: solo|network_intern|public_web|enterprise (loaded from database after setup)")
-    SECRET_KEY: str = Field(default="your-secret-key-here", description="JWT secret key")
+    SECRET_KEY: str = Field(description="Application secret (env SECRET_KEY, no default)")
     ALLOWED_HOSTS: List[str] = Field(default=["*"], description="Allowed host origins")
     # CORS: comma-separated origins (no * when using credentials). Set in compose via CORS_ORIGINS or APP_URL.
     CORS_ORIGINS: str = Field(
@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     AUTH_MODE: str = Field(default="free", description="Authentication mode (login mechanism): free|basic|jwt")
     ACCESS_MODE: str = Field(default="public", description="Who may use the system: public (all open) | mixed (public scan/queue, login for dashboard) | private (login required for all)")
     LOGIN_REQUIRED: bool = Field(default=False, description="Derived: True when ACCESS_MODE=private")
-    SESSION_SECRET: str = Field(default="your-session-secret-here", description="Session secret key")
+    SESSION_SECRET: str = Field(description="Session secret (env SESSION_SECRET, no default)")
     # Auth config block (registration)
     ALLOW_SELF_REGISTRATION: bool = Field(default=False, description="Allow users to self-register (sign up)")
     

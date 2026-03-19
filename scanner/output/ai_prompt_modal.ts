@@ -837,83 +837,86 @@ async function loadAIPrompt(): Promise<void> {
   const error = document.getElementById('ai-prompt-error') as HTMLDivElement | null;
   const textarea = document.getElementById('ai-prompt-textarea') as HTMLTextAreaElement | null;
   const stats = document.getElementById('ai-prompt-stats') as HTMLDivElement | null;
-  
+
   if (!loading || !error || !textarea || !stats) return;
-  
+
   loading.style.display = 'flex';
   error.style.display = 'none';
   textarea.style.display = 'none';
   stats.style.display = 'none';
-  
+
   try {
-    // Try to get API URL - if in WebUI, use relative path, otherwise try to detect
-    let apiUrl: string = '';
-    if (window.location.origin.includes('localhost:8080') || window.location.origin.includes('127.0.0.1:8080')) {
-      apiUrl = window.location.origin;
-    } else {
-      // For standalone reports, try common WebUI ports
-      apiUrl = 'http://localhost:8080';
-    }
-    
-    const response = await fetch(`${apiUrl}/api/scan/ai-prompt?language=${currentLanguage}&policy_path=${encodeURIComponent(currentPolicyPath)}`);
-    if (response.ok) {
-      const data: PromptData = await response.json();
-      currentPrompt = data.prompt;
-      textarea.value = data.prompt;
-      textarea.style.display = 'block';
+    const findingsScript = document.getElementById('findings-data') as HTMLScriptElement | null;
+    if (!findingsScript) {
+      error.textContent =
+        'No embedded findings in this page (missing script#findings-data). Open the scan summary.html from a completed scan.';
+      error.style.display = 'block';
       loading.style.display = 'none';
-      
-      // Show stats
-      const tokens = Math.ceil(data.prompt.length / (currentLanguage === 'chinese' ? 2 : 4));
-      stats.textContent = `📊 ${data.findings_count} findings | ~${tokens.toLocaleString()} tokens`;
-      stats.style.display = 'block';
-    } else {
-      throw new Error('API request failed');
+      return;
     }
-  } catch (err) {
-    // Fallback: Extract findings from embedded JSON in HTML
-    try {
-      const findingsScript = document.getElementById('findings-data') as HTMLScriptElement | null;
-      if (findingsScript) {
-        // Get text content - try textContent first, then innerText
-        let jsonText = findingsScript.textContent || findingsScript.innerText || '';
-        
-        // Decode HTML entities if present (shouldn't be, but handle it just in case)
-        // Use DOMParser instead of innerHTML to avoid XSS risks
-        if (jsonText.includes('&quot;') || jsonText.includes('&amp;')) {
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(`<div>${jsonText}</div>`, 'text/html');
-          const decodedElement = doc.body.firstElementChild as HTMLElement | null;
-          jsonText = decodedElement ? (decodedElement.textContent || decodedElement.innerText || '') : jsonText;
-        }
-        
-        if (jsonText.trim()) {
-          const findings = JSON.parse(jsonText);
-          const includePR = (document.getElementById('ai-prompt-include-pr') as HTMLInputElement | null)?.checked ?? currentIncludePRWorkflow;
-          const onlyCH = (document.getElementById('ai-prompt-only-critical-high') as HTMLInputElement | null)?.checked ?? currentOnlyCriticalHigh;
-          const maxF = parseInt((document.getElementById('ai-prompt-max-findings') as HTMLInputElement | null)?.value || String(currentMaxFindings), 10) || currentMaxFindings;
-          const prompt = generatePromptLocally(findings, currentLanguage, currentPolicyPath, maxF, onlyCH, includePR);
-          currentPrompt = prompt;
-          textarea.value = prompt;
-          textarea.style.display = 'block';
-          loading.style.display = 'none';
-          const n = onlyCH
-            ? Math.min(findings.filter((f: any) => /^(CRITICAL|HIGH|ERROR)$/i.test(String(f.severity || ''))).length, maxF)
-            : Math.min(findings.length, maxF);
-          const charK = Math.round(prompt.length / 1000);
-          stats.textContent = `📊 ${n} findings · ~${charK}k characters`;
-          stats.style.display = 'block';
-          return;
-        }
-      }
-    } catch (parseErr) {
-      // If embedded JSON doesn't exist or is invalid, show error
-      console.error('Failed to parse embedded findings:', parseErr);
-      console.error('Findings script element:', document.getElementById('findings-data'));
+
+    let jsonText = findingsScript.textContent || findingsScript.innerText || '';
+    if (jsonText.includes('&quot;') || jsonText.includes('&amp;')) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`<div>${jsonText}</div>`, 'text/html');
+      const decodedElement = doc.body.firstElementChild as HTMLElement | null;
+      jsonText = decodedElement ? (decodedElement.textContent || decodedElement.innerText || '') : jsonText;
     }
-    
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-    error.textContent = `Error: ${errorMessage}. Make sure the WebUI is running on http://localhost:8080 or open the report via WebUI.`;
+
+    if (!jsonText.trim()) {
+      error.textContent = 'Embedded findings are empty. This report has no normalized findings for the AI prompt.';
+      error.style.display = 'block';
+      loading.style.display = 'none';
+      return;
+    }
+
+    const findings = JSON.parse(jsonText);
+    if (!Array.isArray(findings)) {
+      throw new Error('findings-data is not a JSON array');
+    }
+
+    const includePR =
+      (document.getElementById('ai-prompt-include-pr') as HTMLInputElement | null)?.checked ??
+      currentIncludePRWorkflow;
+    const onlyCH =
+      (document.getElementById('ai-prompt-only-critical-high') as HTMLInputElement | null)?.checked ??
+      currentOnlyCriticalHigh;
+    const maxF =
+      parseInt(
+        (document.getElementById('ai-prompt-max-findings') as HTMLInputElement | null)?.value ||
+          String(currentMaxFindings),
+        10
+      ) || currentMaxFindings;
+
+    const prompt = generatePromptLocally(
+      findings,
+      currentLanguage,
+      currentPolicyPath,
+      maxF,
+      onlyCH,
+      includePR
+    );
+    currentPrompt = prompt;
+    textarea.value = prompt;
+    textarea.style.display = 'block';
+    loading.style.display = 'none';
+    const n = onlyCH
+      ? Math.min(
+          findings.filter((f: any) =>
+            /^(CRITICAL|HIGH|ERROR)$/i.test(String(f.severity || ''))
+          ).length,
+          maxF
+        )
+      : Math.min(findings.length, maxF);
+    const charK = Math.round(prompt.length / 1000);
+    stats.textContent = `📊 ${n} findings · ~${charK}k characters`;
+    stats.style.display = 'block';
+  } catch (parseErr) {
+    console.error('AI prompt from embedded findings failed:', parseErr);
+    error.textContent =
+      parseErr instanceof Error
+        ? `Could not build prompt: ${parseErr.message}`
+        : 'Could not build prompt from embedded findings.';
     error.style.display = 'block';
     loading.style.display = 'none';
   }

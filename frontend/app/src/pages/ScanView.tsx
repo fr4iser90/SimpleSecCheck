@@ -6,19 +6,9 @@ import AIPromptModal from '../components/AIPromptModal'
 import { SubstepSlot } from '../components/SubstepSlot'
 import { useWebSocket } from '../services/websocketService'
 import { formatDuration, parseStepInstantMs } from '../utils/timeUtils'
+import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
 
-// Backend is the source of truth!
-// Backend uses TWO status systems:
-// 1. Queue system: 'pending', 'running', 'completed', 'failed'
-// 2. Scan system: 'idle', 'running', 'done', 'error'
-interface ScanStatusData {
-  status: 'idle' | 'running' | 'done' | 'error' | 'pending' | 'completed' | 'failed'
-  scan_id: string | null
-  results_dir: string | null
-  started_at: string | null
-  error_code?: number | null
-  error_message?: string | null
-}
+type ScanStatusData = ScanStatusState
 
 interface QueueStatus {
   queue_id: string
@@ -111,28 +101,25 @@ export default function ScanView() {
             const data = await response.json()
             setQueueStatus(data)
             
-            // Update status based on queue status (Backend is source of truth!)
-            // Map queue status to scan status for consistency
             if (data.status === 'running') {
-              setStatus(prev => ({ ...prev, status: 'running' }))
+              setStatus((prev) => ({ ...prev, status: 'running' as ScanRunStatus }))
+            } else if (data.status === 'completed' && data.scan_id) {
+              setStatus((prev) => ({
+                ...prev,
+                status: 'completed',
+                scan_id: data.scan_id,
+                results_dir:
+                  data.results_dir ||
+                  data.scan_id ||
+                  prev.results_dir ||
+                  prev.scan_id,
+              }))
             } else if (data.status === 'completed') {
-              // Queue uses 'completed'; set 'done' and results_dir so we auto-switch to report view
-              // Backend does not return results_dir – results live under directory named by scan_id
-              if (data.scan_id) {
-                setStatus(prev => ({
-                  ...prev,
-                  status: 'done',
-                  scan_id: data.scan_id,
-                  results_dir: data.results_dir || data.scan_id || prev.results_dir || prev.scan_id,
-                }))
-              } else {
-                setStatus(prev => ({ ...prev, status: 'completed' }))
-              }
+              setStatus((prev) => ({ ...prev, status: 'completed' }))
             } else if (data.status === 'failed') {
-              // Queue uses 'failed', but we need 'error' for scan system
-              setStatus(prev => ({ ...prev, status: 'error' }))
+              setStatus((prev) => ({ ...prev, status: 'failed' }))
             } else if (data.status === 'pending') {
-              setStatus(prev => ({ ...prev, status: 'pending' }))
+              setStatus((prev) => ({ ...prev, status: 'pending' }))
             }
           }
         } catch (error) {
@@ -149,24 +136,46 @@ export default function ScanView() {
   // Poll scan status if running (non-queue scan or after queue scan started)
   useEffect(() => {
     if (status.status === 'running' && status.scan_id && !isQueueId(status.scan_id)) {
-      const interval = setInterval(async () => {
+      const sid = status.scan_id
+      let intervalId: ReturnType<typeof setInterval> | null = null
+      const poll = async () => {
         try {
           const { apiFetch } = await import('../utils/apiClient')
-          const response = await apiFetch('/api/scan/status')
+          const response = await apiFetch(
+            `/api/v1/scans/${encodeURIComponent(sid)}/status`
+          )
           if (response.ok) {
-            const newStatus = await response.json()
-            setStatus(newStatus)
-            // If scan is done, stop polling
-            if (newStatus.status === 'done' || newStatus.status === 'error') {
-              clearInterval(interval)
+            const data = await response.json()
+            const st = data.status as ScanRunStatus
+            setStatus((prev) => ({
+              ...prev,
+              scan_id: data.scan_id ?? prev.scan_id,
+              status: st,
+              started_at: data.started_at ?? prev.started_at,
+              results_dir:
+                st === 'completed'
+                  ? prev.results_dir || data.scan_id || prev.scan_id
+                  : prev.results_dir,
+            }))
+            if (
+              ['completed', 'failed', 'cancelled', 'interrupted'].includes(
+                data.status
+              ) &&
+              intervalId != null
+            ) {
+              clearInterval(intervalId)
+              intervalId = null
             }
           }
         } catch (error) {
           console.error('Failed to fetch scan status:', error)
         }
-      }, 2000)
-      
-      return () => clearInterval(interval)
+      }
+      void poll()
+      intervalId = setInterval(poll, 2000)
+      return () => {
+        if (intervalId != null) clearInterval(intervalId)
+      }
     }
   }, [status.status, status.scan_id])
 
@@ -460,7 +469,7 @@ export default function ScanView() {
   }
 
   // Show loading/running state with steps (Backend status: 'running' from both systems)
-  if (status.status === 'running' || ((status.status === 'done' || status.status === 'completed') && !status.results_dir)) {
+  if (status.status === 'running' || (status.status === 'completed' && !status.results_dir)) {
     
     return (
       <div style={{ 
@@ -727,8 +736,11 @@ export default function ScanView() {
     )
   }
 
-  // Show error state (Backend status: 'error' from scan system or 'failed' from queue system)
-  if (status.status === 'error' || status.status === 'failed') {
+  if (
+    status.status === 'failed' ||
+    status.status === 'cancelled' ||
+    status.status === 'interrupted'
+  ) {
     return (
       <div style={{ 
         height: 'calc(100vh - 80px)',
@@ -788,8 +800,7 @@ export default function ScanView() {
     )
   }
 
-  // Show full-page report when scan is done (Backend status: 'done' from scan system or 'completed' from queue system)
-  if ((status.status === 'done' || status.status === 'completed') && status.results_dir) {
+  if (status.status === 'completed' && status.results_dir) {
     return (
       <div style={{ 
         height: 'calc(100vh - 80px)',

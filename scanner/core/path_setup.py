@@ -126,7 +126,7 @@ def get_finding_policy_check_path_for_git_clone(container_path: str, policy_rela
     
     Args:
         container_path: Container path where Git repo was cloned (e.g., /app/results/tmp/.../repo)
-        policy_relative_path: Relative path to policy file (e.g., config/finding-policy.json)
+        policy_relative_path: Relative path to policy file (e.g., .scanning/finding-policy.json)
     
     Returns:
         Full container path to check if file exists, or None if path is invalid
@@ -149,7 +149,7 @@ def get_finding_policy_check_path_for_local_scan(host_path: str, policy_relative
     
     Args:
         host_path: Host path to target project (e.g., /home/user/project)
-        policy_relative_path: Relative path to policy file (e.g., config/finding-policy.json)
+        policy_relative_path: Relative path to policy file (e.g., .scanning/finding-policy.json)
     
     Returns:
         None - file cannot be checked in backend container, scanner will check it

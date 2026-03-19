@@ -2,21 +2,13 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
-
-interface ScanStatusData {
-  status: 'idle' | 'running' | 'done' | 'error'
-  scan_id: string | null
-  results_dir: string | null
-  started_at: string | null
-  error_code?: number | null
-  error_message?: string | null
-}
+import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
 
 export default function Header() {
   const { config } = useConfig()
   const { isAuthenticated, user, logout } = useAuth()
   const navigate = useNavigate()
-  const [scanStatus, setScanStatus] = useState<ScanStatusData>({
+  const [scanStatus, setScanStatus] = useState<ScanStatusState>({
     status: 'idle',
     scan_id: null,
     results_dir: null,
@@ -26,44 +18,84 @@ export default function Header() {
   const [showAdminMenu, setShowAdminMenu] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const adminMenuRef = useRef<HTMLDivElement>(null)
-  
+
   const isAdmin = user?.role === 'admin'
 
-  // Poll scan status
   useEffect(() => {
-    const fetchStatus = async () => {
+    let cancelled = false
+    const tick = async () => {
       try {
         const { apiFetch } = await import('../utils/apiClient')
-        const response = await apiFetch('/api/scan/status')
-        if (response.ok) {
-          const status = await response.json()
-          setScanStatus(status)
+        const running = await apiFetch(
+          '/api/v1/scans?status=running&limit=1&sort_by=created_at&sort_order=desc'
+        )
+        if (!running.ok || cancelled) return
+        const runs = await running.json()
+        let scanId: string | null = null
+        if (Array.isArray(runs) && runs.length > 0) {
+          scanId = runs[0].id
         }
-      } catch (error) {
-        console.error('Failed to fetch scan status:', error)
+        if (!scanId) {
+          const pend = await apiFetch(
+            '/api/v1/scans?status=pending&limit=1&sort_by=created_at&sort_order=desc'
+          )
+          if (!pend.ok || cancelled) return
+          const ps = await pend.json()
+          if (Array.isArray(ps) && ps.length > 0) {
+            setScanStatus({
+              status: 'pending',
+              scan_id: ps[0].id,
+              results_dir: null,
+              started_at: ps[0].started_at || null,
+            })
+            return
+          }
+        }
+        if (!scanId) {
+          setScanStatus({
+            status: 'idle',
+            scan_id: null,
+            results_dir: null,
+            started_at: null,
+          })
+          return
+        }
+        const sr = await apiFetch(`/api/v1/scans/${encodeURIComponent(scanId)}/status`)
+        if (!sr.ok || cancelled) return
+        const d = await sr.json()
+        setScanStatus({
+          status: d.status as ScanRunStatus,
+          scan_id: d.scan_id,
+          results_dir: d.scan_id,
+          started_at: d.started_at ?? null,
+        })
+      } catch (e) {
+        console.error('Header scan status poll:', e)
       }
     }
-
-    // Fetch immediately
-    fetchStatus()
-
-    // Poll every 2 seconds if scan is running
-    const interval = setInterval(() => {
-      if (scanStatus.status === 'running') {
-        fetchStatus()
-      }
-    }, 2000)
-
-    return () => clearInterval(interval)
-  }, [scanStatus.status])
+    void tick()
+    const iv = setInterval(tick, 4000)
+    return () => {
+      cancelled = true
+      clearInterval(iv)
+    }
+  }, [])
 
   const getStatusBadge = () => {
     if (scanStatus.status === 'idle') return null
 
-    const badges = {
-      running: { text: 'Running...', className: 'status-running' },
-      done: { text: '✅ Done', className: 'status-done' },
-      error: { text: '❌ Error', className: 'status-error' },
+    const badges: Partial<
+      Record<
+        ScanRunStatus,
+        { text: string; className: string }
+      >
+    > = {
+      running: { text: 'Running…', className: 'status-running' },
+      pending: { text: '⏳ Queued', className: 'status-running' },
+      completed: { text: '✅ Done', className: 'status-done' },
+      failed: { text: '❌ Failed', className: 'status-error' },
+      cancelled: { text: 'Cancelled', className: 'status-error' },
+      interrupted: { text: '⚠️ Interrupted', className: 'status-error' },
     }
 
     const badge = badges[scanStatus.status]
@@ -81,7 +113,6 @@ export default function Header() {
     navigate('/login')
   }
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -134,6 +165,7 @@ export default function Header() {
         {isAuthenticated && user && isAdmin && (
           <div className="dropdown" ref={adminMenuRef}>
             <button
+              type="button"
               className="dropdown-toggle"
               onClick={() => {
                 setShowAdminMenu(!showAdminMenu)
@@ -195,6 +227,7 @@ export default function Header() {
         {isAuthenticated && user && (
           <div className="dropdown" ref={userMenuRef}>
             <button
+              type="button"
               className="dropdown-toggle"
               onClick={() => {
                 setShowUserMenu(!showUserMenu)
@@ -216,10 +249,11 @@ export default function Header() {
               </Link>
               <div className="dropdown-divider"></div>
               <button
+                type="button"
                 className="dropdown-item"
                 onClick={() => {
                   setShowUserMenu(false)
-                  handleLogout()
+                  void handleLogout()
                 }}
               >
                 Logout

@@ -23,6 +23,14 @@ install:
 - - pip3
   - install
   - safety
+# Typer (pulled by safety) needs click>=8.1 for generic click.Choice[...] on Python 3.10
+- - pip3
+  - install
+  - --upgrade
+  - "click>=8.1.3"
+- - pip3
+  - install
+  - pip-audit
 exit_codes:
   binary: safety
   codes:

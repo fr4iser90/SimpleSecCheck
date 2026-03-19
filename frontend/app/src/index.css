@@ -412,14 +412,23 @@ input:focus, select:focus {
   color: #000;
 }
 
-.status-done {
+.status-done,
+.status-completed {
   background: #28a745;
   color: #fff;
 }
 
-.status-error {
+.status-error,
+.status-failed,
+.status-cancelled,
+.status-interrupted {
   background: #dc3545;
   color: #fff;
+}
+
+.status-pending {
+  background: #ffc107;
+  color: #000;
 }
 
 .status-idle {

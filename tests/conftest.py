@@ -12,6 +12,11 @@ _BACKEND = Path(__file__).resolve().parent.parent / "backend"
 if _BACKEND.exists() and str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
+# Required by backend config (no defaults in code); set before any backend import
+for _key in ("JWT_SECRET_KEY", "SECRET_KEY", "SESSION_SECRET"):
+    if _key not in os.environ:
+        os.environ[_key] = "test-secret-do-not-use-in-production-min-32-chars"
+
 def pytest_addoption(parser):
     """Add custom pytest options."""
     parser.addoption(

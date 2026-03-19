@@ -6,14 +6,9 @@ import ScannerDataUpdate from '../components/ScannerDataUpdate'
 import { useConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
 
-interface ScanStatusData {
-  status: 'idle' | 'running' | 'done' | 'error'
-  scan_id: string | null
-  results_dir: string | null
-  started_at: string | null
-  error_code?: number | null
-  error_message?: string | null
-}
+import type { ScanStatusState } from '../types/scanStatus'
+
+type ScanStatusData = ScanStatusState
 
 export default function HomePage() {
   const navigate = useNavigate()

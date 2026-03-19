@@ -5,11 +5,18 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **Checkov** — Text report (`report.txt`) is generated from the single JSON run instead of running Checkov a second time with `--output cli` (roughly halves Checkov wall time).
+- **CodeQL text report** — `codeql database interpret-results` was called with the SARIF file as if it were a query; it now uses the same query suite as `analyze` (e.g. `codeql/python-queries`) and `--format=text` so the per-language `.txt` report is generated correctly.
+- **Safety dependency file discovery** — Removed `setup.py` from the discovered dependency files so paths like `backend/api/routes/setup.py` are no longer treated as requirements (false positive).
+- **OWASP Dependency Check (exit 14)** — `env.example` documents NVD_API_KEY and adds a note on Sonatype OSS Index / "Failed to request component-reports"; optional token or URL if supported by your OWASP DC version.
+- **Safety scanner (manifest install)** — After `pip3 install safety`, manifest now runs `pip3 install --upgrade "click>=8.1.3"` (fixes Typer `click.Choice[...]` on Python 3.10) and `pip3 install pip-audit` for the Safety plugin fallback. No Dockerfile change; rebuild scanner image so `install_assets` re-runs for the updated safety manifest.
+- **AI Prompt (HTML report)** — Removed dependency on `/api/scan/ai-prompt`. Prompt is built only from embedded `findings-data` in `summary.html` (works offline / without WebUI on port 8080).
 - **Worker DB `max_concurrent_jobs`** — The worker image does not ship backend ORM models; importing `infrastructure.database.models` always failed and was ignored, so parallel slots stayed at **1** regardless of admin/DB. Worker now reads `system_state` via raw SQL (`worker/infrastructure/system_state_reader.py`).
 - **Worker queue** — Pro Loop werden alle freien Slots mit Jobs aus der Queue befüllt (nicht nur ein Job pro Sekunde).
 - **Worker parallel jobs** — Only `MAX_CONCURRENT_JOBS` (env override) or DB `max_concurrent_jobs` (admin/setup). Removed `WORKER_CONCURRENCY`. If DB has no value yet, default **1** parallel job. Removed unused `WORKER_MAX_RETRIES` from compose (was never read by code).
 
 ### Changed
+- **Checkov** — Runs on **discovered infra files only** (`-f` per file, batched) instead of `checkov -d` on the whole tree — less RAM, fewer OOM (137) kills on large repos. **File discovery** limited to real infra types (Terraform, Dockerfile, docker-compose*, CloudFormation, serverless, K8s/Helm naming) — no generic `*.yml`/`*.json` so Semgrep rules, package.json, manifests are not scanned (avoids long runs/hangs).
 - **Setup wizard** — Removed global “scanner timeout” (per-tool timeouts remain via admin/manifest). Replaced “Max concurrent scans” with **max concurrent scan jobs**: stored in system config and used by the worker as parallel **complete** scans (queue holds the rest). Optional override: env `MAX_CONCURRENT_JOBS`. Admin: `GET/PUT /api/admin/config/worker-jobs`.
 
 ### Removed

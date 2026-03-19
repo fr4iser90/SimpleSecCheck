@@ -196,18 +196,13 @@ async def handle_http_exception(request: Request, exc: StarletteHTTPException):
     from infrastructure.logging_config import get_logger
     logger = get_logger("api.main")
     
-    # Suppress 404 logs for known frontend polling endpoints
-    if exc.status_code == 404 and request.url.path == "/api/scan/status":
-        # Don't log these - they're just frontend polling endpoints that may not exist
-        pass
-    else:
-        logger.info(
-            "HTTP exception",
-            status_code=exc.status_code,
-            message=exc.detail,
-            method=request.method,
-            path=request.url.path,
-        )
+    logger.info(
+        "HTTP exception",
+        status_code=exc.status_code,
+        message=exc.detail,
+        method=request.method,
+        path=request.url.path,
+    )
     
     # Return simple response to avoid Content-Length conflicts
     return PlainTextResponse(content=exc.detail, status_code=exc.status_code)

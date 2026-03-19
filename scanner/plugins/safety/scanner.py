@@ -45,23 +45,22 @@ class SafetyScanner(BaseScanner):
         super().__init__("Safety", target_path, results_dir, log_file, config_path, step_name=step_name)
     
     def find_dependency_files(self) -> List[Path]:
-        """Find Python dependency files"""
+        """Find Python dependency files (requirements*.txt, Pipfile, pyproject.toml, etc.).
+        Excludes setup.py to avoid false positives (e.g. backend/api/routes/setup.py).
+        """
         patterns = [
             "requirements*.txt",
             "Pipfile",
             "Pipfile.lock",
             "pyproject.toml",
-            "setup.py",
             "environment.yml",
-            "conda.yml"
+            "conda.yml",
         ]
-        
         dependency_files = []
         for pattern in patterns:
             for file in self.target_path.rglob(pattern):
                 if file.is_file():
                     dependency_files.append(file)
-        
         return dependency_files
     
     def create_empty_reports(self):

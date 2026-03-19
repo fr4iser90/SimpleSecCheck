@@ -4,14 +4,9 @@ import { useAuth } from '../hooks/useAuth'
 import ScanStep from './ScanStep'
 import ScannerCardGrid from './ScannerCardGrid'
 
-interface ScanStatusData {
-  status: 'idle' | 'running' | 'done' | 'error'
-  scan_id: string | null
-  results_dir: string | null
-  started_at: string | null
-  error_code?: number | null
-  error_message?: string | null
-}
+import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
+
+type ScanStatusData = ScanStatusState
 
 interface ScanFormProps {
   onScanStart: (scanStatus: ScanStatusData) => void
@@ -389,17 +384,14 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
       // Parse the response to get the scan data
       const scanData = await response.json()
       
-      // Convert new API format to old format for compatibility
+      const st = (scanData.status || 'pending') as ScanRunStatus
       const scanStatus: ScanStatusData = {
-        status: scanData.status === 'pending' ? 'idle' : 
-                scanData.status === 'running' ? 'running' :
-                scanData.status === 'completed' ? 'done' :
-                scanData.status === 'failed' ? 'error' : 'idle',
+        status: st,
         scan_id: scanData.id,
-        results_dir: null, // Will be set when scan completes
+        results_dir: null,
         started_at: scanData.started_at || null,
-        error_code: scanData.status === 'failed' ? 1 : null,
-        error_message: scanData.status === 'failed' ? 'Scan failed' : null,
+        error_code: st === 'failed' ? 1 : null,
+        error_message: st === 'failed' ? 'Scan failed' : null,
       }
       
       // Navigate to scan view with the status
@@ -686,7 +678,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
           value={findingPolicy}
           onChange={(e) => setFindingPolicy(e.target.value)}
           onBlur={(e) => setFindingPolicy(e.target.value.trim())} // Auto-trim on blur
-          placeholder="config/finding-policy.json"
+          placeholder=".scanning/finding-policy.json"
         />
       </div>
 

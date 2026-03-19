@@ -29,12 +29,12 @@ export default function ResultsBrowser() {
   const openReport = (scanId: string) => {
     // Navigate to scan view with the scan_id
     // The ScanView will automatically load the report if results_dir is available
-    navigate('/scan', { 
-      state: { 
-        status: 'done',
+    navigate('/scan', {
+      state: {
+        status: 'completed',
         scan_id: scanId,
-        results_dir: scanId, // Use scan_id as results_dir (it's the directory name)
-      } 
+        results_dir: scanId,
+      },
     })
   }
 

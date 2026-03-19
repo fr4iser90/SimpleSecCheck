@@ -1,6 +1,8 @@
+import type { ScanRunStatus } from '../types/scanStatus'
+
 interface ScanStatusProps {
   status: {
-    status: 'idle' | 'running' | 'done' | 'error'
+    status: ScanRunStatus
     scan_id: string | null
     results_dir: string | null
     started_at: string | null
@@ -8,16 +10,20 @@ interface ScanStatusProps {
   }
 }
 
+const LABELS: Record<ScanRunStatus, string> = {
+  idle: 'Idle',
+  pending: 'Queued',
+  running: 'Running…',
+  completed: 'Completed',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+  interrupted: 'Interrupted',
+}
+
 export default function ScanStatus({ status }: ScanStatusProps) {
   const getStatusBadge = () => {
     const className = `status-badge status-${status.status}`
-    const labels = {
-      idle: 'Idle',
-      running: 'Running...',
-      done: 'Completed',
-      error: 'Error',
-    }
-    return <span className={className}>{labels[status.status]}</span>
+    return <span className={className}>{LABELS[status.status] ?? status.status}</span>
   }
 
   return (
@@ -33,7 +39,7 @@ export default function ScanStatus({ status }: ScanStatusProps) {
           Started: {new Date(status.started_at).toLocaleString()}
         </div>
       )}
-      {status.status === 'done' && (
+      {status.status === 'completed' && (
         <div style={{ marginTop: '1rem', color: '#28a745' }}>
           ✅ Scan completed successfully!
         </div>

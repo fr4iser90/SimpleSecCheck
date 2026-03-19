@@ -446,10 +446,11 @@ class ScanOrchestrator:
         try:
             from scanner.core.scan_metadata import collect_scan_metadata, save_metadata
             
-            # Get finding policy
-            finding_policy = os.getenv("FINDING_POLICY_FILE_IN_CONTAINER", "")
+            # Get finding policy (auto-discover conventional path if not set)
+            finding_policy = os.getenv("FINDING_POLICY_FILE_IN_CONTAINER", "").strip()
             if not finding_policy:
-                finding_policy = None
+                finding_policy = str(self.target_path / ".scanning" / "finding-policy.json")
+            # Store in metadata so report can use it; load_policy will return {} if file missing
             
             # Get CI mode
             ci_mode = os.getenv("CI_MODE", "false").lower() == "true"

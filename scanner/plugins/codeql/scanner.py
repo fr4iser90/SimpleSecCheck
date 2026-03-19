@@ -220,11 +220,11 @@ class CodeQLScanner(BaseScanner):
             if lang_sarif.exists():
                 shutil.copy2(lang_sarif, lang_json)
             
-            # Generate text report
+            # Generate text report (interpret-results takes DB + query suite, not SARIF file)
             lang_text = self.results_dir / f"codeql-{lang}.txt"
             if lang_sarif.exists():
-                cmd = [*tool_cmd, "database", "interpret-results", str(lang_db),
-                       "--format=sarif-latest", str(lang_sarif), f"--output={lang_text}"]
+                cmd = [*tool_cmd, "database", "interpret-results", str(lang_db), query_suite,
+                       "--format=text", f"--output={lang_text}"]
                 result = self.run_command(cmd, capture_output=True)
                 if result.returncode != 0:
                     self.log("Report interpretation failed for {}; no text report.".format(lang), "WARNING")
