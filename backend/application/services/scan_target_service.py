@@ -13,6 +13,7 @@ from domain.repositories.scan_target_repository import ScanTargetRepository
 from domain.services.target_handlers import validate_target_source_and_config, get_target_handler
 from domain.services.target_permission_policy import check_can_scan_target, get_allow_flags_from_settings
 from domain.services.target_scan_helper import create_scan_from_target
+from domain.utils.git_repo_url import normalize_repo_url_for_target_type
 from config.settings import get_settings
 
 
@@ -64,22 +65,24 @@ class ScanTargetService:
         settings = get_settings()
         allow_flags = get_allow_flags_from_settings(settings)
         is_admin = actor_role == "admin"
+        source_clean = source.strip()
+        source_norm = normalize_repo_url_for_target_type(target_type, source_clean)
         check_can_scan_target(
             target_type=target_type,
             allow_flags=allow_flags,
             is_admin=is_admin,
-            target_url=source,
+            target_url=source_norm,
         )
         validated_config = validate_target_source_and_config(
-            target_type, source.strip(), config or {}
+            target_type, source_norm, config or {}
         )
-        if await self._repo.exists_for_user(user_id, source.strip(), target_type):
+        if await self._repo.exists_for_user(user_id, source_norm, target_type):
             raise ValueError("Target with this source already added")
 
         target = ScanTarget(
             user_id=user_id,
             type=target_type,
-            source=source.strip(),
+            source=source_norm,
             display_name=(display_name or "").strip() or None,
             auto_scan=AutoScanConfig.from_dict(auto_scan or {}),
             config=validated_config,

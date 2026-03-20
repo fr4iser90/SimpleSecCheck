@@ -34,6 +34,7 @@ from application.dtos.request_dto import (
     ScanFilterDTO,
     CancelScanRequestDTO
 )
+from domain.utils.git_repo_url import normalize_repo_url_for_target_type
 
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,11 @@ class ScanService:
     ) -> ScanDTO:
         """Create and start a new scan."""
         try:
+            raw_target = (request.target_url or "").strip()
+            normalized = normalize_repo_url_for_target_type(request.target_type, request.target_url or "")
+            if normalized != raw_target:
+                logger.info("Normalized git target URL: %s -> %s", raw_target, normalized)
+            request.target_url = normalized
             await self._apply_default_finding_policy(request)
             await enforce_scan_creation(
                 self.scan_repository,

@@ -295,7 +295,9 @@ function AppContent() {
       {(setupStatus) => (
         <BrowserRouter>
           <div className="app">
-            <AppRoutes setupStatus={setupStatus} />
+            <div className="app__body">
+              <AppRoutes setupStatus={setupStatus} />
+            </div>
             {setupStatus.setup_complete ? <Footer /> : null}
           </div>
         </BrowserRouter>

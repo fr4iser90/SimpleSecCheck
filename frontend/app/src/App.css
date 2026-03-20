@@ -4,6 +4,16 @@
   flex-direction: column;
 }
 
+/* Single flex item for all routes (Header + page), so the footer is not a third sibling
+   beside Header + page — that broke margin-top:auto and could leave the footer mid-viewport. */
+.app__body {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+
 @keyframes pulse {
   0%, 100% {
     opacity: 1;

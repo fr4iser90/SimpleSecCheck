@@ -11,6 +11,7 @@ from pydantic import BaseModel
 import httpx
 
 from infrastructure.logging_config import get_logger
+from domain.utils.git_repo_url import normalize_git_repo_url
 
 logger = get_logger("api.git")
 
@@ -167,6 +168,10 @@ async def get_git_branches(
         )
     
     repo_url = url.strip()
+    normalized = normalize_git_repo_url(repo_url)
+    if normalized != repo_url:
+        logger.info("Normalized Git URL for branch list: %s -> %s", repo_url, normalized)
+    repo_url = normalized
     
     # Validate URL
     if not _is_valid_git_url(repo_url):

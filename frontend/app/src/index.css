@@ -241,9 +241,9 @@ input:focus, select:focus {
   color: #fff;
 }
 
-/* Minimal one-line footer */
+/* Minimal one-line footer (sibling of .app__body; stick to bottom via parent flex, not margin-top:auto on a third column sibling) */
 .app-footer-minimal {
-  margin-top: auto;
+  flex-shrink: 0;
   padding: 0.75rem 1.25rem 1rem;
   text-align: center;
   font-size: 0.8125rem;
