@@ -188,6 +188,8 @@ class DockerAdapter:
             )
             # Longer timeout so tools (Checkov, CodeQL, …) can SIGTERM children before SIGKILL
             await asyncio.to_thread(container.stop, timeout=45)
+        except NotFound:
+            pass
         except DockerException as e:
             self.logger.error(f"Error stopping container {container_id}: {e}")
             raise
@@ -204,6 +206,8 @@ class DockerAdapter:
                 container_id
             )
             await asyncio.to_thread(container.remove)
+        except NotFound:
+            pass
         except DockerException as e:
             self.logger.error(f"Error removing container {container_id}: {e}")
             # Don't raise here - cleanup failure shouldn't fail the job
@@ -248,6 +252,9 @@ class DockerAdapter:
                 container_id
             )
             return container.status
+        except NotFound:
+            # Removed (e.g. cancel/stop+rm) — treat as finished so wait loops exit.
+            return "exited"
         except DockerException as e:
             self.logger.error(f"Error getting state for container {container_id}: {e}")
             return "unknown"
@@ -267,6 +274,9 @@ class DockerAdapter:
                 container_id
             )
             return container.attrs['State']['ExitCode']
+        except NotFound:
+            # Container already removed (e.g. after cancel).
+            return 137
         except DockerException as e:
             self.logger.error(f"Error getting exit code for container {container_id}: {e}")
             return -1
@@ -292,6 +302,8 @@ class DockerAdapter:
                 "network_io": stats.get('networks', {}),
                 "block_io": stats.get('blkio_stats', {})
             }
+        except NotFound:
+            return {}
         except DockerException as e:
             self.logger.error(f"Error getting stats for container {container_id}: {e}")
             return {}

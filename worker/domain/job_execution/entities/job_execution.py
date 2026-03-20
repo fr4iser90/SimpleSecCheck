@@ -56,6 +56,8 @@ class JobExecution:
     
     def complete_execution(self, success: bool = True, error_message: Optional[str] = None) -> None:
         """Mark job as completed."""
+        if self.status != JobExecutionStatus.RUNNING:
+            return
         self.status = JobExecutionStatus.COMPLETED if success else JobExecutionStatus.FAILED
         self.completed_at = datetime.utcnow()
         self.error_message = error_message
