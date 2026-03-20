@@ -19,7 +19,7 @@ for _key in ("JWT_SECRET_KEY", "SECRET_KEY", "SESSION_SECRET"):
 
 # Backend POSTGRES_PASSWORD has no default
 if "POSTGRES_PASSWORD" not in os.environ:
-    os.environ["POSTGRES_PASSWORD"] = "test"
+    os.environ["POSTGRES_PASSWORD"] = "ci-only-postgres-placeholder-not-for-production"
 
 def pytest_addoption(parser):
     """Add custom pytest options."""
