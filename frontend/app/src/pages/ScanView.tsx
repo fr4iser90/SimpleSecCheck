@@ -820,10 +820,10 @@ export default function ScanView() {
           <ReportViewer scanId={status.scan_id} />
         </div>
 
-        {/* Floating Action Buttons */}
+        {/* Floating Action Buttons — sit above global app footer (~3.5rem) so they don’t cover it */}
         <div style={{
           position: 'fixed',
-          bottom: '2rem',
+          bottom: 'calc(2rem + 3.5rem)',
           right: '2rem',
           display: 'flex',
           flexDirection: 'column',

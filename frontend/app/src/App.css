@@ -1,10 +1,12 @@
-/* min-height: 100vh keeps a definite column height so nested flex + iframe % heights
-   do not collapse when #root would otherwise size only from content. */
+/* Fill viewport; do not grow with content — scroll lives in .app__body main only so the
+   global footer stays at the bottom of the window instead of sliding through long pages. */
 .app {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* Single flex item for all routes (Header + page), so the footer is not a third sibling
@@ -15,13 +17,16 @@
   flex-direction: column;
   min-height: 0;
   width: 100%;
+  overflow: hidden;
 }
 
-/* Page after <Header>: fills remaining space above the footer so iframe/report height
-   is not computed from 100vh (which ignored the footer and caused overflow/clipping). */
-.app__body > header + * {
+/* Main scroll region: content after Header, or full-page routes without Header (login, etc.). */
+.app__body > header + *,
+.app__body > :only-child {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
 }

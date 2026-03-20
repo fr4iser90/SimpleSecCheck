@@ -50,7 +50,7 @@ export default function ScannerManagementPage() {
 
   const loadRegistry = async () => {
     try {
-      const response = await apiFetch('/api/scanners')
+      const response = await apiFetch('/api/scanners/')
       if (response.ok) {
         const data = await response.json()
         setRegistry(Array.isArray(data.scanners) ? data.scanners : [])

@@ -3,7 +3,7 @@ import { FrontendConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
 import ScanStep from './ScanStep'
 import ScannerCardGrid from './ScannerCardGrid'
-import { resolveApiUrl } from '../utils/resolveApiUrl'
+import { apiFetch } from '../utils/apiClient'
 
 import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
 
@@ -253,7 +253,9 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
     
     const loadScanners = async () => {
       try {
-        const response = await fetch(resolveApiUrl(`/api/scanners?scan_type=${scanType}`))
+        const response = await apiFetch(
+          `/api/scanners/?scan_type=${encodeURIComponent(scanType)}`,
+        )
         if (!response.ok) {
           throw new Error('Failed to load scanners')
         }
@@ -269,7 +271,13 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
           setSelectedScanners(enabledScanners)
         }
       } catch (err) {
-        setScannerError(err instanceof Error ? err.message : 'Failed to load scanners')
+        const msg =
+          err instanceof TypeError
+            ? 'Could not reach the API (network). Check nginx/backend and reload.'
+            : err instanceof Error
+              ? err.message
+              : 'Failed to load scanners'
+        setScannerError(msg)
         console.error('Error loading scanners:', err)
       } finally {
         setLoadingScanners(false)

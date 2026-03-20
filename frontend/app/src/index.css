@@ -102,6 +102,7 @@
 
 html {
   height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -111,16 +112,19 @@ body {
   background: var(--bg-main);
   background-attachment: fixed;
   color: var(--text-main);
-  min-height: 100vh;
   height: 100%;
+  overflow: hidden;
   transition: background 0.25s ease, color 0.25s ease;
 }
 
 #root {
-  min-height: 100%;
-  height: 100%;
+  /* Use vh so the shell fills the window even if a parent wrapper does not pass height: 100% */
+  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* Glassmorphism */
@@ -1360,7 +1364,9 @@ input:focus, select:focus {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 100vh;
+  flex: 1;
+  width: 100%;
+  min-height: 100%;
   background: var(--bg-main);
   padding: 1.25rem;
 }
@@ -1465,7 +1471,9 @@ input:focus, select:focus {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 100vh;
+  flex: 1;
+  width: 100%;
+  min-height: 100%;
   background: var(--bg-main);
   background-attachment: fixed;
   padding: 1.25rem;
@@ -1602,7 +1610,8 @@ input:focus, select:focus {
 
 /* Admin Dashboard page */
 .admin-dashboard-page {
-  min-height: 100vh;
+  flex: 1;
+  min-height: 100%;
   padding: 2rem;
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { resolveApiUrl } from '../utils/resolveApiUrl'
+import { apiFetch } from '../utils/apiClient'
 
 interface Scanner {
   name: string
@@ -31,7 +31,9 @@ export default function ScannerSelector({
       setLoading(true)
       setError(null)
       try {
-        const response = await fetch(resolveApiUrl(`/api/scanners?scan_type=${scanType}`))
+        const response = await apiFetch(
+          `/api/scanners/?scan_type=${encodeURIComponent(scanType)}`,
+        )
         if (!response.ok) {
           throw new Error('Failed to load scanners')
         }
@@ -47,7 +49,13 @@ export default function ScannerSelector({
           onSelectionChange(enabledScanners)
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load scanners')
+        setError(
+          err instanceof TypeError
+            ? 'Could not reach the API (network). Check nginx/backend and reload.'
+            : err instanceof Error
+              ? err.message
+              : 'Failed to load scanners',
+        )
         console.error('Error loading scanners:', err)
       } finally {
         setLoading(false)

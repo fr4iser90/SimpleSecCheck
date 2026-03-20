@@ -14,7 +14,9 @@ export function useScanners(scanType: string = 'code') {
   useEffect(() => {
     const loadScanners = async () => {
       try {
-        const response = await apiFetch(`/api/scanners?scan_type=${scanType}`)
+        const response = await apiFetch(
+          `/api/scanners/?scan_type=${encodeURIComponent(scanType)}`,
+        )
         if (response.ok) {
           const data = await response.json()
           setScanners(data.scanners || [])
