@@ -469,16 +469,16 @@ async def refresh_token(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication required"
             )
-        role = actor_context.role
-        if not role and actor_context.user_id:
-            try:
-                user = await user_service.get_by_id(actor_context.user_id)
-                if user:
-                    role = user.role.value
-            except Exception:
-                role = "user"
-        if not role:
-            role = "user"
+        user = await user_service.get_by_id(actor_context.user_id)
+        if not user:
+            actor_context_dependency.clear_session_cookie(response)
+            actor_context_dependency.clear_refresh_cookie(response)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Your account is no longer valid. Please sign in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        role = actor_context.role or user.role.value
         # Create new JWT token
         access_token = actor_context_dependency.create_jwt_token(
             user_id=actor_context.user_id,

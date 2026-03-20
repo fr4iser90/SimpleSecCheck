@@ -5,7 +5,7 @@ This module defines the FastAPI routes for scan operations.
 Routes support both authenticated and guest users via ActorContext.
 """
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi import status as fastapi_status
 import asyncio
@@ -16,7 +16,12 @@ import ipaddress
 import re
 from pathlib import Path
 
-from api.deps.actor_context import get_actor_context, ActorContext
+from api.deps.actor_context import (
+    get_actor_context,
+    get_actor_context_dependency,
+    ActorContext,
+    ActorContextDependency,
+)
 from api.schemas.scan_schemas import (
     ScanRequestSchema,
     ScanResponseSchema,
@@ -33,6 +38,7 @@ from api.schemas.scan_schemas import (
     ReportShareLinkResponseSchema,
 )
 from application.services.scan_service import ScanService
+from application.services.user_service import UserService
 from application.dtos.scan_dto import ScanDTO
 from application.dtos.request_dto import (
     ScanRequestDTO,
@@ -59,7 +65,7 @@ import re
 
 
 # Import dependency injection container
-from infrastructure.container import get_scan_service, get_scan_steps_repository
+from infrastructure.container import get_scan_service, get_scan_steps_repository, get_user_service
 from domain.entities.target_type import TargetType
 
 
@@ -221,6 +227,10 @@ def get_scan_service_dependency():
     return get_scan_service()
 
 
+def get_user_service_dependency() -> UserService:
+    return get_user_service()
+
+
 router = APIRouter(
     prefix="/api/v1/scans",
     tags=["scans"],
@@ -368,8 +378,11 @@ def _enrich_step_duration_fields(step: Dict[str, Any]) -> None:
 )
 async def create_scan(
     scan_request: ScanRequestSchema,
+    response: Response,
     actor_context: ActorContext = Depends(get_actor_context),
     scan_service: ScanService = Depends(get_scan_service_dependency),
+    user_service: UserService = Depends(get_user_service_dependency),
+    actor_context_dependency: ActorContextDependency = Depends(get_actor_context_dependency),
 ) -> ScanResponseSchema:
     """
     Create a new scan.
@@ -379,6 +392,18 @@ async def create_scan(
     - **scan_service**: Scan orchestration service (auto-injected)
     """
     try:
+        # JWT can be valid while the user row is missing (e.g. DB reset). Avoid FK error on scans.user_id.
+        if actor_context.is_authenticated and actor_context.user_id:
+            db_user = await user_service.get_by_id(actor_context.user_id)
+            if not db_user:
+                actor_context_dependency.clear_session_cookie(response)
+                actor_context_dependency.clear_refresh_cookie(response)
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_401_UNAUTHORIZED,
+                    detail="Your account is no longer valid. Please sign in again.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
         # Prepare metadata - add session_id for guest sessions
         metadata = scan_request.metadata.copy() if scan_request.metadata else {}
         if not actor_context.is_authenticated and actor_context.session_id:
