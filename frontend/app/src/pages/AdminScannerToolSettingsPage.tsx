@@ -5,7 +5,7 @@ import { apiFetch } from '../utils/apiClient'
 interface ScannerRow {
   tools_key: string
   display_name: string
-  execution_timeout: number
+  standard_profile_timeout: number | null
   discovery_enabled: boolean
   effective_timeout: number
   effective_enabled: boolean
@@ -139,7 +139,7 @@ export default function AdminScannerToolSettingsPage() {
           <thead>
             <tr>
               <th style={{ textAlign: 'left', padding: '0.5rem' }}>Tool / tools_key</th>
-              <th style={{ textAlign: 'left' }}>execution.timeout</th>
+              <th style={{ textAlign: 'left' }}>standard profile (manifest)</th>
               <th style={{ textAlign: 'left' }}>Effective</th>
               <th style={{ textAlign: 'left' }}>DB override</th>
               <th />
@@ -155,7 +155,7 @@ export default function AdminScannerToolSettingsPage() {
                     <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}>(discovery off)</span>
                   )}
                 </td>
-                <td>{row.execution_timeout}s</td>
+                <td>{row.standard_profile_timeout != null ? `${row.standard_profile_timeout}s` : '—'}</td>
                 <td>
                   {row.effective_timeout}s / {row.effective_enabled ? 'on' : 'off'}
                 </td>

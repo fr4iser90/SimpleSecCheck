@@ -63,10 +63,11 @@ class DockerRunner:
         environment: Optional[Dict[str, str]] = None,
         network: Optional[str] = None,
         remove: bool = True,
-        timeout: int = 3600,
+        *,
+        timeout: int,
         **kwargs
     ) -> Dict[str, Any]:
-        """Run Docker container."""
+        """Run Docker container. ``timeout`` is required (no default — caller supplies manifest/admin value)."""
         if not self.is_initialized:
             await self.initialize()
         

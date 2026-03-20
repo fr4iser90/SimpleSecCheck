@@ -3,6 +3,7 @@ Detect-secrets Scanner
 Python implementation of run_detect_secrets.sh
 """
 import os
+import shlex
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
@@ -66,10 +67,11 @@ class DetectSecretsScanner(BaseScanner):
         text_output = self.results_dir / "report.txt"   # Changed from detect-secrets.txt
         
         exclude_args = self.get_exclude_args()
+        extra = shlex.split(os.getenv("DETECT_SECRETS_EXTRA_ARGS", "").strip())
         
         # JSON report
         self.log("Running secret detection scan...")
-        cmd = ["detect-secrets", "scan", "--all-files", *exclude_args, str(self.target_path)]
+        cmd = ["detect-secrets", "scan", "--all-files", *exclude_args, *extra, str(self.target_path)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:

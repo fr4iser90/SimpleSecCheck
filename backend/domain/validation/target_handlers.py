@@ -1,7 +1,5 @@
 """
-Target handlers – plugin-style per target_type.
-
-No if/else on type; handlers registry. Prepares target for scan / validates.
+Target handlers - plugin-style per target_type.
 """
 from __future__ import annotations
 
@@ -12,25 +10,19 @@ from domain.entities.scan_target import ScanTarget
 
 
 class TargetHandler(ABC):
-    """Handler for a target type. Prepare, validate, derive scan params."""
-
     @property
     @abstractmethod
     def target_type(self) -> str:
-        """e.g. git_repo, container_registry, local_mount."""
         pass
 
     def validate_source(self, source: str) -> None:
-        """Validate source format. Raise ValueError if invalid."""
         if not source or not source.strip():
             raise ValueError("source is required")
 
     def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate and normalize config. Return cleaned config dict."""
         return dict(config or {})
 
     def prepare_scan_params(self, target: ScanTarget) -> Dict[str, Any]:
-        """Build target_url, target_type, scan_type, config for starting a scan."""
         return {
             "target_url": target.source,
             "target_type": target.type,
@@ -64,10 +56,6 @@ class ContainerTargetHandler(TargetHandler):
     def target_type(self) -> str:
         return "container_registry"
 
-    def validate_source(self, source: str) -> None:
-        super().validate_source(source)
-        # Allow: nginx, nginx:latest, docker.io/nginx, ghcr.io/owner/image:tag
-
     def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         from domain.value_objects.target_config_schemas import ContainerTargetConfig
         c = ContainerTargetConfig(**(config or {}))
@@ -91,13 +79,10 @@ class LocalTargetHandler(TargetHandler):
 
 
 def get_target_handler(target_type: str) -> Optional[TargetHandler]:
-    """Return handler for target_type. None if not supported."""
     return _HANDLERS.get(target_type)
 
 
 def validate_target_source_and_config(target_type: str, source: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate source and config for target_type. Returns normalized config. Raises ValueError.
-    target_type must be a valid TargetType value (use TargetType.is_valid first in API)."""
     from domain.entities.target_type import TargetType
     if not TargetType.is_valid(target_type):
         raise ValueError(

@@ -3,6 +3,7 @@ Wapiti Scanner
 Python implementation of run_wapiti.sh
 """
 import os
+import shlex
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
@@ -55,17 +56,19 @@ class WapitiScanner(BaseScanner):
         
         json_output = self.results_dir / "report.json"  # Changed from wapiti.json
         text_output = self.results_dir / "report.txt"   # Changed from wapiti.txt
+
+        extra = shlex.split(os.getenv("WAPITI_EXTRA_ARGS", "").strip())
         
         # JSON report
         self.log("Running web vulnerability scan...")
-        cmd = ["wapiti", "-u", self.scan_target, "-f", "json", "-o", str(json_output)]
+        cmd = ["wapiti", "-u", self.scan_target, *extra, "-f", "json", "-o", str(json_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
             self.log("JSON report generation failed", "WARNING")
         
         # Text report
-        cmd = ["wapiti", "-u", self.scan_target, "-o", str(text_output)]
+        cmd = ["wapiti", "-u", self.scan_target, *extra, "-o", str(text_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:

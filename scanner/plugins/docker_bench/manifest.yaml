@@ -10,8 +10,6 @@ categories:
 icon: 🐋
 languages: null
 severity_supported: true
-execution:
-  timeout: 300
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -29,6 +27,19 @@ install:
 - - chmod
   - +x
   - /opt/docker-bench-security/docker-bench-security.sh
+scan_profiles:
+  quick:
+    timeout: 90
+    hints:
+      depth: shallow
+      intensity: low
+  standard:
+    timeout: 120
+  deep:
+    timeout: 150
+    hints:
+      depth: deep
+      intensity: high
 exit_codes:
   binary: docker-bench-security.sh
   codes:

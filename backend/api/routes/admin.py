@@ -30,20 +30,26 @@ from application.services.user_service import UserService
 from infrastructure.redis.client import get_redis_health
 from domain.services.audit_log_service import AuditLogService
 from domain.services.scanner_duration_service import ScannerDurationService
-from domain.services.target_permission_policy import (
+from domain.policies.target_permission_policy import (
     ALL_SCAN_FEATURE_FLAG_KEYS,
     ROLE_CAPABILITY_TARGET_TYPES,
     ROLE_NAMES,
 )
-from domain.services.role_capabilities_merge import (
+from domain.policies.role_capabilities_policy import (
     default_role_capabilities,
     merge_role_capabilities_raw,
 )
 from domain.datetime_serialization import isoformat_utc
-from domain.services.finding_policy_defaults import (
+from domain.policies.finding_policy import (
     DEFAULT_FINDING_POLICY_APPLY_BY_DEFAULT,
     DEFAULT_FINDING_POLICY_PATH,
     default_scan_defaults,
+)
+from domain.policies.scan_profile_policy import (
+    extract_profile_catalog_from_scanner_metadata,
+    normalize_profile_key,
+    resolve_profile_order,
+    scan_profile_settings,
 )
 from datetime import datetime
 
@@ -64,6 +70,10 @@ def get_system_state_repository_dependency() -> SystemStateRepository:
 
 def get_scan_repository_dependency() -> ScanRepository:
     return get_scan_repository()
+
+
+def get_scanner_repository_dependency() -> ScannerRepositoryInterface:
+    return get_scanner_repository()
 
 
 class SMTPConfigRequest(BaseModel):
@@ -133,7 +143,28 @@ def _default_policies() -> Dict[str, Any]:
 
 def _default_scan_defaults() -> Dict[str, Any]:
     """Default for scan form: finding policy path and whether to apply by default."""
-    return default_scan_defaults()
+    out = dict(default_scan_defaults())
+    out.update(scan_profile_settings())
+    return out
+
+
+async def _scan_profile_catalog(scanner_repo: ScannerRepositoryInterface) -> List[str]:
+    scanners = await scanner_repo.list_all()
+    return extract_profile_catalog_from_scanner_metadata(scanners)
+
+
+def _validate_profile_field(value: Optional[str], *, catalog: List[str], field_name: str) -> Optional[str]:
+    if value is None:
+        return None
+    key = normalize_profile_key(value)
+    if not key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name}: profile cannot be empty")
+    if key not in set(catalog):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{field_name}: invalid profile '{key}'. Allowed: {catalog}",
+        )
+    return key
 
 
 class ScanEnforcementUpdate(BaseModel):
@@ -424,18 +455,34 @@ class ScanDefaultsResponse(BaseModel):
     """Scan form defaults: finding policy path and whether to apply by default."""
     default_finding_policy_path: str = Field(description="Default path for finding policy file (e.g. .scanning/finding-policy.json)")
     finding_policy_apply_by_default: bool = Field(description="If True, scan form pre-fills and sends this path so the policy is applied automatically.")
+    scan_profile_guest: str = Field(description="Configured scan profile for guest scans")
+    scan_profile_user: str = Field(description="Configured scan profile for signed-in user scans")
+    scan_profile_admin: str = Field(description="Configured scan profile for admin scans")
+    scan_profile_max_guest: str = Field(description="Maximum allowed scan profile for guests")
+    scan_profile_max_user: str = Field(description="Maximum allowed scan profile for signed-in users")
+    scan_profile_max_admin: str = Field(description="Maximum allowed scan profile for admins")
+    scan_profile_order: List[str] = Field(default_factory=list, description="Profile hierarchy order (low to high)")
+    scan_profiles_catalog: List[str] = Field(default_factory=list, description="Available profiles discovered from scanner manifests")
 
 
 class ScanDefaultsRequest(BaseModel):
     """Request to update scan form defaults."""
     default_finding_policy_path: Optional[str] = Field(None, max_length=500)
     finding_policy_apply_by_default: Optional[bool] = None
+    scan_profile_guest: Optional[str] = None
+    scan_profile_user: Optional[str] = None
+    scan_profile_admin: Optional[str] = None
+    scan_profile_max_guest: Optional[str] = None
+    scan_profile_max_user: Optional[str] = None
+    scan_profile_max_admin: Optional[str] = None
+    scan_profile_order: Optional[List[str]] = None
 
 
 @router.get("/config/scan-defaults", response_model=ScanDefaultsResponse)
 async def get_scan_defaults(
     actor_context: ActorContext = Depends(get_admin_user),
     system_state_repo: SystemStateRepository = Depends(get_system_state_repository_dependency),
+    scanner_repo: ScannerRepositoryInterface = Depends(get_scanner_repository_dependency),
 ) -> ScanDefaultsResponse:
     """Get scan form defaults (admin). Used by Execution Settings and by frontend config."""
     try:
@@ -443,9 +490,27 @@ async def get_scan_defaults(
         defaults = dict(_default_scan_defaults())
         if state and state.config:
             defaults.update(state.config.get("scan_defaults") or {})
+        catalog = await _scan_profile_catalog(scanner_repo)
+        if not catalog:
+            catalog = ["standard"]
+        order = resolve_profile_order(defaults, catalog=catalog)
+        profile_guest = normalize_profile_key(defaults.get("scan_profile_guest")) or order[0]
+        profile_user = normalize_profile_key(defaults.get("scan_profile_user")) or order[min(1, len(order) - 1)]
+        profile_admin = normalize_profile_key(defaults.get("scan_profile_admin")) or order[-1]
+        profile_max_guest = normalize_profile_key(defaults.get("scan_profile_max_guest")) or order[0]
+        profile_max_user = normalize_profile_key(defaults.get("scan_profile_max_user")) or order[min(1, len(order) - 1)]
+        profile_max_admin = normalize_profile_key(defaults.get("scan_profile_max_admin")) or order[-1]
         return ScanDefaultsResponse(
             default_finding_policy_path=defaults.get("default_finding_policy_path", DEFAULT_FINDING_POLICY_PATH),
             finding_policy_apply_by_default=defaults.get("finding_policy_apply_by_default", DEFAULT_FINDING_POLICY_APPLY_BY_DEFAULT),
+            scan_profile_guest=profile_guest if profile_guest in catalog else order[0],
+            scan_profile_user=profile_user if profile_user in catalog else order[min(1, len(order) - 1)],
+            scan_profile_admin=profile_admin if profile_admin in catalog else order[-1],
+            scan_profile_max_guest=profile_max_guest if profile_max_guest in catalog else order[0],
+            scan_profile_max_user=profile_max_user if profile_max_user in catalog else order[min(1, len(order) - 1)],
+            scan_profile_max_admin=profile_max_admin if profile_max_admin in catalog else order[-1],
+            scan_profile_order=order,
+            scan_profiles_catalog=catalog,
         )
     except HTTPException:
         raise
@@ -461,6 +526,7 @@ async def put_scan_defaults(
     body: ScanDefaultsRequest,
     actor_context: ActorContext = Depends(get_admin_user),
     system_state_repo: SystemStateRepository = Depends(get_system_state_repository_dependency),
+    scanner_repo: ScannerRepositoryInterface = Depends(get_scanner_repository_dependency),
 ) -> ScanDefaultsResponse:
     """Update scan form defaults (admin)."""
     try:
@@ -469,18 +535,60 @@ async def put_scan_defaults(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System state not found")
         config = dict(state.config or {})
         scan_defaults = dict(config.get("scan_defaults") or _default_scan_defaults())
+        catalog = await _scan_profile_catalog(scanner_repo)
+        if not catalog:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No scan profiles available from scanner manifests.",
+            )
+        allowed = set(catalog)
+        current_order = resolve_profile_order(scan_defaults, catalog=catalog)
         if body.default_finding_policy_path is not None:
             path = (body.default_finding_policy_path or "").strip() or DEFAULT_FINDING_POLICY_PATH
             scan_defaults["default_finding_policy_path"] = path[:500]
         if body.finding_policy_apply_by_default is not None:
             scan_defaults["finding_policy_apply_by_default"] = body.finding_policy_apply_by_default
+        if body.scan_profile_guest is not None:
+            scan_defaults["scan_profile_guest"] = _validate_profile_field(body.scan_profile_guest, catalog=catalog, field_name="scan_profile_guest")
+        if body.scan_profile_user is not None:
+            scan_defaults["scan_profile_user"] = _validate_profile_field(body.scan_profile_user, catalog=catalog, field_name="scan_profile_user")
+        if body.scan_profile_admin is not None:
+            scan_defaults["scan_profile_admin"] = _validate_profile_field(body.scan_profile_admin, catalog=catalog, field_name="scan_profile_admin")
+        if body.scan_profile_max_guest is not None:
+            scan_defaults["scan_profile_max_guest"] = _validate_profile_field(body.scan_profile_max_guest, catalog=catalog, field_name="scan_profile_max_guest")
+        if body.scan_profile_max_user is not None:
+            scan_defaults["scan_profile_max_user"] = _validate_profile_field(body.scan_profile_max_user, catalog=catalog, field_name="scan_profile_max_user")
+        if body.scan_profile_max_admin is not None:
+            scan_defaults["scan_profile_max_admin"] = _validate_profile_field(body.scan_profile_max_admin, catalog=catalog, field_name="scan_profile_max_admin")
+        if body.scan_profile_order is not None:
+            new_order: List[str] = []
+            seen = set()
+            for item in body.scan_profile_order:
+                key = _validate_profile_field(item, catalog=catalog, field_name="scan_profile_order")
+                if key and key not in seen:
+                    seen.add(key)
+                    new_order.append(key)
+            for c in catalog:
+                if c not in seen:
+                    new_order.append(c)
+            scan_defaults["scan_profile_order"] = new_order
+            current_order = new_order
         config["scan_defaults"] = scan_defaults
         state.config = config
         state.updated_at = datetime.utcnow()
         await system_state_repo.save(state)
+        order = resolve_profile_order(scan_defaults, catalog=catalog) if current_order else resolve_profile_order(scan_defaults, catalog=catalog)
         return ScanDefaultsResponse(
             default_finding_policy_path=scan_defaults["default_finding_policy_path"],
             finding_policy_apply_by_default=scan_defaults["finding_policy_apply_by_default"],
+            scan_profile_guest=normalize_profile_key(scan_defaults.get("scan_profile_guest")) or order[0],
+            scan_profile_user=normalize_profile_key(scan_defaults.get("scan_profile_user")) or order[min(1, len(order) - 1)],
+            scan_profile_admin=normalize_profile_key(scan_defaults.get("scan_profile_admin")) or order[-1],
+            scan_profile_max_guest=normalize_profile_key(scan_defaults.get("scan_profile_max_guest")) or order[0],
+            scan_profile_max_user=normalize_profile_key(scan_defaults.get("scan_profile_max_user")) or order[min(1, len(order) - 1)],
+            scan_profile_max_admin=normalize_profile_key(scan_defaults.get("scan_profile_max_admin")) or order[-1],
+            scan_profile_order=order,
+            scan_profiles_catalog=catalog,
         )
     except HTTPException:
         raise
@@ -1949,7 +2057,7 @@ async def get_scanner_tool_settings(
     """
     List scanners. DB overrides are keyed by tools_key (slug), not display name.
     """
-    from application.services.scanner_tool_overrides_service import execution_timeout_from_meta
+    from application.services.scanner_tool_overrides_service import standard_profile_timeout_from_meta
 
     scanners = await scanner_repo.list_all()
     settings_list = await settings_repo.list_all()
@@ -1960,15 +2068,18 @@ async def get_scanner_tool_settings(
         if not tk:
             continue
         meta = sc.scanner_metadata or {}
-        mt = execution_timeout_from_meta(meta)
+        mt = standard_profile_timeout_from_meta(meta)
         row = db_map.get(tk)
-        eff_timeout = row.timeout_seconds if row and row.timeout_seconds else mt
+        if row and row.timeout_seconds is not None and row.timeout_seconds > 0:
+            eff_timeout = int(row.timeout_seconds)
+        else:
+            eff_timeout = mt
         eff_enabled = row.enabled if row is not None and row.enabled is not None else sc.enabled
         items.append(
             {
                 "tools_key": tk,
                 "display_name": sc.name,
-                "execution_timeout": mt,
+                "standard_profile_timeout": mt,
                 "discovery_enabled": sc.enabled,
                 "effective_timeout": eff_timeout,
                 "effective_enabled": eff_enabled,

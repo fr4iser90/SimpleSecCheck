@@ -65,10 +65,23 @@ class SemgrepScanner(BaseScanner):
         
         return exclude_args
     
+    def _profile_registry_configs(self) -> List[str]:
+        """Optional rule packs from manifest scan profile (SEMGREP_PROFILE_CONFIGS=p/ci,p/owasp-top-ten)."""
+        raw = os.getenv("SEMGREP_PROFILE_CONFIGS", "").strip()
+        if not raw:
+            return []
+        args: List[str] = []
+        for part in raw.split(","):
+            p = part.strip()
+            if p:
+                args.extend(["--config", p])
+        return args
+
     def get_config_args(self) -> List[str]:
         """Get Semgrep config arguments"""
         config_args = []
-        
+        config_args.extend(self._profile_registry_configs())
+
         if self.rules_path.exists():
             if self.rules_path.is_dir():
                 # Directory: add all YAML files
@@ -222,29 +235,31 @@ class SemgrepScanner(BaseScanner):
             self.log(f"SARIF export failed: {e}", "WARNING")
             self.fail_substep("SARIF Export", f"SARIF export failed: {e}")
         
-        # Additional security-focused deep scan (non-critical)
-        try:
-            self.start_substep("Security Deep Scan", "Running additional security-focused scan...", SubStepType.PHASE)
-            security_json = self.results_dir / "security-deep.json"
-            cmd = [
-                "semgrep",
-                "--disable-version-check",
-                "--config", "p/security-audit",
-                "--config", "p/secrets",
-                "--config", "p/owasp-top-ten",
-                str(self.target_path),
-                *exclude_args,
-                "--json",
-                "-o", str(security_json)
-            ]
-            self.run_command(cmd, capture_output=True)
-            if security_json.exists():
-                self.complete_substep("Security Deep Scan", "Security deep scan completed")
-            else:
-                self.complete_substep("Security Deep Scan", "Security deep scan completed (no findings)")
-        except Exception as e:
-            self.log(f"Security deep scan failed: {e}", "WARNING")
-            self.complete_substep("Security Deep Scan", f"Security deep scan skipped: {e}")
+        # Additional security-focused deep scan (non-critical); manifest profile can disable via SEMGREP_RUN_SECURITY_DEEP=0
+        run_deep = os.getenv("SEMGREP_RUN_SECURITY_DEEP", "1").strip().lower() in ("1", "true", "yes")
+        if run_deep:
+            try:
+                self.start_substep("Security Deep Scan", "Running additional security-focused scan...", SubStepType.PHASE)
+                security_json = self.results_dir / "security-deep.json"
+                cmd = [
+                    "semgrep",
+                    "--disable-version-check",
+                    "--config", "p/security-audit",
+                    "--config", "p/secrets",
+                    "--config", "p/owasp-top-ten",
+                    str(self.target_path),
+                    *exclude_args,
+                    "--json",
+                    "-o", str(security_json)
+                ]
+                self.run_command(cmd, capture_output=True)
+                if security_json.exists():
+                    self.complete_substep("Security Deep Scan", "Security deep scan completed")
+                else:
+                    self.complete_substep("Security Deep Scan", "Security deep scan completed (no findings)")
+            except Exception as e:
+                self.log(f"Security deep scan failed: {e}", "WARNING")
+                self.complete_substep("Security Deep Scan", f"Security deep scan skipped: {e}")
         
         # Check if reports were generated
         if json_output.exists() and json_output.stat().st_size > 0:

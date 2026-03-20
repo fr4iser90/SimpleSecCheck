@@ -1,10 +1,5 @@
 """
-Target Initial Scan Scheduler
-
-After a new target is created, the first scan is not enqueued immediately.
-This scheduler runs periodically and enqueues the initial scan for targets
-that were created at least initial_scan_delay_seconds ago (admin-configurable).
-Targets with initial_scan_paused=True are skipped until the user starts the scan manually.
+Target Initial Scan Scheduler.
 """
 import asyncio
 import logging
@@ -15,7 +10,7 @@ from infrastructure.container import (
     get_scan_target_repository,
     get_system_state_repository,
 )
-from domain.services.target_scan_helper import create_scan_from_target
+from application.helpers.target_scan_helper import create_scan_from_target
 from domain.datetime_serialization import isoformat_utc
 
 logger = logging.getLogger(__name__)
@@ -25,11 +20,6 @@ CHECK_INTERVAL_SECONDS = 30
 
 
 class TargetInitialScanScheduler:
-    """
-    Scheduler that enqueues the first scan for new targets after a delay.
-    Delay is read from SystemState.config.execution_limits.initial_scan_delay_seconds.
-    """
-
     def __init__(self, check_interval_seconds: int = CHECK_INTERVAL_SECONDS):
         self.check_interval_seconds = check_interval_seconds
         self._running = False

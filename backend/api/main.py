@@ -369,7 +369,7 @@ async def startup_event():
                 while True:
                     await asyncio.sleep(interval)
                     try:
-                        from domain.services.scan_heartbeat_recovery import (
+                        from infrastructure.jobs.scan_heartbeat_recovery import (
                             recover_stale_running_scans,
                         )
 
@@ -442,7 +442,7 @@ async def startup_event():
     
     # Start auto-scan scheduler for new repositories
     try:
-        from domain.services.auto_scan_scheduler import AutoScanScheduler
+        from infrastructure.jobs.auto_scan_scheduler import AutoScanScheduler
         import api.main as main_module
         auto_scan_scheduler = AutoScanScheduler(delay_seconds=45, check_interval_seconds=30)
         await auto_scan_scheduler.start()
@@ -455,7 +455,7 @@ async def startup_event():
 
     # Start target initial-scan scheduler (enqueues first scan after admin-configured delay)
     try:
-        from domain.services.target_initial_scan_scheduler import TargetInitialScanScheduler
+        from infrastructure.jobs.target_initial_scan_scheduler import TargetInitialScanScheduler
         import api.main as main_module
         target_initial_scheduler = TargetInitialScanScheduler(check_interval_seconds=30)
         await target_initial_scheduler.start()
@@ -477,7 +477,7 @@ async def _re_enqueue_pending_scans():
         from infrastructure.repositories.scan_repository import DatabaseScanRepository
         from infrastructure.services.queue_service import QueueService
         from domain.entities.scan import ScanStatus
-        from domain.services.scan_heartbeat_recovery import recover_stale_running_scans
+        from infrastructure.jobs.scan_heartbeat_recovery import recover_stale_running_scans
 
         scan_repository = DatabaseScanRepository()
         queue_service = QueueService()

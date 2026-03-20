@@ -5,6 +5,7 @@ Python implementation of run_docker_bench.sh
 import os
 import json
 import re
+import shlex
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
@@ -139,7 +140,8 @@ class DockerBenchScanner(BaseScanner):
         
         # Text report
         self.log("Running compliance scan...")
-        cmd = [str(bench_script)]
+        db_extra = shlex.split(os.getenv("DOCKER_BENCH_EXTRA_ARGS", "").strip())
+        cmd = [str(bench_script), *db_extra]
         
         result = self.run_command(cmd, cwd=self.docker_bench_dir, capture_output=True)
         if result.returncode == 0 and result.stdout:

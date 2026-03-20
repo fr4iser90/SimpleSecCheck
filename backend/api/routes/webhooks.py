@@ -13,7 +13,7 @@ import logging
 from api.deps.actor_context import get_actor_context, ActorContext
 from domain.services.auto_scan_service import AutoScanService
 from domain.services.audit_log_service import AuditLogService
-from domain.services.repo_scan_helper import create_repo_scan
+from application.helpers.repo_scan_helper import create_repo_scan
 from application.services.github_repo_service import GitHubRepoService
 from infrastructure.container import get_github_repo_service
 

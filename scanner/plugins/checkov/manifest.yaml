@@ -9,8 +9,6 @@ categories:
 icon: ☁️
 languages: null
 severity_supported: true
-execution:
-  timeout: 1800
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -19,14 +17,13 @@ checkpoint:
   - --version
 homepage: https://www.checkov.io
 documentation: https://www.checkov.io/documentation.html
+# Install only `checkov` (pulls a compatible bc-detect-secrets). Do NOT add
+# `pip install --upgrade bc-detect-secrets` after — it overrides Checkov's pin and
+# breaks the secrets runner (e.g. AttributeError: JSON on FileType in detector_utils).
 install:
 - - pip3
   - install
   - checkov
-- - pip3
-  - install
-  - --upgrade
-  - bc-detect-secrets
 assets:
 - id: config
   type: config
@@ -34,6 +31,23 @@ assets:
   mount:
     host_subpath: scanner/plugins/checkov/config/config.yaml
     container_path: /app/scanner/plugins/checkov/config/config.yaml
+scan_profiles:
+  quick:
+    timeout: 60
+    hints:
+      depth: shallow
+      intensity: low
+    env:
+      CHECKOV_EXTRA_ARGS: "--compact"
+  standard:
+    timeout: 90
+  deep:
+    timeout: 120
+    hints:
+      depth: deep
+      intensity: high
+    env:
+      CHECKOV_EXTRA_ARGS: "--download-external-modules"
 exit_codes:
   binary: checkov
   codes:

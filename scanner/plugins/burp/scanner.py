@@ -4,6 +4,7 @@ Python implementation of run_burp.sh
 """
 import os
 import json
+import shlex
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
@@ -75,7 +76,7 @@ class BurpScanner(BaseScanner):
             self.log("JSON report generation failed", "WARNING")
         
         # Text report
-        cmd = ["java", "-jar", str(self.burp_jar), *config_args, "-u", self.scan_target, "-o", str(text_output)]
+        cmd = ["java", "-jar", str(self.burp_jar), *config_args, *burp_extra, "-u", self.scan_target, "-o", str(text_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:

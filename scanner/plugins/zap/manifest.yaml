@@ -10,8 +10,6 @@ categories:
 icon: 🕷️
 languages: null
 severity_supported: true
-execution:
-  timeout: 1200
 checkpoint:
   primary_artifact: report.xml
   artifact_format: any
@@ -59,6 +57,44 @@ assets:
   mount:
     host_subpath: scanner/plugins/zap/config/baseline.conf
     container_path: /app/scanner/plugins/zap/config/baseline.conf
+# User-facing scan profiles (quick / standard / deep). Consumed by backend + orchestrator via DB metadata.
+scan_profiles:
+  quick:
+    timeout: 180
+    hints:
+      depth: shallow
+      intensity: low
+      coverage: essential
+    env:
+      ZAP_OPTIONS: >-
+        -config api.disablekey=true -config spider.maxDuration=5 -config scanner.maxDuration=0
+        -config scanner.maxRuleTimeInMs=30000
+      ZAP_USE_ACTIVE_SCAN: "0"
+      ZAP_STARTUP_DELAY: "15"
+  standard:
+    timeout: 300
+    hints:
+      depth: medium
+      intensity: medium
+      coverage: balanced
+    env:
+      ZAP_OPTIONS: >-
+        -config api.disablekey=true -config spider.maxDuration=10 -config scanner.maxDuration=30
+        -config scanner.maxRuleTimeInMs=60000
+      ZAP_USE_ACTIVE_SCAN: "1"
+      ZAP_STARTUP_DELAY: "25"
+  deep:
+    timeout: 600
+    hints:
+      depth: deep
+      intensity: high
+      coverage: broad
+    env:
+      ZAP_OPTIONS: >-
+        -config api.disablekey=true -config spider.maxDuration=30 -config scanner.maxDuration=60
+        -config scanner.maxRuleTimeInMs=120000
+      ZAP_USE_ACTIVE_SCAN: "1"
+      ZAP_STARTUP_DELAY: "35"
 exit_codes:
   binary: zap-baseline.py
   codes:

@@ -6,5 +6,12 @@ categories:
 languages: null
 install: []
 assets: []
+scan_profiles:
+  quick:
+    timeout: 30
+  standard:
+    timeout: 30
+  deep:
+    timeout: 60
 exit_codes:
   note: Test plugin placeholder — no production CLI exit semantics.

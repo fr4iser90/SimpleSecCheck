@@ -15,8 +15,6 @@ languages:
 - csharp
 - go
 severity_supported: true
-execution:
-  timeout: 1200
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -65,6 +63,19 @@ install:
   - pack
   - download
   - codeql/go-queries
+scan_profiles:
+  quick:
+    timeout: 180
+    hints:
+      depth: shallow
+      intensity: low
+  standard:
+    timeout: 240
+  deep:
+    timeout: 300
+    hints:
+      depth: deep
+      intensity: high
 exit_codes:
   binary: codeql
   codes:

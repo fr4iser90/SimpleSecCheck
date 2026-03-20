@@ -4,7 +4,7 @@ Test container for providing mock dependencies during testing.
 from unittest.mock import Mock, AsyncMock
 from dependency_injector import containers, providers
 
-from domain.domain_services.scan_validation_service import ScanValidationService
+from domain.services.scan_validation_service import ScanValidationService
 from application.services.scan_service import ScanService
 from application.dtos.scan_dto import ScanDTO
 from application.dtos.request_dto import ScanFilterDTO

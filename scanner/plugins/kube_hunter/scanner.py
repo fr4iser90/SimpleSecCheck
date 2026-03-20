@@ -3,6 +3,7 @@ Kube-hunter Scanner
 Python implementation of run_kube_hunter.sh
 """
 import os
+import shlex
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
@@ -54,10 +55,12 @@ class KubeHunterScanner(BaseScanner):
         
         json_output = self.results_dir / "report.json"  # Changed from kube-hunter.json
         text_output = self.results_dir / "report.txt"   # Changed from kube-hunter.txt
+
+        kh_extra = shlex.split(os.getenv("KUBE_HUNTER_EXTRA_ARGS", "").strip())
         
         # JSON report (with timeout to avoid hanging)
         self.log("Running cluster security scan...")
-        cmd = ["kube-hunter", "--remote", "localhost", "--report", "json"]
+        cmd = ["kube-hunter", "--remote", "localhost", "--report", "json", *kh_extra]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:
@@ -68,7 +71,7 @@ class KubeHunterScanner(BaseScanner):
         
         # Text report (with timeout)
         self.log("Running text report generation...")
-        cmd = ["kube-hunter", "--remote", "localhost", "--report", "plain"]
+        cmd = ["kube-hunter", "--remote", "localhost", "--report", "plain", *kh_extra]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:

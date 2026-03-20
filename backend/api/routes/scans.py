@@ -57,8 +57,8 @@ from domain.exceptions.scan_exceptions import (
     ScanPolicyBlockedException,
 )
 from domain.entities.scan import ScanType
-from domain.services.target_permission_policy import check_can_scan_target, get_allow_flags_from_settings
-from domain.services.scan_result_access import can_read_scan_results, is_scan_owner
+from domain.policies.target_permission_policy import check_can_scan_target, get_allow_flags_from_settings
+from domain.policies.scan_result_access_policy import can_read_scan_results, is_scan_owner
 from config.settings import get_settings
 from typing import Annotated
 import re

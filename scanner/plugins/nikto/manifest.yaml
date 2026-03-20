@@ -8,8 +8,6 @@ categories:
 icon: 🌐
 languages: null
 severity_supported: true
-execution:
-  timeout: 600
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -43,6 +41,28 @@ install:
   - /usr/local/bin/nikto
 - - rm
   - /tmp/nikto.zip
+# -Tuning: digit string selects test categories (1–9); more digits = broader coverage
+scan_profiles:
+  quick:
+    timeout: 60
+    hints:
+      depth: shallow
+      intensity: low
+      coverage: focused test categories
+    env:
+      NIKTO_EXTRA_ARGS: "-Tuning 123"
+  standard:
+    timeout: 120
+    env:
+      NIKTO_EXTRA_ARGS: "-Tuning 123456"
+  deep:
+    timeout: 180
+    hints:
+      depth: deep
+      intensity: high
+      coverage: all tuning categories
+    env:
+      NIKTO_EXTRA_ARGS: "-Tuning 123456789"
 exit_codes:
   binary: nikto
   codes:

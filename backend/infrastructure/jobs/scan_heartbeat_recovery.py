@@ -1,14 +1,8 @@
 """
-Heartbeat-based recovery for scans stuck in ``running`` (worker lost, no liveness).
-
-- Worker updates ``last_heartbeat_at`` while the scanner container runs.
-- Stale threshold: SCAN_HEARTBEAT_STALE_SECONDS (default 180).
-- Running rows without heartbeat yet: grace SCAN_HEARTBEAT_NULL_GRACE_SECONDS (default 600).
-Uses ScanRepository (DDD).
+Heartbeat-based recovery for scans stuck in running.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 from datetime import datetime, timedelta
@@ -55,10 +49,6 @@ def scan_running_is_stale(
 
 
 async def recover_stale_running_scans() -> int:
-    """
-    Find running scans with stale/missing heartbeat, set pending + bump retry metadata.
-    Returns number of scans re-enqueued.
-    """
     now = datetime.utcnow()
     stale_cutoff = now - timedelta(seconds=stale_seconds())
     null_cutoff = now - timedelta(seconds=null_grace_seconds())

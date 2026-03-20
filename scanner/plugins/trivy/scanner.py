@@ -85,6 +85,23 @@ class TrivyScanner(BaseScanner):
         else:
             self.log(f"Config file not found at {self.config_path}. Running with Trivy defaults.", "WARNING")
             return []
+
+    def _trivy_severity(self) -> str:
+        s = os.getenv("TRIVY_SEVERITY", "HIGH,CRITICAL,MEDIUM,LOW").strip()
+        return s if s else "HIGH,CRITICAL,MEDIUM,LOW"
+
+    def _trivy_comprehensive_scanners(self) -> str:
+        s = os.getenv("TRIVY_COMPREHENSIVE_SCANNERS", "vuln,secret,config").strip()
+        return s if s else "vuln,secret,config"
+
+    def _trivy_run_secret_scan(self) -> bool:
+        return os.getenv("TRIVY_RUN_SECRET_SCAN", "1") == "1"
+
+    def _trivy_run_config_scan(self) -> bool:
+        return os.getenv("TRIVY_RUN_CONFIG_SCAN", "1") == "1"
+
+    def _trivy_run_license_scan(self) -> bool:
+        return os.getenv("TRIVY_RUN_LICENSE_SCAN", "1") == "1"
     
     def scan(self) -> bool:
         """Run Trivy scan with detailed substeps"""
@@ -103,7 +120,7 @@ class TrivyScanner(BaseScanner):
             except Exception:
                 pass
 
-        self.log(f"Running DEEP {self.scan_type} scan on {self.target_path}...")
+        self.log(f"Running Trivy {self.scan_type} scan on {self.target_path}...")
         
         json_output = self.results_dir / "report.json"
         text_output = self.results_dir / "report.txt"
@@ -188,7 +205,7 @@ class TrivyScanner(BaseScanner):
             *config_args,
             "--format", "json",
             "-o", str(json_output),
-            "--severity", "HIGH,CRITICAL,MEDIUM,LOW",
+            "--severity", self._trivy_severity(),
             "--scanners", "vuln",
             *skip_args,
             str(self.target_path)
@@ -203,60 +220,69 @@ class TrivyScanner(BaseScanner):
         
         # SCAN: Secret Scanning
         self.substep_scan("Secret Scanning", "Scanning for exposed secrets...")
-        try:
-            secret_cmd = [
-                "trivy",
-                self.scan_type,
-                "--scanners", "secret",
-                "--format", "json",
-                *skip_args,
-                str(self.target_path)
-            ]
-            secret_result = self.run_command(secret_cmd, capture_output=True)
-            if secret_result.returncode == 0:
-                self.complete_substep("Secret Scanning", "Secret scanning completed")
-            else:
-                self.complete_substep("Secret Scanning", "Secret scanning completed (with warnings)")
-        except Exception as e:
-            self.complete_substep("Secret Scanning", f"Secret scanning completed: {e}")
+        if self._trivy_run_secret_scan():
+            try:
+                secret_cmd = [
+                    "trivy",
+                    self.scan_type,
+                    "--scanners", "secret",
+                    "--format", "json",
+                    *skip_args,
+                    str(self.target_path)
+                ]
+                secret_result = self.run_command(secret_cmd, capture_output=True)
+                if secret_result.returncode == 0:
+                    self.complete_substep("Secret Scanning", "Secret scanning completed")
+                else:
+                    self.complete_substep("Secret Scanning", "Secret scanning completed (with warnings)")
+            except Exception as e:
+                self.complete_substep("Secret Scanning", f"Secret scanning completed: {e}")
+        else:
+            self.complete_substep("Secret Scanning", "Skipped (profile)")
         
         # SCAN: Config Scanning
         self.substep_scan("Config Scanning", "Scanning for misconfigurations...")
-        try:
-            config_cmd = [
-                "trivy",
-                self.scan_type,
-                "--scanners", "config",
-                "--format", "json",
-                *skip_args,
-                str(self.target_path)
-            ]
-            config_result = self.run_command(config_cmd, capture_output=True)
-            if config_result.returncode == 0:
-                self.complete_substep("Config Scanning", "Config scanning completed")
-            else:
-                self.complete_substep("Config Scanning", "Config scanning completed (with warnings)")
-        except Exception as e:
-            self.complete_substep("Config Scanning", f"Config scanning completed: {e}")
+        if self._trivy_run_config_scan():
+            try:
+                config_cmd = [
+                    "trivy",
+                    self.scan_type,
+                    "--scanners", "config",
+                    "--format", "json",
+                    *skip_args,
+                    str(self.target_path)
+                ]
+                config_result = self.run_command(config_cmd, capture_output=True)
+                if config_result.returncode == 0:
+                    self.complete_substep("Config Scanning", "Config scanning completed")
+                else:
+                    self.complete_substep("Config Scanning", "Config scanning completed (with warnings)")
+            except Exception as e:
+                self.complete_substep("Config Scanning", f"Config scanning completed: {e}")
+        else:
+            self.complete_substep("Config Scanning", "Skipped (profile)")
         
         # SCAN: License Scanning (optional)
         self.start_substep("License Scanning", "Scanning for license information...", SubStepType.PHASE)
-        try:
-            license_cmd = [
-                "trivy",
-                self.scan_type,
-                "--scanners", "license",
-                "--format", "json",
-                *skip_args,
-                str(self.target_path)
-            ]
-            license_result = self.run_command(license_cmd, capture_output=True)
-            if license_result.returncode == 0:
-                self.complete_substep("License Scanning", "License scanning completed")
-            else:
-                self.complete_substep("License Scanning", "License scanning completed (with warnings)")
-        except Exception as e:
-            self.complete_substep("License Scanning", f"License scanning skipped: {e}")
+        if self._trivy_run_license_scan():
+            try:
+                license_cmd = [
+                    "trivy",
+                    self.scan_type,
+                    "--scanners", "license",
+                    "--format", "json",
+                    *skip_args,
+                    str(self.target_path)
+                ]
+                license_result = self.run_command(license_cmd, capture_output=True)
+                if license_result.returncode == 0:
+                    self.complete_substep("License Scanning", "License scanning completed")
+                else:
+                    self.complete_substep("License Scanning", "License scanning completed (with warnings)")
+            except Exception as e:
+                self.complete_substep("License Scanning", f"License scanning skipped: {e}")
+        else:
+            self.complete_substep("License Scanning", "Skipped (profile)")
         
         # PROCESS: Result Aggregation
         self.substep_process("Result Aggregation", "Aggregating scan results...")
@@ -267,8 +293,8 @@ class TrivyScanner(BaseScanner):
                 *config_args,
                 "--format", "json",
                 "-o", str(json_output),
-                "--severity", "HIGH,CRITICAL,MEDIUM,LOW",
-                "--scanners", "vuln,secret,config",
+                "--severity", self._trivy_severity(),
+                "--scanners", self._trivy_comprehensive_scanners(),
                 *skip_args,
                 str(self.target_path)
             ]
@@ -295,8 +321,8 @@ class TrivyScanner(BaseScanner):
             *config_args,
             "--format", "table",
             "-o", str(text_output),
-            "--severity", "HIGH,CRITICAL,MEDIUM,LOW",
-            "--scanners", "vuln,secret,config",
+            "--severity", self._trivy_severity(),
+            "--scanners", self._trivy_comprehensive_scanners(),
             *skip_args,
             str(self.target_path)
         ]
@@ -316,8 +342,8 @@ class TrivyScanner(BaseScanner):
                 *config_args,
                 "--format", "sarif",
                 "-o", str(sarif_output),
-                "--severity", "HIGH,CRITICAL,MEDIUM,LOW",
-                "--scanners", "vuln,secret,config",
+                "--severity", self._trivy_severity(),
+                "--scanners", self._trivy_comprehensive_scanners(),
                 *skip_args,
                 str(self.target_path)
             ]
@@ -333,20 +359,29 @@ class TrivyScanner(BaseScanner):
         # Additional secrets/config scan
         try:
             self.start_substep("Secrets/Config Deep Scan", "Running additional secrets and config scan...", SubStepType.PHASE)
-            cmd = [
-                "trivy",
-                self.scan_type,
-                "--scanners", "secret,config",
-                "--format", "json",
-                "-o", str(secrets_output),
-                *skip_args,
-                str(self.target_path)
-            ]
-            result = self.run_command(cmd, capture_output=True)
-            if result.returncode == 0 and secrets_output.exists():
-                self.complete_substep("Secrets/Config Deep Scan", "Secrets/config deep scan completed")
+            if self._trivy_run_secret_scan() or self._trivy_run_config_scan():
+                parts = []
+                if self._trivy_run_secret_scan():
+                    parts.append("secret")
+                if self._trivy_run_config_scan():
+                    parts.append("config")
+                scanners = ",".join(parts) if parts else "secret"
+                cmd = [
+                    "trivy",
+                    self.scan_type,
+                    "--scanners", scanners,
+                    "--format", "json",
+                    "-o", str(secrets_output),
+                    *skip_args,
+                    str(self.target_path)
+                ]
+                result = self.run_command(cmd, capture_output=True)
+                if result.returncode == 0 and secrets_output.exists():
+                    self.complete_substep("Secrets/Config Deep Scan", "Secrets/config deep scan completed")
+                else:
+                    self.complete_substep("Secrets/Config Deep Scan", "Secrets/config deep scan completed (with warnings)")
             else:
-                self.complete_substep("Secrets/Config Deep Scan", "Secrets/config deep scan completed (with warnings)")
+                self.complete_substep("Secrets/Config Deep Scan", "Skipped (profile)")
         except Exception as e:
             self.log(f"Secrets/config scan failed: {e}", "WARNING")
             self.complete_substep("Secrets/Config Deep Scan", f"Secrets/config scan skipped: {e}")

@@ -4,6 +4,7 @@ Python implementation of run_npm_audit.sh
 """
 import os
 import json
+import shlex
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
@@ -90,22 +91,28 @@ class NpmAuditScanner(BaseScanner):
         package_dir = first_package.parent
         
         self.log(f"Scanning directory: {package_dir}")
+
+        extra = shlex.split(os.getenv("NPM_AUDIT_EXTRA_ARGS", "").strip())
         
-        # JSON report
-        cmd = ["npm", "audit", "--json"]
+        # JSON report (npm exits 1 when vulnerabilities match --audit-level; stdout is still JSON)
+        cmd = ["npm", "audit", *extra, "--json"]
         result = self.run_command(cmd, cwd=package_dir, capture_output=True)
         
-        if result.returncode == 0 and result.stdout:
-            with open(json_output, "w", encoding="utf-8") as f:
-                f.write(result.stdout)
+        if result.stdout:
+            try:
+                json.loads(result.stdout)
+                with open(json_output, "w", encoding="utf-8") as f:
+                    f.write(result.stdout)
+            except json.JSONDecodeError:
+                self.log("npm audit --json returned non-JSON stdout", "WARNING")
         else:
-            self.log("JSON report generation failed; no report written.", "WARNING")
+            self.log("JSON report generation failed; no stdout.", "WARNING")
         
         # Text report
-        cmd = ["npm", "audit"]
+        cmd = ["npm", "audit", *extra]
         result = self.run_command(cmd, cwd=package_dir, capture_output=True)
         
-        if result.returncode == 0 and result.stdout:
+        if result.stdout and result.returncode in (0, 1):
             with open(text_output, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
         else:

@@ -105,15 +105,16 @@ class ContainerSpec:
         if self.tmpfs:
             # tmpfs can be either a list of paths or a dict with path:options
             # If list items contain ":", parse as "path:options", otherwise use default
+            # exec allowed on /tmp so tools (e.g. pip-audit) can run from TMPDIR; nosuid still on
             tmpfs_dict = {}
             for item in self.tmpfs:
                 if ":" in item:
                     # Format: "/tmp:size=500m" -> path: "/tmp", options: "size=500m"
                     path, options = item.split(":", 1)
-                    tmpfs_dict[path] = f"rw,noexec,nosuid,{options}"
+                    tmpfs_dict[path] = f"rw,exec,nosuid,{options}"
                 else:
                     # Just a path, use default size
-                    tmpfs_dict[item] = "rw,noexec,nosuid,size=100m"
+                    tmpfs_dict[item] = "rw,exec,nosuid,size=100m"
             host_config["tmpfs"] = tmpfs_dict
         
         if self.cpu_limit:
@@ -180,6 +181,8 @@ class ContainerSpec:
         asset_volumes: Optional[List[Dict[str, str]]] = None,  # Asset volumes from scanner manifests
         scanners: Optional[List[str]] = None,  # Selected scanners from backend (if None, scanner filters by scan_type)
         scanner_tool_overrides_json: str = "{}",
+        scan_profile: Optional[str] = None,
+        max_scan_wall_seconds: Optional[int] = None,
     ) -> 'ContainerSpec':
         """Create container spec from scan configuration.
         
@@ -198,6 +201,10 @@ class ContainerSpec:
         Note:
             Logs are part of Results - Scanner creates results/{scan_id}/logs/ automatically.
             No separate logs_dir needed.
+
+        max_scan_wall_seconds:
+            Same value as queue ``max_scan_wall_seconds`` / worker ``container_wait_timeout_seconds``.
+            Passed into the scanner container so orchestrator can log total wall budget in scan.log.
         """
         
         # Command: Use orchestrator module (as defined in Dockerfile CMD)
@@ -244,7 +251,14 @@ class ContainerSpec:
             environment["SELECTED_SCANNERS"] = json.dumps(scanners_list)
         if scanner_tool_overrides_json and scanner_tool_overrides_json.strip() not in ("", "{}"):
             environment["SCANNER_TOOL_OVERRIDES_JSON"] = scanner_tool_overrides_json
-        
+
+        # Scan profile name (quick / standard / deep) for orchestrator logs and tooling; matches scan.config.scan_profile
+        _sp = (scan_profile or "").strip()
+        environment["SCAN_PROFILE"] = _sp if _sp else "standard"
+
+        if max_scan_wall_seconds is not None:
+            environment["SSC_MAX_SCAN_WALL_SECONDS"] = str(int(max_scan_wall_seconds))
+
         # Add exclude paths if provided
         if exclude_paths:
             environment["SIMPLESECCHECK_EXCLUDE_PATHS"] = exclude_paths
@@ -317,7 +331,8 @@ class ContainerSpec:
             labels={
                 "simpleseccheck.scan_id": scan_id,
                 "simpleseccheck.scan_type": scan_type,
-                "simpleseccheck.job_type": "scan"
+                "simpleseccheck.job_type": "scan",
+                "simpleseccheck.scan_profile": environment["SCAN_PROFILE"],
             }
         )
         

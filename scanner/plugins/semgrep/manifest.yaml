@@ -18,8 +18,6 @@ languages:
 - cpp
 - csharp
 severity_supported: true
-execution:
-  timeout: 900
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -29,6 +27,8 @@ checkpoint:
 homepage: https://semgrep.dev
 documentation: https://semgrep.dev/docs/
 install:
+# Semgrep (PyPI) declares click~=8.1.x; install in one pip invocation with explicit
+# click/typer floors so the resolver cannot leave click<8.1 (breaks typer/safety CLI).
 - - pip3
   - install
   - --upgrade
@@ -48,6 +48,36 @@ install:
 - - pip3
   - install
   - semgrep
+  - "click>=8.1.3"
+  - "typer>=0.12.0"
+scan_profiles:
+  quick:
+    timeout: 240
+    hints:
+      depth: shallow
+      intensity: low
+      coverage: essential
+    env:
+      SEMGREP_PROFILE_CONFIGS: p/ci
+      SEMGREP_RUN_SECURITY_DEEP: "0"
+  standard:
+    timeout: 300
+    hints:
+      depth: medium
+      intensity: medium
+      coverage: balanced
+    env:
+      SEMGREP_PROFILE_CONFIGS: p/ci,p/owasp-top-ten
+      SEMGREP_RUN_SECURITY_DEEP: "1"
+  deep:
+    timeout: 360
+    hints:
+      depth: deep
+      intensity: high
+      coverage: broad
+    env:
+      SEMGREP_PROFILE_CONFIGS: p/ci,p/owasp-top-ten,p/security-audit
+      SEMGREP_RUN_SECURITY_DEEP: "1"
 exit_codes:
   binary: semgrep
   codes:

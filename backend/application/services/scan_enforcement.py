@@ -8,15 +8,22 @@ import fnmatch
 import logging
 import re
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 from application.dtos.request_dto import ScanRequestDTO
+
+if TYPE_CHECKING:
+    from domain.entities.scan import Scan
 from domain.entities.target_type import TargetType
 from domain.exceptions.scan_exceptions import (
     ScanExecutionRateLimitException,
     ScanPolicyBlockedException,
 )
 from domain.repositories.scan_repository import ScanRepository
+
+# Wall overhead for max_scan_wall_seconds only (git clone subprocess timeout is only in orchestrator._run_git_clone).
+INIT_ARTIFACT_COMPLETION_BUFFER_SECONDS = 180
+METADATA_STEP_WALL_BUDGET_SECONDS = 120
 
 logger = logging.getLogger(__name__)
 
@@ -159,18 +166,114 @@ async def enforce_scan_creation(
                 )
 
 
-async def get_max_scan_wall_seconds() -> int:
-    """Worker container wait timeout (seconds), from execution_limits.max_scan_duration_seconds."""
-    default = 3600
-    try:
-        repo = _get_system_state_repository()
-        state = await repo.get_singleton()
-        if not state:
-            return default
-        el = (state.config or {}).get("execution_limits") or {}
-        v = _positive_int(el.get("max_scan_duration_seconds"))
-        if v is None:
-            return default
-        return max(300, min(86400, v))
-    except Exception:
-        return default
+async def resolve_max_scan_wall_seconds_for_scan(
+    scan: "Scan",
+    merged_overrides: Dict[str, Dict[str, Any]],
+) -> int:
+    """
+    Worker container wait: sum of effective per-tool timeouts for this scan (sequential orchestration)
+    plus fixed overhead (clone + init + optional metadata step), then clamped to
+    ``execution_limits.max_scan_duration_seconds`` when set (admin ceiling).
+
+    No flat 3600 default — derived from manifests/admin overrides for the selected tools
+    (or all enabled tools for the scan type when ``scan.scanners`` is empty).
+    """
+    from application.services.scanner_tool_overrides_service import tools_key_from_scanner_row
+    from infrastructure.container import get_scanner_repository
+
+    overhead = INIT_ARTIFACT_COMPLETION_BUFFER_SECONDS
+    cfg = scan.config or {}
+    cm = cfg.get("collect_metadata")
+    if cm is not None:
+        collects_meta = bool(cm)
+    else:
+        from config.settings import get_settings
+
+        collects_meta = bool(getattr(get_settings(), "COLLECT_METADATA_DEFAULT", False))
+    if collects_meta:
+        overhead += METADATA_STEP_WALL_BUDGET_SECONDS
+
+    repo = get_scanner_repository()
+    scanners_rows = await repo.list_all()
+    name_to_key: Dict[str, str] = {}
+    for sc in scanners_rows:
+        tk = tools_key_from_scanner_row(sc)
+        if not tk:
+            continue
+        slug = tk.strip().lower()
+        name_to_key[sc.name.strip().lower()] = slug
+        name_to_key[slug] = slug
+
+    tools_order: List[str] = []
+    selected = list(scan.scanners or [])
+    if selected:
+        for s in selected:
+            raw = (s or "").strip()
+            if not raw:
+                continue
+            tk = name_to_key.get(raw.lower(), raw.lower())
+            if tk not in tools_order:
+                tools_order.append(tk)
+    else:
+        st_val = (
+            scan.scan_type.value
+            if hasattr(scan.scan_type, "value")
+            else str(scan.scan_type)
+        ).lower()
+        candidates: List[Tuple[int, str]] = []
+        for sc in scanners_rows:
+            if not sc.enabled:
+                continue
+            sts = [
+                str(x).strip().lower()
+                for x in (sc.scan_types or [])
+                if x is not None
+            ]
+            if st_val not in sts:
+                continue
+            tk = tools_key_from_scanner_row(sc)
+            if not tk:
+                continue
+            candidates.append((int(sc.priority), tk.strip().lower()))
+        candidates.sort(key=lambda x: x[0])
+        tools_order = []
+        seen: set[str] = set()
+        for _p, tk in candidates:
+            if tk not in seen:
+                seen.add(tk)
+                tools_order.append(tk)
+
+    total = overhead
+    missing_timeout_tools: List[str] = []
+    for tk in tools_order:
+        entry = merged_overrides.get(tk)
+        if not isinstance(entry, dict):
+            missing_timeout_tools.append(tk)
+            continue
+        tv = entry.get("timeout")
+        if tv is None:
+            missing_timeout_tools.append(tk)
+            continue
+        try:
+            n = int(tv)
+            if n > 0:
+                total += n
+        except (TypeError, ValueError):
+            missing_timeout_tools.append(tk)
+
+    if tools_order and len(missing_timeout_tools) == len(tools_order):
+        logger.warning(
+            "max_scan_wall_seconds: no positive tool timeouts in overrides for scan %s (tools=%s); using overhead-only %ss",
+            getattr(scan, "id", "?"),
+            tools_order,
+            overhead,
+        )
+
+    limits, _ = await _load_limits_and_policies()
+    el = limits or {}
+    admin_cap = _positive_int(el.get("max_scan_duration_seconds"))
+    if admin_cap is not None:
+        admin_cap = max(300, min(86400, admin_cap))
+        total = min(total, admin_cap)
+
+    return max(300, min(86400, total))

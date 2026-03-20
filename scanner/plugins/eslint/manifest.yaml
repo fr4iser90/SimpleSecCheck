@@ -11,8 +11,6 @@ languages:
 - javascript
 - typescript
 severity_supported: true
-execution:
-  timeout: 600
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -33,6 +31,19 @@ install:
   - install
   - -g
   - typescript
+scan_profiles:
+  quick:
+    timeout: 60
+    hints:
+      depth: shallow
+      intensity: low
+  standard:
+    timeout: 90
+  deep:
+    timeout: 120
+    hints:
+      depth: deep
+      intensity: high
 exit_codes:
   binary: eslint
   codes:

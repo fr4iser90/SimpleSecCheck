@@ -3,6 +3,7 @@ OWASP Dependency Check Scanner
 Python implementation of run_owasp_dependency_check.sh
 """
 import os
+import shlex
 import shutil
 import tempfile
 from pathlib import Path
@@ -201,6 +202,7 @@ class OWASPScanner(BaseScanner):
                 self.log("Consider setting NVD_API_KEY environment variable to avoid rate limiting", "WARNING")
             
             exclude_args = self.get_exclude_args()
+            odc_extra = shlex.split(os.getenv("OWASP_DC_EXTRA_ARGS", "").strip())
             
             # Run OWASP Dependency Check (combines Dependency Analysis and Vulnerability Matching)
             self.update_substep("Dependency Analysis", "Analyzing dependencies and checking for vulnerabilities...")
@@ -216,7 +218,8 @@ class OWASPScanner(BaseScanner):
                 "--data", str(self.data_dir),
                 "--noupdate",
                 *nvd_flag,
-                *exclude_args
+                *exclude_args,
+                *odc_extra,
             ]
             
             # Run command and capture all output

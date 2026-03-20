@@ -9,7 +9,7 @@ fail-on-severity: high  # Only fail on high severity
 # Update vulnerability database on first run
 db:
   update-url: https://toolbox-data.anchore.io/grype/databases/listing.json
-  cache-dir: /tmp/grype-db
+  cache-dir: /app/scanner/plugins/anchore/data
   auto-update: true
 
 # Output configuration

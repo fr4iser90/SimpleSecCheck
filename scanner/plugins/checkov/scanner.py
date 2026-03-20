@@ -4,6 +4,8 @@ Python implementation of run_checkov.sh
 """
 import json
 import os
+import shlex
+import time
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -193,18 +195,6 @@ class CheckovScanner(BaseScanner):
             by_key[k] = f
         return list(by_key.values())
     
-    def get_skip_args(self) -> List[str]:
-        """Get Checkov skip arguments"""
-        skip_args = []
-        
-        if self.exclude_paths:
-            for path in self.exclude_paths.split(","):
-                path = path.strip()
-                if path:
-                    skip_args.extend(["--skip-path", path])
-        
-        return skip_args
-
     def _skip_framework_args(self) -> List[str]:
         """Optional --skip-framework list from env (comma-separated). Empty/unset = no skips.
         Reserved for future admin config, e.g. CHECKOV_SKIP_FRAMEWORKS=secrets,cdk,arm
@@ -221,6 +211,11 @@ class CheckovScanner(BaseScanner):
 
     def scan(self) -> bool:
         """Run Checkov scan with standardized substeps"""
+        self.log(
+            "scan() start: "
+            f"SCANNER_TIMEOUT_SECONDS={os.getenv('SCANNER_TIMEOUT_SECONDS', '')!r}; "
+            f"plugin log={self.log_file}; target={self.target_path}"
+        )
         if not self.check_tool_installed("checkov"):
             self.log("Checkov CLI not found, skipping scan.", "WARNING")
             return True
@@ -256,8 +251,17 @@ class CheckovScanner(BaseScanner):
             shutil.rmtree(json_output, ignore_errors=True)
             self.log("Removed old directory at json_output path")
         
-        skip_args = self.get_skip_args()
+        # Note: Checkov ignores --skip-path when using -f (per upstream docs). Excludes are
+        # applied in find_infra_files() via SIMPLESECCHECK_EXCLUDE_PATHS.
         fw_skip = self._skip_framework_args()
+        config_path = Path(
+            os.getenv("CHECKOV_CONFIG_PATH", "/app/scanner/plugins/checkov/config/config.yaml")
+        )
+        config_prefix: List[str] = []
+        if config_path.is_file():
+            config_prefix = ["--config-file", str(config_path)]
+        else:
+            self.log(f"Checkov config not found at {config_path}, using CLI defaults only.", "WARNING")
 
         # SCAN: Running Security Policies
         self.substep_scan("Running Security Policies", "Evaluating infrastructure against security policies...")
@@ -269,6 +273,8 @@ class CheckovScanner(BaseScanner):
         env["PYTHONHASHSEED"] = "0"
         env["OMP_NUM_THREADS"] = "1"
         env["MKL_NUM_THREADS"] = "1"
+
+        checkov_extra = shlex.split(os.getenv("CHECKOV_EXTRA_ARGS", "").strip())
 
         batch_size = max(1, int(os.getenv("CHECKOV_FILES_PER_BATCH", str(self.CHECKOV_FILES_PER_BATCH))))
         batches: List[List[Path]] = [
@@ -288,14 +294,25 @@ class CheckovScanner(BaseScanner):
                 file_args.extend(["-f", str(p)])
             cmd = [
                 "checkov",
+                *config_prefix,
                 *file_args,
-                *skip_args,
                 *fw_skip,
+                *checkov_extra,
                 "--output",
                 "json",
                 "--quiet",
             ]
-            result = self.run_command(cmd, capture_output=True, env=env)
+            t0 = time.monotonic()
+            self.log(
+                f"Checkov batch {idx}/{len(batches)}: {len(batch)} file(s)…"
+            )
+            result = self.run_command(
+                cmd, capture_output=True, env=env, use_process_group=False
+            )
+            self.log(
+                f"Checkov batch {idx}/{len(batches)} finished in {time.monotonic() - t0:.1f}s "
+                f"(exit {result.returncode})"
+            )
             last_returncode = result.returncode
             if result.stderr:
                 combined_stderr.append(result.stderr)

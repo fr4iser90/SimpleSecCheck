@@ -3,9 +3,9 @@ Nuclei Scanner
 Python implementation of run_nuclei.sh
 """
 import os
-import json
+import shlex
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
 from scanner.core.scanner_registry import ScanType, TargetType, ScannerCapability
 
@@ -61,17 +61,47 @@ class NucleiScanner(BaseScanner):
         config_args = []
         if self.config_path and self.config_path.exists():
             config_args = ["-config", str(self.config_path)]
+
+        def _profile_cli() -> List[str]:
+            extra: List[str] = []
+            rl = os.getenv("NUCLEI_RATE_LIMIT", "").strip()
+            if rl:
+                extra.extend(["-rate-limit", rl])
+            cc = os.getenv("NUCLEI_CONCURRENCY", "").strip()
+            if cc:
+                extra.extend(["-c", cc])
+            sev = os.getenv("NUCLEI_SEVERITY", "").strip()
+            if sev:
+                extra.extend(["-severity", sev])
+            raw = os.getenv("NUCLEI_EXTRA_ARGS", "").strip()
+            if raw:
+                extra.extend(shlex.split(raw))
+            return extra
+
+        profile_args = _profile_cli()
+
+        def _template_dir_prefix() -> List[str]:
+            td = os.getenv("NUCLEI_TEMPLATES_DIR", "").strip() or "/app/scanner/plugins/nuclei/data"
+            p = Path(td)
+            try:
+                if p.is_dir() and any(p.iterdir()):
+                    return ["-t", str(p)]
+            except OSError:
+                pass
+            return []
+
+        tpl = _template_dir_prefix()
         
         # JSON report (JSONL format)
         self.log("Running comprehensive web application scan...")
-        cmd = ["nuclei", "-u", self.scan_target, *config_args, "-jsonl", "-o", str(json_output)]
+        cmd = ["nuclei", *tpl, "-u", self.scan_target, *profile_args, *config_args, "-jsonl", "-o", str(json_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
             self.log("JSON report generation failed", "WARNING")
         
         # Text report
-        cmd = ["nuclei", "-u", self.scan_target, *config_args, "-o", str(text_output)]
+        cmd = ["nuclei", *tpl, "-u", self.scan_target, *profile_args, *config_args, "-o", str(text_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
@@ -79,7 +109,19 @@ class NucleiScanner(BaseScanner):
         
         # Critical vulnerability scan
         self.log("Running additional critical vulnerability scan...")
-        cmd = ["nuclei", "-u", self.scan_target, "-severity", "critical,high", "-jsonl", "-o", str(critical_output)]
+        crit_sev = os.getenv("NUCLEI_CRITICAL_SCAN_SEVERITY", "critical,high").strip() or "critical,high"
+        cmd = [
+            "nuclei",
+            *tpl,
+            "-u",
+            self.scan_target,
+            *profile_args,
+            "-severity",
+            crit_sev,
+            "-jsonl",
+            "-o",
+            str(critical_output),
+        ]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:

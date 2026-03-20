@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
@@ -24,6 +24,7 @@ interface ScannerAssetItem {
     update?: {
       enabled: boolean
       command: string[]
+      env?: Record<string, string>
     } | null
   }
   last_updated?: {
@@ -31,6 +32,21 @@ interface ScannerAssetItem {
     age_seconds?: number | null
     age_human?: string | null
   } | null
+}
+
+function assetKey(scanner: string, assetId: string) {
+  return `${scanner}:${assetId}`
+}
+
+const badgeBase: CSSProperties = {
+  display: 'inline-block',
+  fontSize: '0.7rem',
+  fontWeight: 600,
+  letterSpacing: '0.03em',
+  textTransform: 'uppercase' as const,
+  padding: '0.2rem 0.5rem',
+  borderRadius: '999px',
+  border: '1px solid rgba(255,255,255,0.2)',
 }
 
 export default function ScannerDataUpdate() {
@@ -43,58 +59,28 @@ export default function ScannerDataUpdate() {
     finished_at: null,
   })
   const [assets, setAssets] = useState<ScannerAssetItem[]>([])
-  const [selectedAssetKey, setSelectedAssetKey] = useState<string>('')
-  const [isUpdating, setIsUpdating] = useState(false)
-  
-  // Only admins may see and trigger scanner updates; show manual button when global auto-update is disabled
   const shouldShowButton = isAdmin && !config?.features?.scanner_assets_auto_update_enabled
 
-  // Fetch assets list (admin only)
+  const refreshAssets = useCallback(async () => {
+    try {
+      const response = await fetch(resolveApiUrl('/api/scanners/assets'))
+      if (!response.ok) {
+        console.error('[ScannerDataUpdate] Failed to fetch assets:', response.status)
+        return
+      }
+      const data = await response.json()
+      const assetItems = Array.isArray(data.assets) ? data.assets : []
+      setAssets(assetItems)
+    } catch (err) {
+      console.error('[ScannerDataUpdate] Error fetching assets:', err)
+    }
+  }, [])
+
   useEffect(() => {
     if (!isAdmin) return
-    const fetchAssets = async () => {
-      try {
-        const response = await fetch(resolveApiUrl('/api/scanners/assets'))
-        if (!response.ok) {
-          console.error('[ScannerDataUpdate] Failed to fetch assets:', response.status)
-          return
-        }
-        const data = await response.json()
-        const assetItems = Array.isArray(data.assets) ? data.assets : []
-        setAssets(assetItems)
-        if (!selectedAssetKey && assetItems.length > 0) {
-          const first = assetItems.find((item: ScannerAssetItem) => item.asset?.update?.enabled)
-          if (first) {
-            setSelectedAssetKey(`${first.scanner}:${first.asset.id}`)
-          }
-        }
-      } catch (err) {
-        console.error('[ScannerDataUpdate] Error fetching assets:', err)
-      }
-    }
+    void refreshAssets()
+  }, [isAdmin, refreshAssets])
 
-    fetchAssets()
-  }, [isAdmin, selectedAssetKey])
-
-  const selectedAsset = useMemo(() => {
-    if (!selectedAssetKey) {
-      return null
-    }
-    const [scanner, assetId] = selectedAssetKey.split(':')
-    return assets.find(item => item.scanner === scanner && item.asset.id === assetId) || null
-  }, [assets, selectedAssetKey])
-
-  const selectedAssetAge = useMemo(() => {
-    if (!selectedAsset?.last_updated) {
-      return null
-    }
-    return {
-      updatedAt: selectedAsset.last_updated.updated_at,
-      ageHuman: selectedAsset.last_updated.age_human,
-    }
-  }, [selectedAsset])
-
-  // Poll for status (admin only)
   useEffect(() => {
     if (!isAdmin) return
     let pollInterval: number | null = null
@@ -108,80 +94,77 @@ export default function ScannerDataUpdate() {
         }
         const data = await response.json()
         setStatus(data)
-        setIsUpdating(data.status === 'running')
       } catch (err) {
         console.error('[ScannerDataUpdate] Error fetching status:', err)
       }
     }
 
-    fetchStatus()
-    pollInterval = window.setInterval(() => { fetchStatus() }, 500)
+    void fetchStatus()
+    pollInterval = window.setInterval(() => {
+      void fetchStatus()
+    }, 500)
 
     return () => {
       if (pollInterval) clearInterval(pollInterval)
     }
-  }, [isAdmin, isUpdating])
+  }, [isAdmin])
 
-  const handleStartUpdate = async () => {
-    if (!selectedAssetKey) {
-      alert('Please select a scanner asset to update.')
-      return
-    }
-    
-    // Handle "All" option for batch updates
-    if (selectedAssetKey === 'all') {
-      const updatePromises = updatableAssets.map(async (item) => {
-        try {
-          const response = await fetch(resolveApiUrl(`/api/scanners/${item.scanner}/assets/${item.asset.id}/update`), {
-            method: 'POST',
-          })
-          if (!response.ok) {
-            const error = await response.json()
-            console.error(`Failed to update ${item.scanner}/${item.asset.id}: ${error.detail || 'Unknown error'}`)
-            return { success: false, scanner: item.scanner, asset: item.asset.id, error: error.detail }
-          }
-          return { success: true, scanner: item.scanner, asset: item.asset.id }
-        } catch (err) {
-          console.error(`[ScannerDataUpdate] Error updating ${item.scanner}/${item.asset.id}:`, err)
-          return { success: false, scanner: item.scanner, asset: item.asset.id, error: String(err) }
-        }
-      })
-      
-      setIsUpdating(true)
-      const results = await Promise.all(updatePromises)
-      const successCount = results.filter(r => r.success).length
-      const failCount = results.filter(r => !r.success).length
-      
-      if (failCount === 0) {
-        alert(`✅ All ${successCount} asset updates started successfully!`)
-      } else {
-        alert(`⚠️ Started ${successCount} updates, ${failCount} failed. Check console for details.`)
-      }
-      return
-    }
-    
-    // Single asset update
-    const [scannerName, assetId] = selectedAssetKey.split(':')
+  const updatableAssets = useMemo(
+    () => assets.filter(item => item.asset?.update?.enabled),
+    [assets],
+  )
+
+  const handleUpdateOne = async (scannerName: string, assetId: string) => {
     try {
-      const response = await fetch(resolveApiUrl(`/api/scanners/${scannerName}/assets/${assetId}/update`), {
-        method: 'POST',
-      })
+      const response = await fetch(
+        resolveApiUrl(`/api/scanners/${scannerName}/assets/${assetId}/update`),
+        { method: 'POST' },
+      )
       if (!response.ok) {
-        const error = await response.json()
-        alert(`Failed to start update: ${error.detail || 'Unknown error'}`)
+        const error = await response.json().catch(() => ({}))
+        alert(`Failed to start update: ${(error as { detail?: string }).detail || 'Unknown error'}`)
         return
       }
       const data = await response.json()
       setStatus(data)
-      setIsUpdating(true)
     } catch (err) {
       console.error('[ScannerDataUpdate] Error starting update:', err)
       alert('Failed to start update. Check console for details.')
     }
   }
 
-  const handleStopUpdate = async () => {
-    setIsUpdating(false)
+  const handleUpdateAll = async () => {
+    if (updatableAssets.length === 0) return
+    const updatePromises = updatableAssets.map(async item => {
+      try {
+        const response = await fetch(
+          resolveApiUrl(`/api/scanners/${item.scanner}/assets/${item.asset.id}/update`),
+          { method: 'POST' },
+        )
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}))
+          console.error(
+            `Failed to update ${item.scanner}/${item.asset.id}:`,
+            (error as { detail?: string }).detail,
+          )
+          return { success: false, scanner: item.scanner, asset: item.asset.id }
+        }
+        return { success: true, scanner: item.scanner, asset: item.asset.id }
+      } catch (err) {
+        console.error(`[ScannerDataUpdate] Error updating ${item.scanner}/${item.asset.id}:`, err)
+        return { success: false, scanner: item.scanner, asset: item.asset.id }
+      }
+    })
+
+    const results = await Promise.all(updatePromises)
+    const successCount = results.filter(r => r.success).length
+    const failCount = results.filter(r => !r.success).length
+
+    if (failCount === 0) {
+      alert(`Started ${successCount} asset update(s).`)
+    } else {
+      alert(`Started ${successCount} update(s), ${failCount} failed. Check console.`)
+    }
   }
 
   const getStatusColor = () => {
@@ -200,169 +183,164 @@ export default function ScannerDataUpdate() {
   const getStatusText = () => {
     switch (status.status) {
       case 'running':
-        return '🔄 Updating...'
+        return '🔄 Updating…'
       case 'done':
-        return '✅ Update completed'
+        return '✅ Last job completed'
       case 'error':
-        return '❌ Update failed'
+        return '❌ Last job failed'
       default:
         return '⏸️ Idle'
     }
   }
 
-  // Only admins see this card; guests and users see nothing
   if (!isAdmin) {
     return null
   }
 
-  const updatableAssets = assets.filter(item => item.asset?.update?.enabled)
+  const busy = status.status === 'running'
+
+  const typeBadge = (type: string) => {
+    const t = (type || 'unknown').toLowerCase()
+    const color =
+      t === 'data' ? 'rgba(40, 167, 69, 0.25)' : t === 'config' ? 'rgba(0, 123, 255, 0.25)' : 'rgba(108, 117, 125, 0.35)'
+    return (
+      <span style={{ ...badgeBase, background: color }}>
+        {t}
+      </span>
+    )
+  }
+
+  const btnPrimary: React.CSSProperties = {
+    padding: '0.45rem 0.85rem',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: busy ? 'not-allowed' : 'pointer',
+    fontWeight: 600,
+    fontSize: '0.85rem',
+    opacity: busy ? 0.6 : 1,
+  }
+
+  const cardStyle: CSSProperties = {
+    padding: '1rem',
+    background: 'rgba(0, 0, 0, 0.22)',
+    borderRadius: '8px',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+    minHeight: '140px',
+  }
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h3 style={{ margin: 0, marginBottom: '0.5rem' }}>Scanner Asset Updates</h3>
-          <p style={{ margin: 0, opacity: 0.8, fontSize: '0.9rem' }}>
-            Update scanner data assets (e.g. vulnerability databases) from their manifests.
+          <h3 style={{ margin: 0, marginBottom: '0.5rem' }}>Scanner assets</h3>
+          <p style={{ margin: 0, opacity: 0.8, fontSize: '0.9rem', maxWidth: '42rem' }}>
+            Mounted data and config from plugin manifests. Assets with an update command can refresh local caches (e.g. vulnerability DBs).
           </p>
         </div>
-        {shouldShowButton && (
-          <div>
-            {status.status === 'idle' && (
-              <button
-                onClick={handleStartUpdate}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '1rem',
-                }}
-              >
-                🔄 Update Asset
-              </button>
-            )}
-            {status.status === 'running' && (
-              <button
-                onClick={handleStopUpdate}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  background: '#dc3545',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '1rem',
-                }}
-              >
-                ⏹️ Stop Update
-              </button>
-            )}
-            {(status.status === 'done' || status.status === 'error') && (
-              <button
-                onClick={handleStartUpdate}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '1rem',
-                }}
-              >
-                🔄 Update Again
-              </button>
-            )}
-          </div>
-        )}
-        {!shouldShowButton && (
-          <div style={{ opacity: 0.7, fontSize: '0.9rem' }}>
-            Auto-update enabled
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+          {shouldShowButton && updatableAssets.length > 1 && (
+            <button type="button" style={btnPrimary} disabled={busy} onClick={() => void handleUpdateAll()}>
+              🔄 Update all ({updatableAssets.length})
+            </button>
+          )}
+          {!shouldShowButton && (
+            <span style={{ opacity: 0.75, fontSize: '0.9rem' }}>Auto-update enabled</span>
+          )}
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginBottom: '1rem',
+          padding: '0.85rem 1rem',
+          background: 'rgba(0, 0, 0, 0.2)',
+          borderRadius: '6px',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <span style={{ color: getStatusColor(), fontWeight: 'bold' }}>{getStatusText()}</span>
+          {status.started_at && (
+            <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>
+              Started: {new Date(status.started_at).toLocaleString()}
+            </span>
+          )}
+          {status.finished_at && (
+            <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>
+              Finished: {new Date(status.finished_at).toLocaleString()}
+            </span>
+          )}
+        </div>
+        {status.error_message && (
+          <div style={{ marginTop: '0.5rem', color: '#f8a0a0', fontSize: '0.9rem' }}>
+            {status.error_message}
           </div>
         )}
       </div>
 
-      <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(0, 0, 0, 0.2)', borderRadius: '4px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-        <div style={{ marginBottom: '0.75rem' }}>
-          <label style={{ display: 'block', fontSize: '0.85rem', opacity: 0.8, marginBottom: '0.25rem' }}>
-            Select Asset
-          </label>
-          <select
-            value={selectedAssetKey}
-            onChange={(event) => setSelectedAssetKey(event.target.value)}
-            style={{
-              width: '100%',
-              padding: '0.5rem 0.75rem',
-              borderRadius: '4px',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              background: 'rgba(0, 0, 0, 0.4)',
-              color: 'var(--text-main, #f8f9fa)',
-            }}
-          >
-            <option value="" disabled>
-              {updatableAssets.length === 0 ? 'No updatable assets available' : 'Choose an asset'}
-            </option>
-            {updatableAssets.length > 1 && (
-              <option value="all">
-                🔄 All Assets ({updatableAssets.length} assets)
-              </option>
-            )}
-            {updatableAssets.map(item => (
-              <option key={`${item.scanner}:${item.asset.id}`} value={`${item.scanner}:${item.asset.id}`}>
-                {item.scanner.toUpperCase()} · {item.asset.id}
-              </option>
-            ))}
-          </select>
-          {selectedAsset && (
-            <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', opacity: 0.8 }}>
-              {selectedAsset.asset.description || 'No description provided.'}
-            </div>
-          )}
+      {assets.length === 0 ? (
+        <p style={{ opacity: 0.75 }}>No scanner assets registered. Refresh scanners from the container so manifests sync to the database.</p>
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: '1rem',
+          }}
+        >
+          {assets.map(item => {
+            const key = assetKey(item.scanner, item.asset.id)
+            const canUpdate = Boolean(item.asset.update?.enabled) && shouldShowButton
+            const age = item.last_updated?.age_human
+            return (
+              <div key={key} style={cardStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '1rem', lineHeight: 1.3 }}>{item.scanner}</div>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.75, marginTop: '0.15rem' }}>{item.asset.id}</div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+                    {typeBadge(item.asset.type)}
+                    {item.asset.update?.enabled ? (
+                      <span style={{ ...badgeBase, background: 'rgba(102, 126, 234, 0.35)' }}>updatable</span>
+                    ) : (
+                      <span style={{ ...badgeBase, background: 'rgba(108, 117, 125, 0.25)' }}>mount</span>
+                    )}
+                  </div>
+                </div>
+                {item.asset.description && (
+                  <p style={{ margin: 0, fontSize: '0.82rem', opacity: 0.85, lineHeight: 1.4 }}>{item.asset.description}</p>
+                )}
+                <div style={{ fontSize: '0.72rem', opacity: 0.55, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all' }}>
+                  {item.asset.mount.host_subpath}
+                </div>
+                <div style={{ marginTop: 'auto', paddingTop: '0.35rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  {age ? (
+                    <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>Cache age: {age}</div>
+                  ) : (
+                    <div style={{ fontSize: '0.8rem', opacity: 0.55 }}>No cache timestamp</div>
+                  )}
+                </div>
+                {canUpdate && (
+                  <button
+                    type="button"
+                    style={{ ...btnPrimary, alignSelf: 'flex-start', marginTop: '0.25rem' }}
+                    disabled={busy}
+                    onClick={() => void handleUpdateOne(item.scanner, item.asset.id)}
+                  >
+                    🔄 Update
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={{ color: getStatusColor(), fontWeight: 'bold' }}>{getStatusText()}</span>
-            {status.started_at && (
-              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--text-main, #f8f9fa)' }}>
-                Started: {new Date(status.started_at).toLocaleString()}
-              </span>
-            )}
-            {status.finished_at && (
-              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--text-main, #f8f9fa)' }}>
-                Finished: {new Date(status.finished_at).toLocaleString()}
-              </span>
-            )}
-          </div>
-          {selectedAssetAge?.ageHuman && (
-            <div style={{ fontSize: '0.85rem', opacity: 0.8 }}>
-              Last updated: {selectedAssetAge.ageHuman}
-              {selectedAssetAge.updatedAt && (
-                <span style={{ marginLeft: '0.5rem', opacity: 0.7 }}>
-                  ({new Date(selectedAssetAge.updatedAt).toLocaleString()})
-                </span>
-              )}
-            </div>
-          )}
-          {!selectedAssetAge && selectedAsset && (
-            <div style={{ fontSize: '0.85rem', opacity: 0.7 }}>
-              No local cache data found yet.
-            </div>
-          )}
-
-          {/* Database age information */}
-          {status.error_message && (
-            <div style={{ marginTop: '0.5rem', color: '#dc3545' }}>
-              Error: {status.error_message}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   )
 }

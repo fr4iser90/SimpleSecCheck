@@ -201,7 +201,7 @@ async def load_settings_from_database(settings_instance: Settings) -> None:
             if "feature_flags" in config:
                 feature_flags = config["feature_flags"]
                 if isinstance(feature_flags, dict):
-                    from domain.services.target_permission_policy import ALL_SCAN_FEATURE_FLAG_KEYS
+                    from domain.policies.target_permission_policy import ALL_SCAN_FEATURE_FLAG_KEYS
                     for key in ALL_SCAN_FEATURE_FLAG_KEYS:
                         if key in feature_flags:
                             setattr(settings_instance, key, feature_flags[key])

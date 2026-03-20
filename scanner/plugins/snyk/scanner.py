@@ -4,6 +4,7 @@ Python implementation of run_snyk.sh
 """
 import os
 import json
+import shlex
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -119,12 +120,13 @@ class SnykScanner(BaseScanner):
         
         # Main scan
         self.log("Running Snyk test with JSON output...")
-        cmd = ["snyk", "test", f"--token={self.snyk_token}", "--json", f"--output-file={json_output}"]
+        snyk_extra = shlex.split(os.getenv("SNYK_EXTRA_ARGS", "").strip())
+        cmd = ["snyk", "test", f"--token={self.snyk_token}", *snyk_extra, "--json", f"--output-file={json_output}"]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
             self.log("JSON report generation failed, trying alternative approach...", "WARNING")
-            cmd = ["snyk", "test", f"--token={self.snyk_token}", "--json"]
+            cmd = ["snyk", "test", f"--token={self.snyk_token}", *snyk_extra, "--json"]
             result = self.run_command(cmd, capture_output=True)
             if result.returncode == 0 and result.stdout:
                 with open(json_output, "w", encoding="utf-8") as f:
@@ -154,7 +156,7 @@ class SnykScanner(BaseScanner):
         
         # Text report (for completeness)
         self.log("Running Snyk test with text output...")
-        cmd = ["snyk", "test", f"--token={self.snyk_token}"]
+        cmd = ["snyk", "test", f"--token={self.snyk_token}", *snyk_extra]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:
@@ -166,7 +168,7 @@ class SnykScanner(BaseScanner):
         # Verbose scan (non-critical)
         try:
             self.log("Running additional verbose scan...")
-            cmd = ["snyk", "test", f"--token={self.snyk_token}", "--verbose"]
+            cmd = ["snyk", "test", f"--token={self.snyk_token}", *snyk_extra, "--verbose"]
             result = self.run_command(cmd, capture_output=True)
             if result.returncode == 0 and result.stdout:
                 with open(text_output, "a", encoding="utf-8") as f:

@@ -95,9 +95,14 @@ class ScannerAssetsManager:
             )
             update = None
             if update_data:
+                env_map: Optional[Dict[str, str]] = None
+                raw_env = update_data.get("env")
+                if isinstance(raw_env, dict) and raw_env:
+                    env_map = {str(k): str(v) for k, v in raw_env.items()}
                 update = AssetUpdate(
                     enabled=bool(update_data.get("enabled", False)),
-                    command=list(update_data.get("command", [])),
+                    command=[str(x) for x in (update_data.get("command") or [])],
+                    env=env_map,
                 )
             assets.append(
                 ScannerAsset(
@@ -157,14 +162,25 @@ class ScannerAssetsManager:
             severity_map = None
 
         timeout = None
-        ex = data.get("execution")
-        if isinstance(ex, dict) and ex.get("timeout") is not None:
-            try:
-                t = int(ex["timeout"])
-                if t > 0:
-                    timeout = t
-            except (TypeError, ValueError):
-                pass
+        sp_all = data.get("scan_profiles")
+        if isinstance(sp_all, dict):
+            std = sp_all.get("standard")
+            if isinstance(std, dict) and std.get("timeout") is not None:
+                try:
+                    t = int(std["timeout"])
+                    if t > 0:
+                        timeout = t
+                except (TypeError, ValueError):
+                    pass
+        if timeout is None:
+            ex = data.get("execution")
+            if isinstance(ex, dict) and ex.get("timeout") is not None:
+                try:
+                    t = int(ex["timeout"])
+                    if t >= 0:
+                        timeout = t
+                except (TypeError, ValueError):
+                    pass
 
         homepage = data.get("homepage")
         if homepage is not None:

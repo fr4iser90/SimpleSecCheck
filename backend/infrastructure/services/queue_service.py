@@ -7,7 +7,7 @@ Supports strategies: fifo (default), priority, round_robin.
 import json
 import logging
 import os
-from typing import Optional
+from typing import Any, Dict, Optional
 from datetime import datetime
 
 from domain.entities.scan import Scan
@@ -95,12 +95,32 @@ class QueueService:
             else:
                 target_mount_path = (scan.config or {}).get("target_mount_path")
             
+            merged_final: Dict[str, Dict[str, Any]] = {}
+            scanner_tool_overrides_json = "{}"
             try:
-                from application.services.scan_enforcement import get_max_scan_wall_seconds
+                from application.services.scanner_tool_overrides_service import (
+                    build_merged_tool_overrides,
+                    overrides_map_to_json,
+                )
+                from application.services.scan_profile_merge import merge_resolved_profile_into_overrides
+                from application.services.scan_profile_resolver import resolve_scan_profile_from_manifests
+                from infrastructure.container import get_scanner_repository
 
-                max_wall = await get_max_scan_wall_seconds()
-            except Exception:
-                max_wall = 3600
+                merged = await build_merged_tool_overrides()
+                cfg = scan.config or {}
+                resolved = await resolve_scan_profile_from_manifests(
+                    profile=cfg.get("scan_profile"),
+                    profile_tuning=cfg.get("profile_tuning"),
+                    scanner_repository=get_scanner_repository(),
+                )
+                merged_final = merge_resolved_profile_into_overrides(merged, resolved)
+                scanner_tool_overrides_json = overrides_map_to_json(merged_final)
+            except Exception as ex:
+                logger.warning("scanner_tool_overrides merge skipped: %s", ex)
+
+            from application.services.scan_enforcement import resolve_max_scan_wall_seconds_for_scan
+
+            max_wall = await resolve_max_scan_wall_seconds_for_scan(scan, merged_final)
 
             queue_message = {
                 "scan_id": scan_id,
@@ -125,19 +145,9 @@ class QueueService:
                 "scan_metadata": getattr(scan, "scan_metadata", None) or {},
                 "scheduled_at": isoformat_utc(scan.scheduled_at),
                 "enqueued_at": isoformat_utc(datetime.utcnow()),
+                "scanner_tool_overrides_json": scanner_tool_overrides_json,
                 "max_scan_wall_seconds": max_wall,
             }
-            # DB overrides merged with manifest (timeouts, env e.g. SONAR_HOST_URL)
-            try:
-                from application.services.scanner_tool_overrides_service import (
-                    build_merged_tool_overrides,
-                    overrides_map_to_json,
-                )
-                merged = await build_merged_tool_overrides()
-                queue_message["scanner_tool_overrides_json"] = overrides_map_to_json(merged)
-            except Exception as ex:
-                logger.warning("scanner_tool_overrides merge skipped: %s", ex)
-                queue_message["scanner_tool_overrides_json"] = "{}"
 
             message_json = json.dumps(queue_message)
             strategy = self._get_strategy()

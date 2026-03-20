@@ -11,7 +11,7 @@ import logging
 from domain.entities.scan import Scan, ScanStatus, ScanType
 from domain.datetime_serialization import isoformat_utc
 from domain.value_objects.scan_config import ScanConfig
-from domain.domain_services.scan_validation_service import ScanValidationService
+from domain.services.scan_validation_service import ScanValidationService
 from domain.services.scanner_duration_service import ScannerDurationService
 from domain.exceptions.scan_exceptions import (
     ScanException,
@@ -19,10 +19,20 @@ from domain.exceptions.scan_exceptions import (
     ScanValidationException,
 )
 from application.services.scan_enforcement import enforce_scan_creation
-from domain.services.finding_policy_defaults import (
+from domain.policies.finding_policy import (
     DEFAULT_FINDING_POLICY_APPLY_BY_DEFAULT,
     DEFAULT_FINDING_POLICY_PATH,
 )
+from domain.policies.scan_profile_policy import (
+    extract_profile_catalog_from_scanner_metadata,
+    is_scan_profile_allowed,
+    normalize_profile_key,
+    resolve_max_allowed_scan_profile_for_actor,
+    resolve_profile_order,
+    resolve_scan_profile_for_actor,
+    scan_profile_settings,
+)
+from domain.exceptions.scan_exceptions import ScanPolicyBlockedException
 
 from application.use_cases.start_scan_use_case import StartScanUseCase
 from application.use_cases.process_result_use_case import ProcessResultUseCase
@@ -76,6 +86,8 @@ class ScanService:
                 logger.info("Normalized git target URL: %s -> %s", raw_target, normalized)
             request.target_url = normalized
             await self._apply_default_finding_policy(request)
+            await self._apply_default_scan_profile(request, actor_role=actor_role)
+            await self._enforce_scan_profile_permissions(request, actor_role=actor_role)
             await enforce_scan_creation(
                 self.scan_repository,
                 request,
@@ -145,6 +157,72 @@ class ScanService:
         except Exception as e:
             # Non-fatal: scan creation should continue even if default lookup fails.
             logger.warning("Could not apply default finding policy path: %s", e)
+
+    async def _apply_default_scan_profile(self, request: ScanRequestDTO, *, actor_role: str) -> None:
+        """Apply role-based default scan_profile from SystemState scan_defaults."""
+        try:
+            cfg = dict(request.config or {})
+            existing = cfg.get("scan_profile")
+            if isinstance(existing, str) and existing.strip():
+                return
+
+            from infrastructure.container import get_system_state_repository
+            repo = get_system_state_repository()
+            state = await repo.get_singleton()
+
+            settings = dict(scan_profile_settings())
+            if state and state.config:
+                settings.update((state.config or {}).get("scan_defaults") or {})
+
+            selected = resolve_scan_profile_for_actor(
+                settings,
+                actor_role=actor_role,
+                is_authenticated=bool(request.user_id),
+            )
+            cfg["scan_profile"] = selected
+            request.config = cfg
+        except Exception as e:
+            logger.warning("Could not apply default scan profile: %s", e)
+
+    async def _enforce_scan_profile_permissions(self, request: ScanRequestDTO, *, actor_role: str) -> None:
+        """Enforce role-based max allowed scan profile."""
+        cfg = dict(request.config or {})
+        selected = cfg.get("scan_profile")
+        if not isinstance(selected, str) or not selected.strip():
+            return
+        selected = normalize_profile_key(selected)
+
+        from infrastructure.container import get_scanner_repository, get_system_state_repository
+        scanner_repo = get_scanner_repository()
+        scanners = await scanner_repo.list_all()
+        catalog = extract_profile_catalog_from_scanner_metadata(scanners)
+        if not catalog:
+            raise ScanPolicyBlockedException("No scan profiles available. Scanner manifests define profiles.")
+        if selected not in catalog:
+            raise ScanPolicyBlockedException(f"Selected scan profile '{selected}' is not available.")
+
+        repo = get_system_state_repository()
+        state = await repo.get_singleton()
+        settings = dict(scan_profile_settings())
+        if state and state.config:
+            settings.update((state.config or {}).get("scan_defaults") or {})
+        profile_order = resolve_profile_order(settings, catalog=catalog)
+
+        max_allowed = resolve_max_allowed_scan_profile_for_actor(
+            settings,
+            actor_role=actor_role,
+            is_authenticated=bool(request.user_id),
+        )
+        if max_allowed not in profile_order:
+            max_allowed = profile_order[-1]
+        if not is_scan_profile_allowed(
+            selected_profile=selected,
+            max_allowed_profile=max_allowed,
+            profile_order=profile_order,
+        ):
+            raise ScanPolicyBlockedException(
+                f"Selected scan profile '{selected}' exceeds allowed maximum '{max_allowed}' for this actor."
+            )
     
     async def get_scan_by_id(self, scan_id: str) -> ScanDTO:
         """Get scan by ID."""

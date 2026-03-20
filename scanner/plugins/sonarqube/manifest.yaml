@@ -17,8 +17,6 @@ languages:
 - csharp
 - kotlin
 severity_supported: true
-execution:
-  timeout: 900
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -39,6 +37,19 @@ assets:
   mount:
     host_subpath: scanner/plugins/sonarqube/config/config.yaml
     container_path: /app/scanner/plugins/sonarqube/config/config.yaml
+scan_profiles:
+  quick:
+    timeout: 90
+    hints:
+      depth: shallow
+      intensity: low
+  standard:
+    timeout: 150
+  deep:
+    timeout: 240
+    hints:
+      depth: deep
+      intensity: high
 exit_codes:
   binary: sonar-scanner
   codes:

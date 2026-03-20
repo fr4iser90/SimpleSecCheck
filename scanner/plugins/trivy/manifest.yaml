@@ -10,8 +10,6 @@ categories:
 icon: 🛡️
 languages: null
 severity_supported: true
-execution:
-  timeout: 900
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -36,8 +34,49 @@ assets:
   type: data
   description: Trivy vulnerability database cache
   mount:
-    host_subpath: scanner/plugins/trivy/cache
-    container_path: /app/scanner/plugins/trivy/cache
+    host_subpath: scanner/plugins/trivy/data
+    container_path: /app/scanner/plugins/trivy/data
+  update:
+    enabled: true
+    env:
+      TRIVY_CACHE_DIR: '{container_path}'
+    command:
+    - trivy
+    - image
+    - --download-db-only
+scan_profiles:
+  quick:
+    timeout: 90
+    hints:
+      depth: shallow
+      intensity: low
+      coverage: critical/high vulns only; no secret/config/license substeps
+    env:
+      TRIVY_SEVERITY: HIGH,CRITICAL
+      TRIVY_COMPREHENSIVE_SCANNERS: vuln
+      TRIVY_RUN_SECRET_SCAN: "0"
+      TRIVY_RUN_CONFIG_SCAN: "0"
+      TRIVY_RUN_LICENSE_SCAN: "0"
+  standard:
+    timeout: 120
+    env:
+      TRIVY_SEVERITY: HIGH,CRITICAL,MEDIUM
+      TRIVY_COMPREHENSIVE_SCANNERS: vuln,secret,config
+      TRIVY_RUN_SECRET_SCAN: "1"
+      TRIVY_RUN_CONFIG_SCAN: "1"
+      TRIVY_RUN_LICENSE_SCAN: "0"
+  deep:
+    timeout: 180
+    hints:
+      depth: deep
+      intensity: high
+      coverage: full severity range and license scan
+    env:
+      TRIVY_SEVERITY: HIGH,CRITICAL,MEDIUM,LOW
+      TRIVY_COMPREHENSIVE_SCANNERS: vuln,secret,config
+      TRIVY_RUN_SECRET_SCAN: "1"
+      TRIVY_RUN_CONFIG_SCAN: "1"
+      TRIVY_RUN_LICENSE_SCAN: "1"
 exit_codes:
   binary: trivy
   codes:

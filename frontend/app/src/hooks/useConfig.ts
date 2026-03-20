@@ -53,7 +53,15 @@ export interface FrontendConfig {
   scan_defaults?: {
     default_finding_policy_path: string
     finding_policy_apply_by_default: boolean
+    scan_profile_guest?: string
+    scan_profile_user?: string
+    scan_profile_admin?: string
+    scan_profile_max_guest?: string
+    scan_profile_max_user?: string
+    scan_profile_max_admin?: string
   }
+  scan_profile_order?: string[]
+  scan_profiles_catalog?: string[]
 }
 
 export function useConfig() {

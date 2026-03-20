@@ -4,6 +4,7 @@ Python implementation of run_safety.sh
 """
 import os
 import json
+import shlex
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
@@ -127,7 +128,8 @@ class SafetyScanner(BaseScanner):
         self.complete_substep("Dependency Extraction", "Dependencies extracted")
         
         def run_safety(output_format: str, output_path: Path, file_arg: bool = True) -> bool:
-            cmd = ["safety", "check", "--output", output_format]
+            extra = shlex.split(os.getenv("SAFETY_EXTRA_ARGS", "").strip())
+            cmd = ["safety", "check", *extra, "--output", output_format]
             if file_arg:
                 cmd.extend(["--file", str(dep_file)])
             result = self.run_command(cmd, cwd=self.target_path, capture_output=True)

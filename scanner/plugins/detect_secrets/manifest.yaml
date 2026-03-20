@@ -8,20 +8,34 @@ categories:
 icon: 🕵️
 languages: null
 severity_supported: false
-execution:
-  timeout: 300
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
   version_command:
   - detect-secrets
   - --version
-homepage: https://github.com/Yelp/detect-secrets
-documentation: https://github.com/Yelp/detect-secrets#readme
+homepage: https://github.com/bridgecrewio/detect-secrets
+documentation: https://github.com/bridgecrewio/detect-secrets#readme
 install:
+# Use Bridgecrew fork (`bc-detect-secrets`), NOT PyPI `detect-secrets` (Yelp): both
+# ship `detect_secrets` and the same `detect-secrets` CLI. Yelp wins on pip install
+# order and breaks Checkov's secrets runner (AttributeError: FileType.JSON).
 - - pip3
   - install
-  - detect-secrets>=1.5.0
+  - bc-detect-secrets
+scan_profiles:
+  quick:
+    timeout: 60
+    hints:
+      depth: shallow
+      intensity: low
+  standard:
+    timeout: 90
+  deep:
+    timeout: 120
+    hints:
+      depth: deep
+      intensity: high
 exit_codes:
   binary: detect-secrets
   codes:

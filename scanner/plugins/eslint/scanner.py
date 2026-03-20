@@ -3,6 +3,7 @@ ESLint Scanner
 Python implementation of run_eslint.sh
 """
 import os
+import shlex
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
@@ -133,6 +134,7 @@ module.exports = [
         )
         
         ignore_args = self.get_ignore_args()
+        extra = shlex.split(os.getenv("ESLINT_EXTRA_ARGS", "").strip())
         
         # JSON report
         self.log("Running ESLint scan with JSON output...")
@@ -141,6 +143,7 @@ module.exports = [
             "-c",
             str(temp_config),
             *ignore_args,
+            *extra,
             "--format=json",
             f"--output-file={json_output}",
             str(self.target_path),
@@ -157,6 +160,7 @@ module.exports = [
             "-c",
             str(temp_config),
             *ignore_args,
+            *extra,
             "--format=compact",
             f"--output-file={text_output}",
             str(self.target_path),

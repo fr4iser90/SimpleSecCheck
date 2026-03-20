@@ -9,8 +9,6 @@ categories:
 icon: ⚛️
 languages: null
 severity_supported: true
-execution:
-  timeout: 900
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -36,6 +34,39 @@ install:
   - -s
   - /opt/nuclei
   - /usr/local/bin/nuclei
+assets:
+- id: templates
+  type: data
+  description: Nuclei templates cache
+  mount:
+    host_subpath: scanner/plugins/nuclei/data
+    container_path: /app/scanner/plugins/nuclei/data
+  update:
+    enabled: true
+    command:
+    - nuclei
+    - -update-templates
+    - -ud
+    - '{container_path}'
+scan_profiles:
+  quick:
+    timeout: 120
+    env:
+      NUCLEI_RATE_LIMIT: "50"
+      NUCLEI_CONCURRENCY: "10"
+      NUCLEI_SEVERITY: "critical,high"
+  standard:
+    timeout: 240
+    env:
+      NUCLEI_RATE_LIMIT: "100"
+      NUCLEI_CONCURRENCY: "18"
+      NUCLEI_SEVERITY: "critical,high,medium"
+  deep:
+    timeout: 360
+    env:
+      NUCLEI_RATE_LIMIT: "150"
+      NUCLEI_CONCURRENCY: "25"
+      NUCLEI_SEVERITY: "critical,high,medium,low"
 exit_codes:
   binary: nuclei
   codes:

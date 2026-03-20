@@ -50,4 +50,4 @@ from .exceptions.scan_exceptions import (
 )
 
 # Import domain services
-from .domain_services.scan_validation_service import ScanValidationService
+from .validation.scan_validation import ScanValidationService

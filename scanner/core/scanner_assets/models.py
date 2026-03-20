@@ -16,6 +16,7 @@ class AssetMount:
 class AssetUpdate:
     enabled: bool
     command: List[str]
+    env: Optional[Dict[str, str]] = None
 
 
 @dataclass
@@ -49,7 +50,7 @@ class ScannerManifest:
     languages: Optional[List[str]] = None  # None = all languages
     severity_supported: Optional[bool] = None
     severity_map: Optional[Dict[str, str]] = None
-    timeout: Optional[int] = None  # seconds; from execution.timeout in YAML
+    timeout: Optional[int] = None  # seconds; from scan_profiles.standard or legacy execution in YAML
 
     display_name: Optional[str] = None
     description: Optional[str] = None

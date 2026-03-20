@@ -14,6 +14,8 @@ interface ScanFormProps {
   config: FrontendConfig | null
 }
 
+type ScanProfile = string
+
 // Git URL patterns for detection
 const GIT_URL_PATTERNS = [
   /^https?:\/\/(www\.)?github\.com\/[\w\-\.]+\/[\w\-\.]+/,
@@ -58,6 +60,31 @@ function isUploadId(value: string): boolean {
 export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const roleKey = isAdmin ? 'admin' : user ? 'user' : 'guest'
+  const profileCatalog = (config?.scan_profiles_catalog && config.scan_profiles_catalog.length > 0)
+    ? config.scan_profiles_catalog
+    : []
+  const defaultGuest = profileCatalog[0] ?? ''
+  const defaultUser = profileCatalog[Math.min(1, Math.max(profileCatalog.length - 1, 0))] ?? ''
+  const defaultAdmin = profileCatalog[profileCatalog.length - 1] ?? ''
+  const roleDefaultScanProfile: ScanProfile =
+    roleKey === 'admin'
+      ? (config?.scan_defaults?.scan_profile_admin ?? defaultAdmin)
+      : roleKey === 'user'
+      ? (config?.scan_defaults?.scan_profile_user ?? defaultUser)
+      : (config?.scan_defaults?.scan_profile_guest ?? defaultGuest)
+  const roleMaxAllowedScanProfile: ScanProfile =
+    roleKey === 'admin'
+      ? (config?.scan_defaults?.scan_profile_max_admin ?? defaultAdmin)
+      : roleKey === 'user'
+      ? (config?.scan_defaults?.scan_profile_max_user ?? defaultUser)
+      : (config?.scan_defaults?.scan_profile_max_guest ?? defaultGuest)
+  const profileOrder = (config?.scan_profile_order && config.scan_profile_order.length > 0
+    ? config.scan_profile_order
+    : profileCatalog)
+  const allowedScanProfiles = profileOrder.filter(
+    p => profileOrder.indexOf(p) <= profileOrder.indexOf(roleMaxAllowedScanProfile),
+  ).filter((p) => profileCatalog.includes(p))
 
   // Config: scan_types catalog, allowed_targets (capabilities), permissions (RBAC)
   const scanTypesConfig = config?.scan_types ?? {}
@@ -92,6 +119,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const defaultFindingPolicyPath = config?.scan_defaults?.default_finding_policy_path ?? '.scanning/finding-policy.json'
   const applyFindingPolicyByDefault = config?.scan_defaults?.finding_policy_apply_by_default ?? true
   const [findingPolicy, setFindingPolicy] = useState(applyFindingPolicyByDefault ? defaultFindingPolicyPath : '')
+  const [scanProfile, setScanProfile] = useState<ScanProfile>(roleDefaultScanProfile)
   const [collectMetadata, setCollectMetadata] = useState(metadataCollection === 'always')
   const [selectedScanners, setSelectedScanners] = useState<string[]>([])
   const [scanners, setScanners] = useState<any[]>([])
@@ -101,6 +129,14 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [uploadingZip, setUploadingZip] = useState(false)
   const [zipUploadError, setZipUploadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (allowedScanProfiles.length === 0) return
+    const defaultAllowed = allowedScanProfiles.includes(roleDefaultScanProfile)
+      ? roleDefaultScanProfile
+      : allowedScanProfiles[allowedScanProfiles.length - 1]
+    setScanProfile(defaultAllowed)
+  }, [roleDefaultScanProfile, roleMaxAllowedScanProfile, allowedScanProfiles.join('|')])
   
   // Auto-detect scan type and target type from target input
   useEffect(() => {
@@ -348,6 +384,9 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
       if (collectMetadata) {
         scanConfig.collect_metadata = collectMetadata
       }
+      if (scanProfile) {
+        scanConfig.scan_profile = scanProfile
+      }
 
       // Get backend scan_type from config (backend-driven!)
       const scanTypeConfig = scanTypesConfig[scanType]
@@ -559,6 +598,32 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
             {Array.isArray(config?.allowed_targets_display) && (
               <small className="form-help-text info">
                 Allowed targets: {config.allowed_targets_display.join(', ') || 'none'}
+              </small>
+            )}
+          </div>
+        )}
+
+        {scanType && (
+          <div className="form-group" style={{ marginTop: '1rem' }}>
+            <label htmlFor="scan-profile">Scan Profile</label>
+            <select
+              id="scan-profile"
+              value={scanProfile}
+              disabled={allowedScanProfiles.length === 0}
+              onChange={(e) => setScanProfile(e.target.value as ScanProfile)}
+            >
+              {allowedScanProfiles.map((p) => (
+                <option key={p} value={p}>
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                </option>
+              ))}
+            </select>
+            <small className="form-help-text info">
+              Default: <strong>{roleDefaultScanProfile}</strong>, max allowed: <strong>{roleMaxAllowedScanProfile}</strong>.
+            </small>
+            {allowedScanProfiles.length === 0 && (
+              <small className="form-help-text error">
+                No scan profiles available from backend catalog. Check scanner manifests/discovery.
               </small>
             )}
           </div>

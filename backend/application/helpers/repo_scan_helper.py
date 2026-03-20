@@ -5,7 +5,6 @@ Helper functions for creating scans for GitHub repositories.
 """
 from typing import Optional, Dict, Any
 import logging
-from datetime import datetime
 
 from domain.entities.scan import ScanType
 from domain.entities.target_type import TargetType
@@ -24,23 +23,8 @@ async def create_repo_scan(
     scanners: Optional[list[str]] = None,
     metadata: Optional[Dict[str, Any]] = None
 ) -> Optional[str]:
-    """
-    Create a scan for a GitHub repository.
-    
-    Args:
-        repo_url: Repository URL (e.g., https://github.com/user/repo)
-        repo_name: Repository name for display
-        branch: Branch to scan
-        user_id: User ID who owns the repository
-        commit_hash: Optional commit hash
-        scanners: Optional list of scanners to use (defaults to all enabled code scanners from database)
-        metadata: Optional metadata to attach to scan
-        
-    Returns:
-        Scan ID if successful, None otherwise
-    """
+    """Create a scan for a GitHub repository."""
     try:
-        # If scanners not provided, get all enabled code scanners from repository
         if scanners is None:
             from infrastructure.container import get_scanner_repository
             repo = get_scanner_repository()
@@ -49,7 +33,6 @@ async def create_repo_scan(
                 s.name for s in all_scanners
                 if s.enabled and s.scan_types and "code" in [st.lower() for st in s.scan_types]
             ]
-            # Sort by priority desc (higher first)
             ordered = sorted(
                 [s for s in all_scanners if s.name in code_scanners],
                 key=lambda x: -x.priority,
@@ -59,24 +42,20 @@ async def create_repo_scan(
                 raise ValueError("No code scanners found in database. Please ensure scanners are discovered.")
             scanners = code_scanners
             logger.info("Using %s code scanners from database for repo %s: %s", len(scanners), repo_name, ", ".join(scanners))
-        
-        # Build scan name
+
         scan_name = f"Scan: {repo_name} ({branch})"
         if commit_hash:
             scan_name += f" @ {commit_hash[:8]}"
-        
-        # Build scan description
+
         description = f"Automated scan for {repo_url} on branch {branch}"
         if commit_hash:
             description += f" at commit {commit_hash}"
-        
-        # Build config with git branch
+
         config = {
             "git_branch": branch,
-            "target_mount_path": None  # Will be cloned by worker
+            "target_mount_path": None
         }
-        
-        # Build metadata
+
         scan_metadata = {
             "repo_url": repo_url,
             "repo_name": repo_name,
@@ -86,8 +65,7 @@ async def create_repo_scan(
         }
         if commit_hash:
             scan_metadata["commit_hash"] = commit_hash
-        
-        # Create scan request
+
         scan_request = ScanRequestDTO(
             name=scan_name,
             description=description,
@@ -100,15 +78,13 @@ async def create_repo_scan(
             metadata=scan_metadata,
             tags=["auto-scan", "github-repo"]
         )
-        
-        # Get scan service and create scan
+
         from infrastructure.container import get_scan_service
-        scan_service = get_scan_service()
+        scan_service: ScanService = get_scan_service()
         scan_dto = await scan_service.create_scan(scan_request)
-        
-        logger.info(f"Created scan {scan_dto.id} for repository {repo_url} (branch: {branch})")
+        logger.info("Created scan %s for repository %s (branch: %s)", scan_dto.id, repo_url, branch)
         return scan_dto.id
-        
+
     except Exception as e:
-        logger.error(f"Failed to create scan for repository {repo_url}: {e}", exc_info=True)
+        logger.error("Failed to create scan for repository %s: %s", repo_url, e, exc_info=True)
         return None

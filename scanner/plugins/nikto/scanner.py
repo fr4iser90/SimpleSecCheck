@@ -3,6 +3,7 @@ Nikto Scanner
 Python implementation of run_nikto.sh
 """
 import os
+import shlex
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
@@ -55,17 +56,19 @@ class NiktoScanner(BaseScanner):
         
         json_output = self.results_dir / "report.json"  # Changed from nikto.json
         text_output = self.results_dir / "report.txt"   # Changed from nikto.txt
+
+        extra = shlex.split(os.getenv("NIKTO_EXTRA_ARGS", "").strip())
         
         # JSON report
         self.log("Running web server scan...")
-        cmd = ["nikto", "-h", self.scan_target, "-Format", "json", "-output", str(json_output)]
+        cmd = ["nikto", "-h", self.scan_target, *extra, "-Format", "json", "-output", str(json_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
             self.log("JSON report generation failed", "WARNING")
         
         # Text report
-        cmd = ["nikto", "-h", self.scan_target, "-output", str(text_output)]
+        cmd = ["nikto", "-h", self.scan_target, *extra, "-output", str(text_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:

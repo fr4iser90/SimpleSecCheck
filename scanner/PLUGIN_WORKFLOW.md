@@ -89,6 +89,38 @@ Findings-Dicts sollten mindestens **Severity**/severity, **path**/file/filename,
 - **`description`**, **`categories`**, **`icon`**: für die Weboberfläche. Alles aus dem Manifest – keine Doppelpflege im Code.
 - **`homepage`**, **`documentation`**: optionale Links für die UI.
 
+### Scan-Profile (manifest.yaml, optional)
+
+User-facing **`quick` / `standard` / `deep`** werden im Backend aus **`scan_profiles`** pro Plugin gelesen (nach DB-Sync aus dem Manifest). **Opt-in:** Fehlt `scan_profiles`, nimmt das Tool nicht am Scan-Profil teil (nur `execution.timeout`).
+
+Jedes Plugin definiert **pro Profil** optional **`timeout`** (Sekunden, Orchestrator-Limit für genau diesen Lauf) und **`env`** (UPPER_SNAKE), die der Scanner in `scanner.py` per `os.getenv` auswertet.
+
+```yaml
+scan_profiles:
+  quick:
+    timeout: 600
+    hints:
+      depth: shallow
+      intensity: low
+      coverage: essential
+    env:
+      MY_TOOL_FLAG: "1"
+  standard:
+    timeout: 900
+    env: { ... }
+  deep:
+    timeout: 1200
+    env: { ... }
+```
+
+- **`timeout`**: Laufzeit-Limit für dieses Tool bei gewähltem Profil (30–86400 s).
+- **`hints`**: optional; für UI/Resolved-Profil (Semgrep-Hints werden bevorzugt, sonst erstes Manifest mit `hints`).
+- **`env`**: wird beim Enqueue in `scanner_tool_overrides` gemerged (Profil zuerst, Admin-Config-Env überschreibt gleiche Keys).
+
+Beispiele für **verhaltensrelevante** `env`-Keys (Scanner werten sie in `scanner.py` aus): `BANDIT_EXTRA_ARGS`, `BRAKEMAN_CONFIDENCE_MIN` oder `BRAKEMAN_EXTRA_ARGS`, `WAPITI_EXTRA_ARGS`, `NIKTO_EXTRA_ARGS`, `TRIVY_SEVERITY` / `TRIVY_COMPREHENSIVE_SCANNERS` / `TRIVY_RUN_*_SCAN`, `NPM_AUDIT_EXTRA_ARGS`, `ESLINT_EXTRA_ARGS`, `GITLEAKS_EXTRA_ARGS`, `CHECKOV_EXTRA_ARGS`, `SAFETY_EXTRA_ARGS`, `SNYK_EXTRA_ARGS`, `DETECT_SECRETS_EXTRA_ARGS`, `TRUFFLEHOG_EXTRA_ARGS`, `TERRAFORM_SCAN_EXTRA_ARGS`, `OWASP_DC_EXTRA_ARGS`, `CODEQL_ANALYZE_EXTRA_ARGS`, `SONAR_SCANNER_EXTRA_ARGS`, `BURP_EXTRA_ARGS`, `GRYPE_EXTRA_ARGS`, `KUBE_HUNTER_EXTRA_ARGS`, `KUBE_BENCH_EXTRA_ARGS`, `DOCKER_BENCH_EXTRA_ARGS` — sowie `ZAP_*`, `NUCLEI_*`, `SEMGREP_*`. Mobile-/Stub-Scanner können nur **Timeout** + `hints` nutzen (kein externes CLI).
+
+Der Orchestrator (`--list`) schreibt `scan_profiles` in **`scanner_metadata`**, damit das Backend nichts Hardcodiertes braucht.
+
 ### Optional: Capabilities & Execution (manifest.yaml)
 
 Empfohlen für Orchestrierung, Scoring und Filtering (alle optional, schrittweise ergänzbar):

@@ -365,7 +365,8 @@ export default function ScanView() {
 
     return (
       <div style={{ 
-        height: 'calc(100vh - 80px)',
+        flex: 1,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -473,7 +474,8 @@ export default function ScanView() {
     
     return (
       <div style={{ 
-        height: 'calc(100vh - 80px)',
+        flex: 1,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         padding: '2rem',
@@ -743,7 +745,8 @@ export default function ScanView() {
   ) {
     return (
       <div style={{ 
-        height: 'calc(100vh - 80px)',
+        flex: 1,
+        minHeight: 0,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -803,8 +806,9 @@ export default function ScanView() {
   if (status.status === 'completed' && status.results_dir) {
     return (
       <div style={{ 
-        height: 'calc(100vh - 80px)',
         position: 'relative',
+        flex: 1,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
       }}>
@@ -966,7 +970,8 @@ export default function ScanView() {
   // Default: No scan
   return (
     <div style={{ 
-      height: 'calc(100vh - 80px)',
+      flex: 1,
+      minHeight: 0,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',

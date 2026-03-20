@@ -44,7 +44,7 @@
 │   │   │   ├── scan_repository.py
 │   │   │   ├── target_repository.py
 │   │   │   └── user_repository.py
-│   │   ├── domain_services/
+│   │   ├── services/
 │   │   │   ├── scan_validation_service.py
 │   │   │   └── scanner_selection_service.py
 │   │   └── exceptions/

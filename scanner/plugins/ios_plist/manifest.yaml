@@ -8,8 +8,6 @@ categories:
 icon: 🍎
 languages: null
 severity_supported: true
-execution:
-  timeout: 300
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -19,5 +17,18 @@ install:
 - - pip3
   - install
   - defusedxml
+scan_profiles:
+  quick:
+    timeout: 90
+    hints:
+      depth: shallow
+      intensity: low
+  standard:
+    timeout: 120
+  deep:
+    timeout: 150
+    hints:
+      depth: deep
+      intensity: high
 exit_codes:
   note: No single upstream CLI — plist analysis via Python; see scan logs for errors.

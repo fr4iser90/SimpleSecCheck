@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import inspect
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -29,6 +30,9 @@ from scanner.core.step_registry import StepRegistry, StepStatus, Step, SubStepTy
 from scanner.core.step_definitions import StepDefinitionsRegistry, StepType
 from scanner.core.base_scanner import set_global_step_registry
 from scanner.core import scan_checkpoint as scan_cp
+
+# Git clone subprocess limit — only used in _run_git_clone (change value here only).
+_GIT_CLONE_STEP_TIMEOUT_SECONDS = 20
 
 
 # Single Source of Truth: Mapping from frontend scan_type to scanner scan_types
@@ -159,7 +163,19 @@ class ScanOrchestrator:
                     self._tool_overrides = {}
             except (json.JSONDecodeError, TypeError):
                 self._tool_overrides = {}
-    
+
+        # Worker passes queue max_scan_wall_seconds (same as Docker wait); orchestrator logs budget vs elapsed.
+        self._worker_wall_seconds: Optional[int] = None
+        _wall_raw = os.getenv("SSC_MAX_SCAN_WALL_SECONDS", "").strip()
+        if _wall_raw:
+            try:
+                _wi = int(_wall_raw)
+                if 60 <= _wi <= 86400:
+                    self._worker_wall_seconds = _wi
+            except ValueError:
+                pass
+        self._scan_start_monotonic: Optional[float] = None
+
     def _tools_key_for_override(self, scanner: Scanner) -> str:
         """Merge map is keyed by tools_key (same as scanner_tool_settings.scanner_key)."""
         tk = (scanner.tools_key or "").strip().lower()
@@ -176,6 +192,7 @@ class ScanOrchestrator:
         return True
 
     def _merged_timeout(self, scanner: Scanner) -> int:
+        """Backend ``SCANNER_TOOL_OVERRIDES_JSON`` (manifest + admin + profile merge), then manifest ``scan_profiles`` / registry scanner timeout."""
         o = self._override_for_scanner(scanner)
         t = o.get("timeout")
         if t is not None:
@@ -187,7 +204,10 @@ class ScanOrchestrator:
                 pass
         if scanner.timeout and scanner.timeout > 0:
             return int(scanner.timeout)
-        return 900
+        raise ValueError(
+            f"No execution timeout for scanner {scanner.name!r} (tools_key={scanner.tools_key!r}): "
+            "set scan_profiles / tool timeout in the plugin manifest and/or admin scanner-tool-settings."
+        )
 
     def log_message(self, message: str):
         """Log message to scan.log"""
@@ -280,7 +300,7 @@ class ScanOrchestrator:
                 clone_cmd,
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=20,
                 check=False
             )
             
@@ -296,7 +316,9 @@ class ScanOrchestrator:
                 return False
                 
         except subprocess.TimeoutExpired:
-            error_msg = "Git clone timed out after 5 minutes"
+            error_msg = (
+                f"Git clone timed out after {_GIT_CLONE_STEP_TIMEOUT_SECONDS} seconds"
+            )
             self.log_message(f"[ERROR] {error_msg}")
             self.step_registry.complete_step("Git Clone", error_msg)
             return False
@@ -320,6 +342,13 @@ class ScanOrchestrator:
         self.step_registry.start_step(scanner.name, f"Running {scanner.name} scan...")
         timeout_sec = self._merged_timeout(scanner)
         os.environ["SCANNER_TIMEOUT_SECONDS"] = str(timeout_sec)
+        if self._worker_wall_seconds is not None and self._scan_start_monotonic is not None:
+            _elapsed = time.monotonic() - self._scan_start_monotonic
+            _remaining = max(0.0, float(self._worker_wall_seconds) - _elapsed)
+            self.log_message(
+                f"[ORCHESTRATOR] Wall clock: ~{_elapsed:.0f}s elapsed of {self._worker_wall_seconds}s budget "
+                f"(~{_remaining:.0f}s left; worker may kill container when budget is exhausted)"
+            )
         ov = self._override_for_scanner(scanner)
         env_backup: Dict[str, Optional[str]] = {}
         for k, v in (ov.get("env") or {}).items():
@@ -394,6 +423,10 @@ class ScanOrchestrator:
                         )
 
                 scanner_instance = scanner_class(**valid_kwargs)
+                self.log_message(
+                    f"[ORCHESTRATOR] {scanner.name}: calling run() with merged timeout {timeout_sec}s "
+                    f"(env SCANNER_TIMEOUT_SECONDS); per-tool log: {scanner_log_file}"
+                )
                 success = scanner_instance.run()
 
                 scanner_dir = self.tools_dir_results / scanner.tools_key
@@ -685,7 +718,16 @@ class ScanOrchestrator:
         Returns:
             Exit code (0 for success, non-zero for failure)
         """
+        self._scan_start_monotonic = time.monotonic()
         self.log_message("SimpleSecCheck Scan Started")
+        if self._worker_wall_seconds is not None:
+            self.log_message(
+                f"[ORCHESTRATOR] Worker will wait at most {self._worker_wall_seconds}s for this container "
+                f"(SSC_MAX_SCAN_WALL_SECONDS); after that the worker stops the Docker container "
+                f"(separate limit from each tool's SCANNER_TIMEOUT_SECONDS)."
+            )
+        _profile = (os.getenv("SCAN_PROFILE") or "").strip() or "standard"
+        self.log_message(f"Scan profile: {_profile}")
         scan_type_display = ",".join([s.value for s in self.scan_types])
         self.log_message(f"Scan Type(s): {scan_type_display}")
         self.log_message(f"Target Type: {self.target_type.value}")
@@ -911,7 +953,7 @@ class ScanOrchestrator:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                timeout=300  # 5 minute timeout for report generation
+                timeout=30
             )
             
             # Write output to log
@@ -1079,9 +1121,13 @@ async def list_scanners():
             
             try:
                 mt = getattr(scanner_obj, "timeout", None)
-                exec_timeout = int(mt) if mt and int(mt) > 0 else 900
+                if mt is None:
+                    standard_timeout = None
+                else:
+                    ti = int(mt)
+                    standard_timeout = ti if ti >= 0 else None
             except (TypeError, ValueError):
-                exec_timeout = 900
+                standard_timeout = None
             scanner_data = {
                 "name": scanner_obj.name,
                 "scan_types": scan_types,
@@ -1091,7 +1137,7 @@ async def list_scanners():
                 "description": description,
                 "categories": categories,
                 "icon": icon,
-                "execution_timeout": exec_timeout,
+                "standard_profile_timeout": standard_timeout,
                 "tools_key": getattr(scanner_obj, "tools_key", None),
             }
             
@@ -1133,15 +1179,36 @@ async def list_scanners():
         
         try:
             for scanner_data in scanner_list:
+                # Per-plugin manifest (must not reuse the last manifest from the build loop above).
+                tk = (scanner_data.get("tools_key") or "").strip()
+                row_manifest = (
+                    manifests.get(tk)
+                    if (manifests and tk)
+                    else None
+                )
                 # Extract metadata (description, categories, assets)
                 # Icons are NOT stored in DB - they remain in frontend code only
-                mt = int(scanner_data.get("execution_timeout") or 900)
+                scan_profiles = None
+                if row_manifest and getattr(row_manifest, "raw", None):
+                    sp = row_manifest.raw.get("scan_profiles")
+                    if isinstance(sp, dict) and sp:
+                        scan_profiles = sp
+                std = (
+                    (scan_profiles or {}).get("standard")
+                    if isinstance(scan_profiles, dict)
+                    else None
+                )
+                st_to = std.get("timeout") if isinstance(std, dict) else None
+                if st_to is None and scanner_data.get("standard_profile_timeout") is None:
+                    raise ValueError(
+                        f"Scanner {scanner_data.get('name')!r} has no scan_profiles.standard.timeout in manifest."
+                    )
                 metadata = {
                     "description": scanner_data.get("description"),
                     "categories": scanner_data.get("categories", []),
                     "assets": scanner_data.get("assets", []),
-                    "execution": {"timeout": mt},
                     "tools_key": scanner_data.get("tools_key"),
+                    "scan_profiles": scan_profiles,
                 }
                 
                 # Check if scanner exists
@@ -1271,4 +1338,10 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--bootstrap-assets":
+        from scanner.core.asset_bootstrap import run_bootstrap_assets
+
+        sys.exit(run_bootstrap_assets())
+
     asyncio.run(main())

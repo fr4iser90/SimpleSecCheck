@@ -843,7 +843,7 @@ async def trigger_repo_scan(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Repository not found"
             )
-        from domain.services.repo_scan_helper import create_repo_scan
+        from application.helpers.repo_scan_helper import create_repo_scan
         scan_id = await create_repo_scan(
             repo_url=repo.repo_url,
             repo_name=repo.repo_name,
@@ -1131,7 +1131,7 @@ async def list_scan_targets(
     if not targets:
         return []
 
-    from domain.services.target_scan_helper import get_default_scanner_names_for_target_type
+    from application.helpers.target_scan_helper import get_default_scanner_names_for_target_type
 
     sources = [t.source for t in targets]
     latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_context.user_id, sources)
@@ -1214,7 +1214,7 @@ async def create_scan_target(
         user_agent=request.headers.get("User-Agent"),
     )
     # Initial scan is enqueued by TargetInitialScanScheduler after initial_scan_delay_seconds (admin-configurable)
-    from domain.services.target_scan_helper import get_default_scanner_names_for_target_type
+    from application.helpers.target_scan_helper import get_default_scanner_names_for_target_type
     _custom = created.config.get("scanners") if isinstance(created.config, dict) else None
     _scanners = _custom if isinstance(_custom, list) else await get_default_scanner_names_for_target_type(created.type)
     return ScanTargetResponse(
@@ -1248,7 +1248,7 @@ async def get_scan_target(
     target = await scan_target_service.get_by_id(target_id, actor_context.user_id)
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
-    from domain.services.target_scan_helper import get_default_scanner_names_for_target_type
+    from application.helpers.target_scan_helper import get_default_scanner_names_for_target_type
     _custom = target.config.get("scanners") if isinstance(target.config, dict) else None
     _scanners = _custom if isinstance(_custom, list) else await get_default_scanner_names_for_target_type(target.type)
     latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_context.user_id, [target.source])
@@ -1282,7 +1282,7 @@ async def update_scan_target(
     """Update a scan target. Config is validated per target_type."""
     if not actor_context.user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    from domain.services.target_handlers import get_target_handler
+    from domain.validation.target_handlers import get_target_handler
     from domain.entities.scan_target import ScanTarget
     from domain.value_objects.auto_scan_config import AutoScanConfig
 
@@ -1315,7 +1315,7 @@ async def update_scan_target(
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("User-Agent"),
     )
-    from domain.services.target_scan_helper import get_default_scanner_names_for_target_type
+    from application.helpers.target_scan_helper import get_default_scanner_names_for_target_type
     _custom = updated.config.get("scanners") if isinstance(updated.config, dict) else None
     _scanners = _custom if isinstance(_custom, list) else await get_default_scanner_names_for_target_type(updated.type)
     latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_context.user_id, [updated.source])

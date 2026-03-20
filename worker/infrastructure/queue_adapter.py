@@ -86,6 +86,9 @@ class QueueAdapter:
     async def pop_job(self) -> Optional[Dict[str, Any]]:
         """Pop a job from the queue.
         
+        Backend may enqueue with QUEUE_STRATEGY=priority (sorted set + scan:{id} payload).
+        Worker must drain that first; otherwise jobs never leave DB status "pending".
+
         Returns:
             Job data if available, None otherwise
         """
@@ -97,6 +100,26 @@ class QueueAdapter:
                 except Exception as e:
                     self.logger.error(f"Redis connection error: {e}", exc_info=True)
                     return None
+
+                # --- Priority queue (same as backend QueueService when strategy == priority)
+                try:
+                    popped = await self.redis_client.zpopmin("scan_queue:priority", 1)
+                    if popped:
+                        scan_id, _score = popped[0]
+                        raw = await self.redis_client.get(f"scan:{scan_id}")
+                        if raw:
+                            await self.redis_client.delete(f"scan:{scan_id}")
+                            job_data = json.loads(raw)
+                            self.logger.info(
+                                f"Popped job from priority queue: scan_id={job_data.get('scan_id')}"
+                            )
+                            return job_data
+                        self.logger.warning(
+                            "Priority queue had member %r but scan: payload missing", scan_id
+                        )
+                except Exception as e:
+                    self.logger.error(f"Error popping priority queue: {e}", exc_info=True)
+                    # Fall through to FIFO list; do not abort the whole pop cycle.
                 
                 # Check queue length with error handling
                 queue_length = 0

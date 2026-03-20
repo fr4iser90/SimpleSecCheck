@@ -94,11 +94,22 @@ class BaseScanner(ABC):
             print(f"[{self.name}] Error writing to log: {e}")
     
     def get_timeout(self) -> int:
-        """Return timeout in seconds from env (set by orchestrator from manifest). Default 900."""
+        """Timeout seconds from ``SCANNER_TIMEOUT_SECONDS`` (set by orchestrator from manifest only)."""
+        raw = os.getenv("SCANNER_TIMEOUT_SECONDS")
+        if raw is None or not str(raw).strip():
+            raise RuntimeError(
+                "SCANNER_TIMEOUT_SECONDS is not set. "
+                "The orchestrator must set it from the plugin manifest before running a scanner."
+            )
         try:
-            return int(os.getenv("SCANNER_TIMEOUT_SECONDS", "900"))
-        except (ValueError, TypeError):
-            return 900
+            t = int(raw)
+        except (ValueError, TypeError) as e:
+            raise RuntimeError(
+                f"SCANNER_TIMEOUT_SECONDS must be a positive integer, got {raw!r}"
+            ) from e
+        if t <= 0:
+            raise RuntimeError(f"SCANNER_TIMEOUT_SECONDS must be positive, got {t}")
+        return t
     
     def run_command(
         self,
@@ -106,7 +117,8 @@ class BaseScanner(ABC):
         cwd: Optional[Path] = None,
         env: Optional[Dict[str, str]] = None,
         timeout: Optional[int] = None,
-        capture_output: bool = True
+        capture_output: bool = True,
+        use_process_group: bool = True,
     ) -> subprocess.CompletedProcess:
         """
         Run a command and log output
@@ -117,6 +129,8 @@ class BaseScanner(ABC):
             env: Environment variables
             timeout: Timeout in seconds (None = use SCANNER_TIMEOUT_SECONDS from manifest)
             capture_output: Whether to capture stdout/stderr
+            use_process_group: If True, use setsid + killpg on timeout (default). Set False for
+                tools like Checkov where process groups break multiprocessing.
         
         Returns:
             CompletedProcess result
@@ -127,11 +141,7 @@ class BaseScanner(ABC):
         
         process = None
         try:
-            # Use process group to kill all child processes on timeout
-            # This is important for tools like Checkov that use multiprocessing
-            # NOTE: os.setsid can cause issues with Checkov's multiprocessing, so we only use it for timeout handling
-            # We'll use a different approach: track child PIDs and kill them manually
-            use_process_group = True  # Can be disabled per-scanner if needed
+            # Process group: kill all children on timeout. Optional: Checkov passes False (setsid breaks it).
             process = subprocess.Popen(
                 cmd,
                 cwd=str(cwd) if cwd else None,
@@ -146,23 +156,18 @@ class BaseScanner(ABC):
                 stdout, stderr = process.communicate(timeout=timeout)
                 returncode = process.returncode
             except subprocess.TimeoutExpired:
-                # Kill the entire process group (including all child processes)
-                if hasattr(os, 'setsid'):
+                if use_process_group and hasattr(os, "setsid"):
                     try:
                         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-                        # Wait a bit for graceful shutdown
                         try:
                             process.wait(timeout=5)
                         except subprocess.TimeoutExpired:
-                            # Force kill if still running
                             os.killpg(os.getpgid(process.pid), signal.SIGKILL)
                             process.wait()
                     except (ProcessLookupError, OSError):
-                        # Process already dead or no process group
                         process.kill()
                         process.wait()
                 else:
-                    # Fallback for Windows
                     process.kill()
                     process.wait()
                 
@@ -233,7 +238,7 @@ class BaseScanner(ABC):
         except Exception as e:
             if process:
                 try:
-                    if hasattr(os, 'setsid'):
+                    if use_process_group and hasattr(os, "setsid"):
                         try:
                             os.killpg(os.getpgid(process.pid), signal.SIGTERM)
                         except (ProcessLookupError, OSError):
@@ -241,7 +246,7 @@ class BaseScanner(ABC):
                     else:
                         process.kill()
                     process.wait()
-                except:
+                except Exception:
                     pass
             self.log(f"Error running command: {e}", "ERROR")
             raise

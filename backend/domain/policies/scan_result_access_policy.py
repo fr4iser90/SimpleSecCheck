@@ -1,10 +1,10 @@
 """
-Who may read scan results (report, API scan detail, steps, …).
+Who may read scan results (report, API scan detail, steps, ...).
 
 - Owner: logged-in user_id matches scan.user_id, or guest session_id in scan_metadata.
-- Share — DB JSON scan_metadata:
+- Share - DB JSON scan_metadata:
   - report_shared_with_user_ids: list of user UUID strings (read-only for those users).
-  - report_share_token: secret (≥8 chars); pass ?share_token= on report URL.
+  - report_share_token: secret (>=8 chars); pass ?share_token= on report URL.
 Mutations (update/delete/cancel/retry): owner only (see is_scan_owner).
 """
 from __future__ import annotations

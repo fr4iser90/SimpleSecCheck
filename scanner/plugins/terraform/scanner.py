@@ -4,6 +4,7 @@ Python implementation of run_terraform_security.sh
 """
 import json
 import os
+import shlex
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
@@ -99,8 +100,9 @@ class TerraformSecurityScanner(BaseScanner):
         
         # Main scan
         self.log("Generating JSON report...")
+        extra = shlex.split(os.getenv("TERRAFORM_SCAN_EXTRA_ARGS", "").strip())
         cmd = ["checkov", "-d", str(self.target_path), "--framework", "terraform",
-               "--output", "json", "--output-file", str(json_output)]
+               *extra, "--output", "json", "--output-file", str(json_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0:
@@ -123,7 +125,7 @@ class TerraformSecurityScanner(BaseScanner):
         # Text report (for completeness)
         self.log("Generating text report...")
         cmd = ["checkov", "-d", str(self.target_path), "--framework", "terraform",
-               "--output", "cli", "--output-file", str(text_output)]
+               *extra, "--output", "cli", "--output-file", str(text_output)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:

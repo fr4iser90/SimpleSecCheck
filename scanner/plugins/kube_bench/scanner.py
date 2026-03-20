@@ -3,6 +3,7 @@ Kube-bench Scanner
 Python implementation of run_kube_bench.sh
 """
 import os
+import shlex
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
@@ -55,7 +56,8 @@ class KubeBenchScanner(BaseScanner):
         
         # JSON report
         self.log("Running compliance scan...")
-        cmd = ["kube-bench", "--json"]
+        kb_extra = shlex.split(os.getenv("KUBE_BENCH_EXTRA_ARGS", "").strip())
+        cmd = ["kube-bench", "--json", *kb_extra]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:

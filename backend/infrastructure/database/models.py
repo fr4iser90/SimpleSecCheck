@@ -7,8 +7,7 @@ Models represent the database schema and provide ORM functionality.
 from sqlalchemy import Column, String, DateTime, Boolean, Integer, Text, JSON, Enum as SQLEnum, ForeignKey, ARRAY
 from sqlalchemy.dialects.postgresql import UUID, INET, ENUM as PG_ENUM
 from sqlalchemy.sql import func
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import declarative_base, relationship
 import uuid
 from datetime import datetime
 from enum import Enum

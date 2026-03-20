@@ -10,8 +10,6 @@ languages:
 - javascript
 - typescript
 severity_supported: true
-execution:
-  timeout: 300
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -21,6 +19,27 @@ checkpoint:
 homepage: https://docs.npmjs.com/cli/v8/commands/npm-audit
 documentation: https://docs.npmjs.com/cli/v8/commands/npm-audit
 install: []
+scan_profiles:
+  quick:
+    timeout: 60
+    hints:
+      depth: shallow
+      intensity: low
+      coverage: high-severity advisories only
+    env:
+      NPM_AUDIT_EXTRA_ARGS: --audit-level=high
+  standard:
+    timeout: 90
+    env:
+      NPM_AUDIT_EXTRA_ARGS: --audit-level=moderate
+  deep:
+    timeout: 120
+    hints:
+      depth: deep
+      intensity: high
+      coverage: low severity and above
+    env:
+      NPM_AUDIT_EXTRA_ARGS: --audit-level=low
 exit_codes:
   binary: npm
   codes:

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from api.deps.actor_context import get_actor_context, ActorContext
 from config.settings import get_settings
 from application.services.upload_service import store_upload, UploadRejectedError
-from domain.services.target_permission_policy import check_can_scan_target, get_allow_flags_from_settings
+from domain.policies.target_permission_policy import check_can_scan_target, get_allow_flags_from_settings
 from domain.entities.target_type import TargetType
 
 logger = logging.getLogger(__name__)

@@ -2,9 +2,9 @@
 Merge stored role_capabilities from SystemState.config with defaults.
 Used by admin API and public capabilities snapshot.
 """
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from domain.services.target_permission_policy import ROLE_CAPABILITY_TARGET_TYPES, ROLE_NAMES
+from domain.policies.target_permission_policy import ROLE_CAPABILITY_TARGET_TYPES, ROLE_NAMES
 
 
 def default_role_capabilities() -> Dict[str, Any]:

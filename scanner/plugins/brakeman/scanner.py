@@ -4,6 +4,7 @@ Python implementation of run_brakeman.sh
 """
 import json
 import os
+import shlex
 from pathlib import Path
 from typing import List, Optional
 from scanner.core.base_scanner import BaseScanner
@@ -84,10 +85,16 @@ class BrakemanScanner(BaseScanner):
         if not tool_cmd:
             self.log("brakeman not found", "ERROR")
             return False
-        
+
+        extra = shlex.split(os.getenv("BRAKEMAN_EXTRA_ARGS", "").strip())
+        if not extra:
+            w = os.getenv("BRAKEMAN_CONFIDENCE_MIN", "").strip()
+            if w in ("1", "2", "3"):
+                extra = ["-w", w]
+
         # JSON report
         self.log("Generating JSON report...")
-        cmd = [*tool_cmd, "-q", "-f", "json", "-o", str(json_output), "--force", str(self.target_path)]
+        cmd = [*tool_cmd, "-q", "-f", "json", *extra, "-o", str(json_output), "--force", str(self.target_path)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
@@ -95,7 +102,7 @@ class BrakemanScanner(BaseScanner):
         
         # Text report
         self.log("Generating text report...")
-        cmd = ["brakeman", "-q", "-o", str(text_output), "--force", str(self.target_path)]
+        cmd = [*tool_cmd, "-q", *extra, "-o", str(text_output), "--force", str(self.target_path)]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:

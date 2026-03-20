@@ -4,6 +4,7 @@ Python implementation of run_codeql.sh
 """
 import os
 import json
+import shlex
 import shutil
 from pathlib import Path
 from typing import List, Optional
@@ -201,8 +202,9 @@ class CodeQLScanner(BaseScanner):
             
             self.start_substep(f"Query Execution ({lang})", f"Running security analysis for {lang}...", SubStepType.PHASE)
             self.log(f"Running security analysis for {lang} with {query_suite}...")
+            analyze_extra = shlex.split(os.getenv("CODEQL_ANALYZE_EXTRA_ARGS", "").strip())
             cmd = [*tool_cmd, "database", "analyze", str(lang_db), query_suite,
-                   "--format=sarif-latest", f"--output={lang_sarif}", "--threads=4"]
+                   "--format=sarif-latest", f"--output={lang_sarif}", "--threads=4", *analyze_extra]
             
             result = self.run_command(cmd, capture_output=True)
             if result.returncode != 0:
@@ -220,11 +222,11 @@ class CodeQLScanner(BaseScanner):
             if lang_sarif.exists():
                 shutil.copy2(lang_sarif, lang_json)
             
-            # Generate text report (interpret-results takes DB + query suite, not SARIF file)
+            # Human-readable report (CodeQL 2.x: --format=text removed; graphtext is supported)
             lang_text = self.results_dir / f"codeql-{lang}.txt"
             if lang_sarif.exists():
                 cmd = [*tool_cmd, "database", "interpret-results", str(lang_db), query_suite,
-                       "--format=text", f"--output={lang_text}"]
+                       "--format=graphtext", f"--output={lang_text}"]
                 result = self.run_command(cmd, capture_output=True)
                 if result.returncode != 0:
                     self.log("Report interpretation failed for {}; no text report.".format(lang), "WARNING")

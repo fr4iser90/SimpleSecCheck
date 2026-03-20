@@ -4,6 +4,7 @@ Python implementation of run_trufflehog.sh
 """
 import os
 import json
+import shlex
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner

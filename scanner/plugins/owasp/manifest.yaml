@@ -9,8 +9,6 @@ categories:
 icon: 🔒
 languages: null
 severity_supported: true
-execution:
-  timeout: 1200
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -55,7 +53,22 @@ assets:
     - dependency-check
     - --updateonly
     - --data
-    - /app/scanner/plugins/owasp/data
+    - '{container_path}'
+scan_profiles:
+  quick:
+    timeout: 180
+    hints:
+      depth: shallow
+      intensity: low
+    env:
+      OWASP_DC_EXTRA_ARGS: "--nodePackageSkipDevDependencies"
+  standard:
+    timeout: 180
+  deep:
+    timeout: 240
+    hints:
+      depth: deep
+      intensity: high
 exit_codes:
   binary: dependency-check
   codes:

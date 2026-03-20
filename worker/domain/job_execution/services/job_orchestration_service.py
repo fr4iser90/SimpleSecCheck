@@ -194,7 +194,31 @@ class JobOrchestrationService:
             scanner_tool_overrides_json = job_data.get("scanner_tool_overrides_json") or "{}"
             if not isinstance(scanner_tool_overrides_json, str):
                 scanner_tool_overrides_json = json.dumps(scanner_tool_overrides_json or {})
-            
+
+            cfg = job_data.get("config") or {}
+            if not isinstance(cfg, dict):
+                cfg = {}
+            raw_profile = cfg.get("scan_profile")
+            scan_profile = (
+                str(raw_profile).strip()
+                if raw_profile is not None and str(raw_profile).strip()
+                else None
+            )
+
+            mw = job_data.get("max_scan_wall_seconds")
+            if mw is None:
+                raise ValueError(
+                    "Queue message missing max_scan_wall_seconds; backend must compute it from tool timeouts."
+                )
+            try:
+                n = int(mw)
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"Invalid max_scan_wall_seconds: {mw!r}") from e
+            if not (60 <= n <= 86400):
+                raise ValueError(
+                    f"max_scan_wall_seconds out of allowed range [60, 86400]: {n}"
+                )
+
             # Create container specification
             # Pass host paths for volume mounting, container paths for environment variables
             # NOTE: Logs are part of Results - Scanner creates results/{scan_id}/logs/ automatically
@@ -214,27 +238,22 @@ class JobOrchestrationService:
                 asset_volumes=asset_volumes,  # Asset volumes from scanner manifests
                 scanners=scanners,  # Selected scanners from backend (if empty, scanner filters by scan_type)
                 scanner_tool_overrides_json=scanner_tool_overrides_json,
+                scan_profile=scan_profile,
+                max_scan_wall_seconds=n,
             )
-            
+
             # Create job execution
             job_id_str = job_data.get('job_id')
             if not job_id_str:
                 raise ValueError("job_id is required in queue message but not provided. Backend must set job_id.")
-            
+
             job_execution = JobExecution(
                 id=UUID(job_id_str),
                 scan_id=scan_id,
                 job_type=job_type,
                 container_spec=container_spec
             )
-            try:
-                mw = job_data.get("max_scan_wall_seconds")
-                if mw is not None:
-                    n = int(mw)
-                    if 60 <= n <= 86400:
-                        job_execution.execution_metadata["container_wait_timeout_seconds"] = n
-            except (TypeError, ValueError):
-                pass
+            job_execution.execution_metadata["container_wait_timeout_seconds"] = n
 
             # Save to database
             await self._save_job_execution(job_execution)

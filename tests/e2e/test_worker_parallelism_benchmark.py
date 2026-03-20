@@ -31,13 +31,16 @@ import time
 import httpx
 import pytest
 
+from tests.e2e.manifest_timeouts import max_scan_profile_timeout_seconds_all_plugins
+
 BASE = os.environ.get("SSC_BENCHMARK_BASE", "http://localhost:8080").rstrip("/")
 TARGET = os.environ.get("SSC_BENCHMARK_TARGET", "https://github.com/fr4iser90/SimpleSecCheck")
 BRANCH = os.environ.get("SSC_BENCHMARK_BRANCH", "main")
 SCANNERS = os.environ.get("SSC_BENCHMARK_SCANNERS", "trivy").strip().split()
 PARALLEL_ROUNDS = [int(x) for x in os.environ.get("SSC_BENCHMARK_ROUNDS", "1,2,3").split(",")]
 POLL = float(os.environ.get("SSC_BENCHMARK_POLL", "10"))
-MAX_WAIT = int(os.environ.get("SSC_BENCHMARK_MAX_WAIT", "7200"))
+_mw = os.environ.get("SSC_BENCHMARK_MAX_WAIT", "").strip()
+MAX_WAIT = int(_mw) if _mw else max_scan_profile_timeout_seconds_all_plugins()
 FAST_POLL = float(os.environ.get("SSC_BENCHMARK_FAST_POLL", "0.4"))
 FAST_PHASE_SEC = float(os.environ.get("SSC_BENCHMARK_FAST_PHASE_SEC", "180"))
 SKIP_PARALLEL_ASSERT = os.environ.get("SSC_BENCHMARK_SKIP_PARALLEL_ASSERT", "").strip() == "1"

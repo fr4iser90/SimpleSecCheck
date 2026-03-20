@@ -70,6 +70,15 @@ class ScanConfigSchema(BaseModel):
     finding_policy: Optional[str] = Field(None, max_length=500, description="Relative path to finding policy file (e.g. .scanning/finding-policy.json)")
     collect_metadata: Optional[bool] = Field(None, description="Include Git info, project path, etc. in the scan report")
     git_branch: Optional[str] = Field(None, max_length=255, description="Git branch to scan")
+
+    scan_profile: str = Field(
+        default="standard",
+        description="Scan profile name (manifest-driven per plugin: scan_profiles in manifest.yaml)",
+    )
+    profile_tuning: Dict[str, Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Optional per-tool overrides (tools_key -> env dict). Merged with profile; admin env still wins on key clash.",
+    )
     
     @field_validator('enabled_scanners')
     def validate_scanners(cls, v):
@@ -154,7 +163,7 @@ class ScanRequestSchema(BaseModel):
     target_type: str = Field(default=TargetType.GIT_REPO.value, description="Target type")
     
     config: Optional[ScanConfigSchema] = Field(None, description="Scan configuration")
-    scanners: List[str] = Field(min_length=1, max_length=20, description="List of scanners")
+    scanners: List[str] = Field(min_length=1, description="List of scanners")
     
     project_id: Optional[str] = Field(None, description="Project ID")
     scheduled_at: Optional[datetime] = Field(None, description="Scheduled start time")
@@ -313,7 +322,7 @@ class BatchScanSchema(BaseModel):
     project_id: Optional[str] = Field(None, description="Project ID")
     
     config: Optional[ScanConfigSchema] = Field(None, description="Scan configuration")
-    scanners: List[str] = Field(min_length=1, max_length=20, description="List of scanners")
+    scanners: List[str] = Field(min_length=1, description="List of scanners")
     tags: List[str] = Field(default_factory=list, max_length=10, description="Scan tags")
     
     targets: List[Dict[str, str]] = Field(min_length=1, description="List of targets")

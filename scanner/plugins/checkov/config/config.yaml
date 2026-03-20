@@ -1,49 +1,11 @@
-# Checkov Configuration for SimpleSecCheck
-# Purpose: Infrastructure security scanning for multiple frameworks
-version: "1.0"
+# Checkov CLI config for SimpleSecCheck (`checkov --config-file`).
+#
+# IMPORTANT: Do not add a top-level key `version`. Checkov maps YAML keys to CLI flags;
+# `version: "1.0"` becomes `-v 1.0` and aborts with:
+#   checkov: error: argument -v/--version: ignored explicit argument '1.0'
+#
+# Human-oriented pattern notes live in manifest / docs, not here — only Checkov-supported keys.
 
-# Scan settings
-scan:
-  # Infrastructure file patterns to scan
-  file_patterns:
-    - "*.tf"
-    - "*.tfvars"
-    - "*.tfstate"
-    - "*.yml"
-    - "*.yaml"
-    - "Dockerfile"
-    - "*.json"
-    - "cloudformation.yaml"
-    - "cloudformation.yml"
-    - "serverless.yml"
-    - "serverless.yaml"
-  
-  # Severity levels to include
-  severity_levels:
-    - CRITICAL
-    - HIGH
-    - MEDIUM
-    - LOW
-  
-  # Output formats
-  output_formats:
-    - json
-    - text
-  
-  # Framework support (Checkov supports multiple frameworks)
-  frameworks:
-    - terraform
-    - cloudformation
-    - kubernetes
-    - docker
-    - arm
-  
-  # Skip checks by ID (configured via whitelist)
-  skip_checks: []
-  
-  # Enable soft fail mode (don't fail on errors)
-  soft_fail: true
-  
-  # Maximum parallel scanning workers
-  max_workers: 10
-
+soft-fail: true
+evaluate-variables: true
+summary-position: bottom

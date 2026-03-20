@@ -14,11 +14,12 @@ def print_help():
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 USAGE:
-  docker run [OPTIONS] <image> python3 -m scanner.core.orchestrator [--list|--help]
+  docker run [OPTIONS] <image> python3 -m scanner.core.orchestrator [--list|--bootstrap-assets|--help]
 
 COMMANDS:
   (no args)          Run a security scan
   --list, -l         List all available scanners and sync to database
+  --bootstrap-assets Run manifest-driven asset updates (e.g. vuln DB caches); no scan
   --help, -h         Show this help message
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -69,6 +70,11 @@ OPTIONAL ENVIRONMENT VARIABLES:
   SELECTED_SCANNERS              JSON array of scanner names to run (optional)
                                  If not set, all compatible scanners are auto-selected
                                  Example: SELECTED_SCANNERS=["Semgrep", "Bandit", "Safety"]
+
+  SCAN_PROFILE                   Manifest-driven profile: quick, standard, or deep (optional)
+                                 Set by the worker from scan config; orchestrator logs this at scan start.
+                                 Default when unset: standard
+                                 Example: SCAN_PROFILE=deep
 
   GIT_BRANCH                     Git branch to clone (for git_repo target type)
                                  Example: GIT_BRANCH=main

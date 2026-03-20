@@ -2,7 +2,7 @@
 Target Scan Helper
 
 Create a scan from a ScanTarget (generic saved target). Used by scheduler and "Scan now" UI.
-TargetType → ScanType mapping; handler provides target_url / config.
+TargetType -> ScanType mapping; handler provides target_url / config.
 """
 from __future__ import annotations
 
@@ -12,13 +12,12 @@ from typing import Optional
 from domain.entities.scan_target import ScanTarget
 from domain.entities.scan import ScanType
 from domain.entities.target_type import TargetType
-from domain.services.target_handlers import get_target_handler
+from domain.validation.target_handlers import get_target_handler
 from application.dtos.request_dto import ScanRequestDTO
 from application.services.scan_service import ScanService
 
 logger = logging.getLogger(__name__)
 
-# TargetType (saved target) → ScanType (scan job)
 TARGET_TYPE_TO_SCAN_TYPE = {
     TargetType.GIT_REPO.value: ScanType.CODE,
     TargetType.CONTAINER_REGISTRY.value: ScanType.CONTAINER,
@@ -32,7 +31,6 @@ TARGET_TYPE_TO_SCAN_TYPE = {
 
 
 async def _get_default_scanners_for_scan_type(scan_type: ScanType) -> list[str]:
-    """Load default enabled scanners for the given scan type from repository."""
     from infrastructure.container import get_scanner_repository
     repo = get_scanner_repository()
     scanners = await repo.list_all()
@@ -53,7 +51,6 @@ async def _get_default_scanners_for_scan_type(scan_type: ScanType) -> list[str]:
 
 
 async def get_default_scanner_names_for_target_type(target_type: str) -> list[str]:
-    """Return default scanner names for the given target type (for overview display)."""
     if not TargetType.is_valid(target_type):
         return []
     scan_type = TARGET_TYPE_TO_SCAN_TYPE.get(target_type, ScanType.CODE)
@@ -66,14 +63,9 @@ async def create_scan_from_target(
     metadata_extra: Optional[dict] = None,
     enforcement_mode: str = "full",
 ) -> Optional[str]:
-    """
-    Create and enqueue a scan for the given ScanTarget.
-    Uses handler for target_url/config; maps target.type → ScanType; resolves default scanners.
-    Returns scan_id or None on failure.
-    """
     handler = get_target_handler(target.type)
     if not handler:
-        logger.error(f"No handler for target type {target.type}, cannot create scan")
+        logger.error("No handler for target type %s, cannot create scan", target.type)
         return None
 
     scan_type = TARGET_TYPE_TO_SCAN_TYPE.get(target.type, ScanType.CODE)
@@ -87,7 +79,7 @@ async def create_scan_from_target(
     else:
         scanners = await _get_default_scanners_for_scan_type(scan_type)
     if not scanners:
-        logger.error(f"No scanners for scan_type={scan_type.value}, cannot create scan for target {target.id}")
+        logger.error("No scanners for scan_type=%s, cannot create scan for target %s", scan_type.value, target.id)
         return None
 
     display = target.display_name or target.source
@@ -120,8 +112,8 @@ async def create_scan_from_target(
             actor_role="user",
             enforcement_mode=enforcement_mode,
         )
-        logger.info(f"Created scan {scan_dto.id} for target {target.id} ({target.type}: {target.source[:50]})")
+        logger.info("Created scan %s for target %s (%s: %s)", scan_dto.id, target.id, target.type, target.source[:50])
         return scan_dto.id
     except Exception as e:
-        logger.error(f"Failed to create scan from target {target.id}: {e}", exc_info=True)
+        logger.error("Failed to create scan from target %s: %s", target.id, e, exc_info=True)
         return None

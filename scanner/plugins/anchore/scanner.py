@@ -3,6 +3,7 @@ Anchore Scanner
 Python implementation of run_anchore.sh
 """
 import os
+import shlex
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner
@@ -72,10 +73,11 @@ class AnchoreScanner(BaseScanner):
         config_args = []
         if self.config_path and self.config_path.exists():
             config_args = ["--config", str(self.config_path)]
+        grype_extra = shlex.split(os.getenv("GRYPE_EXTRA_ARGS", "").strip())
         
         # JSON report
         self.log("Running container image vulnerability scan...")
-        cmd = ["grype", *config_args, "--output", "json", self.anchore_image]
+        cmd = ["grype", *config_args, "--output", "json", *grype_extra, self.anchore_image]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:
@@ -85,7 +87,7 @@ class AnchoreScanner(BaseScanner):
             self.log("Scan failed, continuing...", "WARNING")
         
         # Text report
-        cmd = ["grype", *config_args, self.anchore_image]
+        cmd = ["grype", *config_args, *grype_extra, self.anchore_image]
         
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:

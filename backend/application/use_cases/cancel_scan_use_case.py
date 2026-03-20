@@ -9,7 +9,7 @@ from datetime import datetime
 
 from domain.entities.scan import Scan, ScanStatus
 from domain.datetime_serialization import isoformat_utc
-from domain.domain_services.scan_validation_service import ScanValidationService
+from domain.services.scan_validation_service import ScanValidationService
 from domain.exceptions.scan_exceptions import (
     ScanNotFoundException,
     ScanValidationException,

@@ -10,9 +10,9 @@ from domain.entities.scan_target import ScanTarget
 from domain.value_objects.auto_scan_config import AutoScanConfig
 from domain.entities.target_type import TargetType
 from domain.repositories.scan_target_repository import ScanTargetRepository
-from domain.services.target_handlers import validate_target_source_and_config, get_target_handler
-from domain.services.target_permission_policy import check_can_scan_target, get_allow_flags_from_settings
-from domain.services.target_scan_helper import create_scan_from_target
+from domain.validation.target_handlers import validate_target_source_and_config, get_target_handler
+from domain.policies.target_permission_policy import check_can_scan_target, get_allow_flags_from_settings
+from application.helpers.target_scan_helper import create_scan_from_target
 from domain.utils.git_repo_url import normalize_repo_url_for_target_type
 from config.settings import get_settings
 

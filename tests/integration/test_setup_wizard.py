@@ -160,22 +160,21 @@ class DockerComposeManager:
 
 
 def extract_setup_token_from_logs(logs: str) -> Optional[str]:
-    """Extract setup token from backend logs."""
+    """Extract setup token from backend logs (latest occurrence if multiple restarts logged)."""
     # Pattern: "Setup Token: <token>"
-    pattern = r"Setup Token:\s+([a-f0-9]{64})"
-    match = re.search(pattern, logs)
-    if match:
-        return match.group(1)
-    
+    pattern = re.compile(r"Setup Token:\s+([a-f0-9]{64})", re.IGNORECASE)
+    found = list(pattern.finditer(logs))
+    if found:
+        return found[-1].group(1)
+
     # Alternative pattern in JSON logs
     pattern_json = r'"message":\s*"Setup token generated"'
     if re.search(pattern_json, logs):
-        # Token might be in a different format, try to find it
-        pattern_token = r'"token":\s*"([^"]+)"'
-        match = re.search(pattern_token, logs)
-        if match:
-            return match.group(1)
-    
+        pattern_token = re.compile(r'"token":\s*"([^"]+)"')
+        json_matches = list(pattern_token.finditer(logs))
+        if json_matches:
+            return json_matches[-1].group(1)
+
     return None
 
 

@@ -4,6 +4,7 @@ Python implementation of run_sonarqube.sh
 """
 import os
 import json
+import shlex
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -144,7 +145,8 @@ class SonarQubeScanner(BaseScanner):
         
         # Run SonarQube scan
         self.log("Running SonarQube analysis...")
-        cmd = [*tool_cmd, "-X", f"-Dproject.settings={properties_file}"]
+        sonar_extra = shlex.split(os.getenv("SONAR_SCANNER_EXTRA_ARGS", "").strip())
+        cmd = [*tool_cmd, *sonar_extra, "-X", f"-Dproject.settings={properties_file}"]
         
         env = os.environ.copy()
         env.setdefault("SONAR_USER_HOME", str(Path.home() / ".sonar"))

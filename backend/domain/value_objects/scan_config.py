@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Any
 from enum import Enum
 
 from domain.entities.target_type import TargetType
+from domain.value_objects.scan_profile import ScanProfileName
 
 
 class ScanMode(str, Enum):
@@ -64,6 +65,10 @@ class ScanConfig:
     finding_policy: Optional[str] = None
     collect_metadata: Optional[bool] = None
     git_branch: Optional[str] = None
+
+    # Scan profile (manifest-driven per plugin); see manifest.yaml scan_profiles
+    scan_profile: str = ScanProfileName.STANDARD.value
+    profile_tuning: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     
     def validate(self) -> bool:
         """Validate the scan configuration."""
@@ -81,6 +86,12 @@ class ScanConfig:
         
         if self.scan_depth not in ScanDepth:
             raise ValueError(f"Invalid scan depth: {self.scan_depth}")
+
+        allowed_profiles = {e.value for e in ScanProfileName}
+        if self.scan_profile not in allowed_profiles:
+            raise ValueError(
+                f"Invalid scan_profile: {self.scan_profile}. Allowed: {sorted(allowed_profiles)}"
+            )
         
         return True
     
@@ -134,6 +145,8 @@ class ScanConfig:
             'finding_policy': self.finding_policy,
             'collect_metadata': self.collect_metadata,
             'git_branch': self.git_branch,
+            'scan_profile': self.scan_profile,
+            'profile_tuning': self.profile_tuning,
         }
     
     @classmethod
@@ -163,6 +176,8 @@ class ScanConfig:
             finding_policy=data.get('finding_policy'),
             collect_metadata=data.get('collect_metadata'),
             git_branch=data.get('git_branch'),
+            scan_profile=data.get('scan_profile') or ScanProfileName.STANDARD.value,
+            profile_tuning=data.get('profile_tuning') or {},
         )
     
     def merge_with(self, other: 'ScanConfig') -> 'ScanConfig':
@@ -196,4 +211,10 @@ class ScanConfig:
             finding_policy=other.finding_policy if other.finding_policy is not None else self.finding_policy,
             collect_metadata=other.collect_metadata if other.collect_metadata is not None else self.collect_metadata,
             git_branch=other.git_branch if other.git_branch is not None else self.git_branch,
+            scan_profile=(
+                other.scan_profile
+                if other.scan_profile != ScanProfileName.STANDARD.value
+                else self.scan_profile
+            ),
+            profile_tuning={**self.profile_tuning, **other.profile_tuning},
         )

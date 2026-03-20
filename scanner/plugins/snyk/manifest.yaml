@@ -9,8 +9,6 @@ categories:
 icon: 🔐
 languages: null
 severity_supported: true
-execution:
-  timeout: 600
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -24,6 +22,25 @@ install:
   - -c
   - curl -s https://static.snyk.io/cli/latest/snyk-linux -o /tmp/snyk && chmod +x
     /tmp/snyk && mv /tmp/snyk /usr/local/bin/snyk
+scan_profiles:
+  quick:
+    timeout: 90
+    hints:
+      depth: shallow
+      intensity: low
+    env:
+      SNYK_EXTRA_ARGS: "--severity-threshold=high"
+  standard:
+    timeout: 150
+    env:
+      SNYK_EXTRA_ARGS: "--severity-threshold=medium"
+  deep:
+    timeout: 240
+    hints:
+      depth: deep
+      intensity: high
+    env:
+      SNYK_EXTRA_ARGS: "--severity-threshold=low"
 exit_codes:
   binary: snyk
   codes:

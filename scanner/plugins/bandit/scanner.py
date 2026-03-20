@@ -4,6 +4,7 @@ Python implementation of run_bandit.sh
 """
 import os
 import json
+import shlex
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -96,15 +97,17 @@ class BanditScanner(BaseScanner):
         json_output = self.results_dir / "report.json"  # Changed from bandit.json
         text_output = self.results_dir / "report.txt"   # Changed from bandit.txt
 
+        extra = shlex.split(os.getenv("BANDIT_EXTRA_ARGS", "").strip())
+
         # JSON report
-        cmd = ["bandit", "-r", str(self.target_path), "-f", "json", "-o", str(json_output)]
+        cmd = ["bandit", "-r", str(self.target_path), *extra, "-f", "json", "-o", str(json_output)]
 
         result = self.run_command(cmd, capture_output=True)
         if result.returncode != 0:
             self.log("JSON report generation encountered issues", "WARNING")
 
         # Text report
-        cmd = ["bandit", "-r", str(self.target_path)]
+        cmd = ["bandit", "-r", str(self.target_path), *extra]
 
         result = self.run_command(cmd, capture_output=True)
         if result.returncode == 0 and result.stdout:

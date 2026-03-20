@@ -115,17 +115,46 @@ class ZAPScanner(BaseScanner):
         if html_output.exists():
             html_output.unlink()
         
+        use_active = os.getenv("ZAP_USE_ACTIVE_SCAN", "1").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        active_flag = ["-a"] if use_active else []
+        mode_label = "active" if use_active else "passive/baseline"
         # XML report
-        self.log("[ZAP CMD XML] Executing DEEP scan...")
-        cmd = ["python3", str(zap_baseline), "-d", "-t", self.scan_target, "-x", "report.xml", "-J", "-a"]  # Changed from zap-report.xml
+        self.log(f"[ZAP CMD XML] Executing scan ({mode_label})...")
+        cmd = [
+            "python3",
+            str(zap_baseline),
+            "-d",
+            "-t",
+            self.scan_target,
+            "-x",
+            "report.xml",
+            "-J",
+            *active_flag,
+        ]
         
         result = self.run_command(cmd, cwd=self.results_dir, capture_output=True)
         if result.returncode != 0:
             self.log(f"[ZAP CMD XML WARN] zap-baseline.py for XML exited with {result.returncode}.", "WARNING")
         
         # HTML report
-        self.log("[ZAP CMD HTML] Executing DEEP scan...")
-        cmd = ["python3", str(zap_baseline), "-d", "-t", self.scan_target, "-f", "html", "-o", "report.html", "-J", "-a"]  # Changed from zap-report.html
+        self.log(f"[ZAP CMD HTML] Executing scan ({mode_label})...")
+        cmd = [
+            "python3",
+            str(zap_baseline),
+            "-d",
+            "-t",
+            self.scan_target,
+            "-f",
+            "html",
+            "-o",
+            "report.html",
+            "-J",
+            *active_flag,
+        ]
         
         result = self.run_command(cmd, cwd=self.results_dir, capture_output=True)
         if result.returncode != 0:

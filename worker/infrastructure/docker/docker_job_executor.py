@@ -154,10 +154,15 @@ class DockerJobExecutor:
                 )
             try:
                 raw_to = job_execution.execution_metadata.get("container_wait_timeout_seconds")
+                if raw_to is None:
+                    raise ValueError(
+                        "container_wait_timeout_seconds missing on job execution; "
+                        "orchestration must set it from max_scan_wall_seconds."
+                    )
                 try:
-                    timeout = int(raw_to) if raw_to is not None else 3600
-                except (TypeError, ValueError):
-                    timeout = 3600
+                    timeout = int(raw_to)
+                except (TypeError, ValueError) as e:
+                    raise ValueError(f"Invalid container_wait_timeout_seconds: {raw_to!r}") from e
                 timeout = max(60, min(86400, timeout))
                 # Wait for container to complete
                 exit_code = await self._wait_for_container(container_id, timeout=timeout)
@@ -199,7 +204,7 @@ class DockerJobExecutor:
             self.logger.error(f"Error getting logs for container {container_id}: {e}")
             return []
     
-    async def _wait_for_container(self, container_id: str, timeout: int = 3600) -> int:
+    async def _wait_for_container(self, container_id: str, timeout: int) -> int:
         """Wait for container to complete execution.
         
         Args:

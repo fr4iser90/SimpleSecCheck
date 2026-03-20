@@ -9,8 +9,6 @@ icon: 🐍
 languages:
 - python
 severity_supported: true
-execution:
-  timeout: 600
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -23,6 +21,32 @@ install:
 - - pip3
   - install
   - bandit[toml]
+# Bandit: -lll = HIGH only, -ll = MEDIUM+, -l = LOW+ (full severity range)
+scan_profiles:
+  quick:
+    timeout: 120
+    hints:
+      depth: shallow
+      intensity: low
+      coverage: high-severity findings only
+    env:
+      BANDIT_EXTRA_ARGS: "-lll"
+  standard:
+    timeout: 180
+    hints:
+      depth: medium
+      intensity: medium
+      coverage: medium severity and above
+    env:
+      BANDIT_EXTRA_ARGS: "-ll"
+  deep:
+    timeout: 300
+    hints:
+      depth: deep
+      intensity: high
+      coverage: all severity levels
+    env:
+      BANDIT_EXTRA_ARGS: "-l"
 exit_codes:
   binary: bandit
   codes:

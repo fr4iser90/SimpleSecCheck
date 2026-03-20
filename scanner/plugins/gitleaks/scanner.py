@@ -3,6 +3,7 @@ GitLeaks Scanner
 Python implementation of run_gitleaks.sh
 """
 import os
+import shlex
 from pathlib import Path
 from typing import Optional
 from scanner.core.base_scanner import BaseScanner

@@ -9,7 +9,7 @@ from datetime import datetime
 
 from domain.entities.vulnerability import Vulnerability
 from domain.value_objects.vulnerability_severity import VulnerabilitySeverity
-from domain.domain_services.scan_validation_service import ScanValidationService
+from domain.services.scan_validation_service import ScanValidationService
 from domain.exceptions.scan_exceptions import (
     ScanNotFoundException,
     ScanValidationException,

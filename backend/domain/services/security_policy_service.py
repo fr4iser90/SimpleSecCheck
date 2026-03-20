@@ -13,7 +13,7 @@ from typing import Dict, Any, List
 from enum import Enum
 
 from config.settings import settings
-from domain.services.target_permission_policy import get_allow_flags_from_settings
+from domain.policies.target_permission_policy import get_allow_flags_from_settings
 
 
 class UseCase(str, Enum):

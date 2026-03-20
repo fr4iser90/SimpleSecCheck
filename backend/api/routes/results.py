@@ -13,10 +13,10 @@ from fastapi.responses import FileResponse
 from fastapi import status as fastapi_status
 
 from api.deps.actor_context import get_actor_context, ActorContext
-from domain.services.finding_policy_defaults import DEFAULT_FINDING_POLICY_PATH
+from domain.policies.finding_policy import DEFAULT_FINDING_POLICY_PATH
 from application.services.scan_service import ScanService
 from domain.exceptions.scan_exceptions import ScanNotFoundException
-from domain.services.scan_result_access import can_read_scan_results
+from domain.policies.scan_result_access_policy import can_read_scan_results
 from config.settings import get_settings
 from infrastructure.container import get_scan_service
 

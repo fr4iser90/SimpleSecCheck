@@ -16,7 +16,7 @@ import httpx
 from config.settings import get_settings
 from api.routes.admin import get_system_state_repository_dependency
 from domain.repositories.system_state_repository import SystemStateRepository
-from domain.services.target_permission_policy import (
+from domain.policies.target_permission_policy import (
     DANGEROUS_TARGETS,
     TARGET_SECURITY_LEVEL,
     TARGET_PERMISSION_MAP,
@@ -25,8 +25,13 @@ from domain.services.target_permission_policy import (
     get_allowed_targets_display,
     effective_target_labels_for_role,
 )
-from domain.services.finding_policy_defaults import default_scan_defaults
-from domain.services.role_capabilities_merge import merge_role_capabilities_raw
+from domain.policies.finding_policy import default_scan_defaults
+from domain.policies.scan_profile_policy import scan_profile_settings
+from domain.policies.scan_profile_policy import (
+    extract_profile_catalog_from_scanner_metadata,
+    resolve_profile_order,
+)
+from domain.policies.role_capabilities_policy import merge_role_capabilities_raw
 from infrastructure.logging_config import get_logger
 from infrastructure.container import get_scanner_repository, run_database_migrations
 from domain.repositories.scanner_repository import ScannerRepository
@@ -79,6 +84,14 @@ class FrontendConfigResponse(BaseModel):
     queue: Optional[Dict[str, Any]] = None
     rate_limits: Optional[Dict[str, Any]] = None
     scan_defaults: Optional[Dict[str, Any]] = None  # default_finding_policy_path, finding_policy_apply_by_default
+    scan_profile_order: List[str] = Field(
+        default_factory=list,
+        description="Backend-defined scan profile hierarchy order from low to high",
+    )
+    scan_profiles_catalog: List[str] = Field(
+        default_factory=list,
+        description="Profiles discovered from scanner manifests",
+    )
 
 
 class RoleCapabilitiesSnapshot(BaseModel):
@@ -344,7 +357,9 @@ async def start_asset_update(
 
 
 def _default_scan_defaults_for_config() -> Dict[str, Any]:
-    return default_scan_defaults()
+    out = dict(default_scan_defaults())
+    out.update(scan_profile_settings())
+    return out
 
 
 @config_router.get("/config/capabilities", response_model=PublicCapabilitiesResponse)
@@ -392,7 +407,8 @@ async def get_public_capabilities(
             help=(
                 "Guest = using the app without an account. User = signed in. "
                 "Scan targets are the intersection of admin role settings and instance feature flags. "
-                "Admins may have additional options not shown here."
+                "Admins may have additional options not shown here. "
+                "For self-hosted deployments, your admin controls these defaults and capabilities."
             ),
         )
     except Exception as e:
@@ -481,6 +497,11 @@ async def get_frontend_config(
             "scans_per_session": 10,  # TODO: Add setting
             "requests_per_session": 100,  # TODO: Add setting
         }
+        scanners = await get_scanner_repository().list_all()
+        catalog = extract_profile_catalog_from_scanner_metadata(scanners)
+        if not catalog:
+            catalog = ["standard"]
+        scan_profile_order = resolve_profile_order(scan_defaults, catalog=catalog)
         access_mode = getattr(settings, "ACCESS_MODE", "public")
         return FrontendConfigResponse(
             auth_mode=settings.AUTH_MODE.lower(),
@@ -494,6 +515,8 @@ async def get_frontend_config(
             queue=queue,
             rate_limits=rate_limits,
             scan_defaults=scan_defaults,
+            scan_profile_order=scan_profile_order,
+            scan_profiles_catalog=catalog,
         )
         
     except Exception as e:

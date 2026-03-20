@@ -87,7 +87,7 @@ fi
 # Check if command is --list (scanner discovery) - then /target is not needed
 NEEDS_TARGET=true
 for arg in "$@"; do
-    if [ "$arg" = "--list" ] || [ "$arg" = "-l" ]; then
+    if [ "$arg" = "--list" ] || [ "$arg" = "-l" ] || [ "$arg" = "--bootstrap-assets" ]; then
         NEEDS_TARGET=false
         break
     fi

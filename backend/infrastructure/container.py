@@ -9,7 +9,7 @@ and business logic.
 from typing import Optional
 from dependency_injector import containers, providers
 
-from domain.domain_services.scan_validation_service import ScanValidationService
+from domain.services.scan_validation_service import ScanValidationService
 from application.services.scan_service import ScanService
 from application.services.scan_target_service import ScanTargetService
 from application.services.user_service import UserService

@@ -29,6 +29,18 @@ interface QueueConfig {
   priority_guest: number
 }
 
+interface ScanDefaultsFormState {
+  default_finding_policy_path: string
+  finding_policy_apply_by_default: boolean
+  scan_profile_guest: string
+  scan_profile_user: string
+  scan_profile_admin: string
+  scan_profile_max_guest: string
+  scan_profile_max_user: string
+  scan_profile_max_admin: string
+  scan_profile_order: string[]
+}
+
 const STRATEGIES = [
   { value: 'fifo', label: 'FIFO', description: 'First in, first out. Simple and predictable.' },
   {
@@ -83,9 +95,17 @@ export default function ExecutionSettingsPage() {
   const [scanDefaultsLoading, setScanDefaultsLoading] = useState(true)
   const [scanDefaultsSaving, setScanDefaultsSaving] = useState(false)
   const [scanDefaultsSuccess, setScanDefaultsSuccess] = useState<string | null>(null)
-  const [scanDefaultsForm, setScanDefaultsForm] = useState({
+  const [scanProfileCatalog, setScanProfileCatalog] = useState<string[]>([])
+  const [scanDefaultsForm, setScanDefaultsForm] = useState<ScanDefaultsFormState>({
     default_finding_policy_path: '.scanning/finding-policy.json',
     finding_policy_apply_by_default: true,
+    scan_profile_guest: '',
+    scan_profile_user: '',
+    scan_profile_admin: '',
+    scan_profile_max_guest: '',
+    scan_profile_max_user: '',
+    scan_profile_max_admin: '',
+    scan_profile_order: [],
   })
 
   const loadOverview = useCallback(async () => {
@@ -135,12 +155,26 @@ export default function ExecutionSettingsPage() {
       const r = await apiFetch('/api/admin/config/scan-defaults')
       if (!r.ok) throw new Error('Failed to load scan defaults')
       const data = await r.json()
+      const catalog = Array.isArray(data.scan_profiles_catalog) ? data.scan_profiles_catalog : []
+      if (catalog.length === 0) {
+        throw new Error('No scan profiles available from scanner manifests.')
+      }
+      const fallback = catalog[0]
       setScanDefaultsForm({
         default_finding_policy_path: data.default_finding_policy_path ?? '.scanning/finding-policy.json',
         finding_policy_apply_by_default: data.finding_policy_apply_by_default ?? true,
+        scan_profile_guest: data.scan_profile_guest ?? fallback,
+        scan_profile_user: data.scan_profile_user ?? fallback,
+        scan_profile_admin: data.scan_profile_admin ?? fallback,
+        scan_profile_max_guest: data.scan_profile_max_guest ?? fallback,
+        scan_profile_max_user: data.scan_profile_max_user ?? fallback,
+        scan_profile_max_admin: data.scan_profile_max_admin ?? fallback,
+        scan_profile_order: Array.isArray(data.scan_profile_order) ? data.scan_profile_order : catalog,
       })
-    } catch {
-      /* non-fatal */
+      setScanProfileCatalog(catalog)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load scan defaults')
+      setScanProfileCatalog([])
     } finally {
       setScanDefaultsLoading(false)
     }
@@ -310,7 +344,7 @@ export default function ExecutionSettingsPage() {
         const err = await r.json().catch(() => ({}))
         throw new Error((err as { detail?: string }).detail || 'Failed to save')
       }
-      setScanDefaultsSuccess('Saved. New scans will use this default for the Finding Policy field.')
+      setScanDefaultsSuccess('Saved. New scans use these server defaults (policy + role-based scan profile).')
       await loadScanDefaults()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save scan defaults')
@@ -331,6 +365,7 @@ export default function ExecutionSettingsPage() {
   }
 
   const loading = jobsLoading || queueLoading
+  const hasProfileCatalog = scanProfileCatalog.length > 0
 
   if (loading) {
     return (
@@ -745,7 +780,7 @@ export default function ExecutionSettingsPage() {
             background: 'var(--glass-bg-main)',
           }}
         >
-          <h3 style={{ marginTop: 0 }}>Scan form defaults (Finding Policy)</h3>
+          <h3 style={{ marginTop: 0 }}>Scan form defaults (Policy + Profile)</h3>
           <p className="section-description" style={{ marginBottom: '1rem' }}>
             When users start a scan, the &quot;Finding Policy (optional)&quot; field can be pre-filled so the policy
             is applied automatically. Set the default path and whether to apply it by default.
@@ -788,13 +823,126 @@ export default function ExecutionSettingsPage() {
                   Apply finding policy by default (pre-fill and send path in new scans)
                 </label>
               </div>
+              <div className="form-group">
+                <label htmlFor="scan_profile_guest">Default scan profile for guests</label>
+                <select
+                  id="scan_profile_guest"
+                  value={scanDefaultsForm.scan_profile_guest}
+                  disabled={!hasProfileCatalog}
+                  onChange={(e) =>
+                    setScanDefaultsForm((p) => ({
+                      ...p,
+                      scan_profile_guest: e.target.value,
+                    }))
+                  }
+                >
+                  {scanProfileCatalog.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="scan_profile_user">Default scan profile for signed-in users</label>
+                <select
+                  id="scan_profile_user"
+                  value={scanDefaultsForm.scan_profile_user}
+                  disabled={!hasProfileCatalog}
+                  onChange={(e) =>
+                    setScanDefaultsForm((p) => ({
+                      ...p,
+                      scan_profile_user: e.target.value,
+                    }))
+                  }
+                >
+                  {scanProfileCatalog.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="scan_profile_admin">Default scan profile for admins</label>
+                <select
+                  id="scan_profile_admin"
+                  value={scanDefaultsForm.scan_profile_admin}
+                  disabled={!hasProfileCatalog}
+                  onChange={(e) =>
+                    setScanDefaultsForm((p) => ({
+                      ...p,
+                      scan_profile_admin: e.target.value,
+                    }))
+                  }
+                >
+                  {scanProfileCatalog.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="scan_profile_max_guest">Max allowed scan profile for guests</label>
+                <select
+                  id="scan_profile_max_guest"
+                  value={scanDefaultsForm.scan_profile_max_guest}
+                  disabled={!hasProfileCatalog}
+                  onChange={(e) =>
+                    setScanDefaultsForm((p) => ({
+                      ...p,
+                      scan_profile_max_guest: e.target.value,
+                    }))
+                  }
+                >
+                  {scanProfileCatalog.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="scan_profile_max_user">Max allowed scan profile for signed-in users</label>
+                <select
+                  id="scan_profile_max_user"
+                  value={scanDefaultsForm.scan_profile_max_user}
+                  disabled={!hasProfileCatalog}
+                  onChange={(e) =>
+                    setScanDefaultsForm((p) => ({
+                      ...p,
+                      scan_profile_max_user: e.target.value,
+                    }))
+                  }
+                >
+                  {scanProfileCatalog.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="scan_profile_max_admin">Max allowed scan profile for admins</label>
+                <select
+                  id="scan_profile_max_admin"
+                  value={scanDefaultsForm.scan_profile_max_admin}
+                  disabled={!hasProfileCatalog}
+                  onChange={(e) =>
+                    setScanDefaultsForm((p) => ({
+                      ...p,
+                      scan_profile_max_admin: e.target.value,
+                    }))
+                  }
+                >
+                  {scanProfileCatalog.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              {!hasProfileCatalog && (
+                <div className="error-message" role="alert" style={{ marginTop: '0.75rem' }}>
+                  No scan profiles available from scanner manifests. Please check scanner discovery and plugin manifests.
+                </div>
+              )}
               {scanDefaultsSuccess && (
                 <div className="success-message" role="status" style={{ marginTop: '0.75rem' }}>
                   {scanDefaultsSuccess}
                 </div>
               )}
               <div style={{ marginTop: '1rem' }}>
-                <button type="submit" className="btn-primary" disabled={scanDefaultsSaving}>
+                <button type="submit" className="btn-primary" disabled={scanDefaultsSaving || !hasProfileCatalog}>
                   {scanDefaultsSaving ? 'Saving…' : 'Save scan form defaults'}
                 </button>
               </div>

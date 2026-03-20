@@ -188,18 +188,19 @@ class ScanOrchestrationService:
         try:
             # Prepare scanner execution
             image_name = scanner_config['docker_image']
-            timeout = scanner_config.get('timeout', 600)
-            
             # Prepare volumes and environment
             volumes = self._prepare_volumes(scan)
             environment = self._prepare_environment(scan, scanner_name)
-            
-            # Execute scanner container
+            to = scanner_config.get("timeout")
+            if to is None:
+                raise ValueError(
+                    "Scanner docker run requires timeout from manifest/admin (scanner_config['timeout'])."
+                )
             result = await docker_runner.run_container(
                 image_name=image_name,
                 volumes=volumes,
                 environment=environment,
-                timeout=timeout,
+                timeout=int(to),
             )
             
             # Process results

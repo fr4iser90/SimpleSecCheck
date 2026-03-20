@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, type CSSProperties } from 'react'
 import { useConfig } from '../hooks/useConfig'
 import { getReportEndpoint } from '../utils/apiEndpoints'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
@@ -81,33 +81,49 @@ export default function ReportViewer({ scanId }: ReportViewerProps = {}) {
     }
   }, [scanId, config?.features.session_management])
 
+  /* Fills the flex parent (ScanView wrapper is position: relative). Absolute inset avoids
+     iframe %height quirks; the “big block” above/beside the report is usually the HTML
+     report’s own background inside the iframe, not this div. */
+  const shellStyle: CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    overflow: 'hidden',
+    background: 'var(--code-bg)',
+  }
+
   if (!reportUrl) {
     return (
-      <div
-        style={{
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          opacity: 0.7,
-        }}
-      >
-        Loading report...
+      <div style={shellStyle}>
+        <div
+          style={{
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: 0.7,
+          }}
+        >
+          Loading report...
+        </div>
       </div>
     )
   }
 
   return (
-    <iframe
-      ref={iframeRef}
-      src={reportUrl}
-      style={{
-        width: '100%',
-        height: '100%',
-        border: 'none',
-        display: 'block',
-      }}
-      title="Security Report"
-    />
+    <div style={shellStyle}>
+      <iframe
+        ref={iframeRef}
+        src={reportUrl}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          border: 'none',
+          display: 'block',
+        }}
+        title="Security Report"
+      />
+    </div>
   )
 }

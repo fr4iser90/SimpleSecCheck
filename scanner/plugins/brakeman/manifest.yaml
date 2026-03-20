@@ -9,8 +9,6 @@ icon: 💎
 languages:
 - ruby
 severity_supported: true
-execution:
-  timeout: 600
 checkpoint:
   primary_artifact: report.json
   artifact_format: json
@@ -32,6 +30,28 @@ install:
   - install
   - brakeman
   - --no-document
+# Brakeman -w: higher = stricter filter (fewer warnings). 3 = High only, 1 = Weak+Medium+High
+scan_profiles:
+  quick:
+    timeout: 120
+    hints:
+      depth: shallow
+      intensity: low
+      coverage: high-confidence findings only
+    env:
+      BRAKEMAN_CONFIDENCE_MIN: "3"
+  standard:
+    timeout: 180
+    env:
+      BRAKEMAN_CONFIDENCE_MIN: "2"
+  deep:
+    timeout: 300
+    hints:
+      depth: deep
+      intensity: high
+      coverage: all confidence levels
+    env:
+      BRAKEMAN_CONFIDENCE_MIN: "1"
 exit_codes:
   binary: brakeman
   codes:
