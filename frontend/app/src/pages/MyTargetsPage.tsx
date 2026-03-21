@@ -15,7 +15,7 @@ import {
   findDuplicateTarget,
   type AddTargetPayload,
 } from '../utils/targetDuplicate'
-import type { ScanTargetItem, AutoScanConfig } from '../hooks/useTargets'
+import { isScanTargetsListResponse, type ScanTargetItem, type AutoScanConfig } from '../hooks/useTargets'
 
 /** Last scan row is "done" enough for coverage / findings (not queue placeholders). */
 function isFinishedScanStatus(status: string | undefined | null): boolean {
@@ -76,8 +76,8 @@ export default function MyTargetsPage() {
       const listRes = await apiFetch('/api/user/targets')
       let list: ScanTargetItem[] = []
       if (listRes.ok) {
-        const data = await listRes.json()
-        list = Array.isArray(data) ? data : []
+        const data: unknown = await listRes.json()
+        list = isScanTargetsListResponse(data) ? data.targets : []
       }
       const existing = findDuplicateTarget(list, payload) ?? null
       throw new DuplicateTargetError(detail, payload, existing)

@@ -15,7 +15,7 @@ import asyncio
 import logging
 import time
 
-from api.routes import scans, auth, setup, scanners, admin, queue, git, uploads, results
+from api.routes import scans, auth, setup, scanners, admin, queue, git, uploads, results, events
 from api import health as health_module
 from api.middleware.auth_middleware import (
     AuthMiddleware, SecurityHeadersMiddleware
@@ -43,6 +43,8 @@ logger = get_logger("api.main")
 # Global variable to store auto-scan scheduler instance
 _auto_scan_scheduler = None
 _stale_sweep_task = None
+_sse_bridge_stop = None
+_sse_bridge_task = None
 
 
 def create_app() -> FastAPI:
@@ -145,6 +147,7 @@ def create_app() -> FastAPI:
         
     
     app.include_router(scans.router)
+    app.include_router(events.router)
     app.include_router(auth.router)
     app.include_router(setup.router)
     app.include_router(scanners.router)
@@ -388,7 +391,23 @@ async def startup_event():
         except Exception as e:
             if setup_complete:
                 logger.warning("Could not start stale sweep: %s", e)
-    
+
+    # Forward Redis scan_events → per-user SSE subscribers
+    try:
+        import api.main as main_module
+
+        main_module._sse_bridge_stop = asyncio.Event()
+        from infrastructure.realtime.redis_sse_bridge import run_redis_sse_bridge
+
+        main_module._sse_bridge_task = asyncio.create_task(
+            run_redis_sse_bridge(main_module._sse_bridge_stop)
+        )
+        if setup_complete:
+            logger.info("SSE Redis bridge task started")
+    except Exception as e:
+        if setup_complete:
+            logger.warning("SSE Redis bridge not started: %s", e)
+
     # Pre-load scanners on startup (especially important during setup)
     # This ensures scanners are available when user completes setup
     # Do this silently during setup mode
@@ -542,6 +561,19 @@ async def shutdown_event():
         if hasattr(main_module, '_target_initial_scan_scheduler') and main_module._target_initial_scan_scheduler:
             await main_module._target_initial_scan_scheduler.stop()
             logger.info("Target initial-scan scheduler stopped")
+        stop = getattr(main_module, "_sse_bridge_stop", None)
+        task = getattr(main_module, "_sse_bridge_task", None)
+        if stop is not None:
+            stop.set()
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except Exception:
+                pass
+            main_module._sse_bridge_task = None
+            main_module._sse_bridge_stop = None
+            logger.info("SSE Redis bridge stopped")
     except Exception as e:
         logger.error("Failed to stop schedulers", error=str(e))
     

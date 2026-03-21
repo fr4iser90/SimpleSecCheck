@@ -457,7 +457,12 @@ async def create_scan(
                 actor_context.session_id if not actor_context.is_authenticated else None
             ),
         )
-        
+
+        if actor_context.user_id:
+            from infrastructure.realtime.sse_notify import sse_notify_scan
+
+            await sse_notify_scan(actor_context.user_id, scan_dto.id, scan_dto.status)
+
         return ScanResponseSchema(
             id=scan_dto.id,
             name=scan_dto.name,
@@ -1170,7 +1175,12 @@ async def cancel_scan(
         )
         
         scan_dto = await scan_service.cancel_scan(cancel_dto)
-        
+
+        if actor_context.user_id:
+            from infrastructure.realtime.sse_notify import sse_notify_scan
+
+            await sse_notify_scan(actor_context.user_id, scan_dto.id, scan_dto.status)
+
         return ScanResponseSchema(
             id=scan_dto.id,
             name=scan_dto.name,
@@ -1194,7 +1204,7 @@ async def cancel_scan(
             info_vulnerabilities=scan_dto.info_vulnerabilities,
             metadata=scan_dto.metadata,
         )
-        
+
     except ScanNotFoundException as e:
         raise HTTPException(
             status_code=fastapi_status.HTTP_404_NOT_FOUND,

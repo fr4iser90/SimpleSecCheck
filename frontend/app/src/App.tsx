@@ -24,6 +24,7 @@ import AuthSettingsPage from './pages/AuthSettingsPage'
 import QueueSettingsPage from './pages/QueueSettingsPage'
 import ExecutionSettingsPage from './pages/ExecutionSettingsPage'
 import AdminHealthPage from './pages/AdminHealthPage'
+import AdminSseDebugPage from './pages/AdminSseDebugPage'
 import AdminPoliciesPage from './pages/AdminPoliciesPage'
 import IPControlPage from './pages/IPControlPage'
 import ScannerManagementPage from './pages/ScannerManagementPage'
@@ -203,6 +204,12 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
         <ProtectedRoute>
           <Header />
           <AdminHealthPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/sse-debug" element={
+        <ProtectedRoute>
+          <Header />
+          <AdminSseDebugPage />
         </ProtectedRoute>
       } />
       <Route path="/admin/audit-log" element={

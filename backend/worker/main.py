@@ -242,14 +242,18 @@ class ScannerWorker:
         total_duration: int
     ):
         """Publish scan completion event."""
+        user_id = None
+        if scan_data and isinstance(scan_data, dict):
+            user_id = scan_data.get("user_id")
         event_data = {
             'type': 'scan_completed',
             'scan_id': scan_id,
             'status': 'completed',
             'results': results,
             'duration': total_duration,
+            'user_id': user_id,
         }
-        
+
         await redis_client.publish("scan_events", event_data)
 
 

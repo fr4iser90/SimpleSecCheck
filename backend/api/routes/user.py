@@ -5,6 +5,8 @@ Handles user-specific operations like API keys, GitHub repos, and profile manage
 """
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import JSONResponse
+from starlette.responses import Response
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 import secrets
@@ -1056,6 +1058,40 @@ class ScanTargetResponse(BaseModel):
     active_scan: Optional[ActiveScanSummary] = None
 
 
+class ScanTargetListResponse(BaseModel):
+    """List bundle with a stable revision for If-None-Match and SSE."""
+    revision: str
+    targets: List[ScanTargetResponse]
+
+
+def compute_targets_revision(responses: List[ScanTargetResponse]) -> str:
+    """Hash of id-sorted target rows (updated_at + last/active scan summaries)."""
+    parts: List[str] = []
+    for r in sorted(responses, key=lambda x: x.id):
+        ls = r.last_scan
+        ac = r.active_scan
+        ls_part = f"{ls.scan_id}|{ls.status}" if ls else "|"
+        ac_part = f"{ac.scan_id}|{ac.status}" if ac else "|"
+        parts.append(f"{r.id}|{r.updated_at}|{ls_part}|{ac_part}")
+    raw = "\n".join(parts).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:32]
+
+
+def _etag_for_revision(rev: str) -> str:
+    return f'W/"{rev}"'
+
+
+def _if_none_match_matches(header_val: str, rev: str, etag: str) -> bool:
+    if not header_val:
+        return False
+    h = header_val.strip()
+    if h == etag or h == rev:
+        return True
+    if h.startswith('W/"') and h.endswith('"') and h[3:-1] == rev:
+        return True
+    return False
+
+
 def _last_scan_to_summary(scan_row: Any) -> Optional[LastScanSummary]:
     """Build LastScanSummary from a Scan model row or Scan entity or None."""
     if not scan_row:
@@ -1122,50 +1158,22 @@ def _next_scan_at(auto_scan: Dict[str, Any], last_summary: Optional[LastScanSumm
     return isoformat_utc(next_at)
 
 
-@router.get("/targets/initial-scan-config")
-async def get_targets_initial_scan_config(
-    actor_context: ActorContext = Depends(get_authenticated_user),
-) -> Dict[str, Any]:
-    """Return config for initial scan delay (so UI can show countdown). Authenticated users only."""
-    if not actor_context.user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    try:
-        state_repo = get_system_state_repository()
-        state = await state_repo.get_singleton()
-        limits = (state.config or {}).get("execution_limits") or {}
-        delay = limits.get("initial_scan_delay_seconds", 300)
-        try:
-            delay = int(delay)
-        except (TypeError, ValueError):
-            delay = 300
-        return {"initial_scan_delay_seconds": max(0, min(86400, delay))}
-    except Exception:
-        return {"initial_scan_delay_seconds": 300}
-
-
-@router.get("/targets", response_model=List[ScanTargetResponse])
-async def list_scan_targets(
-    target_type: Optional[str] = None,
-    actor_context: ActorContext = Depends(get_authenticated_user),
-    scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
-    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
+async def assemble_user_scan_targets_list(
+    actor_user_id: str,
+    target_type: Optional[str],
+    scan_target_service: ScanTargetService,
+    scan_repository: ScanRepository,
 ) -> List[ScanTargetResponse]:
-    """
-    List all scan targets for the current user (My Targets).
-    Includes scanners (default for target type) and last_scan summary for dashboard overview.
-    Optional filter by target_type.
-    """
-    if not actor_context.user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    targets = await scan_target_service.list_by_user(actor_context.user_id, target_type=target_type)
+    """Build the same list as GET /targets (shared with revision + SSE helpers)."""
+    targets = await scan_target_service.list_by_user(actor_user_id, target_type=target_type)
     if not targets:
         return []
 
     from application.helpers.target_scan_helper import get_default_scanner_names_for_target_type
 
     sources = [t.source for t in targets]
-    latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_context.user_id, sources)
-    active_by_url = await scan_repository.get_active_scans_by_target_urls(actor_context.user_id, sources)
+    latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_user_id, sources)
+    active_by_url = await scan_repository.get_active_scans_by_target_urls(actor_user_id, sources)
 
     scanner_cache: Dict[str, List[str]] = {}
     for t in targets:
@@ -1202,12 +1210,66 @@ async def list_scan_targets(
     ]
 
 
+@router.get("/targets/initial-scan-config")
+async def get_targets_initial_scan_config(
+    actor_context: ActorContext = Depends(get_authenticated_user),
+) -> Dict[str, Any]:
+    """Return config for initial scan delay (so UI can show countdown). Authenticated users only."""
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    try:
+        state_repo = get_system_state_repository()
+        state = await state_repo.get_singleton()
+        limits = (state.config or {}).get("execution_limits") or {}
+        delay = limits.get("initial_scan_delay_seconds", 300)
+        try:
+            delay = int(delay)
+        except (TypeError, ValueError):
+            delay = 300
+        return {"initial_scan_delay_seconds": max(0, min(86400, delay))}
+    except Exception:
+        return {"initial_scan_delay_seconds": 300}
+
+
+@router.get(
+    "/targets",
+    responses={
+        200: {"description": "OK"},
+        304: {"description": "Not modified (If-None-Match)"},
+    },
+)
+async def list_scan_targets(
+    request: Request,
+    target_type: Optional[str] = None,
+    actor_context: ActorContext = Depends(get_authenticated_user),
+    scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
+):
+    """
+    List all scan targets for the current user (My Targets).
+    Response is `{ revision, targets }`. Send `If-None-Match: W/\"<revision>\"` for 304 when unchanged.
+    """
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    rows = await assemble_user_scan_targets_list(
+        actor_context.user_id, target_type, scan_target_service, scan_repository
+    )
+    rev = compute_targets_revision(rows)
+    etag = _etag_for_revision(rev)
+    inm = request.headers.get("if-none-match", "")
+    if _if_none_match_matches(inm, rev, etag):
+        return Response(status_code=304, headers={"ETag": etag})
+    body = ScanTargetListResponse(revision=rev, targets=rows).model_dump(mode="json")
+    return JSONResponse(content=body, headers={"ETag": etag})
+
+
 @router.post("/targets", response_model=ScanTargetResponse)
 async def create_scan_target(
     request: Request,
     body: ScanTargetCreateRequest,
     actor_context: ActorContext = Depends(get_authenticated_user),
     scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> ScanTargetResponse:
     """
     Create a new scan target. Validates source and config per target_type.
@@ -1251,9 +1313,11 @@ async def create_scan_target(
     )
     # Initial scan is enqueued by TargetInitialScanScheduler after initial_scan_delay_seconds (admin-configurable)
     from application.helpers.target_scan_helper import get_default_scanner_names_for_target_type
+    from infrastructure.realtime.sse_notify import sse_notify_target_upsert
+
     _custom = created.config.get("scanners") if isinstance(created.config, dict) else None
     _scanners = _custom if isinstance(_custom, list) else await get_default_scanner_names_for_target_type(created.type)
-    return ScanTargetResponse(
+    out = ScanTargetResponse(
         id=created.id,
         user_id=created.user_id,
         type=created.type,
@@ -1270,6 +1334,17 @@ async def create_scan_target(
         initial_scan_triggered_at=None,
         active_scan=None,
     )
+    rows = await assemble_user_scan_targets_list(
+        actor_context.user_id, None, scan_target_service, scan_repository
+    )
+    list_rev = compute_targets_revision(rows)
+    match = next((r for r in rows if r.id == out.id), None)
+    await sse_notify_target_upsert(
+        actor_context.user_id,
+        (match or out).model_dump(mode="json"),
+        list_rev,
+    )
+    return out
 
 
 @router.get("/targets/{target_id}", response_model=ScanTargetResponse)
@@ -1316,13 +1391,13 @@ async def update_scan_target(
     target_id: str,
     body: ScanTargetUpdateRequest,
     actor_context: ActorContext = Depends(get_authenticated_user),
+    scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
     scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> ScanTargetResponse:
     """Update a scan target. Config is validated per target_type."""
     if not actor_context.user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     from domain.validation.target_handlers import get_target_handler
-    from domain.entities.scan_target import ScanTarget
     from domain.value_objects.auto_scan_config import AutoScanConfig
 
     repo = _target_repo()
@@ -1360,7 +1435,9 @@ async def update_scan_target(
     latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_context.user_id, [updated.source])
     _last = _last_scan_to_summary(latest_by_url.get(updated.source))
     _active = await _active_scan_for_source(scan_repository, actor_context.user_id, updated.source)
-    return ScanTargetResponse(
+    from infrastructure.realtime.sse_notify import sse_notify_target_upsert
+
+    out = ScanTargetResponse(
         id=updated.id,
         user_id=updated.user_id,
         type=updated.type,
@@ -1377,6 +1454,17 @@ async def update_scan_target(
         initial_scan_triggered_at=_initial_scan_flags(updated.config)[1],
         active_scan=_active,
     )
+    rows = await assemble_user_scan_targets_list(
+        actor_context.user_id, None, scan_target_service, scan_repository
+    )
+    list_rev = compute_targets_revision(rows)
+    match = next((r for r in rows if r.id == out.id), None)
+    await sse_notify_target_upsert(
+        actor_context.user_id,
+        (match or out).model_dump(mode="json"),
+        list_rev,
+    )
+    return out
 
 
 @router.post("/targets/{target_id}/scan")
@@ -1385,6 +1473,7 @@ async def trigger_scan_target(
     target_id: str,
     actor_context: ActorContext = Depends(get_authenticated_user),
     scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> Dict[str, Any]:
     """Trigger a scan for a saved target. Creates scan and enqueues it. Returns scan_id."""
     if not actor_context.user_id:
@@ -1412,7 +1501,14 @@ async def trigger_scan_target(
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("User-Agent"),
     )
-    return {"scan_id": scan_id }
+    from infrastructure.realtime.sse_notify import sse_notify_scan
+
+    rows = await assemble_user_scan_targets_list(
+        actor_context.user_id, None, scan_target_service, scan_repository
+    )
+    list_rev = compute_targets_revision(rows)
+    await sse_notify_scan(actor_context.user_id, scan_id, "pending", list_revision=list_rev)
+    return {"scan_id": scan_id}
 
 
 @router.delete("/targets/{target_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1421,6 +1517,7 @@ async def delete_scan_target(
     target_id: str,
     actor_context: ActorContext = Depends(get_authenticated_user),
     scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> None:
     """Delete a scan target."""
     if not actor_context.user_id:
@@ -1436,3 +1533,10 @@ async def delete_scan_target(
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("User-Agent"),
     )
+    from infrastructure.realtime.sse_notify import sse_notify_target_remove
+
+    rows = await assemble_user_scan_targets_list(
+        actor_context.user_id, None, scan_target_service, scan_repository
+    )
+    list_rev = compute_targets_revision(rows)
+    await sse_notify_target_remove(actor_context.user_id, target_id, list_rev)

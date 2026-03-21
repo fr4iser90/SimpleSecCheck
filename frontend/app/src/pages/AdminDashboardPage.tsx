@@ -130,6 +130,12 @@ const DASHBOARD_GROUPS: DashboardGroup[] = [
         description: 'Database, Redis, worker API status',
         icon: '❤️',
       },
+      {
+        to: '/admin/sse-debug',
+        title: 'Live SSE',
+        description: 'Debug stream: structured ssc envelopes for your session',
+        icon: '📡',
+      },
     ],
   },
 ]

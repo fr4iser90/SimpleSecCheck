@@ -285,13 +285,17 @@ class ScanOrchestrationService:
     
     async def _publish_scan_completion(self, scan: Scan):
         """Publish scan completion event."""
-        await redis_client.publish("scan_events", {
-            'type': 'scan_completed',
-            'scan_id': scan.id,
-            'status': scan.status.value,
-            'total_vulnerabilities': scan.total_vulnerabilities,
-            'duration': scan.get_duration(),
-        })
+        await redis_client.publish(
+            "scan_events",
+            {
+                "type": "scan_completed",
+                "scan_id": scan.id,
+                "status": scan.status.value,
+                "total_vulnerabilities": scan.total_vulnerabilities,
+                "duration": scan.get_duration(),
+                "user_id": str(scan.user_id) if getattr(scan, "user_id", None) else None,
+            },
+        )
     
     async def _stop_scan_containers(self, scan_id: str):
         """Stop any running containers for a scan."""

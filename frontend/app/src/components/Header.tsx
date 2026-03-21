@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
+import { useGlobalSse, SSE_ENVELOPE_EVENT, type SseEnvelope } from '../hooks/useGlobalSse'
 import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
 import ThemeToggle from './ThemeToggle'
 
@@ -10,6 +11,7 @@ const GITHUB_REPO = 'https://github.com/fr4iser90/SimpleSecCheck'
 export default function Header() {
   const { config } = useConfig()
   const { isAuthenticated, user, logout } = useAuth()
+  useGlobalSse()
   const navigate = useNavigate()
   const [scanStatus, setScanStatus] = useState<ScanStatusState>({
     status: 'idle',
@@ -23,9 +25,23 @@ export default function Header() {
   const adminMenuRef = useRef<HTMLDivElement>(null)
 
   const isAdmin = user?.role === 'admin'
+  const headerStatusKeyRef = useRef('')
 
   useEffect(() => {
     let cancelled = false
+
+    const applyStatus = (next: ScanStatusState) => {
+      const k = JSON.stringify({
+        status: next.status,
+        scan_id: next.scan_id,
+        started_at: next.started_at,
+        results_dir: next.results_dir,
+      })
+      if (k === headerStatusKeyRef.current) return
+      headerStatusKeyRef.current = k
+      setScanStatus(next)
+    }
+
     const tick = async () => {
       try {
         const { apiFetch } = await import('../utils/apiClient')
@@ -45,7 +61,7 @@ export default function Header() {
           if (!pend.ok || cancelled) return
           const ps = await pend.json()
           if (Array.isArray(ps) && ps.length > 0) {
-            setScanStatus({
+            applyStatus({
               status: 'pending',
               scan_id: ps[0].id,
               results_dir: null,
@@ -55,7 +71,7 @@ export default function Header() {
           }
         }
         if (!scanId) {
-          setScanStatus({
+          applyStatus({
             status: 'idle',
             scan_id: null,
             results_dir: null,
@@ -66,7 +82,7 @@ export default function Header() {
         const sr = await apiFetch(`/api/v1/scans/${encodeURIComponent(scanId)}/status`)
         if (!sr.ok || cancelled) return
         const d = await sr.json()
-        setScanStatus({
+        applyStatus({
           status: d.status as ScanRunStatus,
           scan_id: d.scan_id,
           results_dir: d.scan_id,
@@ -76,14 +92,28 @@ export default function Header() {
         console.error('Header scan status poll:', e)
       }
     }
+
     void tick()
-    // Align with My Targets polling; avoid noisy global header updates every few seconds.
-    const iv = setInterval(tick, 10000)
+
+    if (!isAuthenticated) {
+      const iv = setInterval(tick, 30000)
+      return () => {
+        cancelled = true
+        clearInterval(iv)
+      }
+    }
+
+    const onEnv = (e: Event) => {
+      const env = (e as CustomEvent<SseEnvelope>).detail
+      if (!env || env.v !== 1) return
+      if (env.type === 'scan_update' && env.scope === 'all') void tick()
+    }
+    window.addEventListener(SSE_ENVELOPE_EVENT, onEnv)
     return () => {
       cancelled = true
-      clearInterval(iv)
+      window.removeEventListener(SSE_ENVELOPE_EVENT, onEnv)
     }
-  }, [])
+  }, [isAuthenticated])
 
   const getStatusBadge = () => {
     if (scanStatus.status === 'idle') return null

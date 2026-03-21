@@ -3,7 +3,7 @@ Redis Client
 
 This module provides Redis client functionality for caching, queuing, and session management.
 """
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List, Union, cast
 import asyncio
 import json
 import logging
@@ -231,13 +231,17 @@ class RedisClient:
             logger.error(f"Redis SMEMBERS error for key {key}: {e}")
             return []
     
-    async def publish(self, channel: str, message: str):
-        """Publish message to channel."""
+    async def publish(self, channel: str, message: Union[str, Dict[str, Any]]):
+        """Publish message to channel (JSON-encode dicts)."""
         if not self.is_connected:
             await self.connect()
-        
+        payload: str
+        if isinstance(message, dict):
+            payload = json.dumps(message, separators=(",", ":"))
+        else:
+            payload = cast(str, message)
         try:
-            await self.redis.publish(channel, message)
+            await self.redis.publish(channel, payload)
         except RedisError as e:
             logger.error(f"Redis PUBLISH error for channel {channel}: {e}")
     

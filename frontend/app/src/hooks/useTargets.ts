@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { apiFetch } from '../utils/apiClient'
+import { useAuth } from './useAuth'
+import { SSE_ENVELOPE_EVENT, type SseEnvelope } from './useGlobalSse'
 
 export interface AutoScanConfig {
   enabled: boolean
@@ -46,41 +48,141 @@ export interface ScanTargetItem {
   active_scan?: ActiveScanSummary | null
 }
 
+/** Response shape for `GET /api/user/targets` (no legacy array). */
+export interface ScanTargetsListResponse {
+  revision: string
+  targets: ScanTargetItem[]
+}
+
+function etagIfNoneMatch(revision: string): string {
+  if (!revision) return ''
+  if (revision.startsWith('W/')) return revision
+  return `W/"${revision}"`
+}
+
+function revisionFromResponse(response: Response, body: { revision?: string }): string {
+  const et = response.headers.get('ETag')?.trim()
+  if (et?.startsWith('W/"') && et.endsWith('"')) return et.slice(3, -1)
+  if (body.revision && typeof body.revision === 'string') return body.revision
+  return ''
+}
+
+export function isScanTargetsListResponse(data: unknown): data is ScanTargetsListResponse {
+  if (!data || typeof data !== 'object') return false
+  const o = data as Record<string, unknown>
+  return typeof o.revision === 'string' && Array.isArray(o.targets)
+}
+
 export function useTargets(targetType?: string | null) {
+  const { isAuthenticated } = useAuth()
   const [targets, setTargets] = useState<ScanTargetItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const revisionRef = useRef<string>('')
 
-  const loadTargets = async (options?: { silent?: boolean }) => {
-    const silent = options?.silent === true
-    if (!silent) {
-      setLoading(true)
-      setError(null)
-    }
-    try {
-      const q = targetType ? `?target_type=${encodeURIComponent(targetType)}` : ''
-      const response = await apiFetch(`/api/user/targets${q}`)
-      if (response.ok) {
-        const data = await response.json()
-        setTargets(Array.isArray(data) ? data : [])
-      } else if (!silent) {
-        setError('Failed to load targets')
+  const loadTargets = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent === true
+      if (!silent) {
+        setLoading(true)
+        setError(null)
       }
-    } catch (err) {
-      console.error('Failed to load targets:', err)
-      if (!silent) setError('Failed to load targets')
-    } finally {
-      if (!silent) setLoading(false)
-    }
-  }
+      try {
+        const q = targetType ? `?target_type=${encodeURIComponent(targetType)}` : ''
+        const headers: Record<string, string> = {}
+        const inm = etagIfNoneMatch(revisionRef.current)
+        if (inm) headers['If-None-Match'] = inm
+        const response = await apiFetch(`/api/user/targets${q}`, { headers })
+        if (response.status === 304) {
+          if (!silent) setLoading(false)
+          return
+        }
+        if (response.ok) {
+          const data: unknown = await response.json()
+          if (!isScanTargetsListResponse(data)) {
+            if (!silent) setError('Failed to load targets')
+            return
+          }
+          const rev = revisionFromResponse(response, data)
+          if (rev) revisionRef.current = rev
+          setTargets(data.targets)
+        } else if (!silent) {
+          setError('Failed to load targets')
+        }
+      } catch (err) {
+        console.error('Failed to load targets:', err)
+        if (!silent) setError('Failed to load targets')
+      } finally {
+        if (!silent) setLoading(false)
+      }
+    },
+    [targetType]
+  )
 
   useEffect(() => {
+    revisionRef.current = ''
     void loadTargets({ silent: false })
-    const t = setInterval(() => {
+  }, [loadTargets])
+
+  useEffect(() => {
+    const onEnv = (e: Event) => {
+      const env = (e as CustomEvent<SseEnvelope>).detail
+      if (!env || env.v !== 1) return
+
+      if (env.type === 'scan_update') {
+        const p = env.payload as { list_revision?: string }
+        const incoming = typeof p.list_revision === 'string' ? p.list_revision : ''
+        if (incoming && incoming === revisionRef.current) {
+          return
+        }
+        void loadTargets({ silent: true })
+        return
+      }
+
+      if (env.type !== 'target_update' || env.scope !== 'targets') return
+      const p = env.payload as {
+        action?: string
+        list_revision?: string
+        target?: ScanTargetItem
+        target_id?: string
+      }
+      const rev = typeof p.list_revision === 'string' ? p.list_revision : ''
+      if (rev) revisionRef.current = rev
+
+      if (p.action === 'refetch') {
+        void loadTargets({ silent: true })
+        return
+      }
+
+      if (p.action === 'remove' && p.target_id) {
+        setTargets((prev) => prev.filter((t) => t.id !== p.target_id))
+        return
+      }
+
+      if (p.action === 'upsert' && p.target) {
+        if (targetType && p.target.type !== targetType) {
+          void loadTargets({ silent: true })
+          return
+        }
+        setTargets((prev) => {
+          const t = p.target!
+          const i = prev.findIndex((x) => x.id === t.id)
+          const next = i >= 0 ? [...prev.slice(0, i), t, ...prev.slice(i + 1)] : [...prev, t]
+          return [...next].sort((a, b) => String(a.id).localeCompare(String(b.id)))
+        })
+      }
+    }
+    window.addEventListener(SSE_ENVELOPE_EVENT, onEnv)
+    return () => window.removeEventListener(SSE_ENVELOPE_EVENT, onEnv)
+  }, [loadTargets, targetType])
+
+  useEffect(() => {
+    if (isAuthenticated) return undefined
+    const t = window.setInterval(() => {
       void loadTargets({ silent: true })
-    }, 10000)
+    }, 45000)
     return () => clearInterval(t)
-  }, [targetType ?? ''])
+  }, [isAuthenticated, loadTargets])
 
   const triggerScan = async (targetId: string): Promise<{ success: boolean; scan_id?: string; error?: string }> => {
     try {

@@ -32,3 +32,15 @@ Scanner containers are driven by **environment variables** (e.g. `SCAN_TYPE`, `T
 ## 5) Frontend
 
 Build-time and nginx behaviour: **[`frontend/README.md`](../frontend/README.md)** (`API_BASE_URL`, asset build).
+
+## 6) SSE (global realtime, `/api/v1/events/stream`)
+
+- **Auth:** The browser’s native `EventSource` **cannot** send an `Authorization: Bearer …` header. The UI relies on the **same-origin** request plus **`credentials: 'include'`** so the **`refresh_token` HttpOnly cookie** (or session) reaches the API. In-memory JWT alone is not enough for SSE unless you use a fetch-based stream polyfill.
+- **Wire format:** All application messages use a single SSE event name **`ssc`**. Each `data:` line is one JSON object: **`{ "v": 1, "type": "…", "scope": "…", "payload": { … } }`**. Examples: `type: "system"` with `payload.kind` `connected` or `ping`; `type: "target_update"` / `scope: "targets"` (partial list hints); `type: "scan_update"` / `scope: "all"` with **`payload.list_revision`** matching **`GET /api/user/targets`** (plus `scan_id` / `status`) so clients can **skip** reloading the targets list when the revision is unchanged.
+- **Keep-alive:** The stream emits periodic **system** envelopes (`payload.kind: "ping"`) so reverse proxies do not buffer or idle-timeout the connection. Behind **Nginx**, use `proxy_buffering off` and generous read timeouts for the SSE location.
+- **Redis:** Workers can `PUBLISH` JSON on channel **`scan_events`**; the API forwards to the owning user’s SSE subscribers (includes `user_id` in the payload or resolves it from `scan_id`).
+
+## 7) User targets list (`GET /api/user/targets`)
+
+- **Shape:** **`{ "revision": "<hash>", "targets": [ … ] }` only** (not a bare array). The **`revision`** is a short SHA-256 fingerprint of the list (sorted by target id); **`ETag: W/"<revision>"`** is set on responses.
+- **Caching:** Send **`If-None-Match: W/"<revision>"`** (or the raw revision) to receive **`304 Not Modified`** when nothing relevant changed.
