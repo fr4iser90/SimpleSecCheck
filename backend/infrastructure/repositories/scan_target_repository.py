@@ -13,6 +13,7 @@ from sqlalchemy import select, and_
 from domain.entities.scan_target import ScanTarget
 from domain.value_objects.auto_scan_config import AutoScanConfig
 from domain.repositories.scan_target_repository import ScanTargetRepository
+from domain.utils.git_repo_url import normalize_repo_url_for_target_type
 from infrastructure.database.models import UserScanTarget
 from infrastructure.database.adapter import db_adapter
 
@@ -175,12 +176,17 @@ class DatabaseScanTargetRepository(ScanTargetRepository):
             return True
 
     async def exists_for_user(self, user_id: str, source: str, target_type: str) -> bool:
+        """True if the user already has a target matching `source` (git URLs compared normalized)."""
         await self.db_adapter.ensure_initialized()
+        want = normalize_repo_url_for_target_type(target_type, source)
         async with self.db_adapter.async_session() as session:
-            q = select(UserScanTarget.id).where(
+            q = select(UserScanTarget.source).where(
                 UserScanTarget.user_id == UUID(user_id),
-                UserScanTarget.source == source,
                 UserScanTarget.type == target_type,
-            ).limit(1)
+            )
             r = await session.execute(q)
-            return r.scalar_one_or_none() is not None
+            for row in r.scalars().all():
+                stored = row or ""
+                if normalize_repo_url_for_target_type(target_type, stored) == want:
+                    return True
+            return False

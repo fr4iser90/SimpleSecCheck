@@ -32,6 +32,13 @@ from domain.entities.github_repo import GitHubRepo
 from domain.repositories.repo_scan_history_repository import RepoScanHistoryRepository
 from domain.repositories.scan_repository import ScanRepository
 from domain.services.audit_log_service import AuditLogService
+from domain.exceptions.scan_exceptions import (
+    ScanValidationException,
+    ScanExecutionRateLimitException,
+    ScanPolicyBlockedException,
+    FeatureDisabledException,
+    TargetPermissionDeniedException,
+)
 from uuid import UUID
 
 
@@ -1478,12 +1485,27 @@ async def trigger_scan_target(
     """Trigger a scan for a saved target. Creates scan and enqueues it. Returns scan_id."""
     if not actor_context.user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    scan_id = await scan_target_service.trigger_scan(
-        target_id,
-        actor_context.user_id,
-        metadata_extra={"trigger": "user_scan_now"},
-        enforcement_mode="full",
-    )
+    try:
+        scan_id = await scan_target_service.trigger_scan(
+            target_id,
+            actor_context.user_id,
+            metadata_extra={"trigger": "user_scan_now"},
+            enforcement_mode="full",
+        )
+    except ScanExecutionRateLimitException as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+            headers={"Retry-After": str(e.retry_after_seconds)},
+        )
+    except ScanPolicyBlockedException as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except FeatureDisabledException as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except TargetPermissionDeniedException as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ScanValidationException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     if not scan_id:
         target = await scan_target_service.get_by_id(target_id, actor_context.user_id)
         if not target:

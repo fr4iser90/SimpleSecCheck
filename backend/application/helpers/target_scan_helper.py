@@ -13,6 +13,7 @@ from domain.entities.scan_target import ScanTarget
 from domain.entities.scan import ScanType
 from domain.entities.target_type import TargetType
 from domain.validation.target_handlers import get_target_handler
+from domain.exceptions.scan_exceptions import ScanException, ScanValidationException
 from application.dtos.request_dto import ScanRequestDTO
 from application.services.scan_service import ScanService
 
@@ -62,11 +63,10 @@ async def create_scan_from_target(
     *,
     metadata_extra: Optional[dict] = None,
     enforcement_mode: str = "full",
-) -> Optional[str]:
+) -> str:
     handler = get_target_handler(target.type)
     if not handler:
-        logger.error("No handler for target type %s, cannot create scan", target.type)
-        return None
+        raise ScanValidationException(f"No scan handler for target type {target.type!r}")
 
     scan_type = TARGET_TYPE_TO_SCAN_TYPE.get(target.type, ScanType.CODE)
     params = handler.prepare_scan_params(target)
@@ -79,8 +79,10 @@ async def create_scan_from_target(
     else:
         scanners = await _get_default_scanners_for_scan_type(scan_type)
     if not scanners:
-        logger.error("No scanners for scan_type=%s, cannot create scan for target %s", scan_type.value, target.id)
-        return None
+        raise ScanValidationException(
+            f"No enabled scanners available for scan type '{scan_type.value}'. "
+            "Enable at least one scanner for this type in Admin → Scanner / Tool settings."
+        )
 
     display = target.display_name or target.source
     name = f"Scan: {display[:80]}" if len(display) > 80 else f"Scan: {display}"
@@ -114,6 +116,8 @@ async def create_scan_from_target(
         )
         logger.info("Created scan %s for target %s (%s: %s)", scan_dto.id, target.id, target.type, target.source[:50])
         return scan_dto.id
+    except ScanException:
+        raise
     except Exception as e:
         logger.error("Failed to create scan from target %s: %s", target.id, e, exc_info=True)
-        return None
+        raise ScanValidationException(f"Failed to create scan: {e}") from e

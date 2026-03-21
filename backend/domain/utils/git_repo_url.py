@@ -35,7 +35,13 @@ def normalize_git_repo_url(url: str) -> str:
                 owner, repo = path_parts[0], path_parts[1]
                 if repo.endswith(".git"):
                     repo = repo[:-4]
-                return f"{parsed.scheme}://{parsed.netloc}/{owner}/{repo}.git"
+                return f"{parsed.scheme}://github.com/{owner}/{repo}.git"
+            # Plain repo root: .../owner/repo and .../owner/repo.git → same canonical form
+            if len(path_parts) >= 2:
+                owner, repo = path_parts[0], path_parts[1]
+                if repo.endswith(".git"):
+                    repo = repo[:-4]
+                return f"{parsed.scheme}://github.com/{owner}/{repo}.git"
             return s
 
         # GitLab (hosted or self-hosted): .../-/blob|tree|raw/...

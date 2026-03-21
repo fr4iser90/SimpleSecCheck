@@ -17,10 +17,14 @@ from domain.entities.target_type import TargetType
         ),
         (
             "https://github.com/foo/bar",
-            "https://github.com/foo/bar",
+            "https://github.com/foo/bar.git",
         ),
         (
             "https://github.com/foo/bar.git",
+            "https://github.com/foo/bar.git",
+        ),
+        (
+            "https://www.github.com/foo/bar",
             "https://github.com/foo/bar.git",
         ),
         (
