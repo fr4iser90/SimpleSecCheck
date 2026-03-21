@@ -1,6 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from 'react'
+import { Link } from 'react-router-dom'
 import MessageBanner from '../components/MessageBanner'
 import TargetCard, { TARGET_TYPE_LABELS } from '../components/TargetCard'
+import TargetSectionRow from '../components/TargetSectionRow'
+import MyTargetsTable from '../components/MyTargetsTable'
 import AddTargetModal from '../components/AddTargetModal'
 import EditTargetModal from '../components/EditTargetModal'
 import DiscoverReposModal from '../components/DiscoverReposModal'
@@ -16,13 +19,19 @@ import {
   type AddTargetPayload,
 } from '../utils/targetDuplicate'
 import { isScanTargetsListResponse, type ScanTargetItem, type AutoScanConfig } from '../hooks/useTargets'
-
-/** Last scan row is "done" enough for coverage / findings (not queue placeholders). */
-function isFinishedScanStatus(status: string | undefined | null): boolean {
-  if (!status) return false
-  const s = String(status).toLowerCase()
-  return ['completed', 'failed', 'cancelled', 'interrupted'].includes(s)
-}
+import {
+  applyNarrowFilters,
+  applyQuickPreset,
+  categorizeBucket,
+  compareTargetsRiskFirst,
+  computeOverviewCounts,
+  isFinishedScanStatus,
+  sortVisibleTargets,
+  type FindingsFilter,
+  type LastScanSort,
+  type QuickPreset,
+  type SeverityFilter,
+} from '../utils/targetOverview'
 
 export default function MyTargetsPage() {
   const { targets, loading, loadTargets, triggerScan } = useTargets()
@@ -54,6 +63,16 @@ export default function MyTargetsPage() {
     existing: ScanTargetItem | null
   } | null>(null)
   const [cancellingScanId, setCancellingScanId] = useState<string | null>(null)
+
+  const [quickPreset, setQuickPreset] = useState<QuickPreset>('all')
+  const [layoutMode, setLayoutMode] = useState<'cards' | 'table'>('cards')
+  const [cleanCollapsed, setCleanCollapsed] = useState(true)
+  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('')
+  const [findingsFilter, setFindingsFilter] = useState<FindingsFilter>('')
+  const [lastScanSort, setLastScanSort] = useState<LastScanSort>('risk')
+
+  const failedSectionRef = useRef<HTMLDivElement>(null)
+  const cleanSectionRef = useRef<HTMLDivElement>(null)
 
   const showMessage = (type: 'success' | 'error', text: string, duration = 3000) => {
     setMessage({ type, text })
@@ -139,7 +158,7 @@ export default function MyTargetsPage() {
   }
 
   const handleBulkRemove = async () => {
-    const ids = filteredTargets.filter((t) => selectedTargetIds.has(t.id)).map((t) => t.id)
+    const ids = sortedVisibleTargets.filter((t) => selectedTargetIds.has(t.id)).map((t) => t.id)
     if (ids.length === 0) {
       showMessage('error', 'No targets selected in the current list')
       return
@@ -176,7 +195,7 @@ export default function MyTargetsPage() {
   const selectAllFiltered = () => {
     setSelectedTargetIds((prev) => {
       const next = new Set(prev)
-      filteredTargets.forEach((t) => next.add(t.id))
+      sortedVisibleTargets.forEach((t) => next.add(t.id))
       return next
     })
   }
@@ -380,12 +399,43 @@ export default function MyTargetsPage() {
     return targets.filter((t) => t.type === typeFilter)
   }, [targets, typeFilter])
 
+  const narrowList = useMemo(
+    () => applyNarrowFilters(filteredTargets, severityFilter, findingsFilter),
+    [filteredTargets, severityFilter, findingsFilter]
+  )
+
+  const viewTargets = useMemo(
+    () => applyQuickPreset(narrowList, quickPreset),
+    [narrowList, quickPreset]
+  )
+
+  const sortedVisibleTargets = useMemo(
+    () => sortVisibleTargets(viewTargets, lastScanSort),
+    [viewTargets, lastScanSort]
+  )
+
+  const overviewCounts = useMemo(() => computeOverviewCounts(filteredTargets), [filteredTargets])
+
+  const sectionBuckets = useMemo(() => {
+    const failed = narrowList.filter((t) => categorizeBucket(t) === 'failed')
+    const needs_attention = narrowList.filter((t) => categorizeBucket(t) === 'needs_attention')
+    const clean = narrowList.filter((t) => categorizeBucket(t) === 'clean')
+    const other = narrowList.filter((t) => categorizeBucket(t) === 'other')
+    failed.sort(compareTargetsRiskFirst)
+    needs_attention.sort(compareTargetsRiskFirst)
+    clean.sort((a, b) =>
+      String(a.display_name || a.source).localeCompare(String(b.display_name || b.source))
+    )
+    other.sort(compareTargetsRiskFirst)
+    return { failed, needs_attention, clean, other }
+  }, [narrowList])
+
   const uniqueTypes = useMemo(
     () => [...new Set(targets.map((t) => t.type))].sort(),
     [targets]
   )
 
-  const selectedInView = filteredTargets.filter((t) => selectedTargetIds.has(t.id)).length
+  const selectedInView = sortedVisibleTargets.filter((t) => selectedTargetIds.has(t.id)).length
 
   const closeDiscoverModal = () => {
     setShowDiscoverModal(false)
@@ -400,10 +450,47 @@ export default function MyTargetsPage() {
     ? config.allowed_targets_display.join(', ')
     : null
 
+  const scrollToClean = () => {
+    window.setTimeout(() => cleanSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
+
+  const renderTargetCards = (list: ScanTargetItem[]) => (
+    <div style={{ display: 'grid', gap: '1rem' }}>
+      {list.map((t) => (
+        <TargetCard
+          key={t.id}
+          target={t}
+          initialScanDelaySeconds={initialScanDelaySeconds}
+          onScanNow={handleScanNow}
+          onPauseInitialScan={handlePauseInitialScan}
+          onEdit={setEditingTarget}
+          onRemove={handleRemoveTarget}
+          scanLoading={scanNowTargetId === t.id}
+          onCancelActiveScan={handleCancelActiveScan}
+          cancelLoadingForScanId={cancellingScanId}
+          selectable
+          selected={selectedTargetIds.has(t.id)}
+          onSelectToggle={toggleTargetSelect}
+        />
+      ))}
+    </div>
+  )
+
+  const sectionTitleStyle: CSSProperties = {
+    margin: '0 0 0.75rem 0',
+    fontSize: '1rem',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+  }
+
   return (
     <div className="container" style={{ padding: '2rem' }}>
       <div style={{ marginBottom: '2rem' }}>
-        <h1>My Targets</h1>
+        <h1 style={{ margin: 0 }}>
+          <span aria-hidden>🛡️ </span>My Targets
+        </h1>
         <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
           Manage your scan targets and automatic scanning. Add Git repos, container images, or local paths.
         </p>
@@ -430,6 +517,97 @@ export default function MyTargetsPage() {
                 </>
               )}
             </p>
+
+            <div
+              style={{
+                marginTop: '1rem',
+                padding: '1rem 1.25rem',
+                borderRadius: '8px',
+                border: '1px solid var(--glass-border-main)',
+                background: 'var(--glass-bg-main)',
+                maxWidth: '520px',
+              }}
+            >
+              <h2 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', color: 'var(--color-critical, #dc3545)' }}>
+                Overview (action focus)
+              </h2>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                  gap: '0.5rem 1rem',
+                  fontSize: '0.9rem',
+                  marginBottom: '1rem',
+                }}
+              >
+                <div>
+                  <span style={{ color: 'var(--text-secondary)' }}>Critical issues: </span>
+                  <strong>{overviewCounts.targetsWithCritical}</strong> targets
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-secondary)' }}>High issues (no critical): </span>
+                  <strong>{overviewCounts.targetsWithHighOnly}</strong> targets
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-secondary)' }}>Failed scans: </span>
+                  <strong>{overviewCounts.failed}</strong> targets
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-secondary)' }}>Clean targets: </span>
+                  <strong>{overviewCounts.clean}</strong> targets
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickPreset('critical')
+                    setLayoutMode('cards')
+                  }}
+                >
+                  🔍 Review Critical
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickPreset('high')
+                    setLayoutMode('cards')
+                  }}
+                >
+                  ⚡ Fix High
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickPreset('clean')
+                    setLayoutMode('cards')
+                    setCleanCollapsed(false)
+                    scrollToClean()
+                  }}
+                >
+                  🧹 Clean
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickPreset('failed')
+                    setLayoutMode('cards')
+                    window.setTimeout(
+                      () => failedSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+                      50
+                    )
+                  }}
+                >
+                  ⚠️ Failed
+                </button>
+                {quickPreset !== 'all' && (
+                  <button type="button" onClick={() => setQuickPreset('all')}>
+                    Reset view
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div style={{ marginTop: '0.75rem', maxWidth: '420px' }}>
               <div
                 style={{
@@ -480,7 +658,7 @@ export default function MyTargetsPage() {
           {targets.length > 0 && (
             <>
               <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                Filter type
+                Type
                 <select
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
@@ -494,6 +672,77 @@ export default function MyTargetsPage() {
                   ))}
                 </select>
               </label>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                Severity
+                <select
+                  value={severityFilter}
+                  onChange={(e) => setSeverityFilter(e.target.value as SeverityFilter)}
+                  style={{ padding: '0.35rem 0.5rem', borderRadius: '6px' }}
+                >
+                  <option value="">Any</option>
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </label>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                Findings
+                <select
+                  value={findingsFilter}
+                  onChange={(e) => setFindingsFilter(e.target.value as FindingsFilter)}
+                  style={{ padding: '0.35rem 0.5rem', borderRadius: '6px' }}
+                >
+                  <option value="">Any</option>
+                  <option value="has_findings">Has findings</option>
+                  <option value="clean">Clean</option>
+                  <option value="failed_scan">Failed scan</option>
+                </select>
+              </label>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                Sort
+                <select
+                  value={lastScanSort}
+                  onChange={(e) => setLastScanSort(e.target.value as LastScanSort)}
+                  style={{ padding: '0.35rem 0.5rem', borderRadius: '6px' }}
+                >
+                  <option value="risk">Risk (severity)</option>
+                  <option value="recent">Last scan (newest)</option>
+                  <option value="oldest">Last scan (oldest)</option>
+                </select>
+              </label>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Layout</span>
+              <div style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid var(--glass-border-main)', overflow: 'hidden' }}>
+                <button
+                  type="button"
+                  onClick={() => setLayoutMode('cards')}
+                  style={{
+                    padding: '0.35rem 0.65rem',
+                    fontSize: '0.85rem',
+                    border: 'none',
+                    background: layoutMode === 'cards' ? 'var(--accent, #0d6efd)' : 'transparent',
+                    color: layoutMode === 'cards' ? '#fff' : 'var(--text-main)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cards
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLayoutMode('table')}
+                  style={{
+                    padding: '0.35rem 0.65rem',
+                    fontSize: '0.85rem',
+                    border: 'none',
+                    borderLeft: '1px solid var(--glass-border-main)',
+                    background: layoutMode === 'table' ? 'var(--accent, #0d6efd)' : 'transparent',
+                    color: layoutMode === 'table' ? '#fff' : 'var(--text-main)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Table
+                </button>
+              </div>
             </>
           )}
           {targets.length > 0 && (
@@ -525,9 +774,9 @@ export default function MyTargetsPage() {
         >
           <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
             Bulk: <strong>{selectedInView}</strong> selected
-            {typeFilter ? ` (in filtered list)` : ''}
+            {(typeFilter || severityFilter || findingsFilter || quickPreset !== 'all') && ` (current view)`}
           </span>
-          <button type="button" onClick={selectAllFiltered} disabled={filteredTargets.length === 0}>
+          <button type="button" onClick={selectAllFiltered} disabled={sortedVisibleTargets.length === 0}>
             Select all
           </button>
           <button type="button" onClick={clearSelection} disabled={selectedTargetIds.size === 0}>
@@ -587,25 +836,130 @@ export default function MyTargetsPage() {
         </div>
       ) : filteredTargets.length === 0 ? (
         <p style={{ color: 'var(--text-secondary)' }}>No targets match this type filter.</p>
+      ) : sortedVisibleTargets.length === 0 ? (
+        <p style={{ color: 'var(--text-secondary)' }}>No targets match the current filters. Try adjusting severity, findings, or reset the overview.</p>
+      ) : layoutMode === 'table' ? (
+        <div style={{ marginBottom: '2rem' }}>
+          <h3 style={{ ...sectionTitleStyle, marginBottom: '0.75rem' }}>📦 All targets (table)</h3>
+          <MyTargetsTable
+            targets={sortedVisibleTargets}
+            onScanNow={handleScanNow}
+            onEdit={setEditingTarget}
+            scanLoadingId={scanNowTargetId}
+            selectedIds={selectedTargetIds}
+            onToggleSelect={toggleTargetSelect}
+          />
+        </div>
+      ) : quickPreset !== 'all' ? (
+        <div style={{ marginBottom: '2rem' }}>
+          <h3 style={{ ...sectionTitleStyle, marginBottom: '0.75rem' }}>
+            Filtered targets
+            <span style={{ fontWeight: 400, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              (preset: {quickPreset})
+            </span>
+          </h3>
+          {renderTargetCards(sortedVisibleTargets)}
+        </div>
       ) : (
-        <div style={{ display: 'grid', gap: '1rem' }}>
-          {filteredTargets.map((t) => (
-            <TargetCard
-              key={t.id}
-              target={t}
-              initialScanDelaySeconds={initialScanDelaySeconds}
-              onScanNow={handleScanNow}
-              onPauseInitialScan={handlePauseInitialScan}
-              onEdit={setEditingTarget}
-              onRemove={handleRemoveTarget}
-              scanLoading={scanNowTargetId === t.id}
-              onCancelActiveScan={handleCancelActiveScan}
-              cancelLoadingForScanId={cancellingScanId}
-              selectable
-              selected={selectedTargetIds.has(t.id)}
-              onSelectToggle={toggleTargetSelect}
-            />
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+          {sectionBuckets.failed.length > 0 && (
+            <section ref={failedSectionRef}>
+              <h3 style={sectionTitleStyle}>⚠️ Failed / broken scans</h3>
+              <div style={{ display: 'grid', gap: '0.75rem' }}>
+                {sectionBuckets.failed.map((t) => (
+                  <TargetSectionRow
+                    key={t.id}
+                    target={t}
+                    variant="failed"
+                    onScanNow={handleScanNow}
+                    scanLoading={scanNowTargetId === t.id}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {sectionBuckets.needs_attention.length > 0 && (
+            <section>
+              <h3 style={sectionTitleStyle}>🔥 Needs attention (by severity)</h3>
+              <div style={{ display: 'grid', gap: '0.75rem' }}>
+                {sectionBuckets.needs_attention.map((t) => (
+                  <TargetSectionRow
+                    key={t.id}
+                    target={t}
+                    variant="needs_attention"
+                    onScanNow={handleScanNow}
+                    scanLoading={scanNowTargetId === t.id}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {sectionBuckets.clean.length > 0 && (
+            <section ref={cleanSectionRef}>
+              <button
+                type="button"
+                onClick={() => setCleanCollapsed((c) => !c)}
+                style={{
+                  ...sectionTitleStyle,
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  width: '100%',
+                }}
+              >
+                🟢 Clean targets ({sectionBuckets.clean.length})
+                <span style={{ fontSize: '0.85rem', fontWeight: 400, color: 'var(--text-secondary)' }}>
+                  {cleanCollapsed ? ' — click to expand' : ' — click to collapse'}
+                </span>
+              </button>
+              {!cleanCollapsed && (
+                <ul
+                  style={{
+                    margin: '0.25rem 0 0',
+                    paddingLeft: '1.25rem',
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.9rem',
+                  }}
+                >
+                  {sectionBuckets.clean.map((t) => {
+                    const label = t.display_name || t.source
+                    const report =
+                      t.last_scan && (t.last_scan.status === 'completed' || t.last_scan.status === 'failed')
+                        ? `/api/results/${t.last_scan.scan_id}/report`
+                        : null
+                    return (
+                      <li key={t.id} style={{ marginBottom: '0.35rem' }}>
+                        <span aria-hidden>✔ </span>
+                        {report ? (
+                          <Link to={report} style={{ color: 'var(--accent, #0d6efd)' }}>
+                            {label.length > 80 ? label.slice(0, 80) + '…' : label}
+                          </Link>
+                        ) : (
+                          label
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </section>
+          )}
+
+          {sectionBuckets.other.length > 0 && (
+            <section>
+              <h3 style={sectionTitleStyle}>⏳ Waiting for scan or in progress</h3>
+              {renderTargetCards(sectionBuckets.other)}
+            </section>
+          )}
+
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+            Switch to <strong>Table</strong> in the toolbar for a single sortable list of all targets in the current
+            filter.
+          </p>
         </div>
       )}
 

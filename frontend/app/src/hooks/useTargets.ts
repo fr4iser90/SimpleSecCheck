@@ -167,8 +167,7 @@ export function useTargets(targetType?: string | null) {
         setTargets((prev) => {
           const t = p.target!
           const i = prev.findIndex((x) => x.id === t.id)
-          const next = i >= 0 ? [...prev.slice(0, i), t, ...prev.slice(i + 1)] : [...prev, t]
-          return [...next].sort((a, b) => String(a.id).localeCompare(String(b.id)))
+          return i >= 0 ? [...prev.slice(0, i), t, ...prev.slice(i + 1)] : [...prev, t]
         })
       }
     }
