@@ -30,6 +30,10 @@ from scanner.core.step_registry import StepRegistry, StepStatus, Step, SubStepTy
 from scanner.core.step_definitions import StepDefinitionsRegistry, StepType
 from scanner.core.base_scanner import set_global_step_registry, scan_log_verbose
 from scanner.core import scan_checkpoint as scan_cp
+from scanner.core.worker_result_collection import (
+    DEFAULT_WORKER_RESULT_COLLECTION,
+    merge_worker_result_collection,
+)
 
 # Git clone subprocess limit — only used in _run_git_clone (change value here only).
 _GIT_CLONE_STEP_TIMEOUT_SECONDS = 20
@@ -1257,12 +1261,21 @@ async def list_scanners():
                     raise ValueError(
                         f"Scanner {scanner_data.get('name')!r} has no scan_profiles.standard.timeout in manifest."
                     )
+                wrc_override = None
+                if row_manifest and getattr(row_manifest, "raw", None):
+                    raw = row_manifest.raw
+                    if isinstance(raw, dict):
+                        wrc_override = raw.get("worker_result_collection")
                 metadata = {
                     "description": scanner_data.get("description"),
                     "categories": scanner_data.get("categories", []),
                     "assets": scanner_data.get("assets", []),
                     "tools_key": scanner_data.get("tools_key"),
                     "scan_profiles": scan_profiles,
+                    "worker_result_collection": merge_worker_result_collection(
+                        DEFAULT_WORKER_RESULT_COLLECTION,
+                        wrc_override,
+                    ),
                 }
                 
                 # Check if scanner exists

@@ -16,6 +16,10 @@ from worker.domain.job_execution.entities.job_execution import JobExecution, Job
 from worker.domain.job_execution.entities.container_spec import ContainerSpec
 from worker.domain.job_execution.entities.execution_result import ExecutionResult
 from worker.infrastructure.docker_adapter import DockerAdapter
+from worker.infrastructure.worker_result_collection import (
+    collect_file_results_for_scan_sync,
+    load_merged_worker_result_collection,
+)
 
 
 class DockerJobExecutor:
@@ -407,9 +411,6 @@ class DockerJobExecutor:
             File results
         """
         try:
-            import os
-            from pathlib import Path
-            
             # Extract results directory container path from volume mounts (GENERIC)
             # Find volume mount that contains results - don't hardcode container path!
             # FIX: Use container_path, not host_path, because Worker runs in a container
@@ -435,19 +436,17 @@ class DockerJobExecutor:
             if not results_path.exists():
                 self.logger.warning(f"Results directory does not exist: {results_dir}")
                 return {}
-            
-            file_results = {}
-            
-            # Find all non-JSON files in the results directory
-            for file_path in results_path.rglob("*"):
-                if file_path.is_file() and not file_path.suffix == '.json':
-                    try:
-                        content = await asyncio.to_thread(file_path.read_text, encoding="utf-8", errors='ignore')
-                        if content:
-                            file_results[str(file_path.relative_to(results_path))] = content
-                    except Exception as e:
-                        self.logger.warning(f"Error reading file {file_path}: {e}")
-            
+
+            scan_id = str(job_execution.scan_id)
+            scan_root = results_path / scan_id
+            if not scan_root.is_dir():
+                self.logger.debug(f"No per-scan results directory for file collection: {scan_root}")
+                return {}
+
+            merged = await load_merged_worker_result_collection(self.database_adapter)
+            file_results = await asyncio.to_thread(
+                collect_file_results_for_scan_sync, scan_root, results_path, merged
+            )
             return file_results
             
         except Exception as e:

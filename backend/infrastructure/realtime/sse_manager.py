@@ -11,16 +11,17 @@ import logging
 from collections import defaultdict
 from typing import Any, DefaultDict, Dict, List
 
+from config.settings import get_settings
+
 logger = logging.getLogger(__name__)
 
 _lock = asyncio.Lock()
 _subscribers: DefaultDict[str, List[asyncio.Queue]] = defaultdict(list)
 
-MAX_QUEUE = 200
-
 
 async def sse_subscribe(user_id: str) -> asyncio.Queue:
-    q: asyncio.Queue = asyncio.Queue(maxsize=MAX_QUEUE)
+    maxsize = get_settings().SSE_QUEUE_MAX_PER_CONNECTION
+    q: asyncio.Queue = asyncio.Queue(maxsize=maxsize)
     async with _lock:
         _subscribers[user_id].append(q)
     return q

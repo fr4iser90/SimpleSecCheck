@@ -3,7 +3,7 @@ Redis Client
 
 This module provides Redis client functionality for caching, queuing, and session management.
 """
-from typing import Optional, Dict, Any, List, Union, cast
+from typing import Any, Optional, Dict, List, Tuple, Union, cast
 import asyncio
 import json
 import logging
@@ -245,15 +245,26 @@ class RedisClient:
         except RedisError as e:
             logger.error(f"Redis PUBLISH error for channel {channel}: {e}")
     
-    async def subscribe(self, channel: str):
-        """Subscribe to channel."""
-        if not self.is_connected:
-            await self.connect()
-        
+    async def subscribe(self, channel: str) -> Optional[Tuple[Any, Redis]]:
+        """
+        Subscribe to a channel for long-lived ``pubsub.listen()``.
+
+        Uses a **dedicated** Redis client with ``socket_timeout=None``. The shared
+        pool client uses ``socket_timeout=5``, which breaks blocking pubsub reads
+        during idle periods (redis.exceptions.TimeoutError).
+        """
         try:
-            pubsub = self.redis.pubsub()
+            pub_redis = Redis.from_url(
+                settings.REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=None,
+                health_check_interval=30,
+            )
+            await pub_redis.ping()
+            pubsub = pub_redis.pubsub()
             await pubsub.subscribe(channel)
-            return pubsub
+            return (pubsub, pub_redis)
         except RedisError as e:
             logger.error(f"Redis SUBSCRIBE error for channel {channel}: {e}")
             return None

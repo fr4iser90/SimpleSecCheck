@@ -63,6 +63,10 @@ install:
   - pack
   - download
   - codeql/go-queries
+# Worker: which paths under results/<scan_id>/ may be collected (merged with defaults in DB).
+worker_result_collection:
+  exclude_dir_names:
+    - codeql-database
 scan_profiles:
   quick:
     timeout: 180

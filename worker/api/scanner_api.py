@@ -445,6 +445,11 @@ async def refresh_scanners() -> Dict[str, Any]:
             # Reload from database after refresh
             _scanner_cache = await _get_scanners_from_database()
             _cache_timestamp = time.time()
+            from worker.infrastructure.worker_result_collection import (
+                invalidate_merged_worker_result_collection_cache,
+            )
+
+            invalidate_merged_worker_result_collection_cache()
         return {"status": "ok", "count": len(_scanner_cache)}
     except Exception as e:
         logger.error("Failed to refresh scanners", error=str(e))

@@ -8,7 +8,7 @@ after setup is completed.
 from typing import List
 from urllib.parse import quote_plus
 
-from pydantic import Field, computed_field, model_validator
+from pydantic import AliasChoices, Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,7 +60,28 @@ class Settings(BaseSettings):
         description="Redis connection URL"
     )
     REDIS_POOL_SIZE: int = Field(default=10, description="Redis connection pool size")
-    
+
+    # SSE / realtime — single source for queue bounds (sse_manager + redis_sse_bridge)
+    SSE_QUEUE_MAX_PER_CONNECTION: int = Field(
+        default=200,
+        ge=1,
+        le=10_000,
+        description="Max pending SSE envelopes per open EventSource connection",
+    )
+    SSE_REDIS_BRIDGE_QUEUE_MAX: int = Field(
+        default=500,
+        ge=16,
+        le=50_000,
+        description=(
+            "Bounded queue between Redis scan_events pubsub and SSE delivery (backpressure). "
+            "Legacy env alias: SCAN_EVENTS_BRIDGE_QUEUE_MAX."
+        ),
+        validation_alias=AliasChoices(
+            "SSE_REDIS_BRIDGE_QUEUE_MAX",
+            "SCAN_EVENTS_BRIDGE_QUEUE_MAX",
+        ),
+    )
+
     # API
     API_HOST: str = Field(default="0.0.0.0", description="API host")
     API_PORT: int = Field(default=8000, description="API port")
