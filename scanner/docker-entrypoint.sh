@@ -49,6 +49,8 @@ if [ -n "$SCANNER_UID" ] && [ -n "$SCANNER_GID" ]; then
     fi
 
     if [ "$SCANNER_UID" != "$CURRENT_UID" ]; then
+        # usermod re-homes /home/scanner; chown to root first if mixed ownership breaks the transfer
+        chown -R root:root /home/scanner 2>/dev/null || true
         usermod -u "$SCANNER_UID" scanner
     fi
 fi
@@ -77,9 +79,11 @@ mkdir -p "$HOME_DIR" "$CACHE_DIR" "$CONFIG_DIR" "$RESULTS_DIR" || true
 chown -R "$FINAL_UID:$FINAL_GID" "$RESULTS_DIR" "$HOME_DIR" "$CACHE_DIR" "$CONFIG_DIR" 2>/dev/null || true
 chmod -R u+rwX,g+rwX "$RESULTS_DIR" "$HOME_DIR" "$CACHE_DIR" "$CONFIG_DIR" 2>/dev/null || true
 
-# Plugin trees are chown'd to scanner:scanner at image build (e.g. UID 1000). After usermod,
-# the scanner account may be a different UID (PUID/PGID / /project); files on disk keep the old
-# numeric owner, so Trivy and other plugins cannot mkdir under .../plugins/.../data.
+# passwd home may still be /home/scanner even when HOME=/tmp/scanner
+chown -R "$FINAL_UID:$FINAL_GID" /home/scanner 2>/dev/null || true
+
+# Plugins are chown'd at image build to scanner (e.g. UID 1000). After usermod, numeric owners are stale;
+# Trivy and others need mkdir under .../plugins/.../data.
 if [ -d /app/scanner/plugins ]; then
     chown -R "$FINAL_UID:$FINAL_GID" /app/scanner/plugins 2>/dev/null || true
     chmod -R u+rwX,g+rwX /app/scanner/plugins 2>/dev/null || true
