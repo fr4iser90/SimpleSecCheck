@@ -1030,6 +1030,13 @@ class LastScanSummary(BaseModel):
     low_vulnerabilities: int = 0
 
 
+class ActiveScanSummary(BaseModel):
+    """A pending or running scan for this target (My Targets card actions)."""
+    scan_id: str
+    status: str
+    queue_position: Optional[int] = None
+
+
 class ScanTargetResponse(BaseModel):
     """Response for a scan target."""
     id: str
@@ -1046,6 +1053,7 @@ class ScanTargetResponse(BaseModel):
     next_scan_at: Optional[str] = None  # ISO datetime when next interval scan is due (null if not auto-interval)
     initial_scan_paused: bool = False
     initial_scan_triggered_at: Optional[str] = None  # ISO datetime when initial scan was enqueued (null if not yet)
+    active_scan: Optional[ActiveScanSummary] = None
 
 
 def _last_scan_to_summary(scan_row: Any) -> Optional[LastScanSummary]:
@@ -1063,6 +1071,28 @@ def _last_scan_to_summary(scan_row: Any) -> Optional[LastScanSummary]:
         medium_vulnerabilities=getattr(scan_row, "medium_vulnerabilities", 0) or 0,
         low_vulnerabilities=getattr(scan_row, "low_vulnerabilities", 0) or 0,
     )
+
+
+def _active_scan_to_summary(
+    scan_row: Any, queue_position: Optional[int]
+) -> ActiveScanSummary:
+    status = getattr(scan_row.status, "value", scan_row.status) or str(scan_row.status)
+    return ActiveScanSummary(
+        scan_id=str(scan_row.id),
+        status=str(status).lower(),
+        queue_position=queue_position,
+    )
+
+
+async def _active_scan_for_source(
+    scan_repository: ScanRepository, user_id: str, source: str
+) -> Optional[ActiveScanSummary]:
+    active_by_url = await scan_repository.get_active_scans_by_target_urls(user_id, [source])
+    ent = active_by_url.get(source)
+    if not ent:
+        return None
+    pos = await scan_repository.get_position_in_queue(str(ent.id))
+    return _active_scan_to_summary(ent, pos)
 
 
 def _initial_scan_flags(config: Dict[str, Any]) -> tuple:
@@ -1135,6 +1165,7 @@ async def list_scan_targets(
 
     sources = [t.source for t in targets]
     latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_context.user_id, sources)
+    active_by_url = await scan_repository.get_active_scans_by_target_urls(actor_context.user_id, sources)
 
     scanner_cache: Dict[str, List[str]] = {}
     for t in targets:
@@ -1157,10 +1188,15 @@ async def list_scan_targets(
             created_at=isoformat_utc(t.created_at),
             updated_at=isoformat_utc(t.updated_at),
             scanners=_scanners_for_target(t),
-            last_scan=_last_scan_to_summary(latest_by_url.get(t.source)),
-            next_scan_at=_next_scan_at(t.auto_scan.to_dict(), _last_scan_to_summary(latest_by_url.get(t.source))),
+            last_scan=(last_s := _last_scan_to_summary(latest_by_url.get(t.source))),
+            next_scan_at=_next_scan_at(t.auto_scan.to_dict(), last_s),
             initial_scan_paused=_initial_scan_flags(t.config)[0],
             initial_scan_triggered_at=_initial_scan_flags(t.config)[1],
+            active_scan=(
+                _active_scan_to_summary(active_by_url[t.source], None)
+                if t.source in active_by_url
+                else None
+            ),
         )
         for t in targets
     ]
@@ -1232,6 +1268,7 @@ async def create_scan_target(
         next_scan_at=None,
         initial_scan_paused=_initial_scan_flags(created.config)[0],
         initial_scan_triggered_at=None,
+        active_scan=None,
     )
 
 
@@ -1253,6 +1290,7 @@ async def get_scan_target(
     _scanners = _custom if isinstance(_custom, list) else await get_default_scanner_names_for_target_type(target.type)
     latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_context.user_id, [target.source])
     _last = _last_scan_to_summary(latest_by_url.get(target.source))
+    _active = await _active_scan_for_source(scan_repository, actor_context.user_id, target.source)
     return ScanTargetResponse(
         id=target.id,
         user_id=target.user_id,
@@ -1268,6 +1306,7 @@ async def get_scan_target(
         next_scan_at=_next_scan_at(target.auto_scan.to_dict(), _last),
         initial_scan_paused=_initial_scan_flags(target.config)[0],
         initial_scan_triggered_at=_initial_scan_flags(target.config)[1],
+        active_scan=_active,
     )
 
 
@@ -1320,6 +1359,7 @@ async def update_scan_target(
     _scanners = _custom if isinstance(_custom, list) else await get_default_scanner_names_for_target_type(updated.type)
     latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_context.user_id, [updated.source])
     _last = _last_scan_to_summary(latest_by_url.get(updated.source))
+    _active = await _active_scan_for_source(scan_repository, actor_context.user_id, updated.source)
     return ScanTargetResponse(
         id=updated.id,
         user_id=updated.user_id,
@@ -1335,6 +1375,7 @@ async def update_scan_target(
         next_scan_at=_next_scan_at(updated.auto_scan.to_dict(), _last),
         initial_scan_paused=_initial_scan_flags(updated.config)[0],
         initial_scan_triggered_at=_initial_scan_flags(updated.config)[1],
+        active_scan=_active,
     )
 
 

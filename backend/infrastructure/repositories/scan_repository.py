@@ -792,6 +792,34 @@ class DatabaseScanRepository(ScanRepository):
                 logger.error(f"get_latest_scans_by_target_urls failed: {e}")
                 raise
 
+    async def get_active_scans_by_target_urls(
+        self, user_id: str, target_urls: List[str]
+    ) -> Dict[str, Scan]:
+        if not target_urls:
+            return {}
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(ScanModel)
+                    .where(
+                        ScanModel.user_id == UUID(user_id),
+                        ScanModel.status.in_(["pending", "running"]),
+                        ScanModel.target_url.in_(target_urls),
+                    )
+                    .order_by(ScanModel.created_at.desc())
+                )
+                rows = result.scalars().all()
+                out: Dict[str, Scan] = {}
+                for r in rows:
+                    url = r.target_url or ""
+                    if url not in out:
+                        out[url] = await self._model_to_entity(r)
+                return out
+            except Exception as e:
+                logger.error(f"get_active_scans_by_target_urls failed: {e}")
+                raise
+
     async def get_position_in_queue(self, scan_id: str) -> Optional[int]:
         await self.db_adapter.ensure_initialized()
         async with self.db_adapter.async_session() as session:

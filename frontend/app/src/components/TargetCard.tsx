@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import type { ScanTargetItem } from '../hooks/useTargets'
+import type { ActiveScanSummary, ScanTargetItem } from '../hooks/useTargets'
 
-const TYPE_LABELS: Record<string, string> = {
+/** Labels for target `type` (filters, badges). */
+export const TARGET_TYPE_LABELS: Record<string, string> = {
   git_repo: 'Git repo',
   container_registry: 'Container',
   local_mount: 'Local path',
@@ -38,6 +39,13 @@ interface TargetCardProps {
   onEdit: (target: ScanTargetItem) => void
   onRemove: (targetId: string, label: string) => void
   scanLoading?: boolean
+  activeScan?: ActiveScanSummary | null
+  onCancelActiveScan?: (scanId: string) => void
+  cancelLoadingForScanId?: string | null
+  /** When using bulk selection */
+  selectable?: boolean
+  selected?: boolean
+  onSelectToggle?: (targetId: string) => void
 }
 
 function formatClock(date: Date): string {
@@ -59,9 +67,16 @@ export default function TargetCard({
   onEdit,
   onRemove,
   scanLoading,
+  activeScan: activeScanProp,
+  onCancelActiveScan,
+  cancelLoadingForScanId,
+  selectable,
+  selected,
+  onSelectToggle,
 }: TargetCardProps) {
+  const activeScan = activeScanProp ?? target.active_scan ?? null
   const label = target.display_name || target.source
-  const typeLabel = TYPE_LABELS[target.type] || target.type
+  const typeLabel = TARGET_TYPE_LABELS[target.type] || target.type
   const icon = TYPE_ICONS[target.type] || '🎯'
   const autoScanOn = target.auto_scan?.enabled && (target.auto_scan?.interval_seconds || target.auto_scan?.event)
   const hasNoScanYet = !target.last_scan
@@ -101,6 +116,15 @@ export default function TargetCard({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+            {selectable && onSelectToggle && (
+              <input
+                type="checkbox"
+                checked={!!selected}
+                onChange={() => onSelectToggle(target.id)}
+                aria-label={`Select ${label}`}
+                style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer', flexShrink: 0 }}
+              />
+            )}
             <h3 style={{ margin: 0, fontSize: '1.1rem' }}>
               {icon} {label.length > 60 ? label.slice(0, 60) + '…' : label}
             </h3>
@@ -215,6 +239,58 @@ export default function TargetCard({
           {target.scanners && target.scanners.length > 0 && (
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
               <strong>Scanners:</strong> {target.scanners.join(', ')}
+            </div>
+          )}
+          {activeScan && ['pending', 'running'].includes(activeScan.status) && (
+            <div
+              style={{
+                marginTop: '0.5rem',
+                padding: '0.5rem',
+                borderRadius: '6px',
+                background: 'rgba(13, 110, 253, 0.12)',
+                border: '1px solid rgba(13, 110, 253, 0.35)',
+                fontSize: '0.85rem',
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <span
+                style={{
+                  padding: '0.12rem 0.45rem',
+                  borderRadius: '999px',
+                  fontSize: '0.72rem',
+                  background:
+                    activeScan.status === 'running' ? 'rgba(25, 135, 84, 0.25)' : 'rgba(255, 193, 7, 0.25)',
+                  border: `1px solid ${activeScan.status === 'running' ? 'rgba(25, 135, 84, 0.5)' : 'rgba(255, 193, 7, 0.5)'}`,
+                }}
+              >
+                Scan {activeScan.status === 'running' ? 'running' : 'queued'}
+              </span>
+              {activeScan.queue_position != null && (
+                <span style={{ color: 'var(--text-secondary)' }}>Queue #{activeScan.queue_position}</span>
+              )}
+              <Link
+                to="/scan"
+                state={{ scan_id: activeScan.scan_id }}
+                style={{ color: 'var(--accent, #0d6efd)', fontWeight: 500 }}
+              >
+                Open scan →
+              </Link>
+              <Link to="/my-scans" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                My Scans
+              </Link>
+              {onCancelActiveScan && (
+                <button
+                  type="button"
+                  onClick={() => onCancelActiveScan(activeScan.scan_id)}
+                  disabled={cancelLoadingForScanId === activeScan.scan_id}
+                  style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem', marginLeft: 'auto' }}
+                >
+                  {cancelLoadingForScanId === activeScan.scan_id ? 'Cancelling…' : 'Cancel scan'}
+                </button>
+              )}
             </div>
           )}
           {target.last_scan && (

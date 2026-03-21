@@ -181,6 +181,13 @@ class ScanRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_active_scans_by_target_urls(
+        self, user_id: str, target_urls: List[str]
+    ) -> Dict[str, Scan]:
+        """Newest pending/running scan per target_url for user. Keys match stored target_url."""
+        pass
+
+    @abstractmethod
     async def get_position_in_queue(self, scan_id: str) -> Optional[int]:
         """1-based position of scan among all pending+running (by priority desc, created_at asc). None if not found or not pending/running."""
         pass

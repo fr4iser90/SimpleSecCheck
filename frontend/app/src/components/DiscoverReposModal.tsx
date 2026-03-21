@@ -14,6 +14,10 @@ interface DiscoverReposModalProps {
   onDeselectAll: () => void
   onAddSelected: () => void
   loading: boolean
+  /** e.g. { current: 2, total: 10 } while bulk-adding */
+  addProgress?: { current: number; total: number } | null
+  /** Per-repo outcome after bulk add */
+  addResults?: { full_name: string; ok: boolean; error?: string }[] | null
 }
 
 export default function DiscoverReposModal({
@@ -29,7 +33,9 @@ export default function DiscoverReposModal({
   onSelectAll,
   onDeselectAll,
   onAddSelected,
-  loading
+  loading,
+  addProgress,
+  addResults,
 }: DiscoverReposModalProps) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="🔍 Discover GitHub Repositories" size="lg">
@@ -37,6 +43,64 @@ export default function DiscoverReposModal({
           Enter a GitHub username or organization name to find all their repositories.
         </p>
         
+        {addProgress && addProgress.total > 0 && (
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem', color: 'var(--text-secondary)' }}>
+              Adding repositories… {addProgress.current} / {addProgress.total}
+            </div>
+            <div
+              style={{
+                height: '6px',
+                borderRadius: '4px',
+                background: 'var(--glass-border-main)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  width: `${Math.round((100 * addProgress.current) / addProgress.total)}%`,
+                  background: 'var(--accent, #0d6efd)',
+                  transition: 'width 0.2s ease',
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {addResults && addResults.length > 0 && (
+          <div
+            style={{
+              marginBottom: '1rem',
+              maxHeight: '220px',
+              overflowY: 'auto',
+              border: '1px solid var(--glass-border-main)',
+              borderRadius: '8px',
+              padding: '0.5rem',
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.9rem' }}>Add results</div>
+            {addResults.map((r) => (
+              <div
+                key={r.full_name}
+                style={{
+                  fontSize: '0.8rem',
+                  padding: '0.35rem 0.25rem',
+                  borderBottom: '1px solid var(--glass-border-main)',
+                  color: r.ok ? 'var(--color-pass, #198754)' : 'var(--color-critical, #dc3545)',
+                }}
+              >
+                {r.ok ? '✓' : '✗'} {r.full_name}
+                {!r.ok && r.error && (
+                  <span style={{ display: 'block', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                    {r.error}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
           <input
             type="text"

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Modal from './Modal'
 import type { AutoScanConfig } from '../hooks/useTargets'
+import { DuplicateTargetError } from '../utils/targetDuplicate'
 
 interface AddTargetModalProps {
   isOpen: boolean
@@ -13,6 +14,8 @@ interface AddTargetModalProps {
     auto_scan: AutoScanConfig
     initial_scan_paused?: boolean
   }) => Promise<void>
+  /** Called when API reports duplicate; add modal stays open unless you close it here. */
+  onDuplicate?: (err: DuplicateTargetError) => void
   allowedTargets: Record<string, boolean> | null
 }
 
@@ -26,6 +29,7 @@ export default function AddTargetModal({
   isOpen,
   onClose,
   onSubmit,
+  onDuplicate,
   allowedTargets,
 }: AddTargetModalProps) {
   const [type, setType] = useState('git_repo')
@@ -78,6 +82,10 @@ export default function AddTargetModal({
       setInitialScanPaused(false)
       onClose()
     } catch (err) {
+      if (err instanceof DuplicateTargetError) {
+        onDuplicate?.(err)
+        return
+      }
       setError(err instanceof Error ? err.message : 'Failed to add target')
     } finally {
       setSaving(false)

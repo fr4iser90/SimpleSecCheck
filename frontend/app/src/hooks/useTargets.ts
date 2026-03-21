@@ -19,6 +19,12 @@ export interface LastScanSummary {
   low_vulnerabilities: number
 }
 
+export interface ActiveScanSummary {
+  scan_id: string
+  status: string
+  queue_position: number | null
+}
+
 export interface ScanTargetItem {
   id: string
   user_id: string
@@ -36,6 +42,8 @@ export interface ScanTargetItem {
   initial_scan_paused?: boolean
   /** ISO datetime when initial scan was enqueued (null if not yet). */
   initial_scan_triggered_at?: string | null
+  /** Pending or running scan for this target (from API). */
+  active_scan?: ActiveScanSummary | null
 }
 
 export function useTargets(targetType?: string | null) {
@@ -43,30 +51,33 @@ export function useTargets(targetType?: string | null) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadTargets = async () => {
-    setLoading(true)
-    setError(null)
+  const loadTargets = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const q = targetType ? `?target_type=${encodeURIComponent(targetType)}` : ''
       const response = await apiFetch(`/api/user/targets${q}`)
       if (response.ok) {
         const data = await response.json()
         setTargets(Array.isArray(data) ? data : [])
-      } else {
+      } else if (!silent) {
         setError('Failed to load targets')
       }
     } catch (err) {
       console.error('Failed to load targets:', err)
-      setError('Failed to load targets')
+      if (!silent) setError('Failed to load targets')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadTargets()
+    void loadTargets({ silent: false })
     const t = setInterval(() => {
-      void loadTargets()
+      void loadTargets({ silent: true })
     }, 10000)
     return () => clearInterval(t)
   }, [targetType ?? ''])

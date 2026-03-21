@@ -77,7 +77,8 @@ export default function Header() {
       }
     }
     void tick()
-    const iv = setInterval(tick, 4000)
+    // Align with My Targets polling; avoid noisy global header updates every few seconds.
+    const iv = setInterval(tick, 10000)
     return () => {
       cancelled = true
       clearInterval(iv)
