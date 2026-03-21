@@ -77,6 +77,14 @@ mkdir -p "$HOME_DIR" "$CACHE_DIR" "$CONFIG_DIR" "$RESULTS_DIR" || true
 chown -R "$FINAL_UID:$FINAL_GID" "$RESULTS_DIR" "$HOME_DIR" "$CACHE_DIR" "$CONFIG_DIR" 2>/dev/null || true
 chmod -R u+rwX,g+rwX "$RESULTS_DIR" "$HOME_DIR" "$CACHE_DIR" "$CONFIG_DIR" 2>/dev/null || true
 
+# Plugin trees are chown'd to scanner:scanner at image build (e.g. UID 1000). After usermod,
+# the scanner account may be a different UID (PUID/PGID / /project); files on disk keep the old
+# numeric owner, so Trivy and other plugins cannot mkdir under .../plugins/.../data.
+if [ -d /app/scanner/plugins ]; then
+    chown -R "$FINAL_UID:$FINAL_GID" /app/scanner/plugins 2>/dev/null || true
+    chmod -R u+rwX,g+rwX /app/scanner/plugins 2>/dev/null || true
+fi
+
 # Verify write access (only warn if actually not writable)
 if ! gosu scanner test -w "$RESULTS_DIR"; then
     echo "[Entrypoint] WARNING: $RESULTS_DIR not writable by scanner (uid=$FINAL_UID gid=$FINAL_GID)"
