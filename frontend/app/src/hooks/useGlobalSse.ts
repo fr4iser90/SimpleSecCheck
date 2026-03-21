@@ -2,9 +2,6 @@ import { useEffect, useRef } from 'react'
 import { useAuth } from './useAuth'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
 
-/** @deprecated Legacy custom event; UI should listen to SSE_ENVELOPE_EVENT. */
-export const SSE_INVALIDATE_EVENT = 'ssc:invalidate'
-
 /** Raw SSE envelope from `event: ssc` (detail = full object). */
 export const SSE_ENVELOPE_EVENT = 'ssc:sse-envelope'
 
@@ -14,8 +11,6 @@ export type SseEnvelope = {
   scope: string
   payload: Record<string, unknown>
 }
-
-export type SseInvalidateScope = 'targets' | 'header' | 'all'
 
 /**
  * One EventSource per signed-in user (cookies + same origin).

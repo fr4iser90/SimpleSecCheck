@@ -1051,6 +1051,21 @@ input:focus, select:focus {
   max-width: 400px;
 }
 
+/* Setup wizard: stable footprint so steps don’t resize the shell wildly */
+.setup-wizard-shell {
+  max-width: 720px;
+}
+
+.setup-wizard-card {
+  min-height: min(72vh, 680px);
+  display: flex;
+  flex-direction: column;
+}
+
+.setup-wizard-card .setup-progress {
+  flex-shrink: 0;
+}
+
 /* Setup Wizard Progress Bar */
 .setup-progress {
   display: flex;

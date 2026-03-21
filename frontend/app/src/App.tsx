@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import { useConfig } from './hooks/useConfig'
 import BootstrapLoader, { SetupStatus } from './components/BootstrapLoader'
-import Header from './components/Header'
+import MainLayout from './components/MainLayout'
 import HomePage from './pages/HomePage'
 import ScanView from './pages/ScanView'
 import BatchProgressPage from './pages/BatchProgressPage'
@@ -95,7 +95,14 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
   if (!setupStatus.setup_complete) {
     return (
       <Routes>
-        <Route path="/setup" element={<SetupWizard />} />
+        <Route
+          path="/setup"
+          element={
+            <div className="shell-content">
+              <SetupWizard />
+            </div>
+          }
+        />
         <Route path="*" element={<Navigate to="/setup" replace />} />
       </Routes>
     )
@@ -104,185 +111,233 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
   // Setup is complete - show normal application routes
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignUpPage />} />
-      <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route
+        path="/login"
+        element={
+          <div className="shell-content">
+            <LoginPage />
+          </div>
+        }
+      />
+      <Route
+        path="/signup"
+        element={
+          <div className="shell-content">
+            <SignUpPage />
+          </div>
+        }
+      />
+      <Route
+        path="/verify-email"
+        element={
+          <div className="shell-content">
+            <VerifyEmailPage />
+          </div>
+        }
+      />
       <Route path="/capabilities" element={
-        <>
-          <Header />
+        <MainLayout>
           <CapabilitiesPage />
-        </>
+        </MainLayout>
       } />
-      <Route path="/password-reset" element={<PasswordResetPage />} />
+      <Route
+        path="/password-reset"
+        element={
+          <div className="shell-content">
+            <PasswordResetPage />
+          </div>
+        }
+      />
       <Route path="/" element={
         <ProtectedRoute>
-          <Header />
-          <HomePage />
+          <MainLayout>
+            <HomePage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/scan" element={
         <ProtectedRoute>
-          <Header />
-          <ScanView />
+          <MainLayout>
+            <ScanView />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/bulk" element={
         <ProtectedRoute>
-          <Header />
-          <BatchProgressPage />
+          <MainLayout>
+            <BatchProgressPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/queue" element={
         <ProtectedRoute>
-          <Header />
-          <QueueView />
+          <MainLayout>
+            <QueueView />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/my-scans" element={
         <ProtectedRoute>
-          <Header />
-          <MyScansPage />
+          <MainLayout>
+            <MyScansPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/statistics" element={
         <ProtectedRoute>
-          <Header />
-          <StatisticsPage />
+          <MainLayout>
+            <StatisticsPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       {/* Admin Routes */}
       <Route path="/admin" element={
         <ProtectedRoute>
-          <Header />
-          <AdminDashboardPage />
+          <MainLayout>
+            <AdminDashboardPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/settings" element={
         <ProtectedRoute>
-          <Header />
-          <AdminSettingsPage />
+          <MainLayout>
+            <AdminSettingsPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/users" element={
         <ProtectedRoute>
-          <Header />
-          <UserManagementPage />
+          <MainLayout>
+            <UserManagementPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/feature-flags" element={
         <ProtectedRoute>
-          <Header />
-          <FeatureFlagsPage />
+          <MainLayout>
+            <FeatureFlagsPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/auth" element={
         <ProtectedRoute>
-          <Header />
-          <AuthSettingsPage />
+          <MainLayout>
+            <AuthSettingsPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/execution" element={
         <ProtectedRoute>
-          <Header />
-          <ExecutionSettingsPage />
+          <MainLayout>
+            <ExecutionSettingsPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/queue" element={
         <ProtectedRoute>
-          <Header />
-          <QueueSettingsPage />
+          <MainLayout>
+            <QueueSettingsPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/security" element={<Navigate to="/admin/policies" replace />} />
       <Route path="/admin/policies" element={
         <ProtectedRoute>
-          <Header />
-          <AdminPoliciesPage />
+          <MainLayout>
+            <AdminPoliciesPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/health" element={
         <ProtectedRoute>
-          <Header />
-          <AdminHealthPage />
+          <MainLayout>
+            <AdminHealthPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/sse-debug" element={
         <ProtectedRoute>
-          <Header />
-          <AdminSseDebugPage />
+          <MainLayout>
+            <AdminSseDebugPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/audit-log" element={
         <ProtectedRoute>
-          <Header />
-          <AuditLogPage />
+          <MainLayout>
+            <AuditLogPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/security/ip-control" element={
         <ProtectedRoute>
-          <Header />
-          <IPControlPage />
+          <MainLayout>
+            <IPControlPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/scanner" element={
         <ProtectedRoute>
-          <Header />
-          <ScannerManagementPage />
+          <MainLayout>
+            <ScannerManagementPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/tool-duration" element={
         <ProtectedRoute>
-          <Header />
-          <AdminToolDurationPage />
+          <MainLayout>
+            <AdminToolDurationPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/tool-settings" element={
         <ProtectedRoute>
-          <Header />
-          <AdminScannerToolSettingsPage />
+          <MainLayout>
+            <AdminScannerToolSettingsPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/vulnerabilities" element={
         <ProtectedRoute>
-          <Header />
-          <div style={{ padding: '2rem' }}>Vulnerability Database - Coming Soon</div>
+          <MainLayout>
+            <div style={{ padding: '2rem' }}>Vulnerability Database - Coming Soon</div>
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/scan-policies" element={
         <ProtectedRoute>
-          <Header />
-          <div style={{ padding: '2rem' }}>Scan Policies - Coming Soon</div>
+          <MainLayout>
+            <div style={{ padding: '2rem' }}>Scan Policies - Coming Soon</div>
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/admin/notifications" element={
         <ProtectedRoute>
-          <Header />
-          <div style={{ padding: '2rem' }}>Notification Management - Coming Soon</div>
-        </ProtectedRoute>
-      } />
-      <Route path="/admin/health" element={
-        <ProtectedRoute>
-          <Header />
-          <div style={{ padding: '2rem' }}>System Health - Coming Soon</div>
+          <MainLayout>
+            <div style={{ padding: '2rem' }}>Notification Management - Coming Soon</div>
+          </MainLayout>
         </ProtectedRoute>
       } />
       {/* User Routes */}
       <Route path="/profile" element={
         <ProtectedRoute>
-          <Header />
-          <ProfilePage />
+          <MainLayout>
+            <ProfilePage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/my-targets" element={
         <ProtectedRoute>
-          <Header />
-          <MyTargetsPage />
+          <MainLayout>
+            <MyTargetsPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       <Route path="/api-keys" element={
         <ProtectedRoute>
-          <Header />
-          <APIKeysPage />
+          <MainLayout>
+            <APIKeysPage />
+          </MainLayout>
         </ProtectedRoute>
       } />
       {/* Redirect /setup to / if setup is already complete */}

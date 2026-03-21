@@ -20,15 +20,23 @@
   overflow: hidden;
 }
 
-/* Main scroll region: content after Header, or full-page routes without Header (login, etc.). */
-.app__body > header + *,
-.app__body > :only-child {
+/*
+ * Shell content column (full width): page markup lives inside; scrollbar at viewport edge.
+ * Avoid overflow-y on .container — that attaches the scrollbar to the max-width column.
+ */
+.shell-content {
   flex: 1;
   min-height: 0;
+  width: 100%;
+  min-width: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  display: flex;
-  flex-direction: column;
+}
+
+.app__body > header + .shell-content,
+.app__body > .shell-content:only-child {
+  flex: 1;
+  min-height: 0;
 }
 
 @keyframes pulse {

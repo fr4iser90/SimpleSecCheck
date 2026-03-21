@@ -794,8 +794,8 @@ export default function SetupWizard() {
 
   if (loading && !setupStatus) {
     return (
-      <div className="container">
-        <div className="card">
+      <div className="container setup-wizard-shell">
+        <div className="card setup-wizard-card">
           <h2>Setup Wizard</h2>
           <div className="loading">Checking system status...</div>
         </div>
@@ -804,8 +804,8 @@ export default function SetupWizard() {
   }
 
   return (
-    <div className="container">
-      <div className="card">
+    <div className="container setup-wizard-shell">
+      <div className="card setup-wizard-card">
         <h2>Setup Wizard</h2>
         {error && (
           <div className="form-info-box error">
