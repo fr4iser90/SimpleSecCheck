@@ -29,7 +29,7 @@
     "targetLabel": "Target",
     "approach": "Choose approach",
     "quick": "Quick fix (IDE / ChatGPT)",
-    "pr_ready": "PR-ready patch",
+    "pr_ready": "PR-ready patch (Experimental, not tested. Expected to work as interface for external agents( Jules , Cursor agent, etc.))",
     "explain": "Explain only",
     "policyPath": "Policy path (advanced)",
     "generatedPrompt": "Generated fix prompt",
