@@ -254,7 +254,7 @@ async def _refresh_scanners_from_container() -> None:
         raise HTTPException(status_code=503, detail="Docker not available")
     
     try:
-        scanner_image = "simpleseccheck-scanner:local"
+        scanner_image = "simpleseccheck-scanner:latest"
 
         environment_vars: Dict[str, str] = {}
         for k in ("POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"):

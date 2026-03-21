@@ -19,7 +19,7 @@ from application.services.upload_service import resolve_upload_mount_path
 logger = logging.getLogger(__name__)
 
 # Default scanner image name (can be overridden via environment variable)
-DEFAULT_SCANNER_IMAGE = os.getenv("SCANNER_IMAGE", "simpleseccheck-scanner:local")
+DEFAULT_SCANNER_IMAGE = os.getenv("SCANNER_IMAGE", "simpleseccheck-scanner:latest")
 
 
 def _collect_metadata_default(config: Optional[dict]) -> bool:

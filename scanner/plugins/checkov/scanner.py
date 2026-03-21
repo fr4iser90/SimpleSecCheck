@@ -14,6 +14,37 @@ from scanner.core.scanner_registry import ScanType, TargetType, ScannerCapabilit
 from scanner.core.step_registry import SubStepType
 
 
+def _normalize_checkov_extra_args_tokens(tokens: List[str]) -> List[str]:
+    """
+    Ensure ``--download-external-modules`` always has a boolean value.
+
+    Admin ``SCANNER_TOOL_OVERRIDES_JSON`` can set ``CHECKOV_EXTRA_ARGS`` to a lone
+    ``--download-external-modules``, which makes Checkov abort with "expected one argument".
+    """
+    out: List[str] = []
+    i = 0
+    while i < len(tokens):
+        t = tokens[i]
+        if t == "--download-external-modules":
+            out.append(t)
+            nxt = tokens[i + 1] if i + 1 < len(tokens) else None
+            if nxt is not None and not nxt.startswith("-"):
+                out.append(nxt)
+                i += 2
+            else:
+                out.append("true")
+                i += 1
+            continue
+        if t.startswith("--download-external-modules="):
+            val = t.split("=", 1)[1].strip() or "true"
+            out.extend(["--download-external-modules", val])
+            i += 1
+            continue
+        out.append(t)
+        i += 1
+    return out
+
+
 def _collect_failed_checks(data: Any) -> List[dict]:
     """Normalize Checkov JSON (dict or list of per-framework blocks) into failed_checks."""
     out: List[dict] = []
@@ -274,7 +305,9 @@ class CheckovScanner(BaseScanner):
         env["OMP_NUM_THREADS"] = "1"
         env["MKL_NUM_THREADS"] = "1"
 
-        checkov_extra = shlex.split(os.getenv("CHECKOV_EXTRA_ARGS", "").strip())
+        checkov_extra = _normalize_checkov_extra_args_tokens(
+            shlex.split(os.getenv("CHECKOV_EXTRA_ARGS", "").strip())
+        )
 
         batch_size = max(1, int(os.getenv("CHECKOV_FILES_PER_BATCH", str(self.CHECKOV_FILES_PER_BATCH))))
         batches: List[List[Path]] = [

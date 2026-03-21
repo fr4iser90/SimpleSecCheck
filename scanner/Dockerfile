@@ -11,7 +11,7 @@ LABEL maintainer="fr4iser"
 RUN apt-get update && \
     apt-get install -y python3 python3-pip curl gosu git && \
     pip3 install pyyaml && \
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs
 
 ## Scanner tool installations moved into per-module manifests

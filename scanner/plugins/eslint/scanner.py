@@ -98,19 +98,49 @@ class ESLintScanner(BaseScanner):
         
         json_output = self.results_dir / "report.json"  # Changed from eslint.json
         text_output = self.results_dir / "report.txt"   # Changed from eslint.txt
-        temp_config = self.results_dir / "eslint.config.cjs"
 
-        # Ensure plugins are available where the config runs (config is in results_dir, so resolve from there)
+        # Install plugins in results_dir so we don't pollute the target repo.
+        # Minimal package.json keeps npm layout stable (scoped packages under node_modules).
+        pkg_json = self.results_dir / "package.json"
+        if not pkg_json.is_file():
+            try:
+                pkg_json.write_text('{"name":"ssc-eslint-plugins","private":true}\n', encoding="utf-8")
+            except OSError as e:
+                self.log(f"Cannot write {pkg_json}: {e}", "WARNING")
+
+        # Pin versions for reproducible installs; resolve via NODE_PATH + package name in .cjs
+        # (avoids brittle absolute paths if npm lays out deps differently).
         install_result = self.run_command(
-            ["npm", "install", "eslint-plugin-security", "@typescript-eslint/parser", "@typescript-eslint/eslint-plugin"],
+            [
+                "npm",
+                "install",
+                "--no-fund",
+                "--no-audit",
+                "eslint-plugin-security@^3.0.0",
+                "@typescript-eslint/parser@8.57.1",
+                "@typescript-eslint/eslint-plugin@8.57.1",
+            ],
             capture_output=True,
             cwd=self.results_dir,
         )
         if install_result.returncode != 0:
             self.log("npm install for eslint plugins failed (will try anyway): " + (install_result.stderr or install_result.stdout or "")[:200], "WARNING")
 
-        temp_config.write_text(
-            """const security = require('eslint-plugin-security');
+        plugins_nm = str((self.results_dir / "node_modules").resolve())
+        parser_pkg = self.results_dir / "node_modules" / "@typescript-eslint" / "parser"
+        if not (parser_pkg / "package.json").is_file():
+            self.log(
+                f"ESLint plugin layout incomplete (missing {parser_pkg}); npm install may have failed.",
+                "ERROR",
+            )
+            tail = (install_result.stderr or install_result.stdout or "").strip()
+            if tail:
+                self.log(f"npm output (truncated): {tail[:800]}", "WARNING")
+
+        # ESLint 9 flat config: "files" are relative to the config file's directory. So we write
+        # the config inside the target and run with cwd=target; then **/*.js matches target files.
+        temp_config = self.target_path / ".eslint.scan.cjs"
+        config_content = """const security = require('eslint-plugin-security');
 const tsParser = require('@typescript-eslint/parser');
 
 module.exports = [
@@ -129,55 +159,70 @@ module.exports = [
     },
   },
 ];
-""",
-            encoding="utf-8",
-        )
-        
+"""
+        try:
+            temp_config.write_text(config_content, encoding="utf-8")
+        except OSError as e:
+            self.log(f"Cannot write ESLint config to target: {e}", "ERROR")
+            return False
+
         ignore_args = self.get_ignore_args()
         extra = shlex.split(os.getenv("ESLINT_EXTRA_ARGS", "").strip())
-        
-        # JSON report
+
+        # Run ESLint with cwd=target so config base path = target and "." lints the repo
+        run_cwd = str(self.target_path)
+        config_arg = ".eslint.scan.cjs"
+
+        run_env = os.environ.copy()
+        prev_np = run_env.get("NODE_PATH", "").strip()
+        run_env["NODE_PATH"] = (
+            plugins_nm + os.pathsep + prev_np if prev_np else plugins_nm
+        )
+
+        # JSON report (output paths must be absolute when cwd=target)
         self.log("Running ESLint scan with JSON output...")
         cmd = [
             *tool_cmd,
             "-c",
-            str(temp_config),
+            config_arg,
             *ignore_args,
             *extra,
             "--format=json",
-            f"--output-file={json_output}",
-            str(self.target_path),
+            f"--output-file={json_output.resolve()}",
+            ".",
         ]
-        
-        result = self.run_command(cmd, capture_output=True)
+        result = self.run_command(cmd, capture_output=True, cwd=Path(run_cwd), env=run_env)
         json_failed = result.returncode != 0
         if json_failed:
             self.log("JSON report generation failed (exit code {}); no report written.".format(result.returncode), "WARNING")
-        
+
         # Text report
         self.log("Running ESLint scan with text output...")
         cmd = [
             *tool_cmd,
             "-c",
-            str(temp_config),
+            config_arg,
             *ignore_args,
             *extra,
             "--format=compact",
-            f"--output-file={text_output}",
-            str(self.target_path),
+            f"--output-file={text_output.resolve()}",
+            ".",
         ]
-        
-        # Avoid duplicating the same stderr tail when JSON run already failed the same way
         result = self.run_command(
             cmd,
             capture_output=True,
+            cwd=Path(run_cwd),
+            env=run_env,
             log_failure_output_tail=not json_failed,
         )
         if result.returncode != 0:
             self.log("Text report generation failed", "WARNING")
-        
-        if temp_config.exists():
-            temp_config.unlink()
+
+        try:
+            if temp_config.exists():
+                temp_config.unlink()
+        except OSError:
+            pass
 
         if json_output.exists():
             self.log("ESLint scan completed successfully", "SUCCESS")

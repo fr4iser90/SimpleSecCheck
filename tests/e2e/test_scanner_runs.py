@@ -49,7 +49,7 @@ def run_scanner(finding_policy_path: str | None, log_path: Path) -> tuple[int, s
             "-e", f"FINDING_POLICY_FILE_IN_CONTAINER={finding_policy_path}",
         ])
     cmd.extend([
-        "simpleseccheck-scanner:local",
+        "simpleseccheck-scanner:latest",
         "python3", "-m", "scanner.core.orchestrator",
     ])
     LOG_DIR.mkdir(parents=True, exist_ok=True)

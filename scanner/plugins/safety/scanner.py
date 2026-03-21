@@ -126,9 +126,34 @@ class SafetyScanner(BaseScanner):
         self.start_substep("Dependency Extraction", "Extracting dependencies from files...", SubStepType.ACTION)
         # Dependency extraction happens during scan
         self.complete_substep("Dependency Extraction", "Dependencies extracted")
-        
+
+        def _safety_extra_for_output(output_format: str) -> List[str]:
+            """Strip flags that newer Safety CLI rejects together with ``--output`` (e.g. admin env)."""
+            tokens = shlex.split(os.getenv("SAFETY_EXTRA_ARGS", "").strip())
+            if output_format not in ("json", "bare"):
+                return tokens
+            out: List[str] = []
+            i = 0
+            while i < len(tokens):
+                t = tokens[i]
+                if t in ("--full-report", "--json", "--bare"):
+                    i += 1
+                    continue
+                if t.startswith("--full-report="):
+                    i += 1
+                    continue
+                if t == "--output":
+                    i += 2 if i + 1 < len(tokens) else 1
+                    continue
+                if t.startswith("--output="):
+                    i += 1
+                    continue
+                out.append(t)
+                i += 1
+            return out
+
         def run_safety(output_format: str, output_path: Path, file_arg: bool = True) -> bool:
-            extra = shlex.split(os.getenv("SAFETY_EXTRA_ARGS", "").strip())
+            extra = _safety_extra_for_output(output_format)
             cmd = ["safety", "check", *extra, "--output", output_format]
             if file_arg:
                 cmd.extend(["--file", str(dep_file)])
