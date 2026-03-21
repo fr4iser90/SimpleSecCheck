@@ -234,6 +234,9 @@ class ScanStatisticsDTO:
     container_scans: int = 0
     infrastructure_scans: int = 0
     web_application_scans: int = 0
+    distinct_targets_scanned: int = 0
+    distinct_repositories_scanned: int = 0
+    distinct_repo_owners_scanned: int = 0
     
     # Time statistics
     average_scan_duration: float = 0.0  # in seconds
@@ -241,6 +244,8 @@ class ScanStatisticsDTO:
     shortest_scan_duration: float = 0.0
     # Per-tool duration stats (from ScannerDurationStats)
     scanner_duration_stats: List[Dict[str, Any]] = field(default_factory=list)
+    # Daily counts for charts/trends
+    daily_scan_counts: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -261,8 +266,12 @@ class ScanStatisticsDTO:
             'container_scans': self.container_scans,
             'infrastructure_scans': self.infrastructure_scans,
             'web_application_scans': self.web_application_scans,
+            'distinct_targets_scanned': self.distinct_targets_scanned,
+            'distinct_repositories_scanned': self.distinct_repositories_scanned,
+            'distinct_repo_owners_scanned': self.distinct_repo_owners_scanned,
             'average_scan_duration': self.average_scan_duration,
             'longest_scan_duration': self.longest_scan_duration,
             'shortest_scan_duration': self.shortest_scan_duration,
             'scanner_duration_stats': self.scanner_duration_stats,
+            'daily_scan_counts': self.daily_scan_counts,
         }

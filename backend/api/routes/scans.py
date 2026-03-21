@@ -808,6 +808,9 @@ async def get_scan_statistics(
             container_scans=statistics_dto.container_scans,
             infrastructure_scans=statistics_dto.infrastructure_scans,
             web_application_scans=statistics_dto.web_application_scans,
+            distinct_targets_scanned=statistics_dto.distinct_targets_scanned,
+            distinct_repositories_scanned=statistics_dto.distinct_repositories_scanned,
+            distinct_repo_owners_scanned=statistics_dto.distinct_repo_owners_scanned,
             average_scan_duration=statistics_dto.average_scan_duration,
             longest_scan_duration=statistics_dto.longest_scan_duration,
             shortest_scan_duration=statistics_dto.shortest_scan_duration,
@@ -822,6 +825,7 @@ async def get_scan_statistics(
                 )
                 for s in statistics_dto.scanner_duration_stats
             ],
+            daily_scan_counts=statistics_dto.daily_scan_counts,
         )
 
     except ScanException as e:

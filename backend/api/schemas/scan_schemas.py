@@ -273,6 +273,16 @@ class ScannerDurationStatSchema(BaseModel):
     last_updated: Optional[str] = Field(None, description="ISO timestamp of last update")
 
 
+class DailyScanCountSchema(BaseModel):
+    """Schema for daily scan counts (overall + by type)."""
+    date: str = Field(description="UTC date in YYYY-MM-DD format")
+    total_scans: int = Field(ge=0, description="Total scans for that day")
+    repository_scans: int = Field(ge=0, description="Repository scans for that day")
+    container_scans: int = Field(ge=0, description="Container scans for that day")
+    infrastructure_scans: int = Field(ge=0, description="Infrastructure scans for that day")
+    web_application_scans: int = Field(ge=0, description="Web application scans for that day")
+
+
 class ScanStatisticsSchema(BaseModel):
     """Schema for scan statistics."""
     
@@ -294,6 +304,9 @@ class ScanStatisticsSchema(BaseModel):
     container_scans: int = Field(ge=0, description="Container scans")
     infrastructure_scans: int = Field(ge=0, description="Infrastructure scans")
     web_application_scans: int = Field(ge=0, description="Web application scans")
+    distinct_targets_scanned: int = Field(ge=0, description="Distinct target URLs scanned")
+    distinct_repositories_scanned: int = Field(ge=0, description="Distinct repositories scanned")
+    distinct_repo_owners_scanned: int = Field(ge=0, description="Distinct repo owners/orgs scanned")
     
     average_scan_duration: float = Field(ge=0, description="Average scan duration in seconds")
     longest_scan_duration: float = Field(ge=0, description="Longest scan duration in seconds")
@@ -301,6 +314,10 @@ class ScanStatisticsSchema(BaseModel):
     scanner_duration_stats: List[ScannerDurationStatSchema] = Field(
         default_factory=list,
         description="Per-scanner duration stats (avg/min/max/sample_count)",
+    )
+    daily_scan_counts: List[DailyScanCountSchema] = Field(
+        default_factory=list,
+        description="Daily scan counts (overall + by type) for trend charts",
     )
 
 

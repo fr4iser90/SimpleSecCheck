@@ -5,8 +5,10 @@ This module provides the PostgreSQL implementation of the ScanRepository interfa
 """
 import json
 import logging
+import re
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+from urllib.parse import urlparse
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, text, cast
@@ -523,6 +525,45 @@ class DatabaseScanRepository(ScanRepository):
                 critical = high = medium = low = info = 0
                 durations: List[float] = []
                 repo_scans = container_scans = infra_scans = web_scans = 0
+                distinct_targets: set[str] = set()
+                distinct_repositories: set[str] = set()
+                distinct_repo_owners: set[str] = set()
+                daily_rollup: Dict[str, Dict[str, int]] = {}
+
+                def _extract_repo_owner_and_slug(raw_url: str) -> tuple[Optional[str], Optional[str]]:
+                    if not raw_url:
+                        return None, None
+                    target = raw_url.strip()
+                    if not target:
+                        return None, None
+
+                    # Handle SSH notation: git@github.com:owner/repo(.git)
+                    ssh_match = re.match(r"^git@github\.com:([^/]+)/(.+)$", target, flags=re.IGNORECASE)
+                    if ssh_match:
+                        owner = ssh_match.group(1).strip().lower()
+                        repo = ssh_match.group(2).strip()
+                        if repo.lower().endswith(".git"):
+                            repo = repo[:-4]
+                        repo = repo.strip("/").lower()
+                        if owner and repo:
+                            return owner, f"{owner}/{repo}"
+                        return owner or None, None
+
+                    # Handle http(s) URLs
+                    if "://" in target:
+                        parsed = urlparse(target)
+                        if parsed.netloc.lower() == "github.com":
+                            parts = [p for p in parsed.path.split("/") if p]
+                            if len(parts) >= 2:
+                                owner = parts[0].strip().lower()
+                                repo = parts[1].strip()
+                                if repo.lower().endswith(".git"):
+                                    repo = repo[:-4]
+                                repo = repo.lower()
+                                if owner and repo:
+                                    return owner, f"{owner}/{repo}"
+                                return owner or None, None
+                    return None, None
                 
                 for scan in scans:
                     status = (scan.status or "pending").lower()
@@ -537,17 +578,49 @@ class DatabaseScanRepository(ScanRepository):
                     info += scan.info_vulnerabilities or 0
                     if getattr(scan, "duration", None) is not None:
                         durations.append(float(scan.duration))
+                    if scan.target_url:
+                        distinct_targets.add(f"{(scan.target_type or '').lower()}::{scan.target_url.strip().lower()}")
                     if st in ("code", "repository", "repo"):
                         repo_scans += 1
+                        owner, slug = _extract_repo_owner_and_slug(scan.target_url or "")
+                        if owner:
+                            distinct_repo_owners.add(owner)
+                        if slug:
+                            distinct_repositories.add(slug)
                     elif st in ("image", "container"):
                         container_scans += 1
                     elif st in ("infrastructure", "infra", "terraform"):
                         infra_scans += 1
                     elif st in ("web", "web_application"):
                         web_scans += 1
+
+                    if scan.created_at:
+                        day_key = scan.created_at.strftime("%Y-%m-%d")
+                        if day_key not in daily_rollup:
+                            daily_rollup[day_key] = {
+                                "total_scans": 0,
+                                "repository_scans": 0,
+                                "container_scans": 0,
+                                "infrastructure_scans": 0,
+                                "web_application_scans": 0,
+                            }
+                        day_bucket = daily_rollup[day_key]
+                        day_bucket["total_scans"] += 1
+                        if st in ("code", "repository", "repo"):
+                            day_bucket["repository_scans"] += 1
+                        elif st in ("image", "container"):
+                            day_bucket["container_scans"] += 1
+                        elif st in ("infrastructure", "infra", "terraform"):
+                            day_bucket["infrastructure_scans"] += 1
+                        elif st in ("web", "web_application"):
+                            day_bucket["web_application_scans"] += 1
                 
                 total = len(scans)
                 avg_dur = sum(durations) / len(durations) if durations else 0.0
+                daily_scan_counts = [
+                    {"date": day, **counts}
+                    for day, counts in sorted(daily_rollup.items(), key=lambda item: item[0])
+                ]
                 return {
                     "total_scans": total,
                     "pending_scans": by_status.get("pending", 0),
@@ -565,9 +638,13 @@ class DatabaseScanRepository(ScanRepository):
                     "container_scans": container_scans,
                     "infrastructure_scans": infra_scans,
                     "web_application_scans": web_scans,
+                    "distinct_targets_scanned": len(distinct_targets),
+                    "distinct_repositories_scanned": len(distinct_repositories),
+                    "distinct_repo_owners_scanned": len(distinct_repo_owners),
                     "average_scan_duration": avg_dur,
                     "longest_scan_duration": max(durations) if durations else 0.0,
                     "shortest_scan_duration": min(durations) if durations else 0.0,
+                    "daily_scan_counts": daily_scan_counts,
                 }
             except Exception as e:
                 logger.error(f"Failed to get scan statistics: {e}")

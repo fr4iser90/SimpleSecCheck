@@ -354,10 +354,14 @@ class ScanService:
             statistics_dto.container_scans = stats.get('container_scans', 0)
             statistics_dto.infrastructure_scans = stats.get('infrastructure_scans', 0)
             statistics_dto.web_application_scans = stats.get('web_application_scans', 0)
+            statistics_dto.distinct_targets_scanned = stats.get('distinct_targets_scanned', 0)
+            statistics_dto.distinct_repositories_scanned = stats.get('distinct_repositories_scanned', 0)
+            statistics_dto.distinct_repo_owners_scanned = stats.get('distinct_repo_owners_scanned', 0)
             
             statistics_dto.average_scan_duration = stats.get('average_scan_duration', 0.0)
             statistics_dto.longest_scan_duration = stats.get('longest_scan_duration', 0.0)
             statistics_dto.shortest_scan_duration = stats.get('shortest_scan_duration', 0.0)
+            statistics_dto.daily_scan_counts = stats.get('daily_scan_counts', [])
 
             scanner_stats = await ScannerDurationService.get_all_stats()
             statistics_dto.scanner_duration_stats = scanner_stats
