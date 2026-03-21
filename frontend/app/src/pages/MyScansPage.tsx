@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, type CSSProperties } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useConfig } from '../hooks/useConfig'
 import { formatEstimatedTime, formatDuration } from '../utils/timeUtils'
@@ -25,6 +25,62 @@ interface MyScansData {
   scans: MyScanItem[]
 }
 
+type MyScansSortKey = 'repository' | 'branch' | 'scanners' | 'status' | 'position' | 'time' | 'created'
+
+function timeColumnSeconds(item: MyScanItem): number {
+  if (item.status === 'pending' || item.status === 'running') {
+    return item.estimated_time_seconds ?? 0
+  }
+  return item.duration_seconds ?? 0
+}
+
+function compareMyScans(a: MyScanItem, b: MyScanItem, key: MyScansSortKey, dir: 'asc' | 'desc'): number {
+  if (key === 'position') {
+    const ap = a.position
+    const bp = b.position
+    const aHas = typeof ap === 'number' && !Number.isNaN(ap)
+    const bHas = typeof bp === 'number' && !Number.isNaN(bp)
+    if (aHas && bHas) {
+      const diff = (ap as number) - (bp as number)
+      return dir === 'asc' ? diff : -diff
+    }
+    if (aHas && !bHas) return -1
+    if (!aHas && bHas) return 1
+    return 0
+  }
+
+  let cmp = 0
+  switch (key) {
+    case 'repository':
+      cmp = a.repository_name.localeCompare(b.repository_name, undefined, { sensitivity: 'base' })
+      break
+    case 'branch':
+      cmp = (a.branch || '').localeCompare(b.branch || '', undefined, { sensitivity: 'base' })
+      break
+    case 'scanners': {
+      const na = (a.scanners || []).length
+      const nb = (b.scanners || []).length
+      cmp = na - nb
+      if (cmp === 0) {
+        cmp = (a.scanners || []).join('\0').localeCompare((b.scanners || []).join('\0'))
+      }
+      break
+    }
+    case 'status':
+      cmp = a.status.localeCompare(b.status)
+      break
+    case 'time':
+      cmp = timeColumnSeconds(a) - timeColumnSeconds(b)
+      break
+    case 'created':
+      cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      break
+    default:
+      cmp = 0
+  }
+  return dir === 'asc' ? cmp : -cmp
+}
+
 export default function MyScansPage() {
   useConfig()
   const navigate = useNavigate()
@@ -36,6 +92,59 @@ export default function MyScansPage() {
   const [flashMessage, setFlashMessage] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [shareCopyingId, setShareCopyingId] = useState<string | null>(null)
+  /** Next in queue first: lowest position at top; rows without position stay at the end. */
+  const [sortKey, setSortKey] = useState<MyScansSortKey>('position')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const sortedScans = useMemo(() => {
+    if (!scansData?.scans.length) return []
+    const rows = [...scansData.scans]
+    rows.sort((a, b) => compareMyScans(a, b, sortKey, sortDir))
+    return rows
+  }, [scansData, sortKey, sortDir])
+
+  const toggleSort = (key: MyScansSortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir(key === 'created' ? 'desc' : 'asc')
+    }
+  }
+
+  const sortIndicator = (key: MyScansSortKey) =>
+    sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''
+
+  const sortableThStyle: CSSProperties = {
+    padding: '0.75rem',
+    textAlign: 'left',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    userSelect: 'none',
+    whiteSpace: 'nowrap',
+  }
+
+  const SortTh = (props: { col: MyScansSortKey; label: string; title: string }) => (
+    <th
+      scope="col"
+      style={sortableThStyle}
+      tabIndex={0}
+      onClick={() => toggleSort(props.col)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          toggleSort(props.col)
+        }
+      }}
+      title={props.title}
+      aria-sort={
+        sortKey === props.col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+      }
+    >
+      {props.label}
+      {sortIndicator(props.col)}
+    </th>
+  )
 
   const handleCopyShareLink = async (scanId: string) => {
     setShareCopyingId(scanId)
@@ -287,18 +396,28 @@ export default function MyScansPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr className="table-head-row" style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Repository</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Branch</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Scanners</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Status</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Position</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Time</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Created</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>Actions</th>
+                  <SortTh col="repository" label="Repository" title="Sort by repository name" />
+                  <SortTh col="branch" label="Branch" title="Sort by branch" />
+                  <SortTh col="scanners" label="Scanners" title="Sort by number of scanners, then name" />
+                  <SortTh col="status" label="Status" title="Sort by status" />
+                  <SortTh
+                    col="position"
+                    label="Position"
+                    title="Sort by queue position (default: next in line first)"
+                  />
+                  <SortTh
+                    col="time"
+                    label="Time"
+                    title="Sort by estimated time (queued/running) or duration (finished)"
+                  />
+                  <SortTh col="created" label="Created" title="Sort by created time" />
+                  <th scope="col" style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 'bold' }}>
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {scansData.scans.map((item) => (
+                {sortedScans.map((item) => (
                   <tr key={item.queue_id} style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
                     <td style={{ padding: '0.75rem' }}>
                       <div>
