@@ -90,6 +90,10 @@ Structured Data → HTML Report → WebUI Integration → AI Analysis
 
 ## Docker Usage
 
+### Helper script (repository root)
+
+See **`run-scanner.sh`** in the repo root: `./run-scanner.sh --help` — sets required env vars and supports **quick / standard / deep** profiles (`SCAN_PROFILE`). Full notes: [docs/CLI_DOCKER.md](../docs/CLI_DOCKER.md#helper-script-easiest).
+
 ### Build Image
 ```bash
 docker build -t simpleseccheck/scanner:latest .

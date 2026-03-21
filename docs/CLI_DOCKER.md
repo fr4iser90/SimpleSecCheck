@@ -2,6 +2,23 @@
 
 This page covers **scan-only** CLI usage (no WebUI) plus common Docker workflows. All examples are **single-shot** runs that exit after the scan finishes.
 
+## Helper script (easiest)
+
+From the repository root, use **`./run-scanner.sh`** — it sets `SCAN_TYPE`, `TARGET_TYPE`, `COLLECT_METADATA`, `SCAN_PROFILE` (quick / standard / deep), and mounts for you:
+
+```bash
+chmod +x ./run-scanner.sh
+./run-scanner.sh --help
+./run-scanner.sh -p quick /path/to/project
+./run-scanner.sh -p deep https://example.com
+./run-scanner.sh network
+./run-scanner.sh --type image nginx:alpine
+./run-scanner.sh --git https://github.com/org/repo.git
+./run-scanner.sh --orchestrator-help   # env vars inside the container
+```
+
+Results go to `./results/<scan_id>/` by default (override with `-o`).
+
 > **Tip:** When using Docker Compose, the OWASP Dependency-Check cache is mounted automatically.
 
 In the **full** `docker-compose.yml`, the `scanner` **service** sets `command: ["sleep", "infinity"]` so a container can stay up for debugging. **One-off scans** must pass the orchestrator explicitly:

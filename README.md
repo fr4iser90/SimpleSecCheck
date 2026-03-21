@@ -67,6 +67,8 @@ Open **http://localhost:80** — nginx serves the UI and proxies **`/api/`** to 
 
 ### 2) CLI-only scan (optional, same repo checkout)
 
+**Easiest:** from the repo root run **`./run-scanner.sh`** (profiles `quick` / `standard` / `deep`, `--help`, website/code/network/image/git). See [CLI_DOCKER.md](docs/CLI_DOCKER.md#helper-script-easiest).
+
 The `scanner` service overrides the image command with `sleep infinity`; for a **one-off** scan you must invoke the orchestrator explicitly and set **`SCAN_TARGET`** (or **`SCAN_ID`**) plus **`SCAN_TYPE`** / **`COLLECT_METADATA`** as in [CLI_DOCKER.md](docs/CLI_DOCKER.md). Example — scan the compose-mounted repo at `/project`:
 
 ```bash

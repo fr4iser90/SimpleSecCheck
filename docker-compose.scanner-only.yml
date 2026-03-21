@@ -22,7 +22,13 @@ services:
       - .:/target:ro
 
     environment:
+      # Required by scanner.core.orchestrator (standalone)
+      SCAN_TYPE: code
+      TARGET_TYPE: local_mount
+      COLLECT_METADATA: "true"
+      SCAN_PROFILE: ${SCAN_PROFILE:-standard}
       SCAN_TARGET: /target
+      TARGET_PATH_IN_CONTAINER: /target
       RESULTS_DIR_IN_CONTAINER: /app/results
       NVD_API_KEY: ${NVD_API_KEY:-}
       SNYK_TOKEN: ${SNYK_TOKEN:-}
