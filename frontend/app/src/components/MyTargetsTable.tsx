@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import type { ScanTargetItem } from '../hooks/useTargets'
 import { TARGET_TYPE_LABELS } from './TargetCard'
 import { formatRelativeScanTime, topSeverityLabel } from '../utils/targetOverview'
@@ -120,9 +119,14 @@ export default function MyTargetsTable({
                 <td style={{ padding: '0.5rem 0.75rem', verticalAlign: 'middle' }}>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
                     {reportLink && (
-                      <Link to={reportLink} style={{ fontSize: '0.85rem', color: 'var(--accent, #0d6efd)' }}>
+                      <a
+                        href={reportLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: '0.85rem', color: 'var(--accent, #0d6efd)', textDecoration: 'none' }}
+                      >
                         View
-                      </Link>
+                      </a>
                     )}
                     {reportLink && onOpenFix && (
                       <button

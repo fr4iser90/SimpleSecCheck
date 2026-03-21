@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import type { ScanTargetItem } from '../hooks/useTargets'
 import { formatRelativeScanTime, topSeverityLabel } from '../utils/targetOverview'
 
@@ -80,9 +79,14 @@ export default function TargetSectionRow({
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
         {reportLink && (
-          <Link to={reportLink} style={{ fontSize: '0.85rem', color: 'var(--accent, #0d6efd)', fontWeight: 500 }}>
+          <a
+            href={reportLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: '0.85rem', color: 'var(--accent, #0d6efd)', fontWeight: 500, textDecoration: 'none' }}
+          >
             View
-          </Link>
+          </a>
         )}
         {reportLink && onOpenFix && (
           <button

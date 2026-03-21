@@ -78,9 +78,11 @@ The differentiator is not “another button,” but **structured context** (targ
 - “Fix everything automatically with no review.”
 - Replacing CI with ad-hoc test runs inside the agent only.
 
-**Implemented (guidance only, no backend agent):** Collapsible **Stage 3** block in the same modal — hybrid workflow text, **copy** local `git` commands, download **hybrid-workflow.md**, download an **example** GitHub Actions YAML (reminder job, not connected to your instance). Fully automated agents and **rescan-on-PR webhooks** remain future backend work.
+**Implemented (guidance only, no backend agent):** Collapsible **Stage 3** block in the same modal — hybrid workflow text, **copy** local `git` commands, download **hybrid-workflow.md**, download an **example** GitHub Actions YAML (reminder job, not connected to your instance).  
+**Status:** experimental / not tested.
+Fully automated agents and **rescan-on-PR webhooks** remain future backend work.
 
-**Implemented interface for external agents:**  
+**Implemented interface for external agents (experimental / not tested):**  
 `POST /api/user/targets/{target_id}/agent-callback` (authenticated as the user) accepts agent metadata (`agent_name`, `branch_name`, `pr_url`, `commit_sha`, `trigger_rescan`) and can enqueue a scan immediately. For `git_repo` targets, `branch_name` is used as a **scan-time branch override** (target config is not permanently changed).
 
 ---

@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
 import { useTranslation, Language } from '../i18n'
 import { apiFetch } from '../utils/apiClient'
 import type { ScanTargetItem } from '../hooks/useTargets'
@@ -310,8 +309,10 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
                 {t('common.cancel')}
               </button>
               {reportPath && (
-                <Link
-                  to={reportPath}
+                <a
+                  href={reportPath}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   onClick={onClose}
                   style={{
                     padding: '0.65rem 1.25rem',
@@ -324,7 +325,7 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
                   }}
                 >
                   {t('fixTarget.openReport')}
-                </Link>
+                </a>
               )}
               <button
                 type="button"

@@ -327,12 +327,14 @@ export default function TargetCard({
               )}
               {(target.last_scan.status === 'completed' || target.last_scan.status === 'failed') && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
-                  <Link
-                    to={`/api/results/${target.last_scan.scan_id}/report`}
-                    style={{ fontSize: '0.85rem', color: 'var(--accent, #0d6efd)' }}
+                  <a
+                    href={`/api/results/${target.last_scan.scan_id}/report`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: '0.85rem', color: 'var(--accent, #0d6efd)', textDecoration: 'none' }}
                   >
                     View report →
-                  </Link>
+                  </a>
                   {onOpenFix && (
                     <button
                       type="button"
