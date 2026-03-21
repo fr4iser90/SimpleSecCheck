@@ -15,6 +15,7 @@ interface MyTargetsTableProps {
   targets: ScanTargetItem[]
   onScanNow: (targetId: string) => void
   onEdit: (target: ScanTargetItem) => void
+  onOpenFix?: (target: ScanTargetItem) => void
   scanLoadingId: string | null
   selectedIds: Set<string>
   onToggleSelect: (targetId: string) => void
@@ -24,6 +25,7 @@ export default function MyTargetsTable({
   targets,
   onScanNow,
   onEdit,
+  onOpenFix,
   scanLoadingId,
   selectedIds,
   onToggleSelect,
@@ -121,6 +123,15 @@ export default function MyTargetsTable({
                       <Link to={reportLink} style={{ fontSize: '0.85rem', color: 'var(--accent, #0d6efd)' }}>
                         View
                       </Link>
+                    )}
+                    {reportLink && onOpenFix && (
+                      <button
+                        type="button"
+                        style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+                        onClick={() => onOpenFix(t)}
+                      >
+                        Fix
+                      </button>
                     )}
                     <button
                       type="button"

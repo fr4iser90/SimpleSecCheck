@@ -14,6 +14,7 @@ interface TargetSectionRowProps {
   target: ScanTargetItem
   variant: 'needs_attention' | 'failed'
   onScanNow: (targetId: string) => void
+  onOpenFix?: (target: ScanTargetItem) => void
   scanLoading?: boolean
 }
 
@@ -21,6 +22,7 @@ export default function TargetSectionRow({
   target,
   variant,
   onScanNow,
+  onOpenFix,
   scanLoading,
 }: TargetSectionRowProps) {
   const label = target.display_name || target.source
@@ -82,10 +84,22 @@ export default function TargetSectionRow({
             View
           </Link>
         )}
-        {reportLink && (
-          <Link to={reportLink} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            Fix
-          </Link>
+        {reportLink && onOpenFix && (
+          <button
+            type="button"
+            style={{
+              fontSize: '0.85rem',
+              padding: '0.2rem 0.5rem',
+              background: 'var(--glass-bg-main)',
+              border: '1px solid var(--glass-border-main)',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              color: 'var(--text-main)',
+            }}
+            onClick={() => onOpenFix(target)}
+          >
+            🔧 Fix
+          </button>
         )}
         <button
           type="button"

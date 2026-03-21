@@ -62,6 +62,7 @@ async def create_scan_from_target(
     target: ScanTarget,
     *,
     metadata_extra: Optional[dict] = None,
+    config_override: Optional[dict] = None,
     enforcement_mode: str = "full",
 ) -> str:
     handler = get_target_handler(target.type)
@@ -69,11 +70,22 @@ async def create_scan_from_target(
         raise ScanValidationException(f"No scan handler for target type {target.type!r}")
 
     scan_type = TARGET_TYPE_TO_SCAN_TYPE.get(target.type, ScanType.CODE)
-    params = handler.prepare_scan_params(target)
-    target_url = params.get("target_url", target.source)
-    config = params.get("config") or target.config
+    target_for_scan = target
+    if config_override:
+        from dataclasses import replace
+        merged = dict(target.config or {})
+        merged.update(config_override)
+        target_for_scan = replace(target, config=merged)
 
-    custom_scanners = target.config.get("scanners") if isinstance(target.config, dict) else None
+    params = handler.prepare_scan_params(target_for_scan)
+    target_url = params.get("target_url", target.source)
+    config = params.get("config") or target_for_scan.config
+
+    custom_scanners = (
+        target_for_scan.config.get("scanners")
+        if isinstance(target_for_scan.config, dict)
+        else None
+    )
     if isinstance(custom_scanners, list) and custom_scanners:
         scanners = custom_scanners
     else:

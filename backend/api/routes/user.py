@@ -10,6 +10,7 @@ from starlette.responses import Response
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 import secrets
+import re
 
 from api.json_datetime import isoformat_utc
 import hashlib
@@ -1071,6 +1072,49 @@ class ScanTargetListResponse(BaseModel):
     targets: List[ScanTargetResponse]
 
 
+class ExternalAgentCallbackRequest(BaseModel):
+    """
+    Callback payload from an external agent runner (Jules/CI/bot/etc.).
+    This endpoint does not execute an agent; it only records context and can trigger a scan.
+    """
+    agent_name: str = Field(..., min_length=1, max_length=80, description="External agent name")
+    branch_name: Optional[str] = Field(
+        None, max_length=255, description="Git branch produced by external agent (for git_repo targets)"
+    )
+    pr_url: Optional[str] = Field(None, max_length=2048, description="Pull/Merge request URL")
+    commit_sha: Optional[str] = Field(None, max_length=128, description="Commit SHA reported by external agent")
+    trigger_rescan: bool = Field(
+        default=True, description="If true, enqueue a new scan immediately (optionally on branch_name)"
+    )
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Optional free-form metadata")
+
+
+class ExternalAgentCallbackResponse(BaseModel):
+    target_id: str
+    accepted: bool
+    scan_id: Optional[str] = None
+    branch_name: Optional[str] = None
+    pr_url: Optional[str] = None
+    message: str
+
+
+_BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
+
+
+def _validate_branch_name(branch_name: str) -> str:
+    b = (branch_name or "").strip()
+    if not b:
+        raise ValueError("branch_name cannot be empty")
+    if len(b) > 255:
+        raise ValueError("branch_name is too long")
+    if not _BRANCH_RE.fullmatch(b):
+        raise ValueError("branch_name contains invalid characters")
+    # Keep validation conservative and predictable for external callbacks.
+    if b.startswith("/") or b.endswith("/") or ".." in b or "@{" in b or b.endswith(".lock"):
+        raise ValueError("branch_name is invalid")
+    return b
+
+
 def compute_targets_revision(responses: List[ScanTargetResponse]) -> str:
     """Hash of id-sorted target rows (updated_at + last/active scan summaries)."""
     parts: List[str] = []
@@ -1531,6 +1575,134 @@ async def trigger_scan_target(
     list_rev = compute_targets_revision(rows)
     await sse_notify_scan(actor_context.user_id, scan_id, "pending", list_revision=list_rev)
     return {"scan_id": scan_id}
+
+
+@router.post(
+    "/targets/{target_id}/agent-callback",
+    response_model=ExternalAgentCallbackResponse,
+)
+async def external_agent_target_callback(
+    request: Request,
+    target_id: str,
+    body: ExternalAgentCallbackRequest,
+    actor_context: ActorContext = Depends(get_authenticated_user),
+    scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
+) -> ExternalAgentCallbackResponse:
+    """
+    Interface for external agent runners.
+
+    Typical flow:
+    1) External tool creates branch/PR in user's repo.
+    2) It POSTs branch/pr metadata here (authorized as the user).
+    3) Backend optionally enqueues rescan, including branch override for git_repo targets.
+    """
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+    target = await scan_target_service.get_by_id(target_id, actor_context.user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
+
+    branch_name: Optional[str] = None
+    if body.branch_name:
+        try:
+            branch_name = _validate_branch_name(body.branch_name)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    if branch_name and target.type != "git_repo":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="branch_name is only supported for git_repo targets",
+        )
+
+    callback_meta: Dict[str, Any] = {
+        "trigger": "external_agent_callback",
+        "agent_name": body.agent_name,
+        "target_id": target_id,
+    }
+    if branch_name:
+        callback_meta["agent_branch"] = branch_name
+    if body.pr_url:
+        callback_meta["pr_url"] = body.pr_url
+    if body.commit_sha:
+        callback_meta["commit_sha"] = body.commit_sha
+    if isinstance(body.metadata, dict) and body.metadata:
+        # Avoid huge payload amplification in scan metadata.
+        callback_meta["external_metadata"] = dict(list(body.metadata.items())[:50])
+
+    scan_id: Optional[str] = None
+    if body.trigger_rescan:
+        try:
+            if branch_name:
+                from application.helpers.target_scan_helper import create_scan_from_target
+                scan_id = await create_scan_from_target(
+                    target,
+                    metadata_extra=callback_meta,
+                    config_override={"branch": branch_name},
+                    enforcement_mode="full",
+                )
+            else:
+                scan_id = await scan_target_service.trigger_scan(
+                    target_id,
+                    actor_context.user_id,
+                    metadata_extra=callback_meta,
+                    enforcement_mode="full",
+                )
+        except ScanExecutionRateLimitException as e:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=str(e),
+                headers={"Retry-After": str(e.retry_after_seconds)},
+            )
+        except ScanPolicyBlockedException as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        except FeatureDisabledException as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        except TargetPermissionDeniedException as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        except ScanValidationException as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        if not scan_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create scan for target",
+            )
+
+        from infrastructure.realtime.sse_notify import sse_notify_scan
+        rows = await assemble_user_scan_targets_list(
+            actor_context.user_id, None, scan_target_service, scan_repository
+        )
+        list_rev = compute_targets_revision(rows)
+        await sse_notify_scan(actor_context.user_id, scan_id, "pending", list_revision=list_rev)
+
+    await AuditLogService.log_event(
+        user_id=actor_context.user_id,
+        user_email=actor_context.email,
+        action_type="EXTERNAL_AGENT_CALLBACK",
+        target=target_id,
+        details={
+            "agent_name": body.agent_name,
+            "branch_name": branch_name,
+            "pr_url": body.pr_url,
+            "commit_sha": body.commit_sha,
+            "trigger_rescan": body.trigger_rescan,
+            "scan_id": scan_id,
+        },
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("User-Agent"),
+    )
+
+    return ExternalAgentCallbackResponse(
+        target_id=target_id,
+        accepted=True,
+        scan_id=scan_id,
+        branch_name=branch_name,
+        pr_url=body.pr_url,
+        message="Callback accepted; rescan enqueued." if scan_id else "Callback accepted.",
+    )
 
 
 @router.delete("/targets/{target_id}", status_code=status.HTTP_204_NO_CONTENT)

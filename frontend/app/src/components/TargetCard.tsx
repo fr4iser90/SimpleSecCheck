@@ -46,6 +46,8 @@ interface TargetCardProps {
   selectable?: boolean
   selected?: boolean
   onSelectToggle?: (targetId: string) => void
+  /** Open fix prompt modal (My Targets) */
+  onOpenFix?: (target: ScanTargetItem) => void
 }
 
 function formatClock(date: Date): string {
@@ -73,6 +75,7 @@ export default function TargetCard({
   selectable,
   selected,
   onSelectToggle,
+  onOpenFix,
 }: TargetCardProps) {
   const activeScan = activeScanProp ?? target.active_scan ?? null
   const label = target.display_name || target.source
@@ -323,12 +326,31 @@ export default function TargetCard({
                 <div style={{ marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>0 findings</div>
               )}
               {(target.last_scan.status === 'completed' || target.last_scan.status === 'failed') && (
-                <Link
-                  to={`/api/results/${target.last_scan.scan_id}/report`}
-                  style={{ fontSize: '0.85rem', color: 'var(--accent, #0d6efd)' }}
-                >
-                  View report →
-                </Link>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
+                  <Link
+                    to={`/api/results/${target.last_scan.scan_id}/report`}
+                    style={{ fontSize: '0.85rem', color: 'var(--accent, #0d6efd)' }}
+                  >
+                    View report →
+                  </Link>
+                  {onOpenFix && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenFix(target)}
+                      style={{
+                        fontSize: '0.85rem',
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: '6px',
+                        border: '1px solid var(--glass-border-main)',
+                        background: 'var(--glass-bg-main)',
+                        cursor: 'pointer',
+                        color: 'var(--text-main)',
+                      }}
+                    >
+                      🔧 Fix
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}

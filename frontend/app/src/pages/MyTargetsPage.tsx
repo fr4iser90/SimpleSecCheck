@@ -4,6 +4,7 @@ import MessageBanner from '../components/MessageBanner'
 import TargetCard, { TARGET_TYPE_LABELS } from '../components/TargetCard'
 import TargetSectionRow from '../components/TargetSectionRow'
 import MyTargetsTable from '../components/MyTargetsTable'
+import FixTargetModal from '../components/FixTargetModal'
 import AddTargetModal from '../components/AddTargetModal'
 import EditTargetModal from '../components/EditTargetModal'
 import DiscoverReposModal from '../components/DiscoverReposModal'
@@ -63,6 +64,7 @@ export default function MyTargetsPage() {
     existing: ScanTargetItem | null
   } | null>(null)
   const [cancellingScanId, setCancellingScanId] = useState<string | null>(null)
+  const [fixModalTarget, setFixModalTarget] = useState<ScanTargetItem | null>(null)
 
   const [quickPreset, setQuickPreset] = useState<QuickPreset>('all')
   const [layoutMode, setLayoutMode] = useState<'cards' | 'table'>('cards')
@@ -471,6 +473,7 @@ export default function MyTargetsPage() {
           selectable
           selected={selectedTargetIds.has(t.id)}
           onSelectToggle={toggleTargetSelect}
+          onOpenFix={setFixModalTarget}
         />
       ))}
     </div>
@@ -845,6 +848,7 @@ export default function MyTargetsPage() {
             targets={sortedVisibleTargets}
             onScanNow={handleScanNow}
             onEdit={setEditingTarget}
+            onOpenFix={setFixModalTarget}
             scanLoadingId={scanNowTargetId}
             selectedIds={selectedTargetIds}
             onToggleSelect={toggleTargetSelect}
@@ -872,6 +876,7 @@ export default function MyTargetsPage() {
                     target={t}
                     variant="failed"
                     onScanNow={handleScanNow}
+                    onOpenFix={setFixModalTarget}
                     scanLoading={scanNowTargetId === t.id}
                   />
                 ))}
@@ -889,6 +894,7 @@ export default function MyTargetsPage() {
                     target={t}
                     variant="needs_attention"
                     onScanNow={handleScanNow}
+                    onOpenFix={setFixModalTarget}
                     scanLoading={scanNowTargetId === t.id}
                   />
                 ))}
@@ -962,6 +968,12 @@ export default function MyTargetsPage() {
           </p>
         </div>
       )}
+
+      <FixTargetModal
+        isOpen={fixModalTarget !== null}
+        onClose={() => setFixModalTarget(null)}
+        target={fixModalTarget}
+      />
 
       <AddTargetModal
         isOpen={showAddModal}

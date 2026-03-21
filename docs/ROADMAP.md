@@ -60,6 +60,7 @@ Ideas (only when needed): more IaC rulesets, language-specific linters, DAST cov
 - **Notifications** — Email is configurable; optional **webhooks** or chat hooks for scan done / failed.
 - **Hardening** — Rate limits, policy tuning, deployment notes for **air-gapped** or **registry-restricted** hosts.
 - **UI / UX** — Polish scan flows, results presentation, admin screens (ongoing; not listed as a single ticket here).
+- **Findings → fix journey** — Structured prompts, workflow links, optional future automation; see [SECURITY_FIX_FLOW_ROADMAP.md](SECURITY_FIX_FLOW_ROADMAP.md).
 
 ---
 
