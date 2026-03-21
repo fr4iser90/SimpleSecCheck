@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type CSSProperties } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from '../i18n'
 import type { ScanTargetItem } from '../hooks/useTargets'
 import {
@@ -21,6 +21,7 @@ import {
   buildHybridReadmeMarkdown,
   buildExampleGithubActionsYaml,
 } from '../utils/fixWorkflowTemplates'
+import './FixWorkflowPanel.css'
 
 interface FixWorkflowPanelProps {
   target: ScanTargetItem
@@ -94,7 +95,11 @@ export default function FixWorkflowPanel({ target, draftPrompt, scanId, disabled
   }
 
   const handleDownloadGha = () => {
-    downloadTextFile(`simpleseccheck-example-github-actions.yml`, buildExampleGithubActionsYaml(), 'text/yaml;charset=utf-8')
+    downloadTextFile(
+      'simpleseccheck-example-github-actions.yml',
+      buildExampleGithubActionsYaml(),
+      'text/yaml;charset=utf-8'
+    )
   }
 
   const issueUrl = (p: ParsedRepo): string | null => {
@@ -108,85 +113,52 @@ export default function FixWorkflowPanel({ target, draftPrompt, scanId, disabled
     return githubComparePrUrl(p.owner, p.repo, baseBranch, headBranch)
   }
 
-  const btnStyle: CSSProperties = {
-    fontSize: '0.8rem',
-    padding: '0.4rem 0.65rem',
-    borderRadius: '6px',
-    border: '1px solid var(--glass-border-main)',
-    background: 'var(--glass-bg-main)',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? 0.55 : 1,
-  }
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem' }}>
-      <fieldset
-        style={{
-          border: '1px solid var(--glass-border-main)',
-          borderRadius: '8px',
-          padding: '1rem',
-          margin: 0,
-        }}
-      >
-        <legend style={{ padding: '0 0.5rem', fontWeight: 600 }}>{t('fixTarget.stage2Title')}</legend>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 0 }}>{t('fixTarget.stage2Blurb')}</p>
+    <div className="fix-workflow">
+      <fieldset className="fix-workflow__fieldset">
+        <legend className="fix-workflow__legend">{t('fixTarget.stage2Title')}</legend>
+        <p className="fix-workflow__blurb">{t('fixTarget.stage2Blurb')}</p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-          <label style={{ fontSize: '0.85rem' }}>
+        <div className="fix-workflow__inputs">
+          <label className="fix-workflow__label">
             {t('fixTarget.baseBranch')}
             <input
               value={baseBranch}
               onChange={(e) => setBaseBranch(e.target.value)}
               disabled={disabled}
-              style={{
-                width: '100%',
-                marginTop: '0.25rem',
-                padding: '0.4rem 0.5rem',
-                borderRadius: '6px',
-                border: '1px solid var(--glass-border-main)',
-                background: 'var(--glass-bg-main)',
-                color: 'var(--text-main)',
-              }}
+              className="fix-workflow__input"
             />
           </label>
-          <label style={{ fontSize: '0.85rem' }}>
+          <label className="fix-workflow__label">
             {t('fixTarget.headBranch')}
             <input
               value={headBranch}
               onChange={(e) => setHeadBranch(e.target.value)}
               disabled={disabled}
-              style={{
-                width: '100%',
-                marginTop: '0.25rem',
-                padding: '0.4rem 0.5rem',
-                borderRadius: '6px',
-                border: '1px solid var(--glass-border-main)',
-                background: 'var(--glass-bg-main)',
-                color: 'var(--text-main)',
-              }}
+              className="fix-workflow__input"
             />
           </label>
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
-          <button type="button" style={btnStyle} disabled={disabled || !draftPrompt.trim()} onClick={handleDownloadFixMd}>
+        <div className="fix-workflow__btn-row">
+          <button type="button" className="fix-workflow__btn" disabled={disabled || !draftPrompt.trim()} onClick={handleDownloadFixMd}>
             {t('fixTarget.downloadFixMd')}
           </button>
-          <button type="button" style={btnStyle} disabled={disabled || !prBody} onClick={handleDownloadPrTemplate}>
+          <button type="button" className="fix-workflow__btn" disabled={disabled || !prBody} onClick={handleDownloadPrTemplate}>
             {t('fixTarget.downloadPrMd')}
           </button>
-          <button type="button" style={btnStyle} disabled={disabled || !issueBody} onClick={handleDownloadIssueTemplate}>
+          <button type="button" className="fix-workflow__btn" disabled={disabled || !issueBody} onClick={handleDownloadIssueTemplate}>
             {t('fixTarget.downloadIssueMd')}
           </button>
-          <button type="button" style={btnStyle} disabled={disabled} onClick={handleDownloadPatchWorkflow}>
+          <button type="button" className="fix-workflow__btn" disabled={disabled} onClick={handleDownloadPatchWorkflow}>
             {t('fixTarget.downloadPatchWorkflow')}
           </button>
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+        <div className="fix-workflow__btn-row fix-workflow__btn-row--tight">
           <button
             type="button"
-            style={btnStyle}
+            className="fix-workflow__btn"
             disabled={disabled}
             onClick={() => copyText('title', prTitle)}
           >
@@ -194,7 +166,7 @@ export default function FixWorkflowPanel({ target, draftPrompt, scanId, disabled
           </button>
           <button
             type="button"
-            style={btnStyle}
+            className="fix-workflow__btn"
             disabled={disabled || !prBody}
             onClick={() => copyText('body', prBody)}
           >
@@ -203,17 +175,17 @@ export default function FixWorkflowPanel({ target, draftPrompt, scanId, disabled
         </div>
 
         {parsed ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+          <div className="fix-workflow__remote-block">
+            <span className="fix-workflow__remote-text">
               {t('fixTarget.detectedRemote', { provider: parsed.provider, owner: parsed.owner, repo: parsed.repo })}
             </span>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div className="fix-workflow__btn-row">
               {issueUrl(parsed) && (
                 <a
                   href={issueUrl(parsed)!}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ ...btnStyle, display: 'inline-flex', alignItems: 'center', textDecoration: 'none', color: 'var(--accent, #0d6efd)' }}
+                  className="fix-workflow__btn fix-workflow__link-btn"
                 >
                   {t('fixTarget.openNewIssue')}
                 </a>
@@ -223,7 +195,7 @@ export default function FixWorkflowPanel({ target, draftPrompt, scanId, disabled
                   href={compareUrl(parsed)!}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ ...btnStyle, display: 'inline-flex', alignItems: 'center', textDecoration: 'none', color: 'var(--accent, #0d6efd)' }}
+                  className="fix-workflow__btn fix-workflow__link-btn"
                 >
                   {t('fixTarget.openComparePr')}
                 </a>
@@ -233,7 +205,7 @@ export default function FixWorkflowPanel({ target, draftPrompt, scanId, disabled
                   href={gitlabNewMrUrl(parsed.host, parsed.owner, parsed.repo)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ ...btnStyle, display: 'inline-flex', alignItems: 'center', textDecoration: 'none', color: 'var(--accent, #0d6efd)' }}
+                  className="fix-workflow__btn fix-workflow__link-btn"
                 >
                   {t('fixTarget.openNewMr')}
                 </a>
@@ -241,83 +213,43 @@ export default function FixWorkflowPanel({ target, draftPrompt, scanId, disabled
             </div>
           </div>
         ) : (
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>{t('fixTarget.noParsedRemote')}</p>
+          <p className="fix-workflow__no-remote">{t('fixTarget.noParsedRemote')}</p>
         )}
       </fieldset>
 
-      <fieldset
-        style={{
-          border: '1px solid var(--glass-border-main)',
-          borderRadius: '8px',
-          padding: '0.75rem 1rem',
-          margin: 0,
-        }}
-      >
-        <legend style={{ padding: '0 0.5rem', fontWeight: 600 }}>
+      <fieldset className="fix-workflow__fieldset fix-workflow__fieldset--compact">
+        <legend className="fix-workflow__legend">
           <button
             type="button"
             onClick={() => setShowStage3((s) => !s)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-main)',
-              font: 'inherit',
-              fontWeight: 600,
-              padding: 0,
-            }}
+            className="fix-workflow__toggle"
           >
             {showStage3 ? '▼' : '▶'} {t('fixTarget.stage3Title')}
           </button>
         </legend>
         {showStage3 && (
-          <div style={{ marginTop: '0.75rem' }}>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 0 }}>{t('fixTarget.stage3Blurb')}</p>
-            <pre
-              style={{
-                fontSize: '0.75rem',
-                padding: '0.75rem',
-                borderRadius: '6px',
-                background: 'var(--code-bg)',
-                overflow: 'auto',
-                maxHeight: '140px',
-                border: '1px solid var(--glass-border-main)',
-              }}
-            >
-              {buildPatchInstructionsMarkdown(headBranch, baseBranch, target)}
-            </pre>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+          <div className="fix-workflow__stage3">
+            <p className="fix-workflow__blurb">{t('fixTarget.stage3Blurb')}</p>
+            <pre className="fix-workflow__pre">{buildPatchInstructionsMarkdown(headBranch, baseBranch, target)}</pre>
+            <div className="fix-workflow__btn-row">
               <button
                 type="button"
-                style={btnStyle}
+                className="fix-workflow__btn"
                 disabled={disabled}
-                onClick={() =>
-                  copyText('patch', buildPatchInstructionsMarkdown(headBranch, baseBranch, target))
-                }
+                onClick={() => copyText('patch', buildPatchInstructionsMarkdown(headBranch, baseBranch, target))}
               >
                 {copied === 'patch' ? `✓ ${t('fixTarget.copiedField')}` : t('fixTarget.copyPatchCommands')}
               </button>
-              <button type="button" style={btnStyle} disabled={disabled} onClick={handleDownloadHybrid}>
+              <button type="button" className="fix-workflow__btn" disabled={disabled} onClick={handleDownloadHybrid}>
                 {t('fixTarget.downloadHybridMd')}
               </button>
-              <button type="button" style={btnStyle} onClick={handleDownloadGha}>
+              <button type="button" className="fix-workflow__btn" onClick={handleDownloadGha}>
                 {t('fixTarget.downloadGhaExample')}
               </button>
             </div>
-            <details style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              <summary style={{ cursor: 'pointer', marginBottom: '0.35rem' }}>{t('fixTarget.ghaPreview')}</summary>
-              <pre
-                style={{
-                  fontSize: '0.72rem',
-                  padding: '0.5rem',
-                  borderRadius: '6px',
-                  background: 'var(--code-bg)',
-                  overflow: 'auto',
-                  maxHeight: '160px',
-                }}
-              >
-                {buildExampleGithubActionsYaml()}
-              </pre>
+            <details className="fix-workflow__details">
+              <summary className="fix-workflow__summary">{t('fixTarget.ghaPreview')}</summary>
+              <pre className="fix-workflow__pre fix-workflow__pre--small">{buildExampleGithubActionsYaml()}</pre>
             </details>
           </div>
         )}

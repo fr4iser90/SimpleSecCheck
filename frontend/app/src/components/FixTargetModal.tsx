@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useTranslation, Language } from '../i18n'
+import { useTranslation, type Language } from '../i18n'
 import { apiFetch } from '../utils/apiClient'
 import type { ScanTargetItem } from '../hooks/useTargets'
 import {
@@ -9,6 +9,7 @@ import {
   type FixApproach,
 } from '../utils/fixTargetPrompt'
 import FixWorkflowPanel from './FixWorkflowPanel'
+import './FixTargetModal.css'
 
 interface FixTargetModalProps {
   isOpen: boolean
@@ -122,75 +123,31 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
 
   const label = target.display_name || target.source
   const approachOptions: FixApproach[] = ['quick', 'pr_ready', 'explain']
+  const isQuickApproach = approach === 'quick'
+  const isPrReadyApproach = approach === 'pr_ready'
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'var(--modal-overlay-bg)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: '2rem',
-      }}
+      className="fix-target-modal__overlay"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
       <div
-        style={{
-          background: 'var(--modal-content-bg)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          borderRadius: '10px',
-          border: '1px solid var(--glass-border-main)',
-          boxShadow: 'var(--shadow-main)',
-          padding: '1.5rem',
-          maxWidth: '920px',
-          width: '100%',
-          maxHeight: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'relative',
-          overflow: 'auto',
-        }}
+        className="fix-target-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="fix-target-title"
       >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '1rem',
-            borderBottom: '1px solid var(--glass-border-main)',
-            paddingBottom: '1rem',
-          }}
-        >
-          <h2 id="fix-target-title" style={{ margin: 0 }}>
+        <div className="fix-target-modal__header">
+          <h2 id="fix-target-title" className="fix-target-modal__title">
             🔧 {t('fixTarget.title')}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: '1.5rem',
-              cursor: 'pointer',
-              color: 'var(--text-main)',
-              padding: '0.25rem 0.5rem',
-              lineHeight: 1,
-            }}
+            className="fix-target-modal__close"
             title={t('common.close')}
           >
             ✕
@@ -198,155 +155,92 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
         </div>
 
         {!scanId ? (
-          <p style={{ color: 'var(--text-secondary)' }}>{t('fixTarget.noScan')}</p>
+          <>
+            <div className="fix-target-modal__body">
+              <p className="fix-target-modal__no-scan">{t('fixTarget.noScan')}</p>
+            </div>
+            <div className="fix-target-modal__actions">
+              <button type="button" onClick={onClose} className="fix-target-modal__action-btn">
+                {t('common.close')}
+              </button>
+            </div>
+          </>
         ) : (
           <>
-            <div
-              style={{
-                marginBottom: '1rem',
-                fontSize: '0.95rem',
-                padding: '0.85rem 1rem',
-                border: '1px solid var(--glass-border-main)',
-                borderRadius: '8px',
-                background: 'var(--glass-bg-main)',
-              }}
-            >
-              <div>
-                <strong>{t('fixTarget.severity')}:</strong>{' '}
-                <span style={{ color: 'var(--color-critical, #dc3545)' }}>{formatTopSeverityLabel(target)}</span>
-              </div>
-              <div style={{ marginTop: '0.35rem' }}>
-                <strong>{t('fixTarget.targetLabel')}:</strong> {label.length > 80 ? label.slice(0, 80) + '…' : label}
-              </div>
-            </div>
-
-            <fieldset style={{ border: '1px solid var(--glass-border-main)', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
-              <legend style={{ padding: '0 0.5rem', fontWeight: 600 }}>{t('fixTarget.approach')}</legend>
-              <div style={{ display: 'grid', gap: '0.5rem' }}>
-                {approachOptions.map((key) => (
-                  <label
-                    key={key}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.65rem',
-                      cursor: 'pointer',
-                      width: '100%',
-                      padding: '0.55rem 0.7rem',
-                      borderRadius: '8px',
-                      border:
-                        approach === key
-                          ? '1px solid var(--accent, #0d6efd)'
-                          : '1px solid var(--glass-border-main)',
-                      background:
-                        approach === key
-                          ? 'rgba(13, 110, 253, 0.12)'
-                          : 'var(--glass-bg-main)',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="fix-approach"
-                      checked={approach === key}
-                      onChange={() => setApproach(key)}
-                      style={{ margin: 0, flexShrink: 0 }}
-                    />
-                    <span style={{ lineHeight: 1.35 }}>{t(`fixTarget.${key}`)}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            <div className="form-group" style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.85rem' }}>{t('fixTarget.policyPath')}</label>
-              <input
-                type="text"
-                value={policyPath}
-                onChange={(e) => setPolicyPath(e.target.value)}
-                style={{
-                  width: '100%',
-                  maxWidth: '100%',
-                  padding: '0.5rem 0.75rem',
-                  borderRadius: '6px',
-                  border: '1px solid var(--glass-border-main)',
-                  background: 'var(--glass-bg-main)',
-                  color: 'var(--text-main)',
-                }}
-              />
-            </div>
-
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', marginBottom: '1rem' }}>
-              <label style={{ marginBottom: '0.5rem', fontWeight: 600 }}>{t('fixTarget.generatedPrompt')}</label>
-              {loading ? (
-                <div
-                  style={{
-                    padding: '2rem 1rem',
-                    textAlign: 'center',
-                    background: 'var(--glass-bg-main)',
-                    borderRadius: '8px',
-                    border: '1px solid var(--glass-border-main)',
-                    minHeight: '120px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  {t('fixTarget.loading')}
+            <div className="fix-target-modal__body">
+              <div className="fix-target-modal__meta">
+                <div>
+                  <strong>{t('fixTarget.severity')}:</strong>{' '}
+                  <span className="fix-target-modal__severity">{formatTopSeverityLabel(target)}</span>
                 </div>
-              ) : error ? (
-                <div
-                  style={{
-                    padding: '1rem',
-                    background: 'rgba(220, 53, 69, 0.15)',
-                    border: '1px solid var(--color-critical, #dc3545)',
-                    borderRadius: '8px',
-                    color: 'var(--color-critical, #dc3545)',
-                  }}
-                >
-                  {error}
+                <div className="fix-target-modal__meta-secondary">
+                  <strong>{t('fixTarget.targetLabel')}:</strong> {label.length > 80 ? label.slice(0, 80) + '…' : label}
                 </div>
-              ) : (
-                <textarea
-                  value={draftPrompt}
-                  onChange={(e) => setDraftPrompt(e.target.value)}
-                  style={{
-                    flex: 1,
-                    minHeight: '320px',
-                    background: 'var(--code-bg)',
-                    border: '1px solid var(--glass-border-main)',
-                    borderRadius: '8px',
-                    padding: '1rem',
-                    color: 'var(--code-text)',
-                    fontFamily: "'Courier New', monospace",
-                    fontSize: '0.85rem',
-                    resize: 'vertical',
-                    whiteSpace: 'pre-wrap',
-                    wordWrap: 'break-word',
-                  }}
+              </div>
+
+              <fieldset className="fix-target-modal__fieldset">
+                <legend className="fix-target-modal__legend">{t('fixTarget.approach')}</legend>
+                <div className="fix-target-modal__approach-list">
+                  {approachOptions.map((key) => (
+                    <label
+                      key={key}
+                      className={`fix-target-modal__approach-option ${
+                        approach === key ? 'is-selected' : ''
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="fix-approach"
+                        checked={approach === key}
+                        onChange={() => setApproach(key)}
+                      />
+                      <span className="fix-target-modal__approach-label">{t(`fixTarget.${key}`)}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              {!isQuickApproach && (
+                <div className="fix-target-modal__group">
+                  <label className="fix-target-modal__label">{t('fixTarget.policyPath')}</label>
+                  <input
+                    type="text"
+                    value={policyPath}
+                    onChange={(e) => setPolicyPath(e.target.value)}
+                    className="fix-target-modal__input"
+                  />
+                </div>
+              )}
+
+              <div className="fix-target-modal__prompt">
+                <label className="fix-target-modal__prompt-label">{t('fixTarget.generatedPrompt')}</label>
+                {loading ? (
+                  <div className="fix-target-modal__loading">{t('fixTarget.loading')}</div>
+                ) : error ? (
+                  <div className="fix-target-modal__error">{error}</div>
+                ) : (
+                  <textarea
+                    value={draftPrompt}
+                    onChange={(e) => setDraftPrompt(e.target.value)}
+                    className="fix-target-modal__textarea"
+                  />
+                )}
+              </div>
+
+              {isPrReadyApproach && (
+                <FixWorkflowPanel
+                  target={target}
+                  draftPrompt={draftPrompt}
+                  scanId={scanId}
+                  disabled={loading || !!error}
                 />
               )}
+
+              <p className="fix-target-modal__hint">{t('fixTarget.hint')}</p>
             </div>
 
-            <FixWorkflowPanel
-              target={target}
-              draftPrompt={draftPrompt}
-              scanId={scanId}
-              disabled={loading || !!error}
-            />
-
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>{t('fixTarget.hint')}</p>
-
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '0.75rem',
-                justifyContent: 'flex-end',
-                paddingTop: '0.75rem',
-                borderTop: '1px solid var(--glass-border-main)',
-              }}
-            >
-              <button type="button" onClick={onClose} style={{ padding: '0.65rem 1.25rem' }}>
+            <div className="fix-target-modal__actions">
+              <button type="button" onClick={onClose} className="fix-target-modal__action-btn">
                 {t('common.cancel')}
               </button>
               {reportPath && (
@@ -355,38 +249,21 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={onClose}
-                  style={{
-                    padding: '0.65rem 1.25rem',
-                    borderRadius: '6px',
-                    border: '1px solid var(--glass-border-main)',
-                    color: 'var(--text-main)',
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                  }}
+                  className="fix-target-modal__action-link"
                 >
                   {t('fixTarget.openReport')}
                 </a>
               )}
               <button
                 type="button"
-                className="primary"
+                className="primary fix-target-modal__action-btn"
                 onClick={handleCopy}
                 disabled={!draftPrompt.trim() || loading}
-                style={{ padding: '0.65rem 1.25rem' }}
               >
                 {copied ? `✓ ${t('fixTarget.copied')}` : `📋 ${t('fixTarget.copy')}`}
               </button>
             </div>
           </>
-        )}
-
-        {!scanId && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-            <button type="button" onClick={onClose} style={{ padding: '0.65rem 1.25rem' }}>
-              {t('common.close')}
-            </button>
-          </div>
         )}
       </div>
     </div>
