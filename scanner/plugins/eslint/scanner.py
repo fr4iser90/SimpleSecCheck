@@ -81,12 +81,6 @@ class ESLintScanner(BaseScanner):
     
     def scan(self) -> bool:
         """Run ESLint scan"""
-        # Get tool command (handles npm global packages, npx, PATH)
-        tool_cmd = self.get_tool_command("eslint")
-        if not tool_cmd:
-            self.log("eslint not found", "ERROR")
-            return False
-        
         js_files = self.find_js_files()
         
         if not js_files:
@@ -108,17 +102,18 @@ class ESLintScanner(BaseScanner):
             except OSError as e:
                 self.log(f"Cannot write {pkg_json}: {e}", "WARNING")
 
-        # Pin versions for reproducible installs; resolve via NODE_PATH + package name in .cjs
-        # (avoids brittle absolute paths if npm lays out deps differently).
+        # Local ESLint 9 + eslint-plugin-security 4: system ESLint (often v10) breaks v3 rules
+        # (context.getSourceCode). Install a pinned toolchain under results_dir and prefer
+        # node_modules/.bin/eslint over PATH.
         install_result = self.run_command(
             [
                 "npm",
                 "install",
                 "--no-fund",
                 "--no-audit",
-                "eslint-plugin-security@^3.0.0",
+                "eslint@9.16.0",
+                "eslint-plugin-security@4.0.0",
                 "@typescript-eslint/parser@8.57.1",
-                "@typescript-eslint/eslint-plugin@8.57.1",
             ],
             capture_output=True,
             cwd=self.results_dir,
@@ -127,6 +122,16 @@ class ESLintScanner(BaseScanner):
             self.log("npm install for eslint plugins failed (will try anyway): " + (install_result.stderr or install_result.stdout or "")[:200], "WARNING")
 
         plugins_nm = str((self.results_dir / "node_modules").resolve())
+        local_eslint = self.results_dir / "node_modules" / ".bin" / "eslint"
+        if local_eslint.is_file():
+            tool_cmd = [str(local_eslint)]
+        else:
+            tool_cmd = self.get_tool_command("eslint")
+            if not tool_cmd:
+                self.log("eslint not found (local install missing and no PATH eslint)", "ERROR")
+                return False
+            self.log("Using PATH eslint (local node_modules/.bin/eslint missing); may mismatch plugins.", "WARNING")
+
         parser_pkg = self.results_dir / "node_modules" / "@typescript-eslint" / "parser"
         if not (parser_pkg / "package.json").is_file():
             self.log(
@@ -139,23 +144,19 @@ class ESLintScanner(BaseScanner):
 
         # ESLint 9 flat config: "files" are relative to the config file's directory. So we write
         # the config inside the target and run with cwd=target; then **/*.js matches target files.
+        # eslint-plugin-security v4: use configs.recommended (not .rules spread — ESLint 9/10 API).
         temp_config = self.target_path / ".eslint.scan.cjs"
         config_content = """const security = require('eslint-plugin-security');
 const tsParser = require('@typescript-eslint/parser');
 
 module.exports = [
   {
+    ...security.configs.recommended,
     files: ['**/*.{js,jsx,ts,tsx}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
       parser: tsParser,
-    },
-    plugins: {
-      security,
-    },
-    rules: {
-      ...security.configs.recommended.rules,
     },
   },
 ];
@@ -204,7 +205,8 @@ module.exports = [
             config_arg,
             *ignore_args,
             *extra,
-            "--format=compact",
+            # ESLint 9+ removed `compact`/`unix` from core; `stylish` remains built-in.
+            "--format=stylish",
             f"--output-file={text_output.resolve()}",
             ".",
         ]
