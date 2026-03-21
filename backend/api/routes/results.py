@@ -211,7 +211,11 @@ async def _serve_report(
     p = _report_path(scan_id)
     if not p.is_file():
         raise HTTPException(fastapi_status.HTTP_404_NOT_FOUND, "Report not found")
-    return FileResponse(p, media_type="text/html", filename="summary.html")
+    return FileResponse(
+        p,
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": 'inline; filename="summary.html"'},
+    )
 
 
 @router.get("/results/{scan_id}/report")

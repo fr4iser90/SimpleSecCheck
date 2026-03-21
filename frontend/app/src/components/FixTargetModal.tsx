@@ -98,7 +98,7 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
     return () => {
       cancelled = true
     }
-  }, [isOpen, target, scanId, uiLanguage, policyPath, t])
+  }, [isOpen, target, scanId, uiLanguage, policyPath])
 
   useEffect(() => {
     if (isOpen) {
@@ -121,6 +121,7 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
   if (!isOpen || !target) return null
 
   const label = target.display_name || target.source
+  const approachOptions: FixApproach[] = ['quick', 'pr_ready', 'explain']
 
   return (
     <div
@@ -148,16 +149,17 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
           background: 'var(--modal-content-bg)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          borderRadius: '8px',
+          borderRadius: '10px',
           border: '1px solid var(--glass-border-main)',
           boxShadow: 'var(--shadow-main)',
-          padding: '2rem',
+          padding: '1.5rem',
           maxWidth: '920px',
           width: '100%',
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
+          overflow: 'auto',
         }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -199,7 +201,16 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
           <p style={{ color: 'var(--text-secondary)' }}>{t('fixTarget.noScan')}</p>
         ) : (
           <>
-            <div style={{ marginBottom: '1rem', fontSize: '0.95rem' }}>
+            <div
+              style={{
+                marginBottom: '1rem',
+                fontSize: '0.95rem',
+                padding: '0.85rem 1rem',
+                border: '1px solid var(--glass-border-main)',
+                borderRadius: '8px',
+                background: 'var(--glass-bg-main)',
+              }}
+            >
               <div>
                 <strong>{t('fixTarget.severity')}:</strong>{' '}
                 <span style={{ color: 'var(--color-critical, #dc3545)' }}>{formatTopSeverityLabel(target)}</span>
@@ -211,19 +222,36 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
 
             <fieldset style={{ border: '1px solid var(--glass-border-main)', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
               <legend style={{ padding: '0 0.5rem', fontWeight: 600 }}>{t('fixTarget.approach')}</legend>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {(['quick', 'pr_ready', 'explain'] as const).map((key) => (
+              <div style={{ display: 'grid', gap: '0.5rem' }}>
+                {approachOptions.map((key) => (
                   <label
                     key={key}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.65rem',
+                      cursor: 'pointer',
+                      width: '100%',
+                      padding: '0.55rem 0.7rem',
+                      borderRadius: '8px',
+                      border:
+                        approach === key
+                          ? '1px solid var(--accent, #0d6efd)'
+                          : '1px solid var(--glass-border-main)',
+                      background:
+                        approach === key
+                          ? 'rgba(13, 110, 253, 0.12)'
+                          : 'var(--glass-bg-main)',
+                    }}
                   >
                     <input
                       type="radio"
                       name="fix-approach"
                       checked={approach === key}
                       onChange={() => setApproach(key)}
+                      style={{ margin: 0, flexShrink: 0 }}
                     />
-                    {t(`fixTarget.${key}`)}
+                    <span style={{ lineHeight: 1.35 }}>{t(`fixTarget.${key}`)}</span>
                   </label>
                 ))}
               </div>
@@ -252,11 +280,15 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
               {loading ? (
                 <div
                   style={{
-                    padding: '2rem',
+                    padding: '2rem 1rem',
                     textAlign: 'center',
                     background: 'var(--glass-bg-main)',
                     borderRadius: '8px',
                     border: '1px solid var(--glass-border-main)',
+                    minHeight: '120px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
                   {t('fixTarget.loading')}
@@ -304,7 +336,16 @@ export default function FixTargetModal({ isOpen, onClose, target }: FixTargetMod
 
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>{t('fixTarget.hint')}</p>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '0.75rem',
+                justifyContent: 'flex-end',
+                paddingTop: '0.75rem',
+                borderTop: '1px solid var(--glass-border-main)',
+              }}
+            >
               <button type="button" onClick={onClose} style={{ padding: '0.65rem 1.25rem' }}>
                 {t('common.cancel')}
               </button>
