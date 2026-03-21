@@ -136,6 +136,7 @@ class BaseScanner(ABC):
         timeout: Optional[int] = None,
         capture_output: bool = True,
         use_process_group: bool = True,
+        log_failure_output_tail: bool = True,
     ) -> subprocess.CompletedProcess:
         """
         Run a command and log output
@@ -148,7 +149,9 @@ class BaseScanner(ABC):
             capture_output: Whether to capture stdout/stderr
             use_process_group: If True, use setsid + killpg on timeout (default). Set False for
                 tools like Checkov where process groups break multiprocessing.
-        
+            log_failure_output_tail: If False, do not print stderr/stdout tail to console on
+                non-zero exit (output is still appended to the per-tool log file).
+
         Returns:
             CompletedProcess result
         """
@@ -236,14 +239,14 @@ class BaseScanner(ABC):
                         f.write(result.stderr)
                     if verbose:
                         stderr_lines = result.stderr.split("\n")
-                        for stderr_line in stderr_lines[:50]:
+                        for stderr_line in stderr_lines[:30]:
                             if stderr_line.strip():
                                 # Many tools log progress to stderr; only treat as ERROR on failure
                                 lvl = "ERROR" if result.returncode != 0 else "INFO"
                                 self.log(f"[STDERR] {stderr_line.strip()}", lvl)
-                    elif result.returncode != 0:
-                        self._log_output_tail(result.stderr, "[STDERR]", max_lines=50)
-                        self._log_output_tail(result.stdout, "[STDOUT]", max_lines=25)
+                    elif result.returncode != 0 and log_failure_output_tail:
+                        self._log_output_tail(result.stderr, "[STDERR]", max_lines=18)
+                        self._log_output_tail(result.stdout, "[STDOUT]", max_lines=10)
             
             if result.returncode == 0:
                 if scan_log_verbose():

@@ -78,6 +78,7 @@ OPTIONAL ENVIRONMENT VARIABLES:
 
   SSC_SCAN_LOG_VERBOSE           Mirror tool stdout/stderr to container console (optional)
                                  Default: unset/false — quiet console; full output still in each tool's log file.
+                                 On command failure, only a short stderr/stdout tail is printed (full output in tool log).
                                  Set to 1, true, or yes for verbose console (legacy-style noise).
                                  Example: SSC_SCAN_LOG_VERBOSE=1
 

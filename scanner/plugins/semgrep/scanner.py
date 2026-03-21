@@ -84,14 +84,17 @@ class SemgrepScanner(BaseScanner):
 
         if self.rules_path.exists():
             if self.rules_path.is_dir():
-                # Directory: add all YAML files
-                self.log(f"Found rules directory, adding all YAML files...")
-                for rule_file in self.rules_path.rglob("*.yml"):
+                # Directory: add all YAML files (one console line; full list is in tool log)
+                yml_files = list(self.rules_path.rglob("*.yml"))
+                yaml_files = list(self.rules_path.rglob("*.yaml"))
+                all_rule_files = yml_files + yaml_files
+                for rule_file in yml_files:
                     config_args.extend(["--config", str(rule_file)])
-                    self.log(f"Adding rule file: {rule_file}")
-                for rule_file in self.rules_path.rglob("*.yaml"):
+                for rule_file in yaml_files:
                     config_args.extend(["--config", str(rule_file)])
-                    self.log(f"Adding rule file: {rule_file}")
+                self.log(
+                    f"Found rules directory: {len(all_rule_files)} YAML rule file(s) under {self.rules_path}"
+                )
             elif self.rules_path.is_file():
                 # Single file
                 config_args.extend(["--config", str(self.rules_path)])

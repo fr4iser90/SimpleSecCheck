@@ -150,7 +150,8 @@ module.exports = [
         ]
         
         result = self.run_command(cmd, capture_output=True)
-        if result.returncode != 0:
+        json_failed = result.returncode != 0
+        if json_failed:
             self.log("JSON report generation failed (exit code {}); no report written.".format(result.returncode), "WARNING")
         
         # Text report
@@ -166,7 +167,12 @@ module.exports = [
             str(self.target_path),
         ]
         
-        result = self.run_command(cmd, capture_output=True)
+        # Avoid duplicating the same stderr tail when JSON run already failed the same way
+        result = self.run_command(
+            cmd,
+            capture_output=True,
+            log_failure_output_tail=not json_failed,
+        )
         if result.returncode != 0:
             self.log("Text report generation failed", "WARNING")
         

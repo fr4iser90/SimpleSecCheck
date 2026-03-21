@@ -68,17 +68,17 @@ def run_scanner(finding_policy_path: str | None, log_path: Path) -> tuple[int, s
 
 
 def extract_tool_events(output: str) -> list[dict]:
-    """Extract per-tool events from orchestrator output (quiet or SSC_SCAN_LOG_VERBOSE)."""
+    """Extract per-tool events from orchestrator output.
+
+    Quiet mode: ``[Tool] <name> OK`` / ``FAILED`` only (no per-tool start line).
+    Verbose (SSC_SCAN_LOG_VERBOSE): ``--- Orchestrating <name> Scan ---`` etc.
+    """
     events = []
     for line in output.splitlines():
         if "--- Orchestrating" in line:
             m = re.search(r"--- Orchestrating (\w+) Scan ---", line)
             if m:
                 events.append({"tool": m.group(1), "event": "start"})
-        elif "[Tool]" in line and " start timeout=" in line:
-            m = re.search(r"\[Tool\] (.+?) start timeout=", line)
-            if m:
-                events.append({"tool": m.group(1).strip(), "event": "start"})
         elif "completed successfully" in line or "completed successfully (" in line:
             m = re.search(r"\(1\) (\w+) completed successfully", line)
             if m:

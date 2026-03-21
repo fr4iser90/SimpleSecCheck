@@ -453,10 +453,6 @@ class ScanOrchestrator:
                         f"[ORCHESTRATOR] {scanner.name}: calling run() with merged timeout {timeout_sec}s "
                         f"(env SCANNER_TIMEOUT_SECONDS); per-tool log: {scanner_log_file}"
                     )
-                else:
-                    self.log_message(
-                        f"[Tool] {scanner.name} start timeout={timeout_sec}s log={scanner_log_file}"
-                    )
                 success = scanner_instance.run()
 
                 scanner_dir = self.tools_dir_results / scanner.tools_key
@@ -700,7 +696,6 @@ class ScanOrchestrator:
         ]
 
         total_steps = len(step_definitions) + len(scanners)
-        self.log_message(f"Pre-registering {total_steps} steps from registry (Step Definitions: {len(step_definitions)}, Scanners: {len(scanners)})")
 
         def register_step(step_def):
             if step_def.name not in self.step_registry.steps:
@@ -747,8 +742,12 @@ class ScanOrchestrator:
 
         # Send initial update to frontend with all steps
         asyncio.create_task(self.step_registry._send_update())
-        
-        self.log_message(f"Pre-registered {len(self.step_registry.steps)} steps. Total: {self.step_registry.step_counter}")
+
+        self.log_message(
+            f"Pre-registered {len(self.step_registry.steps)} steps "
+            f"(planned {total_steps}: {len(step_definitions)} step definitions + {len(scanners)} scanners; "
+            f"counter={self.step_registry.step_counter})"
+        )
     
     async def run_scan(self) -> int:
         """

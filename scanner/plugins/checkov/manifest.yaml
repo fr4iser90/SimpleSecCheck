@@ -47,7 +47,8 @@ scan_profiles:
       depth: deep
       intensity: high
     env:
-      CHECKOV_EXTRA_ARGS: "--download-external-modules"
+      # Flag requires a value (e.g. true/false); bare flag breaks Checkov CLI.
+      CHECKOV_EXTRA_ARGS: "--download-external-modules true"
 exit_codes:
   binary: checkov
   codes:

@@ -39,8 +39,6 @@ scan_profiles:
     hints:
       depth: deep
       intensity: high
-    env:
-      SAFETY_EXTRA_ARGS: "--full-report"
 exit_codes:
   binary: safety
   codes:
