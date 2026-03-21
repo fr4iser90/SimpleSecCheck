@@ -59,6 +59,7 @@ def main() -> int:
         if web_argv is None:
             print("Invalid WEB_CMD / --web-cmd: use python3 with script path only (no -c).", file=sys.stderr)
             return 1
+        # WEB_CMD was validated above: no shell, allowlist python/python3, safe-arg regex only
         return subprocess.run(web_argv, check=False).returncode
 
     print("Timeout waiting for results")

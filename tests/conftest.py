@@ -17,9 +17,9 @@ for _key in ("JWT_SECRET_KEY", "SECRET_KEY", "SESSION_SECRET"):
     if _key not in os.environ:
         os.environ[_key] = "test-secret-do-not-use-in-production-min-32-chars"
 
-# Backend POSTGRES_PASSWORD has no default
+# Backend POSTGRES_PASSWORD has no default (CI/test only; not a production secret)
 if "POSTGRES_PASSWORD" not in os.environ:
-    os.environ["POSTGRES_PASSWORD"] = "ci-only-postgres-placeholder-not-for-production"
+    os.environ["POSTGRES_PASSWORD"] = "ci-only-postgres-placeholder-not-for-production"  # nosec B105
 
 def pytest_addoption(parser):
     """Add custom pytest options."""

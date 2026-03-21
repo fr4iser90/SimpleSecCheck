@@ -68,21 +68,33 @@ def run_scanner(finding_policy_path: str | None, log_path: Path) -> tuple[int, s
 
 
 def extract_tool_events(output: str) -> list[dict]:
-    """Extract per-tool events from orchestrator output."""
+    """Extract per-tool events from orchestrator output (quiet or SSC_SCAN_LOG_VERBOSE)."""
     events = []
     for line in output.splitlines():
         if "--- Orchestrating" in line:
             m = re.search(r"--- Orchestrating (\w+) Scan ---", line)
             if m:
                 events.append({"tool": m.group(1), "event": "start"})
+        elif "[Tool]" in line and " start timeout=" in line:
+            m = re.search(r"\[Tool\] (.+?) start timeout=", line)
+            if m:
+                events.append({"tool": m.group(1).strip(), "event": "start"})
         elif "completed successfully" in line or "completed successfully (" in line:
             m = re.search(r"\(1\) (\w+) completed successfully", line)
             if m:
                 events.append({"tool": m.group(1), "event": "completed"})
+        elif re.search(r"\[Tool\] .+ OK\s*$", line):
+            m = re.search(r"\[Tool\] (.+?) OK\s*$", line)
+            if m:
+                events.append({"tool": m.group(1).strip(), "event": "completed"})
         elif "ORCHESTRATOR WARNING" in line and "failed" in line:
             m = re.search(r"\(1\) \[ORCHESTRATOR WARNING\] (\w+) failed", line)
             if m:
                 events.append({"tool": m.group(1), "event": "failed"})
+        elif "[Tool]" in line and "FAILED (continuing)" in line:
+            m = re.search(r"\[Tool\] (.+?) FAILED \(continuing\)", line)
+            if m:
+                events.append({"tool": m.group(1).strip(), "event": "failed"})
     return events
 
 

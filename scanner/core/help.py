@@ -76,6 +76,11 @@ OPTIONAL ENVIRONMENT VARIABLES:
                                  Default when unset: standard
                                  Example: SCAN_PROFILE=deep
 
+  SSC_SCAN_LOG_VERBOSE           Mirror tool stdout/stderr to container console (optional)
+                                 Default: unset/false — quiet console; full output still in each tool's log file.
+                                 Set to 1, true, or yes for verbose console (legacy-style noise).
+                                 Example: SSC_SCAN_LOG_VERBOSE=1
+
   GIT_BRANCH                     Git branch to clone (for git_repo target type)
                                  Example: GIT_BRANCH=main
 

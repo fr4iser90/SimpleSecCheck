@@ -19,6 +19,11 @@ from abc import ABC, abstractmethod
 _global_step_registry = None
 
 
+def scan_log_verbose() -> bool:
+    """When true, mirror tool stdout/stderr to console. Default: quiet console, full detail in per-tool log files."""
+    return os.environ.get("SSC_SCAN_LOG_VERBOSE", "").strip().lower() in ("1", "true", "yes")
+
+
 def set_global_step_registry(step_registry):
     """Set global StepRegistry instance for scanner access"""
     global _global_step_registry
@@ -92,6 +97,18 @@ class BaseScanner(ABC):
                 f.write(f"{formatted}\n")
         except Exception as e:
             print(f"[{self.name}] Error writing to log: {e}")
+
+    def _log_output_tail(self, text: Optional[str], label: str, max_lines: int = 40) -> None:
+        """Append a tail of stdout/stderr to console (used when command fails in quiet mode)."""
+        if not text or not text.strip():
+            return
+        lines = [ln for ln in text.strip().split("\n") if ln.strip()]
+        if not lines:
+            return
+        tail = lines[-max_lines:]
+        self.log(f"{label} (last {len(tail)} lines):", "WARNING")
+        for line in tail:
+            self.log(f"  {line}", "WARNING")
     
     def get_timeout(self) -> int:
         """Timeout seconds from ``SCANNER_TIMEOUT_SECONDS`` (set by orchestrator from manifest only)."""
@@ -137,7 +154,14 @@ class BaseScanner(ABC):
         """
         if timeout is None:
             timeout = self.get_timeout()
-        self.log(f"Running command: {' '.join(cmd)}")
+        if scan_log_verbose():
+            self.log(f"Running command: {' '.join(cmd)}")
+        else:
+            try:
+                with open(self.log_file, "a", encoding="utf-8") as f:
+                    f.write(f"\n--- Running: {' '.join(cmd)} ---\n")
+            except OSError:
+                pass
         
         process = None
         try:
@@ -182,30 +206,54 @@ class BaseScanner(ABC):
                 stderr
             )
             
-            # Log output
+            # Log output: always full detail to per-tool log file; console depends on SSC_SCAN_LOG_VERBOSE
             if capture_output:
+                verbose = scan_log_verbose()
                 if result.stdout:
                     with open(self.log_file, "a", encoding="utf-8") as f:
                         f.write(result.stdout)
-                    # Also log errors from stdout to console
-                    if result.returncode != 0:
-                        stdout_lines = result.stdout.split('\n')
-                        error_lines = [line.strip() for line in stdout_lines if line.strip() and any(keyword in line.lower() for keyword in ['error', 'failed', 'exception', 'fatal', 'warning'])]
-                        if error_lines:
-                            for error_line in error_lines[:10]:  # Log first 10 error lines
-                                self.log(f"[STDOUT] {error_line}", "ERROR" if "error" in error_line.lower() or "failed" in error_line.lower() else "WARNING")
-                
+                    if verbose and result.returncode != 0:
+                        stdout_lines = result.stdout.split("\n")
+                        error_lines = [
+                            line.strip()
+                            for line in stdout_lines
+                            if line.strip()
+                            and any(
+                                keyword in line.lower()
+                                for keyword in ("error", "failed", "exception", "fatal", "warning")
+                            )
+                        ]
+                        for error_line in error_lines[:10]:
+                            self.log(
+                                f"[STDOUT] {error_line}",
+                                "ERROR"
+                                if "error" in error_line.lower() or "failed" in error_line.lower()
+                                else "WARNING",
+                            )
+
                 if result.stderr:
                     with open(self.log_file, "a", encoding="utf-8") as f:
                         f.write(result.stderr)
-                    # Always log stderr to console as it contains error messages
-                    stderr_lines = result.stderr.split('\n')
-                    for stderr_line in stderr_lines[:20]:  # Log first 20 stderr lines
-                        if stderr_line.strip():
-                            self.log(f"[STDERR] {stderr_line.strip()}", "ERROR")
+                    if verbose:
+                        stderr_lines = result.stderr.split("\n")
+                        for stderr_line in stderr_lines[:50]:
+                            if stderr_line.strip():
+                                # Many tools log progress to stderr; only treat as ERROR on failure
+                                lvl = "ERROR" if result.returncode != 0 else "INFO"
+                                self.log(f"[STDERR] {stderr_line.strip()}", lvl)
+                    elif result.returncode != 0:
+                        self._log_output_tail(result.stderr, "[STDERR]", max_lines=50)
+                        self._log_output_tail(result.stdout, "[STDOUT]", max_lines=25)
             
             if result.returncode == 0:
-                self.log(f"Command completed successfully", "SUCCESS")
+                if scan_log_verbose():
+                    self.log("Command completed successfully", "SUCCESS")
+                else:
+                    try:
+                        with open(self.log_file, "a", encoding="utf-8") as f:
+                            f.write(f"[{self.name}] Command completed successfully\n")
+                    except OSError:
+                        pass
             else:
                 self.log(f"Command failed with exit code {result.returncode}", "ERROR")
                 mp = plugin_manifest_path_from_class(type(self))
@@ -402,8 +450,9 @@ class BaseScanner(ABC):
             True if successful, False otherwise
         """
         self.log(f"Initializing {self.name} scan...")
-        self.log(f"Target: {self.target_path}")
-        self.log(f"Results: {self.results_dir}")
+        if scan_log_verbose():
+            self.log(f"Target: {self.target_path}")
+            self.log(f"Results: {self.results_dir}")
         
         try:
             return self.scan()

@@ -76,6 +76,12 @@
                 "path_regex": ".*/frontend/nginx\\.conf$",
                 "message_regex": "proxy_pass|internal directive|missing-internal|SSRF",
                 "reason": "The /api/ location must be publicly reachable so the SPA can call the backend. proxy_pass target is fixed (backend:8080); no user-controlled URL. Adding 'internal' would block legitimate client requests. SSRF risk mitigated by fixed upstream."
+            },
+            {
+                "rule_id": "python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
+                "path_regex": ".*/scanner/core/results_waiter\\.py$",
+                "message_regex": "subprocess|user controlled|command injection|shlex\\.quote",
+                "reason": "WEB_CMD is validated by _validated_web_argv before subprocess.run: no shell, allowlist (python/python3 only), no -c, and each argv part must match safe regex. Tainted-env concern is mitigated by strict validation."
             }
         ]
     },
@@ -190,6 +196,12 @@
                 "reason": "Parsing step timestamps from structured scan results (steps.log); skipping malformed or invalid date entries is intentional. No security-sensitive data; errors are non-fatal for duration stats."
             },
             {
+                "rule_id": "B112",
+                "path_regex": ".*/tests/e2e/manifest_timeouts\\.py$",
+                "message_regex": "Try, Except, Continue detected",
+                "reason": "When aggregating timeouts across plugin manifests, invalid or unreadable YAML is skipped intentionally. Exceptions are limited to OSError and yaml.YAMLError; no silent swallowing of unexpected errors."
+            },
+            {
                 "rule_id": "B310",
                 "path_regex": ".*/scanner/plugins/sonarqube/scanner\\.py$",
                 "message_regex": "Audit url open for permitted schemes",
@@ -206,6 +218,12 @@
                 "path_regex": ".*/tests/",
                 "message_regex": "Use of assert detected",
                 "reason": "Assertions in test code are expected and do not affect production; pytest runs with assert rewriting."
+            },
+            {
+                "rule_id": "B105",
+                "path_regex": ".*/tests/conftest\\.py$",
+                "message_regex": "Possible hardcoded password.*ci-only-postgres-placeholder",
+                "reason": "CI/test-only placeholder for POSTGRES_PASSWORD when running tests; backend requires the env var. Not a production secret. Code also uses nosec B105."
             },
             {
                 "rule_id": "B105",

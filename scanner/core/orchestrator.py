@@ -28,7 +28,7 @@ import scanner.plugins  # noqa: F401 - This triggers auto-registration via __ini
 from scanner.core.scanner_registry import ScannerRegistry, ScanType, TargetType, Scanner
 from scanner.core.step_registry import StepRegistry, StepStatus, Step, SubStepType
 from scanner.core.step_definitions import StepDefinitionsRegistry, StepType
-from scanner.core.base_scanner import set_global_step_registry
+from scanner.core.base_scanner import set_global_step_registry, scan_log_verbose
 from scanner.core import scan_checkpoint as scan_cp
 
 # Git clone subprocess limit — only used in _run_git_clone (change value here only).
@@ -220,6 +220,28 @@ class ScanOrchestrator:
         except Exception as e:
             print(f"[Orchestrator] Error writing to log: {e}")
 
+    def _describe_scan_target(self) -> str:
+        """Human-readable scan target for logs (repo URL, image, host path), not only /target."""
+        st = (os.getenv("SCAN_TARGET") or "").strip()
+        branch = (os.getenv("GIT_BRANCH") or "").strip()
+        host_path = (os.getenv("TARGET_PATH_HOST") or os.getenv("ORIGINAL_TARGET_PATH") or "").strip()
+        tt = self.target_type
+
+        if tt == TargetType.GIT_REPO and st:
+            return f"{st}" + (f" (branch {branch})" if branch else "")
+        if tt in (
+            TargetType.CONTAINER_REGISTRY,
+            TargetType.WEBSITE,
+            TargetType.API_ENDPOINT,
+            TargetType.OPENAPI_SPEC,
+        ) and st:
+            return st
+        if host_path:
+            return host_path
+        if st:
+            return st
+        return str(self.target_path)
+
     def _resolve_target_type(self) -> TargetType:
         """Resolve target type from environment variable.
         
@@ -342,7 +364,8 @@ class ScanOrchestrator:
         self.step_registry.start_step(scanner.name, f"Running {scanner.name} scan...")
         timeout_sec = self._merged_timeout(scanner)
         os.environ["SCANNER_TIMEOUT_SECONDS"] = str(timeout_sec)
-        if self._worker_wall_seconds is not None and self._scan_start_monotonic is not None:
+        verbose = scan_log_verbose()
+        if verbose and self._worker_wall_seconds is not None and self._scan_start_monotonic is not None:
             _elapsed = time.monotonic() - self._scan_start_monotonic
             _remaining = max(0.0, float(self._worker_wall_seconds) - _elapsed)
             self.log_message(
@@ -357,7 +380,8 @@ class ScanOrchestrator:
             env_backup[k] = os.environ.get(k)
             os.environ[str(k)] = str(v)
         try:
-            self.log_message(f"--- Orchestrating {scanner.name} Scan ---")
+            if verbose:
+                self.log_message(f"--- Orchestrating {scanner.name} Scan ---")
             if not scanner.tools_key:
                 self.log_message(f"[ORCHESTRATOR] Scanner {scanner.name} has no tools_key in registry, skipping.")
                 self.scanner_statuses[scanner.name] = "FAILED"
@@ -376,7 +400,8 @@ class ScanOrchestrator:
 
             python_scanner_class = scanner.python_class
             try:
-                self.log_message(f"Using Python scanner class: {python_scanner_class}")
+                if verbose:
+                    self.log_message(f"Using Python scanner class: {python_scanner_class}")
                 module_path, class_name = python_scanner_class.rsplit(".", 1)
                 module = __import__(module_path, fromlist=[class_name])
                 scanner_class = getattr(module, class_name)
@@ -423,10 +448,15 @@ class ScanOrchestrator:
                         )
 
                 scanner_instance = scanner_class(**valid_kwargs)
-                self.log_message(
-                    f"[ORCHESTRATOR] {scanner.name}: calling run() with merged timeout {timeout_sec}s "
-                    f"(env SCANNER_TIMEOUT_SECONDS); per-tool log: {scanner_log_file}"
-                )
+                if verbose:
+                    self.log_message(
+                        f"[ORCHESTRATOR] {scanner.name}: calling run() with merged timeout {timeout_sec}s "
+                        f"(env SCANNER_TIMEOUT_SECONDS); per-tool log: {scanner_log_file}"
+                    )
+                else:
+                    self.log_message(
+                        f"[Tool] {scanner.name} start timeout={timeout_sec}s log={scanner_log_file}"
+                    )
                 success = scanner_instance.run()
 
                 scanner_dir = self.tools_dir_results / scanner.tools_key
@@ -444,11 +474,19 @@ class ScanOrchestrator:
                         pass
 
                 if success:
-                    self.log_message(f"{scanner.name} completed successfully (exit code 0)")
+                    if verbose:
+                        self.log_message(f"{scanner.name} completed successfully (exit code 0)")
+                    else:
+                        self.log_message(f"[Tool] {scanner.name} OK")
                     self.scanner_statuses[scanner.name] = "SUCCESS"
                     self.step_registry.complete_step(scanner.name, f"{scanner.name} scan completed")
                     return True
-                self.log_message(f"[ORCHESTRATOR WARNING] {scanner.name} failed, but continuing scan...")
+                if verbose:
+                    self.log_message(
+                        f"[ORCHESTRATOR WARNING] {scanner.name} failed, but continuing scan..."
+                    )
+                else:
+                    self.log_message(f"[Tool] {scanner.name} FAILED (continuing)")
                 self.scanner_statuses[scanner.name] = "FAILED"
                 self.step_registry.fail_step(scanner.name, f"{scanner.name} scan failed")
                 return False
@@ -466,7 +504,8 @@ class ScanOrchestrator:
                     os.environ.pop(k, None)
                 else:
                     os.environ[k] = old
-            self.log_message(f"--- {scanner.name} Scan Orchestration Finished ---")
+            if verbose:
+                self.log_message(f"--- {scanner.name} Scan Orchestration Finished ---")
     
     async def _collect_metadata(self):
         """Collect scan metadata if enabled"""
@@ -720,19 +759,35 @@ class ScanOrchestrator:
         """
         self._scan_start_monotonic = time.monotonic()
         self.log_message("SimpleSecCheck Scan Started")
+        v = scan_log_verbose()
         if self._worker_wall_seconds is not None:
-            self.log_message(
-                f"[ORCHESTRATOR] Worker will wait at most {self._worker_wall_seconds}s for this container "
-                f"(SSC_MAX_SCAN_WALL_SECONDS); after that the worker stops the Docker container "
-                f"(separate limit from each tool's SCANNER_TIMEOUT_SECONDS)."
-            )
+            if v:
+                self.log_message(
+                    f"[ORCHESTRATOR] Worker will wait at most {self._worker_wall_seconds}s for this container "
+                    f"(SSC_MAX_SCAN_WALL_SECONDS); after that the worker stops the Docker container "
+                    f"(separate limit from each tool's SCANNER_TIMEOUT_SECONDS)."
+                )
+            else:
+                self.log_message(
+                    f"Worker wall budget: {self._worker_wall_seconds}s (SSC_MAX_SCAN_WALL_SECONDS)"
+                )
         _profile = (os.getenv("SCAN_PROFILE") or "").strip() or "standard"
-        self.log_message(f"Scan profile: {_profile}")
         scan_type_display = ",".join([s.value for s in self.scan_types])
-        self.log_message(f"Scan Type(s): {scan_type_display}")
-        self.log_message(f"Target Type: {self.target_type.value}")
-        self.log_message(f"Target Path: {self.target_path}")
-        self.log_message(f"Results Dir: {self.results_dir}")
+        scan_id = (os.getenv("SCAN_ID") or "").strip() or "?"
+        display_target = self._describe_scan_target()
+        if v:
+            self.log_message(f"Scan profile: {_profile}")
+            self.log_message(f"Scan Type(s): {scan_type_display}")
+            self.log_message(f"Target Type: {self.target_type.value}")
+            self.log_message(f"Target (display): {display_target}")
+            self.log_message(f"Workdir (container): {self.target_path}")
+            self.log_message(f"Results Dir: {self.results_dir}")
+        else:
+            self.log_message(
+                f"Context: scan_id={scan_id} profile={_profile} types={scan_type_display} "
+                f"target_type={self.target_type.value} target={display_target} "
+                f"workdir={self.target_path} results={self.results_dir}"
+            )
         
         # CRITICAL: Pre-register ALL steps BEFORE starting scan
         # This ensures frontend knows total_steps immediately

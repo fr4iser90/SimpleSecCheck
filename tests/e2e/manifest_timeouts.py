@@ -56,7 +56,8 @@ def max_scan_profile_timeout_seconds_all_plugins() -> int:
             continue
         try:
             data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, yaml.YAMLError):
+            # Skip unreadable or invalid manifest files when aggregating timeouts
             continue
         for t in _timeouts_from_manifest(data):
             m = max(m, t)
