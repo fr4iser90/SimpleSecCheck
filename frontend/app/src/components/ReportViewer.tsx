@@ -89,6 +89,7 @@ export default function ReportViewer({ scanId }: ReportViewerProps = {}) {
     inset: 0,
     overflow: 'hidden',
     background: 'var(--code-bg)',
+    zIndex: 1,
   }
 
   if (!reportUrl) {
@@ -121,6 +122,7 @@ export default function ReportViewer({ scanId }: ReportViewerProps = {}) {
           height: '100%',
           border: 'none',
           display: 'block',
+          zIndex: 2,
         }}
         title="Security Report"
       />

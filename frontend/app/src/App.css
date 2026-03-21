@@ -29,8 +29,14 @@
   min-height: 0;
   width: 100%;
   min-width: 0;
+  /* Flex column so route roots (e.g. ScanView flex:1) actually fill height; otherwise report iframe
+     collapses and the shell scroll layer visually “covers” the report area. */
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  position: relative;
+  z-index: 0;
 }
 
 .app__body > header + .shell-content,
