@@ -1,12 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
 import { apiFetch } from '../utils/apiClient'
 
 export default function AdminPoliciesPage() {
-  const { user, isAuthenticated } = useAuth()
-  const isAdmin = user?.role === 'admin'
-
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -36,9 +32,8 @@ export default function AdminPoliciesPage() {
   }
 
   useEffect(() => {
-    if (!isAuthenticated || !isAdmin) return
     void load()
-  }, [isAuthenticated, isAdmin])
+  }, [])
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -76,16 +71,6 @@ export default function AdminPoliciesPage() {
     } finally {
       setSaving(false)
     }
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="admin-settings-page">
-        <div className="admin-settings-container">
-          <h2>Access Denied</h2>
-        </div>
-      </div>
-    )
   }
 
   return (

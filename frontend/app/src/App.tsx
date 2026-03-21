@@ -1,8 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider, useAuth } from './hooks/useAuth'
-import { useConfig } from './hooks/useConfig'
+import { AuthProvider } from './hooks/useAuth'
 import BootstrapLoader, { SetupStatus } from './components/BootstrapLoader'
 import MainLayout from './components/MainLayout'
+import { ProtectedRoute, AdminRoute } from './components/RouteGuards'
 import HomePage from './pages/HomePage'
 import ScanView from './pages/ScanView'
 import BatchProgressPage from './pages/BatchProgressPage'
@@ -35,56 +35,6 @@ import APIKeysPage from './pages/APIKeysPage'
 import MyTargetsPage from './pages/MyTargetsPage'
 import Footer from './components/Footer'
 import './App.css'
-
-/**
- * Protected Route Component
- * 
- * Note: This component does NOT wait for useConfig() during bootstrap.
- * Config loading happens after setup is complete, so auth_mode is checked
- * from config when available, but doesn't block rendering.
- */
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading: authLoading } = useAuth()
-  const { config } = useConfig()
-
-  // Show loading only if auth is loading (config loading is non-blocking)
-  if (authLoading) {
-    return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        flexDirection: 'column',
-        gap: '20px'
-      }}>
-        <div style={{
-          width: '40px',
-          height: '40px',
-          border: '4px solid #f3f3f3',
-          borderTop: '4px solid #007bff',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-        }}></div>
-        <p style={{ color: '#666', fontSize: '16px' }}>Loading...</p>
-      </div>
-    )
-  }
-
-  // FREE mode: no authentication required
-  // If config is still loading, allow access (config loads after setup, so if we're here, setup is complete)
-  // Admin can always login if they want, but it's never required in free mode
-  if (!config || config.auth_mode === 'free' || !config.login_required) {
-    return <>{children}</>
-  }
-
-  // BASIC/JWT mode: authentication required
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
-  }
-
-  return <>{children}</>
-}
 
 /**
  * Application Routes Component
@@ -190,135 +140,135 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
           </MainLayout>
         </ProtectedRoute>
       } />
-      {/* Admin Routes */}
+      {/* Admin Routes — AdminRoute = login + role admin (see RouteGuards) */}
       <Route path="/admin" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <AdminDashboardPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/settings" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <AdminSettingsPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/users" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <UserManagementPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/feature-flags" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <FeatureFlagsPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/auth" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <AuthSettingsPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/execution" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <ExecutionSettingsPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/queue" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <QueueSettingsPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/security" element={<Navigate to="/admin/policies" replace />} />
       <Route path="/admin/policies" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <AdminPoliciesPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/health" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <AdminHealthPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/sse-debug" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <AdminSseDebugPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/audit-log" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <AuditLogPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/security/ip-control" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <IPControlPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/scanner" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <ScannerManagementPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/tool-duration" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <AdminToolDurationPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/tool-settings" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <AdminScannerToolSettingsPage />
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/vulnerabilities" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <div style={{ padding: '2rem' }}>Vulnerability Database - Coming Soon</div>
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/scan-policies" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <div style={{ padding: '2rem' }}>Scan Policies - Coming Soon</div>
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
       <Route path="/admin/notifications" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <MainLayout>
             <div style={{ padding: '2rem' }}>Notification Management - Coming Soon</div>
           </MainLayout>
-        </ProtectedRoute>
+        </AdminRoute>
       } />
-      {/* User Routes */}
+      {/* User Routes — ProtectedRoute = instance login policy only */}
       <Route path="/profile" element={
         <ProtectedRoute>
           <MainLayout>

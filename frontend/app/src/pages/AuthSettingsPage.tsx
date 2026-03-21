@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useAuth } from '../hooks/useAuth'
 import { apiFetch } from '../utils/apiClient'
 
 interface AuthConfig {
@@ -12,8 +11,6 @@ interface AuthConfig {
 }
 
 export default function AuthSettingsPage() {
-  const { isAuthenticated, user } = useAuth()
-  const isAdmin = user?.role === 'admin'
   const [config, setConfig] = useState<AuthConfig>({
     auth_mode: 'free',
     access_mode: 'public',
@@ -28,9 +25,8 @@ export default function AuthSettingsPage() {
   const [success, setSuccess] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isAuthenticated) return
-    loadAuthConfig()
-  }, [isAuthenticated])
+    void loadAuthConfig()
+  }, [])
 
   const loadAuthConfig = async () => {
     try {
@@ -77,17 +73,6 @@ export default function AuthSettingsPage() {
     } finally {
       setSaving(false)
     }
-  }
-
-  if (!isAuthenticated || !isAdmin) {
-    return (
-      <div className="admin-settings-page">
-        <div className="admin-settings-container">
-          <h2>Access Denied</h2>
-          <p>You must be logged in as an admin to access this page.</p>
-        </div>
-      </div>
-    )
   }
 
   if (loading) {

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
 import { apiFetch } from '../utils/apiClient'
 
 interface ScannerDurationStat {
@@ -21,8 +20,6 @@ function formatDuration(seconds: number): string {
 }
 
 export default function AdminToolDurationPage() {
-  const { isAuthenticated, user } = useAuth()
-  const isAdmin = user?.role === 'admin'
   const [stats, setStats] = useState<ScannerDurationStat[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,20 +39,8 @@ export default function AdminToolDurationPage() {
         setLoading(false)
       }
     }
-    if (isAuthenticated && isAdmin) fetchStats()
-    else setLoading(false)
-  }, [isAuthenticated, isAdmin])
-
-  if (!isAuthenticated || !isAdmin) {
-    return (
-      <div className="admin-settings-page">
-        <div className="admin-settings-container">
-          <h2>Access Denied</h2>
-          <p>You must be logged in as an admin to view tool duration statistics.</p>
-        </div>
-      </div>
-    )
-  }
+    void fetchStats()
+  }, [])
 
   return (
     <div className="admin-settings-page">

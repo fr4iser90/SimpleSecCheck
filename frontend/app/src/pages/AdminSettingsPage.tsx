@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
 import { apiFetch } from '../utils/apiClient'
 
 interface SMTPConfig {
@@ -15,7 +14,6 @@ interface SMTPConfig {
 }
 
 export default function AdminSettingsPage() {
-  const { isAuthenticated } = useAuth()
   const [smtpConfig, setSmtpConfig] = useState<SMTPConfig>({
     enabled: false,
     host: 'smtp.gmail.com',
@@ -32,11 +30,8 @@ export default function AdminSettingsPage() {
   const [success, setSuccess] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      return
-    }
-    loadSMTPConfig()
-  }, [isAuthenticated])
+    void loadSMTPConfig()
+  }, [])
 
   const loadSMTPConfig = async () => {
     try {
@@ -100,17 +95,6 @@ export default function AdminSettingsPage() {
     // TODO: Implement test email sending
     setError(null)
     setSuccess('Test email functionality coming soon')
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="admin-settings-page">
-        <div className="admin-settings-container">
-          <h2>Access Denied</h2>
-          <p>You must be logged in as an admin to access this page.</p>
-        </div>
-      </div>
-    )
   }
 
   if (loading) {

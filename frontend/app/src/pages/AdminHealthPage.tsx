@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useAuth } from '../hooks/useAuth'
 import { apiFetch } from '../utils/apiClient'
 import { Link } from 'react-router-dom'
 
@@ -16,8 +15,6 @@ interface SystemHealth {
 }
 
 export default function AdminHealthPage() {
-  const { isAuthenticated, user } = useAuth()
-  const isAdmin = user?.role === 'admin'
   const [data, setData] = useState<SystemHealth | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,21 +33,10 @@ export default function AdminHealthPage() {
   }, [])
 
   useEffect(() => {
-    if (!isAuthenticated || !isAdmin) return
     void load()
     const t = setInterval(load, 15000)
     return () => clearInterval(t)
-  }, [isAuthenticated, isAdmin, load])
-
-  if (!isAuthenticated || !isAdmin) {
-    return (
-      <div className="admin-settings-page">
-        <div className="admin-settings-container">
-          <h2>Access Denied</h2>
-        </div>
-      </div>
-    )
-  }
+  }, [load])
 
   const pill = (ok: boolean | undefined) => (
     <span

@@ -1,14 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
 import type { SseEnvelope } from '../hooks/useGlobalSse'
 
 const MAX_ROWS = 400
 
 export default function AdminSseDebugPage() {
-  const { isAuthenticated, user } = useAuth()
-  const isAdmin = user?.role === 'admin'
   const [rows, setRows] = useState<SseEnvelope[]>([])
   const [connected, setConnected] = useState(false)
   const esRef = useRef<EventSource | null>(null)
@@ -16,8 +13,6 @@ export default function AdminSseDebugPage() {
   const clear = useCallback(() => setRows([]), [])
 
   useEffect(() => {
-    if (!isAuthenticated || !isAdmin) return undefined
-
     const url = resolveApiUrl('/api/v1/events/stream')
     const es = new EventSource(url, { withCredentials: true })
     esRef.current = es
@@ -52,17 +47,7 @@ export default function AdminSseDebugPage() {
       esRef.current = null
       setConnected(false)
     }
-  }, [isAuthenticated, isAdmin])
-
-  if (!isAuthenticated || !isAdmin) {
-    return (
-      <div className="admin-settings-page">
-        <div className="admin-settings-container">
-          <h2>Access Denied</h2>
-        </div>
-      </div>
-    )
-  }
+  }, [])
 
   return (
     <div className="admin-settings-page">

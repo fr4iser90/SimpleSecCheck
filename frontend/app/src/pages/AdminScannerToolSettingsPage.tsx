@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useAuth } from '../hooks/useAuth'
 import { apiFetch } from '../utils/apiClient'
 
 interface ScannerRow {
@@ -17,8 +16,6 @@ interface ScannerRow {
 }
 
 export default function AdminScannerToolSettingsPage() {
-  const { user, isAuthenticated } = useAuth()
-  const isAdmin = user?.role === 'admin'
   const [items, setItems] = useState<ScannerRow[]>([])
   const [help, setHelp] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
@@ -48,8 +45,8 @@ export default function AdminScannerToolSettingsPage() {
   }
 
   useEffect(() => {
-    if (isAdmin) load()
-  }, [isAdmin])
+    void load()
+  }, [])
 
   const openEdit = (row: ScannerRow) => {
     setEditing(row.tools_key)
@@ -109,14 +106,6 @@ export default function AdminScannerToolSettingsPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed')
     }
-  }
-
-  if (!isAuthenticated || !isAdmin) {
-    return (
-      <div className="admin-dashboard-page">
-        <p>Admin only.</p>
-      </div>
-    )
   }
 
   return (

@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
 
 interface CardItem {
   to: string
@@ -141,20 +140,6 @@ const DASHBOARD_GROUPS: DashboardGroup[] = [
 ]
 
 export default function AdminDashboardPage() {
-  const { isAuthenticated, user } = useAuth()
-  const isAdmin = user?.role === 'admin'
-
-  if (!isAuthenticated || !isAdmin) {
-    return (
-      <div className="admin-dashboard-page">
-        <div className="admin-dashboard-container">
-          <h2>Access Denied</h2>
-          <p>You must be logged in as an admin to access the admin area.</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="admin-dashboard-page">
       <div className="admin-dashboard-container">

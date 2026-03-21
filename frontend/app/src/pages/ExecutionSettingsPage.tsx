@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
 import { apiFetch } from '../utils/apiClient'
 
 interface QueueOverviewItem {
@@ -56,9 +55,6 @@ const STRATEGIES = [
 ] as const
 
 export default function ExecutionSettingsPage() {
-  const { isAuthenticated, user } = useAuth()
-  const isAdmin = user?.role === 'admin'
-
   const [maxConcurrentJobs, setMaxConcurrentJobs] = useState(3)
   const [jobsLoading, setJobsLoading] = useState(true)
   const [jobsSaving, setJobsSaving] = useState(false)
@@ -181,19 +177,17 @@ export default function ExecutionSettingsPage() {
   }
 
   useEffect(() => {
-    if (!isAuthenticated) return
     void loadJobs()
     void loadQueue()
     void loadEnforcement()
     void loadScanDefaults()
-  }, [isAuthenticated])
+  }, [])
 
   useEffect(() => {
-    if (!isAuthenticated || !isAdmin) return
     void loadOverview()
     const t = setInterval(loadOverview, 10000)
     return () => clearInterval(t)
-  }, [isAuthenticated, isAdmin, loadOverview])
+  }, [loadOverview])
 
   const loadJobs = async () => {
     try {
@@ -351,17 +345,6 @@ export default function ExecutionSettingsPage() {
     } finally {
       setScanDefaultsSaving(false)
     }
-  }
-
-  if (!isAuthenticated || !isAdmin) {
-    return (
-      <div className="admin-settings-page">
-        <div className="admin-settings-container">
-          <h2>Access Denied</h2>
-          <p>You must be logged in as an admin to access this page.</p>
-        </div>
-      </div>
-    )
   }
 
   const loading = jobsLoading || queueLoading
