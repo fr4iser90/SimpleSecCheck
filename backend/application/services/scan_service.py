@@ -330,10 +330,17 @@ class ScanService:
         except ScanException as e:
             raise e
     
-    async def get_scan_statistics(self, user_id: Optional[str] = None) -> ScanStatisticsDTO:
+    async def get_scan_statistics(
+        self,
+        user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+    ) -> ScanStatisticsDTO:
         """Get scan statistics."""
         try:
-            stats = await self.scan_repository.get_scan_statistics(user_id)
+            stats = await self.scan_repository.get_scan_statistics(
+                user_id=user_id,
+                guest_session_id=guest_session_id,
+            )
             
             statistics_dto = ScanStatisticsDTO()
             statistics_dto.total_scans = stats.get('total_scans', 0)

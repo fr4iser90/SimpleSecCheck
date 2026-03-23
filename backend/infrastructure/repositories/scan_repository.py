@@ -506,7 +506,11 @@ class DatabaseScanRepository(ScanRepository):
                 logger.error(f"Failed to get recent scans: {e}")
                 raise
     
-    async def get_scan_statistics(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+    async def get_scan_statistics(
+        self,
+        user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Get scan statistics for API (ScanStatisticsSchema)."""
         await self.db_adapter.ensure_initialized()
         
@@ -515,6 +519,13 @@ class DatabaseScanRepository(ScanRepository):
                 query = select(ScanModel)
                 if user_id:
                     query = query.where(ScanModel.user_id == UUID(user_id))
+                elif guest_session_id:
+                    query = query.where(
+                        and_(
+                            ScanModel.user_id.is_(None),
+                            text("scans.scan_metadata->>'session_id' = :gsid"),
+                        )
+                    ).params(gsid=guest_session_id)
                 
                 result = await session.execute(query)
                 scans = result.scalars().all()

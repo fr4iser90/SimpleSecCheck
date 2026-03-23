@@ -115,7 +115,11 @@ class ScanRepository(ABC):
         pass
     
     @abstractmethod
-    async def get_scan_statistics(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+    async def get_scan_statistics(
+        self,
+        user_id: Optional[str] = None,
+        guest_session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Get scan statistics."""
         pass
 

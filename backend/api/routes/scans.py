@@ -765,6 +765,7 @@ async def detect_target_type(
 )
 async def get_scan_statistics(
     user_id: Optional[str] = Query(None, description="Get stats for specific user (admin only)"),
+    scope: str = Query("own", description="Scope: own | global"),
     actor_context: ActorContext = Depends(get_actor_context),
     scan_service: ScanService = Depends(get_scan_service_dependency),
 ) -> ScanStatisticsSchema:
@@ -776,8 +777,9 @@ async def get_scan_statistics(
     - **scan_service**: Scan service
     """
     try:
-        # Non-admin users can only get their own stats
+        # Non-admin users can only get their own/session or global aggregate.
         stats_user_id = None
+        stats_guest_session_id = None
         if user_id:
             if not actor_context.is_authenticated:
                 raise HTTPException(
@@ -786,10 +788,25 @@ async def get_scan_statistics(
                 )
             stats_user_id = user_id
         else:
-            if actor_context.is_authenticated:
-                stats_user_id = actor_context.user_id
+            normalized_scope = (scope or "own").strip().lower()
+            if normalized_scope not in ("own", "global"):
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid scope. Use 'own' or 'global'.",
+                )
+            if normalized_scope == "global":
+                stats_user_id = None
+                stats_guest_session_id = None
+            else:
+                if actor_context.is_authenticated:
+                    stats_user_id = actor_context.user_id
+                else:
+                    stats_guest_session_id = actor_context.session_id
 
-        statistics_dto = await scan_service.get_scan_statistics(stats_user_id)
+        statistics_dto = await scan_service.get_scan_statistics(
+            user_id=stats_user_id,
+            guest_session_id=stats_guest_session_id,
+        )
 
         return ScanStatisticsSchema(
             total_scans=statistics_dto.total_scans,

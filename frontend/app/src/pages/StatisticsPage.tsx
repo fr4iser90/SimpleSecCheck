@@ -47,6 +47,7 @@ const STATS_API = '/api/v1/scans/statistics'
 type ChartMode = 'all' | 'repository' | 'container' | 'infrastructure' | 'web'
 type ChartView = 'cumulative' | 'period'
 type ChartPoint = { date: string, value: number }
+type StatsScope = 'own' | 'global'
 
 interface DailySeriesPoint {
   date: string
@@ -181,11 +182,13 @@ export default function StatisticsPage() {
   const [error, setError] = useState<string | null>(null)
   const [chartMode, setChartMode] = useState<ChartMode>('all')
   const [chartView, setChartView] = useState<ChartView>('cumulative')
+  const [statsScope, setStatsScope] = useState<StatsScope>('own')
 
   useEffect(() => {
     const fetchStatistics = async () => {
+      setLoading(true)
       try {
-        const response = await apiFetch(STATS_API)
+        const response = await apiFetch(`${STATS_API}?scope=${statsScope}`)
         if (response.status === 404) {
           // No stats yet (e.g. route not mounted or no data) — show empty state, not error
           setStatistics(null)
@@ -206,7 +209,7 @@ export default function StatisticsPage() {
     }
 
     fetchStatistics()
-  }, [])
+  }, [statsScope])
 
   const severityEntries = statistics
     ? [
@@ -289,10 +292,10 @@ export default function StatisticsPage() {
     y: paddingTop + innerHeight - (ratio * innerHeight),
     value: Math.round(chartMax * ratio),
   }))
-  const xTickCount = Math.min(6, Math.max(2, chartPoints.length))
+  const xTickCount = Math.min(6, Math.max(2, renderPoints.length))
   const xTickIndices = Array.from({ length: xTickCount }, (_, i) => {
     if (xTickCount === 1) return 0
-    return Math.round((i / (xTickCount - 1)) * (chartPoints.length - 1))
+    return Math.round((i / (xTickCount - 1)) * (renderPoints.length - 1))
   })
 
   return (
@@ -301,8 +304,24 @@ export default function StatisticsPage() {
         <header className="statistics-header">
           <h2>Statistics</h2>
           <p className="statistics-subtitle">
-            Aggregated statistics from all scans
+            {statsScope === 'global' ? 'Global statistics across all scans' : 'Your own statistics'}
           </p>
+          <div className="statistics-chart-toolbar" style={{ marginTop: '0.8rem', marginBottom: 0 }}>
+            <button
+              type="button"
+              className={`statistics-chip ${statsScope === 'own' ? 'statistics-chip--active' : ''}`}
+              onClick={() => setStatsScope('own')}
+            >
+              Own
+            </button>
+            <button
+              type="button"
+              className={`statistics-chip ${statsScope === 'global' ? 'statistics-chip--active' : ''}`}
+              onClick={() => setStatsScope('global')}
+            >
+              Global
+            </button>
+          </div>
         </header>
 
         {error && (
@@ -464,8 +483,8 @@ export default function StatisticsPage() {
                 <div className="statistics-chart-card">
                   <div className="statistics-linechart" aria-label={chartLabel}>
                     <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} role="img" aria-label={chartLabel}>
-                      {yTicks.map((tick) => (
-                        <g key={tick.value}>
+                      {yTicks.map((tick, tickIndex) => (
+                        <g key={`y-${tickIndex}`}>
                           <line
                             x1={paddingLeft}
                             x2={paddingLeft + innerWidth}
@@ -502,15 +521,15 @@ export default function StatisticsPage() {
                       {areaPath && <path d={areaPath} className="statistics-linechart-area" />}
                       {linePoints && <polyline points={linePoints} className="statistics-linechart-line" />}
 
-                      {xTickIndices.map((index) => (
+                      {xTickIndices.map((index, tickIndex) => (
                         <text
-                          key={`${index}-${chartPoints[index]?.date ?? 'x'}`}
+                          key={`x-${tickIndex}-${index}`}
                           x={toX(index)}
                           y={svgHeight - 8}
                           className="statistics-linechart-xlabel"
                           textAnchor="middle"
                         >
-                          {formatDateLabel(chartPoints[index]?.date ?? '', granularity)}
+                          {formatDateLabel(renderPoints[index]?.date ?? '', granularity)}
                         </text>
                       ))}
                     </svg>
