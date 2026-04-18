@@ -81,6 +81,14 @@ class Settings(BaseSettings):
             "SCAN_EVENTS_BRIDGE_QUEUE_MAX",
         ),
     )
+    PROMETHEUS_METRICS_ENABLED: bool = Field(
+        default=True,
+        description="Register /metrics and Prometheus HTTP middleware (set false to reduce CPU if unused)",
+    )
+    SSE_REDIS_BRIDGE_ENABLED: bool = Field(
+        default=True,
+        description="Run Redis scan_events → SSE fan-out task (set false if realtime SSE is unused)",
+    )
 
     # API
     API_HOST: str = Field(default="0.0.0.0", description="API host")

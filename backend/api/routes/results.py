@@ -78,6 +78,79 @@ def _build_ai_prompt(
     lang = (language or "english").lower()
     parts: List[str] = []
 
+    policy_schema_en = (
+        "\n\n## Finding policy JSON schema (MUST follow exactly)\n"
+        "Output must be **valid JSON** (not YAML). Root must be a JSON object. Each top-level value must be a JSON object.\n"
+        "Only use these keys when relevant to the tool(s) in the findings. Do not invent new fields.\n\n"
+        "### Root shape\n"
+        f"- File: `{policy_path}`\n"
+        "- Root: `{ <tool_policy_key>: <object>, ... }`\n\n"
+        "### Supported tool blocks and fields\n"
+        "- `semgrep`:\n"
+        "  - `accepted_findings[]`: `{ rule_id, path_regex, message_regex, reason }` (all strings; regex fields optional)\n"
+        "  - `severity_overrides[]`: `{ rule_id, path_regex, message_regex, new_severity, reason }` (`new_severity` one of: CRITICAL|HIGH|MEDIUM|LOW|INFO)\n"
+        "  - `dedupe`: `{ enabled: boolean, line_window: number }`\n"
+        "- `bandit`:\n"
+        "  - `accepted_findings[]`: `{ rule_id, path_regex, message_regex, reason }`\n"
+        "- `codeql`:\n"
+        "  - `accepted_findings[]`: `{ rule_id, path_regex, message_regex, reason }` (note: `rule_id` may be treated as regex)\n"
+        "- `gitleaks`:\n"
+        "  - `accepted_findings[]`: `{ rule_id, file_regex, description_regex, reason }`\n"
+        "- `detect_secrets`:\n"
+        "  - `accepted_findings[]`: `{ rule_id, path_regex, reason }`\n"
+        "- `npm_audit`:\n"
+        "  - `accepted_findings[]`: `{ rule_id, path_regex, message_regex, reason }`\n"
+        "- `trivy`:\n"
+        "  - `accepted_findings[]`: `{ rule_id, path_regex, message_regex, reason }`\n\n"
+        "### Minimal example skeleton\n"
+        "{\n"
+        '  "semgrep": {\n'
+        '    "accepted_findings": [\n'
+        '      {\n'
+        '        "rule_id": "EXAMPLE_RULE_ID",\n'
+        '        "path_regex": "EXAMPLE_PATH_REGEX",\n'
+        '        "message_regex": "EXAMPLE_MESSAGE_REGEX",\n'
+        '        "reason": "EXAMPLE_REASON"\n'
+        "      }\n"
+        "    ]\n"
+        "  }\n"
+        "}\n"
+    )
+
+    policy_schema_de = (
+        "\n\n## Finding-Policy JSON-Schema (MUSS exakt eingehalten werden)\n"
+        "Output muss **valide JSON** sein (kein YAML). Root muss ein JSON-Objekt sein. Jeder Top-Level-Value muss ein JSON-Objekt sein.\n"
+        "Nur diese Keys verwenden, wenn sie zum Tool passen. Keine neuen Felder erfinden.\n\n"
+        "### Root-Form\n"
+        f"- Datei: `{policy_path}`\n"
+        "- Root: `{ <tool_policy_key>: <object>, ... }`\n\n"
+        "### Tool-Blöcke und Felder\n"
+        "- `semgrep`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`, `severity_overrides[]` `{ rule_id, path_regex, message_regex, new_severity, reason }`, `dedupe` `{ enabled, line_window }`\n"
+        "- `bandit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n"
+        "- `codeql`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n"
+        "- `gitleaks`: `accepted_findings[]` `{ rule_id, file_regex, description_regex, reason }`\n"
+        "- `detect_secrets`: `accepted_findings[]` `{ rule_id, path_regex, reason }`\n"
+        "- `npm_audit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n"
+        "- `trivy`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n"
+    )
+
+    policy_schema_zh = (
+        "\n\n## Finding policy JSON 结构（必须严格遵守）\n"
+        "输出必须是**合法 JSON**（不是 YAML）。根必须是 JSON 对象。每个顶层 value 必须是 JSON 对象。\n"
+        "只使用与工具匹配的字段，不要编造新字段。\n\n"
+        "### 根结构\n"
+        f"- 文件: `{policy_path}`\n"
+        "- 根: `{ <tool_policy_key>: <object>, ... }`\n\n"
+        "### 工具块与字段\n"
+        "- `semgrep`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`, `severity_overrides[]` `{ rule_id, path_regex, message_regex, new_severity, reason }`, `dedupe` `{ enabled, line_window }`\n"
+        "- `bandit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n"
+        "- `codeql`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n"
+        "- `gitleaks`: `accepted_findings[]` `{ rule_id, file_regex, description_regex, reason }`\n"
+        "- `detect_secrets`: `accepted_findings[]` `{ rule_id, path_regex, reason }`\n"
+        "- `npm_audit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n"
+        "- `trivy`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n"
+    )
+
     if lang == "german":
         parts = [
             "# Sicherheitsscan-Ergebnisse Analyseanfrage\n\n",
@@ -102,6 +175,7 @@ def _build_ai_prompt(
                 if finding.get("rule_id"):
                     parts.append(f"- **Regel-ID**: `{finding['rule_id']}`\n")
                 parts.append(f"- **Nachricht**: {finding.get('message') or ''}\n\n")
+        parts.append(policy_schema_de)
         parts.extend([
             "\n## Erwartete Ausgabe\n",
             "1. Liste der False Positives mit Erklärung\n",
@@ -135,6 +209,7 @@ def _build_ai_prompt(
                 if finding.get("rule_id"):
                     parts.append(f"- **规则ID**: `{finding['rule_id']}`\n")
                 parts.append(f"- **消息**: {finding.get('message') or ''}\n\n")
+        parts.append(policy_schema_zh)
         parts.extend([
             "\n## 期望输出\n",
             "1. 误报列表及说明\n",
@@ -169,6 +244,7 @@ def _build_ai_prompt(
                 if finding.get("rule_id"):
                     parts.append(f"- **Rule ID**: `{finding['rule_id']}`\n")
                 parts.append(f"- **Message**: {finding.get('message') or ''}\n\n")
+        parts.append(policy_schema_en)
         parts.extend([
             "\n## Expected Output\n",
             "1. List of false positives with explanations\n",

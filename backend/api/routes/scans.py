@@ -339,6 +339,11 @@ def _read_deduplicated_steps(scan_id: str) -> tuple[List[Dict[str, Any]], int, i
     return steps, total_steps, completed_steps
 
 
+def _steps_content_hash(steps: List[Dict[str, Any]]) -> int:
+    """Sync hash for WebSocket deduplication; run via asyncio.to_thread (can be CPU-heavy on large steps)."""
+    return hash(json.dumps(steps, sort_keys=True))
+
+
 def _enrich_step_duration_fields(step: Dict[str, Any]) -> None:
     """Mutate step dict with duration_seconds (same logic as steps.log path)."""
     import time
@@ -1503,12 +1508,14 @@ async def websocket_scan_stream(websocket: WebSocket, scan_id: str):
         last_steps_hash = None
         
         while True:
-            # Read and deduplicate steps
-            steps, total_steps, completed_steps = _read_deduplicated_steps(scan_id)
+            # Read and deduplicate steps (sync file I/O — must not block the asyncio event loop)
+            steps, total_steps, completed_steps = await asyncio.to_thread(
+                _read_deduplicated_steps, scan_id
+            )
             progress_percentage = int((completed_steps / total_steps * 100)) if total_steps > 0 else 0
             
             # Create a hash of steps to detect changes
-            steps_hash = hash(json.dumps(steps, sort_keys=True))
+            steps_hash = await asyncio.to_thread(_steps_content_hash, steps)
             
             # Only send update if steps have changed
             if steps_hash != last_steps_hash:

@@ -519,6 +519,70 @@ function generatePromptLocally(
   const prWorkflowEn = "\n\n## Pull Request workflow\nIf you need to apply fixes in a repository: clone the repo if needed, apply fixes per finding or per file, commit with clear messages, and open a Pull Request. Re-run the scan with FINDING_POLICY_FILE set to verify.\n";
   const prWorkflowZh = "\n\n## 提交流程\n如需在仓库中应用修复：如需要请先克隆仓库，按发现或按文件修复，用清晰消息提交，并提交 Pull Request。使用 FINDING_POLICY_FILE 重新运行扫描以验证。\n";
   const prWorkflowDe = "\n\n## Pull-Request-Workflow\nWenn Sie Fixes im Repository anwenden müssen: Repo ggf. klonen, Fixes pro Finding oder pro Datei anwenden, mit klaren Commit-Messages committen und einen Pull Request öffnen. Scan mit gesetztem FINDING_POLICY_FILE erneut ausführen.\n";
+
+  const policySchemaEn =
+    "\n\n## Finding policy JSON schema (MUST follow exactly)\n" +
+    "Output must be **valid JSON** (not YAML). Root must be a JSON object. Each top-level value must be a JSON object.\n" +
+    "Only use these keys when relevant to the tool(s) in the findings. Do not invent new fields.\n\n" +
+    "### Root shape\n" +
+    `- File: \`${policyPath}\`\n` +
+    "- Root: `{ <tool_policy_key>: <object>, ... }`\n\n" +
+    "### Supported tool blocks and fields\n" +
+    "- `semgrep`:\n" +
+    "  - `accepted_findings[]`: `{ rule_id, path_regex, message_regex, reason }` (strings; regex fields optional)\n" +
+    "  - `severity_overrides[]`: `{ rule_id, path_regex, message_regex, new_severity, reason }` (`new_severity`: CRITICAL|HIGH|MEDIUM|LOW|INFO)\n" +
+    "  - `dedupe`: `{ enabled: boolean, line_window: number }`\n" +
+    "- `bandit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+    "- `codeql`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+    "- `gitleaks`: `accepted_findings[]` `{ rule_id, file_regex, description_regex, reason }`\n" +
+    "- `detect_secrets`: `accepted_findings[]` `{ rule_id, path_regex, reason }`\n" +
+    "- `npm_audit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+    "- `trivy`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n\n" +
+    "### Minimal example skeleton\n" +
+    "{\n" +
+    '  "semgrep": {\n' +
+    '    "accepted_findings": [\n' +
+    "      {\n" +
+    '        "rule_id": "EXAMPLE_RULE_ID",\n' +
+    '        "path_regex": "EXAMPLE_PATH_REGEX",\n' +
+    '        "message_regex": "EXAMPLE_MESSAGE_REGEX",\n' +
+    '        "reason": "EXAMPLE_REASON"\n' +
+    "      }\n" +
+    "    ]\n" +
+    "  }\n" +
+    "}\n";
+
+  const policySchemaDe =
+    "\n\n## Finding-Policy JSON-Schema (MUSS exakt eingehalten werden)\n" +
+    "Output muss **valide JSON** sein (kein YAML). Root muss ein JSON-Objekt sein. Jeder Top-Level-Value muss ein JSON-Objekt sein.\n" +
+    "Nur diese Keys verwenden, wenn sie zum Tool passen. Keine neuen Felder erfinden.\n\n" +
+    "### Root-Form\n" +
+    `- Datei: \`${policyPath}\`\n` +
+    "- Root: `{ <tool_policy_key>: <object>, ... }`\n\n" +
+    "### Tool-Blöcke und Felder\n" +
+    "- `semgrep`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`, `severity_overrides[]` `{ rule_id, path_regex, message_regex, new_severity, reason }`, `dedupe` `{ enabled, line_window }`\n" +
+    "- `bandit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+    "- `codeql`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+    "- `gitleaks`: `accepted_findings[]` `{ rule_id, file_regex, description_regex, reason }`\n" +
+    "- `detect_secrets`: `accepted_findings[]` `{ rule_id, path_regex, reason }`\n" +
+    "- `npm_audit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+    "- `trivy`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n";
+
+  const policySchemaZh =
+    "\n\n## Finding policy JSON 结构（必须严格遵守）\n" +
+    "输出必须是**合法 JSON**（不是 YAML）。根必须是 JSON 对象。每个顶层 value 必须是 JSON 对象。\n" +
+    "只使用与工具匹配的字段，不要编造新字段。\n\n" +
+    "### 根结构\n" +
+    `- 文件: \`${policyPath}\`\n` +
+    "- 根: `{ <tool_policy_key>: <object>, ... }`\n\n" +
+    "### 工具块与字段\n" +
+    "- `semgrep`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`, `severity_overrides[]` `{ rule_id, path_regex, message_regex, new_severity, reason }`, `dedupe` `{ enabled, line_window }`\n" +
+    "- `bandit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+    "- `codeql`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+    "- `gitleaks`: `accepted_findings[]` `{ rule_id, file_regex, description_regex, reason }`\n" +
+    "- `detect_secrets`: `accepted_findings[]` `{ rule_id, path_regex, reason }`\n" +
+    "- `npm_audit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+    "- `trivy`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n";
   
   if (language === 'chinese') {
     const parts: string[] = [
@@ -549,7 +613,7 @@ function generatePromptLocally(
         parts.push(`- **消息**: ${finding.message || ''}\n\n`);
       }
     }
-    
+    parts.push(policySchemaZh);
     parts.push("\n## 期望输出\n");
     parts.push("1. 误报列表及说明\n");
     parts.push("2. 代码更改建议（如适用）\n");
@@ -591,7 +655,7 @@ function generatePromptLocally(
         parts.push(`- **Nachricht**: ${finding.message || ''}\n\n`);
       }
     }
-    
+    parts.push(policySchemaDe);
     parts.push("\n## Erwartete Ausgabe\n");
     parts.push("1. Liste der False Positives mit Erklärung\n");
     parts.push("2. Code-Änderungsvorschläge (falls zutreffend)\n");
@@ -634,7 +698,7 @@ function generatePromptLocally(
         parts.push(`- **Message**: ${finding.message || ''}\n\n`);
       }
     }
-    
+    parts.push(policySchemaEn);
     parts.push("\n## Expected Output\n");
     parts.push("1. List of false positives with explanations\n");
     parts.push("2. Code change suggestions (if applicable)\n");
@@ -700,6 +764,70 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
       }
       chunkByTool[tool].push(f);
     }
+
+    const policySchemaEn =
+      "\n\n## Finding policy JSON schema (MUST follow exactly)\n" +
+      "Output must be **valid JSON** (not YAML). Root must be a JSON object. Each top-level value must be a JSON object.\n" +
+      "Only use these keys when relevant to the tool(s) in the findings. Do not invent new fields.\n\n" +
+      "### Root shape\n" +
+      `- File: \`${policyPath}\`\n` +
+      "- Root: `{ <tool_policy_key>: <object>, ... }`\n\n" +
+      "### Supported tool blocks and fields\n" +
+      "- `semgrep`:\n" +
+      "  - `accepted_findings[]`: `{ rule_id, path_regex, message_regex, reason }` (strings; regex fields optional)\n" +
+      "  - `severity_overrides[]`: `{ rule_id, path_regex, message_regex, new_severity, reason }` (`new_severity`: CRITICAL|HIGH|MEDIUM|LOW|INFO)\n" +
+      "  - `dedupe`: `{ enabled: boolean, line_window: number }`\n" +
+      "- `bandit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+      "- `codeql`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+      "- `gitleaks`: `accepted_findings[]` `{ rule_id, file_regex, description_regex, reason }`\n" +
+      "- `detect_secrets`: `accepted_findings[]` `{ rule_id, path_regex, reason }`\n" +
+      "- `npm_audit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+      "- `trivy`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n\n" +
+      "### Minimal example skeleton\n" +
+      "{\n" +
+      '  "semgrep": {\n' +
+      '    "accepted_findings": [\n' +
+      "      {\n" +
+      '        "rule_id": "EXAMPLE_RULE_ID",\n' +
+      '        "path_regex": "EXAMPLE_PATH_REGEX",\n' +
+      '        "message_regex": "EXAMPLE_MESSAGE_REGEX",\n' +
+      '        "reason": "EXAMPLE_REASON"\n' +
+      "      }\n" +
+      "    ]\n" +
+      "  }\n" +
+      "}\n";
+
+    const policySchemaDe =
+      "\n\n## Finding-Policy JSON-Schema (MUSS exakt eingehalten werden)\n" +
+      "Output muss **valide JSON** sein (kein YAML). Root muss ein JSON-Objekt sein. Jeder Top-Level-Value muss ein JSON-Objekt sein.\n" +
+      "Nur diese Keys verwenden, wenn sie zum Tool passen. Keine neuen Felder erfinden.\n\n" +
+      "### Root-Form\n" +
+      `- Datei: \`${policyPath}\`\n` +
+      "- Root: `{ <tool_policy_key>: <object>, ... }`\n\n" +
+      "### Tool-Blöcke und Felder\n" +
+      "- `semgrep`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`, `severity_overrides[]` `{ rule_id, path_regex, message_regex, new_severity, reason }`, `dedupe` `{ enabled, line_window }`\n" +
+      "- `bandit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+      "- `codeql`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+      "- `gitleaks`: `accepted_findings[]` `{ rule_id, file_regex, description_regex, reason }`\n" +
+      "- `detect_secrets`: `accepted_findings[]` `{ rule_id, path_regex, reason }`\n" +
+      "- `npm_audit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+      "- `trivy`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n";
+
+    const policySchemaZh =
+      "\n\n## Finding policy JSON 结构（必须严格遵守）\n" +
+      "输出必须是**合法 JSON**（不是 YAML）。根必须是 JSON 对象。每个顶层 value 必须是 JSON 对象。\n" +
+      "只使用与工具匹配的字段，不要编造新字段。\n\n" +
+      "### 根结构\n" +
+      `- 文件: \`${policyPath}\`\n` +
+      "- 根: `{ <tool_policy_key>: <object>, ... }`\n\n" +
+      "### 工具块与字段\n" +
+      "- `semgrep`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`, `severity_overrides[]` `{ rule_id, path_regex, message_regex, new_severity, reason }`, `dedupe` `{ enabled, line_window }`\n" +
+      "- `bandit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+      "- `codeql`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+      "- `gitleaks`: `accepted_findings[]` `{ rule_id, file_regex, description_regex, reason }`\n" +
+      "- `detect_secrets`: `accepted_findings[]` `{ rule_id, path_regex, reason }`\n" +
+      "- `npm_audit`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n" +
+      "- `trivy`: `accepted_findings[]` `{ rule_id, path_regex, message_regex, reason }`\n";
     
     if (language === 'chinese') {
       const parts: string[] = [
@@ -732,6 +860,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
         }
       }
       
+      parts.push(policySchemaZh);
       parts.push("\n## 期望输出\n");
       parts.push("1. 误报列表及说明\n");
       parts.push("2. 代码更改建议（如适用）\n");
@@ -773,6 +902,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
         }
       }
       
+      parts.push(policySchemaDe);
       parts.push("\n## Erwartete Ausgabe\n");
       parts.push("1. Liste der False Positives mit Erklärung\n");
       parts.push("2. Code-Änderungsvorschläge (falls zutreffend)\n");
@@ -815,6 +945,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
         }
       }
       
+      parts.push(policySchemaEn);
       parts.push("\n## Expected Output\n");
       parts.push("1. List of false positives with explanations\n");
       parts.push("2. Code change suggestions (if applicable)\n");

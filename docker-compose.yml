@@ -79,6 +79,9 @@ services:
       - POSTGRES_SSL=${POSTGRES_SSL:-false}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Optional: reduce idle CPU — set to false and rebuild if /metrics or SSE bridge unused
+      - PROMETHEUS_METRICS_ENABLED=${PROMETHEUS_METRICS_ENABLED:-true}
+      - SSE_REDIS_BRIDGE_ENABLED=${SSE_REDIS_BRIDGE_ENABLED:-true}
     ports:
       - "8080:8080"
     networks:
@@ -89,7 +92,7 @@ services:
       - /tmp:noexec,nosuid,size=100m
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests,sys; sys.exit(0 if requests.get('http://localhost:8080/api/health').ok else 1)"]
+      test: ["CMD", "python", "-c", "import sys,urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=5); sys.exit(0)"]
       interval: 30s
       timeout: 5s
       retries: 3

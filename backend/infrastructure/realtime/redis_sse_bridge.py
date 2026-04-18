@@ -10,13 +10,37 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Dict, Optional
+import time
+from typing import Any, Dict, Optional, Tuple
 
 from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
 SCAN_EVENTS_CHANNEL = "scan_events"
+
+# Short TTL: many scan_events per second would otherwise each run a full targets-list query.
+_list_rev_memo: Dict[str, Tuple[float, str]] = {}
+_LIST_REV_MEMO_TTL_SEC = 2.5
+_LIST_REV_MEMO_MAX_KEYS = 2000
+
+
+async def _list_revision_for_sse(user_id: str) -> str:
+    """Compute targets list_revision with per-user memoization (reduces DB load on event bursts)."""
+    from api.helpers.user_targets_revision import compute_user_targets_list_revision
+
+    now = time.monotonic()
+    row = _list_rev_memo.get(user_id)
+    if row is not None and (now - row[0]) < _LIST_REV_MEMO_TTL_SEC:
+        return row[1]
+    rev = await compute_user_targets_list_revision(user_id)
+    _list_rev_memo[user_id] = (now, rev)
+    if len(_list_rev_memo) > _LIST_REV_MEMO_MAX_KEYS:
+        cutoff = now - _LIST_REV_MEMO_TTL_SEC * 4
+        stale = [k for k, (t, _) in _list_rev_memo.items() if t < cutoff]
+        for k in stale[: _LIST_REV_MEMO_MAX_KEYS // 2]:
+            _list_rev_memo.pop(k, None)
+    return rev
 
 
 async def _user_id_for_scan_event(data: Dict[str, Any]) -> Optional[str]:
@@ -40,7 +64,6 @@ async def _user_id_for_scan_event(data: Dict[str, Any]) -> Optional[str]:
 
 async def _deliver_scan_event_payload(data: Dict[str, Any]) -> None:
     """Resolve user, compute revision, emit to SSE — same behaviour as before."""
-    from api.helpers.user_targets_revision import compute_user_targets_list_revision
     from infrastructure.realtime.sse_notify import make_envelope, sse_emit_envelope
 
     user_id = await _user_id_for_scan_event(data)
@@ -52,7 +75,7 @@ async def _deliver_scan_event_payload(data: Dict[str, Any]) -> None:
         )
         return
     try:
-        list_rev = await compute_user_targets_list_revision(user_id)
+        list_rev = await _list_revision_for_sse(user_id)
     except Exception:
         logger.exception("SSE Redis bridge: list revision failed for user %s", user_id)
         list_rev = ""
@@ -121,12 +144,28 @@ async def _delivery_loop(
     queue: "asyncio.Queue[Dict[str, Any]]",
     stop: asyncio.Event,
 ) -> None:
-    """Consume parsed events from the queue and fan out to SSE."""
-    while not stop.is_set():
+    """Consume parsed events from the queue and fan out to SSE.
+
+    Block on ``queue.get()`` only (no periodic timeout). A 0.5s poll would wake the
+    event loop twice per second forever and can inflate CPU in ``docker stats``.
+    """
+    while True:
+        get_t = asyncio.create_task(queue.get())
+        stop_t = asyncio.create_task(stop.wait())
+        done, pending = await asyncio.wait(
+            {get_t, stop_t},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for t in pending:
+            t.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        if stop_t in done:
+            if not get_t.done():
+                get_t.cancel()
+                await asyncio.gather(get_t, return_exceptions=True)
+            break
         try:
-            data = await asyncio.wait_for(queue.get(), timeout=0.5)
-        except asyncio.TimeoutError:
-            continue
+            data = get_t.result()
         except asyncio.CancelledError:
             break
         try:

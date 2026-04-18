@@ -61,16 +61,19 @@ def create_app() -> FastAPI:
         docs_url="/api/docs",
         redoc_url="/api/redoc",
         openapi_url="/api/openapi.json",
-        debug=True
+        debug=settings.DEBUG,
     )
     
     # Instrument the app for metrics FIRST (before adding custom middleware)
     # Skip in test to avoid Duplicated timeseries when creating multiple app instances
-    if os.environ.get("ENVIRONMENT") != "test":
+    if (
+        os.environ.get("ENVIRONMENT") != "test"
+        and settings.PROMETHEUS_METRICS_ENABLED
+    ):
         instrumentator = Instrumentator(
             should_group_status_codes=True,
             should_ignore_untemplated=True,
-            should_instrument_requests_inprogress=True,
+            should_instrument_requests_inprogress=False,
             excluded_handlers=["/metrics"],
         )
         instrumentator.instrument(app).expose(app, endpoint="/metrics")
@@ -296,7 +299,13 @@ async def startup_event():
             logger.error("Database connection failed", error=str(e))
     
     if setup_complete:
-        logger.info("API started")
+        from config.settings import settings as _settings
+        logger.info(
+            "API started (DEBUG=%s PROMETHEUS_METRICS_ENABLED=%s SSE_REDIS_BRIDGE_ENABLED=%s)",
+            _settings.DEBUG,
+            _settings.PROMETHEUS_METRICS_ENABLED,
+            _settings.SSE_REDIS_BRIDGE_ENABLED,
+        )
     
     # Generate setup token only if setup is not complete
     try:
@@ -393,20 +402,23 @@ async def startup_event():
                 logger.warning("Could not start stale sweep: %s", e)
 
     # Forward Redis scan_events → per-user SSE subscribers
-    try:
-        import api.main as main_module
+    if settings.SSE_REDIS_BRIDGE_ENABLED:
+        try:
+            import api.main as main_module
 
-        main_module._sse_bridge_stop = asyncio.Event()
-        from infrastructure.realtime.redis_sse_bridge import run_redis_sse_bridge
+            main_module._sse_bridge_stop = asyncio.Event()
+            from infrastructure.realtime.redis_sse_bridge import run_redis_sse_bridge
 
-        main_module._sse_bridge_task = asyncio.create_task(
-            run_redis_sse_bridge(main_module._sse_bridge_stop)
-        )
-        if setup_complete:
-            logger.info("SSE Redis bridge task started")
-    except Exception as e:
-        if setup_complete:
-            logger.warning("SSE Redis bridge not started: %s", e)
+            main_module._sse_bridge_task = asyncio.create_task(
+                run_redis_sse_bridge(main_module._sse_bridge_stop)
+            )
+            if setup_complete:
+                logger.info("SSE Redis bridge task started")
+        except Exception as e:
+            if setup_complete:
+                logger.warning("SSE Redis bridge not started: %s", e)
+    elif setup_complete:
+        logger.info("SSE Redis bridge disabled (SSE_REDIS_BRIDGE_ENABLED=false)")
 
     # Pre-load scanners on startup (especially important during setup)
     # This ensures scanners are available when user completes setup

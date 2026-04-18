@@ -427,6 +427,13 @@ def sanitize_findings(findings_by_tool):
     return sanitized
 
 
+def _safe_json_for_script_tag(value) -> str:
+    """Serialize JSON so embedded </script> cannot terminate the script element."""
+    # json.dumps alone is not enough for HTML script tags: a finding message may contain
+    # literal </script> (e.g. CodeQL bad-tag-filter), which would truncate embedded JSON.
+    return json.dumps(value, ensure_ascii=False).replace("</", "<\\/")
+
+
 def _report_features_script():
     """Return inline script for filter, sort, export, expand/collapse in the standalone report."""
     return r"""
@@ -775,7 +782,7 @@ def main():
         # Normalize findings for AI prompt (for client-side generation when frontend is not available)
         normalized_findings = normalize_findings_for_ai_prompt(scanner_processors, all_findings)
         ai_prompt_disabled = len(normalized_findings) == 0
-        findings_json = json.dumps(normalized_findings, indent=2)
+        findings_json = _safe_json_for_script_tag(normalized_findings)
         # Embed as JSON in script tag - no HTML escape needed since it's in a script tag
         # JSON is safe in script tags (no script execution)
         embedded_scripts += f'<script type="application/json" id="findings-data">{findings_json}</script>\n'
@@ -783,12 +790,16 @@ def main():
 
         # Report findings for filter/sort/export (flat list)
         report_findings = build_report_findings(all_findings)
-        embedded_scripts += f'<script type="application/json" id="report-findings-data">{json.dumps(report_findings)}</script>\n'
+        embedded_scripts += f'<script type="application/json" id="report-findings-data">{_safe_json_for_script_tag(report_findings)}</script>\n'
         # Pre-fill AI prompt modal: policy path from scan (or default)
         display_policy_path = (policy_path or ".scanning/finding-policy.json").replace("/target/", "").strip()
         if not display_policy_path:
             display_policy_path = ".scanning/finding-policy.json"
-        embedded_scripts += f'<script type="application/json" id="scan-ai-prompt-defaults">{json.dumps({"policy_path": display_policy_path})}</script>\n'
+        embedded_scripts += (
+            f'<script type="application/json" id="scan-ai-prompt-defaults">'
+            f'{_safe_json_for_script_tag({"policy_path": display_policy_path})}'
+            "</script>\n"
+        )
         embedded_scripts += _report_features_script()
 
         # Overall status for header badge: Critical | High | OK (counts are post-policy)

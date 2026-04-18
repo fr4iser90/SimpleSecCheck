@@ -44,7 +44,7 @@ ENV PYTHONPATH=/app/backend
 
 # Health check (run as backend after gosu; use same python as app)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD gosu backend python -c "import requests; requests.get('http://localhost:8080/api/health', timeout=5)"
+    CMD gosu backend python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=5)"
 
 # Start command
 # Trust X-Forwarded-Proto from nginx/Traefik so redirects use https:// in Location
