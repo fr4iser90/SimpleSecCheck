@@ -145,33 +145,41 @@ async def _delivery_loop(
     stop: asyncio.Event,
 ) -> None:
     """Consume parsed events from the queue and fan out to SSE.
-
-    Block on ``queue.get()`` only (no periodic timeout). A 0.5s poll would wake the
-    event loop twice per second forever and can inflate CPU in ``docker stats``.
+    
+    Optimierte Version ohne asyncio.wait() Overhead:
+    Nutzt asyncio.as_completed() statt wait() für minimalen Event Loop Last
     """
-    while True:
-        get_t = asyncio.create_task(queue.get())
-        stop_t = asyncio.create_task(stop.wait())
-        done, pending = await asyncio.wait(
-            {get_t, stop_t},
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        for t in pending:
-            t.cancel()
-        await asyncio.gather(*pending, return_exceptions=True)
-        if stop_t in done:
-            if not get_t.done():
-                get_t.cancel()
-                await asyncio.gather(get_t, return_exceptions=True)
-            break
+    while not stop.is_set():
         try:
-            data = get_t.result()
+            # Warte gleichzeitig auf Stop Event oder neue Nachricht
+            get_task = asyncio.create_task(queue.get())
+            stop_task = asyncio.create_task(stop.wait())
+            
+            for coro in asyncio.as_completed([get_task, stop_task]):
+                result = await coro
+                if coro is stop_task:
+                    get_task.cancel()
+                    try:
+                        await get_task
+                    except asyncio.CancelledError:
+                        pass
+                    return
+                if coro is get_task:
+                    stop_task.cancel()
+                    try:
+                        await stop_task
+                    except asyncio.CancelledError:
+                        pass
+                    data = result
+                    break
+            
+            await _deliver_scan_event_payload(data)
+            
         except asyncio.CancelledError:
             break
-        try:
-            await _deliver_scan_event_payload(data)
         except Exception:
             logger.exception("SSE Redis bridge: delivery failed")
+            await asyncio.sleep(0.5)
 
 
 async def run_redis_sse_bridge(stop: asyncio.Event) -> None:

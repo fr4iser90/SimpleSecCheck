@@ -629,10 +629,17 @@ async def api_info():
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+    
+    # Nur reload aktivieren wenn explizit in Entwicklungsumgebung gesetzt
+    reload_enabled = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
+    
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8080,
-        reload=True,
+        reload=reload_enabled,
         log_level="info",
+        workers=1,
+        loop="uvloop",
     )
