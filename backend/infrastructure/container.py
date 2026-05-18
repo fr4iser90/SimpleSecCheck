@@ -115,6 +115,7 @@ class Container(containers.DeclarativeContainer):
     api_key_service = providers.Factory(
         ApiKeyService,
         api_key_repository=api_key_repository,
+        user_repository=user_repository,
     )
     github_repo_service = providers.Factory(
         GitHubRepoService,

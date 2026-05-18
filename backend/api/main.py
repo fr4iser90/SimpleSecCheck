@@ -123,9 +123,11 @@ def create_app() -> FastAPI:
     # ACCESS_MODE = who may use the system (public | mixed | private). Middleware reads settings.ACCESS_MODE per request.
     protected_paths = [
         "/api/v1/scans",
+        "/api/v1/resolve-scan",
         "/api/v1/queue",
         "/api/v1/stats",
         "/api/v1/uploads",
+        "/api/user",
     ]
     app.add_middleware(
         AuthMiddleware,
@@ -150,6 +152,8 @@ def create_app() -> FastAPI:
         
     
     app.include_router(scans.router)
+    from api.routes import resolve_scan as resolve_scan_routes
+    app.include_router(resolve_scan_routes.router)
     app.include_router(events.router)
     app.include_router(auth.router)
     app.include_router(setup.router)

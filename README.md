@@ -117,6 +117,7 @@ For TLS and a reverse proxy, use the Traefik overlay file (see `docker-compose.t
 
 ## Documentation
 
+- [Agent & automation API](docs/AGENT_API.md) — AgentLayer / CI integration (`resolve-scan`, findings pagination, API keys)
 - [Configuration](docs/CONFIGURATION.md) — `.env`, `backend/config/settings.py`, Admin vs scanner env
 - [Roadmap](docs/ROADMAP.md) — planned integrations (e.g. SonarQube), platform ideas
 - [CLI & Docker examples](docs/CLI_DOCKER.md) — targets, env vars, `docker compose run` / `docker run`

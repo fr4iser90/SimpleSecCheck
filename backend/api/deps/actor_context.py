@@ -72,41 +72,90 @@ class ActorContextDependency:
         self.jwt_expiration_minutes = jwt_expiration_minutes
         self.logger = logging.getLogger("api.deps.actor_context")
     
+    async def resolve_context(
+        self,
+        request: Request,
+        response: Response,
+        credentials: Optional[HTTPAuthorizationCredentials] = None,
+    ) -> ActorContext:
+        """
+        Resolve actor context from API key, JWT, refresh/session cookies, or guest.
+
+        Used by FastAPI dependencies and AuthMiddleware (single code path).
+        Invalid ``ssc_`` keys return an unauthenticated context (never a guest session).
+        """
+        if credentials and credentials.credentials:
+            token = credentials.credentials.strip()
+            if self._looks_like_api_key(token):
+                context = await self._get_context_from_api_key(token)
+                if context:
+                    return context
+                return ActorContext()
+            try:
+                context = await self._get_context_from_jwt(token)
+                if context:
+                    return context
+            except jwt.PyJWTError:
+                pass
+
+        refresh_token = request.cookies.get("refresh_token")
+        if refresh_token:
+            context = self.get_context_from_refresh_token(refresh_token)
+            if context:
+                return context
+
+        session_id = request.cookies.get("session_id")
+        if session_id:
+            context = await self._get_context_from_session(session_id)
+            if context:
+                return context
+
+        return await self._create_guest_session(response)
+
     async def __call__(
         self,
         request: Request,
         response: Response,
         credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))
     ) -> ActorContext:
-        """Resolve actor context from JWT token or session cookie."""
-        
-        # Try to get context from JWT token first
-        if credentials:
-            try:
-                context = await self._get_context_from_jwt(credentials.credentials)
-                if context:
-                    return context
-            except jwt.PyJWTError:
-                # JWT is invalid, continue to session check
-                pass
-
-        # Try refresh_token cookie (for /auth/refresh and page reload session restore)
-        refresh_token = request.cookies.get("refresh_token")
-        if refresh_token:
-            context = self.get_context_from_refresh_token(refresh_token)
-            if context:
-                return context
-        
-        # Try to get context from session cookie
-        session_id = request.cookies.get("session_id")
-        if session_id:
-            context = await self._get_context_from_session(session_id)
-            if context:
-                return context
-        
-        # Create new guest session
-        return await self._create_guest_session(response)
+        """Resolve actor context from API key, JWT token, or session cookie."""
+        return await self.resolve_context(request, response, credentials)
     
+    @staticmethod
+    def _looks_like_api_key(token: str) -> bool:
+        from api.auth.api_key_utils import is_api_key_token
+        return is_api_key_token(token)
+
+    async def _get_context_from_api_key(self, plain_key: str) -> Optional[ActorContext]:
+        """Resolve authenticated user from Bearer API key (ssc_…)."""
+        try:
+            from api.auth.api_key_utils import hash_api_key
+            from infrastructure.container import get_api_key_service
+
+            key_hash = hash_api_key(plain_key)
+            result = await get_api_key_service().authenticate(key_hash)
+            if not result:
+                return None
+            api_key, user = result
+            role = getattr(user.role, "value", user.role) if user.role is not None else "user"
+            key_exp = (
+                api_key.expires_at.isoformat() + "Z"
+                if api_key.expires_at
+                else None
+            )
+            return ActorContext(
+                user_id=str(user.id),
+                session_id=None,
+                is_authenticated=True,
+                email=user.email,
+                name=user.username or user.email,
+                role=str(role) if role else "user",
+                expires_at=key_exp,
+            )
+        except Exception as exc:
+            self.logger.warning("API key authentication failed: %s", exc, exc_info=True)
+            return None
+
     async def _get_context_from_jwt(self, token: str) -> Optional[ActorContext]:
         """Extract context from JWT token."""
         try:

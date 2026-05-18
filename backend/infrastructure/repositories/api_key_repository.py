@@ -98,3 +98,27 @@ class DatabaseApiKeyRepository(ApiKeyRepository):
             m.is_active = False
             await session.commit()
             return True
+
+    async def get_by_key_hash(self, key_hash: str) -> Optional[ApiKey]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            r = await session.execute(
+                select(APIKeyModel).where(
+                    APIKeyModel.key_hash == key_hash,
+                    APIKeyModel.is_active == True,
+                )
+            )
+            m = r.scalar_one_or_none()
+            return _model_to_entity(m) if m else None
+
+    async def touch_last_used(self, key_id: str) -> None:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            r = await session.execute(
+                select(APIKeyModel).where(APIKeyModel.id == UUID(key_id))
+            )
+            m = r.scalar_one_or_none()
+            if not m:
+                return
+            m.last_used_at = datetime.utcnow()
+            await session.commit()

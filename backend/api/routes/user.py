@@ -9,12 +9,12 @@ from fastapi.responses import JSONResponse
 from starlette.responses import Response
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
-import secrets
 import re
 
 from api.json_datetime import isoformat_utc
 import hashlib
 
+from api.auth.api_key_utils import generate_api_key, hash_api_key
 from api.deps.actor_context import get_authenticated_user, ActorContext
 from infrastructure.container import (
     get_scan_target_service,
@@ -139,17 +139,6 @@ class APIKeyCreateResponse(BaseModel):
     api_key: str  # Full key (only shown once)
     created_at: str
     expires_at: Optional[str] = None
-
-
-def generate_api_key(user_id: str) -> str:
-    """Generate a new API key."""
-    random_part = secrets.token_urlsafe(32)
-    return f"ssc_{user_id[:8]}_{random_part}"
-
-
-def hash_api_key(api_key: str) -> str:
-    """Hash an API key for storage."""
-    return hashlib.sha256(api_key.encode()).hexdigest()
 
 
 @router.get("/api-keys", response_model=List[APIKeyResponse])

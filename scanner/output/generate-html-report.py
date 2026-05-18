@@ -828,6 +828,20 @@ def main():
         except Exception as e:
             debug(f"Warning: Could not write statistics.json: {e}")
 
+        try:
+            from datetime import datetime, timezone
+            findings_doc = {
+                "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "findings": report_findings,
+                "summary": statistics,
+            }
+            findings_path = Path(OUTPUT_FILE).parent / "findings.json"
+            with open(findings_path, "w", encoding="utf-8") as ff:
+                json.dump(findings_doc, ff, indent=2, ensure_ascii=False)
+            debug(f"Wrote findings.json ({len(report_findings)} items) to {findings_path}")
+        except Exception as e:
+            debug(f"Warning: Could not write findings.json: {e}")
+
         overall_status = "Critical" if critical_count > 0 else "High" if high_count > 0 else "OK"
         repo_url = ""
         if scan_metadata:

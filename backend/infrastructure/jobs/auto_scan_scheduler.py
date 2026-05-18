@@ -14,6 +14,7 @@ from infrastructure.container import (
 )
 from application.helpers.repo_scan_helper import create_repo_scan
 from application.helpers.target_scan_helper import create_scan_from_target
+from domain.services.auto_scan_service import AutoScanService
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ class AutoScanScheduler:
         while self._running:
             try:
                 await self._check_and_schedule_initial_scans()
+                await self._check_and_schedule_periodic_repo_scans()
                 await self._check_and_schedule_target_scans()
                 await asyncio.sleep(self.check_interval_seconds)
             except asyncio.CancelledError:
@@ -80,6 +82,11 @@ class AutoScanScheduler:
             for repo in repos:
                 try:
                     if repo.id in latest_by_repo:
+                        continue
+                    finished = await scan_repo.find_latest_finished_scan_by_user_and_target(
+                        repo.user_id, repo.repo_url
+                    )
+                    if finished:
                         continue
                     active = await scan_repo.find_active_scan_by_user_and_target(
                         repo.user_id, repo.repo_url
@@ -107,6 +114,54 @@ class AutoScanScheduler:
                     logger.error("Error processing repo %s for initial scan: %s", repo.id, e, exc_info=True)
         except Exception as e:
             logger.error("Error checking for initial scans: %s", e, exc_info=True)
+
+    async def _check_and_schedule_periodic_repo_scans(self):
+        """Daily/weekly repos: one due repo per tick (frequency + commit SHA diff)."""
+        try:
+            scan_repo = get_scan_repository()
+            next_repo = await AutoScanService.get_next_repo_to_scan()
+            if not next_repo:
+                return
+
+            user_id = next_repo["user_id"]
+            repo_url = next_repo["repo_url"]
+            active = await scan_repo.find_active_scan_by_user_and_target(user_id, repo_url)
+            if active:
+                logger.debug(
+                    "Periodic scan skipped for %s: active scan %s",
+                    next_repo.get("repo_name"),
+                    active.id,
+                )
+                return
+
+            commit_hash = next_repo.get("commit_hash")
+            scan_id = await create_repo_scan(
+                repo_url=repo_url,
+                repo_name=next_repo["repo_name"],
+                branch=next_repo["branch"],
+                user_id=user_id,
+                scanners=next_repo.get("scanners"),
+                commit_hash=commit_hash,
+                metadata={
+                    "trigger": "auto_scan_scheduler_periodic",
+                    "repo_id": next_repo["id"],
+                    "scan_frequency_reason": next_repo.get("scan_reason"),
+                },
+            )
+            if scan_id:
+                logger.info(
+                    "Periodic scan %s queued for %s (%s)",
+                    scan_id,
+                    next_repo.get("repo_name"),
+                    next_repo.get("scan_reason"),
+                )
+            else:
+                logger.error(
+                    "Failed to create periodic scan for repo %s",
+                    next_repo.get("repo_name"),
+                )
+        except Exception as e:
+            logger.error("Error scheduling periodic repo scans: %s", e, exc_info=True)
 
     async def _check_and_schedule_target_scans(self):
         try:

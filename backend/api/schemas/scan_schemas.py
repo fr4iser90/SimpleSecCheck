@@ -354,6 +354,66 @@ class BatchScanSchema(BaseModel):
         return v
 
 
+class ScanFindingsSummarySchema(BaseModel):
+    """Vulnerability counts (post finding-policy)."""
+
+    total_vulnerabilities: int = Field(default=0, ge=0)
+    critical_vulnerabilities: int = Field(default=0, ge=0)
+    high_vulnerabilities: int = Field(default=0, ge=0)
+    medium_vulnerabilities: int = Field(default=0, ge=0)
+    low_vulnerabilities: int = Field(default=0, ge=0)
+    info_vulnerabilities: int = Field(default=0, ge=0)
+
+
+class ScanFindingItemSchema(BaseModel):
+    """Normalized finding for automation integrations."""
+
+    tool: str = Field(description="Scanner/tool name")
+    severity: str = Field(description="Severity (CRITICAL, HIGH, …)")
+    path: str = Field(default="", description="File or target path")
+    line: str = Field(default="", description="Line number if known")
+    message: str = Field(default="", description="Finding message")
+    rule_id: str = Field(default="", description="Rule or vulnerability ID")
+    cwe: Optional[str] = Field(None, description="CWE id when available")
+    fix_hint: Optional[str] = Field(None, description="Remediation hint when available")
+
+
+class ScanFindingsPaginationSchema(BaseModel):
+    """Pagination metadata for GET .../findings (limit/offset over sorted list)."""
+
+    total: int = Field(ge=0, description="Total findings after severity filter")
+    limit: Optional[int] = Field(
+        None,
+        ge=1,
+        description="Requested page size (null = no limit, return remainder from offset)",
+    )
+    offset: int = Field(default=0, ge=0, description="Start index in filtered, sorted list")
+    returned: int = Field(default=0, ge=0, description="Number of findings in this response")
+    has_more: bool = Field(description="True if another page exists")
+    next_path: Optional[str] = Field(
+        None,
+        description="Relative URL for the next page (same limit/severity, higher offset)",
+    )
+
+
+class ScanFindingsResponseSchema(BaseModel):
+    """Machine-readable findings for a completed (or partially reported) scan."""
+
+    scan_id: str
+    status: str
+    generated_at: Optional[str] = None
+    findings: List[ScanFindingItemSchema] = Field(default_factory=list)
+    summary: ScanFindingsSummarySchema = Field(default_factory=ScanFindingsSummarySchema)
+    pagination: Optional[ScanFindingsPaginationSchema] = Field(
+        None,
+        description="Present when limit/offset/severity query params are used",
+    )
+    source: str = Field(
+        default="file",
+        description="findings source: file (findings.json), html (legacy embed), or empty",
+    )
+
+
 class ScanStatusResponseSchema(BaseModel):
     """Schema for scan status response."""
     

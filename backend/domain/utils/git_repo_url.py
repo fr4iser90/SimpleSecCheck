@@ -60,6 +60,19 @@ def normalize_git_repo_url(url: str) -> str:
         return s
 
 
+def repo_urls_match(a: str, b: str) -> bool:
+    """True if two git repo URLs refer to the same repository (normalized)."""
+    na = normalize_git_repo_url((a or "").strip()).rstrip("/").lower()
+    nb = normalize_git_repo_url((b or "").strip()).rstrip("/").lower()
+    if na == nb:
+        return True
+    if na.endswith(".git") and na[:-4] == nb:
+        return True
+    if nb.endswith(".git") and nb[:-4] == na:
+        return True
+    return False
+
+
 def normalize_repo_url_for_target_type(target_type: str, url: Optional[str]) -> str:
     """Apply `normalize_git_repo_url` only when target_type is git_repo."""
     if target_type != TargetType.GIT_REPO.value:

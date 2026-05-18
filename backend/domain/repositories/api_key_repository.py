@@ -38,3 +38,13 @@ class ApiKeyRepository(ABC):
     async def revoke(self, key_id: str, user_id: str) -> bool:
         """Soft-delete (set is_active=False). Returns True if found and revoked."""
         pass
+
+    @abstractmethod
+    async def get_by_key_hash(self, key_hash: str) -> Optional[ApiKey]:
+        """Look up an active API key by its stored hash."""
+        pass
+
+    @abstractmethod
+    async def touch_last_used(self, key_id: str) -> None:
+        """Update last_used_at to now (caller may throttle)."""
+        pass
