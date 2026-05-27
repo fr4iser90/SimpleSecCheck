@@ -124,6 +124,7 @@ def create_app() -> FastAPI:
     protected_paths = [
         "/api/v1/scans",
         "/api/v1/resolve-scan",
+        "/api/v1/finding-policy",
         "/api/v1/queue",
         "/api/v1/stats",
         "/api/v1/uploads",
@@ -154,6 +155,8 @@ def create_app() -> FastAPI:
     app.include_router(scans.router)
     from api.routes import resolve_scan as resolve_scan_routes
     app.include_router(resolve_scan_routes.router)
+    from api.routes import finding_policy as finding_policy_routes
+    app.include_router(finding_policy_routes.router)
     app.include_router(events.router)
     app.include_router(auth.router)
     app.include_router(setup.router)

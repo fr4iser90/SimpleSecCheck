@@ -829,9 +829,10 @@ def main():
             debug(f"Warning: Could not write statistics.json: {e}")
 
         try:
-            from datetime import datetime, timezone
             findings_doc = {
-                "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "generated_at": datetime.datetime.now(datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
                 "findings": report_findings,
                 "summary": statistics,
             }

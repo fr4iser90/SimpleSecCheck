@@ -306,10 +306,64 @@ POST agent-callback { branch_name, trigger_rescan: true }
 
 ---
 
+## Finding policy schema (for false positives)
+
+Agents that write `.scanning/finding-policy.json` should load the schema **once** and cache it (no `scan_id` required).
+
+```http
+GET /api/v1/finding-policy/schema
+Authorization: Bearer ssc_...
+```
+
+Optional filter (smaller payload):
+
+```http
+GET /api/v1/finding-policy/schema?tools=semgrep,gitleaks
+```
+
+**Response (abbreviated):**
+
+```json
+{
+  "schema_version": "1",
+  "default_path": ".scanning/finding-policy.json",
+  "format": "json",
+  "rules": { "root_type": "object", "block_value_type": "object" },
+  "notes": [
+    "Semgrep dedupe is configured under the semgrep block (semgrep.dedupe), not at root.",
+    "A root-level dedupe key is ignored by the scanner (legacy); use semgrep.dedupe instead."
+  ],
+  "tools": {
+    "semgrep": {
+      "accepted_findings": { "items": { "fields": { "rule_id": {}, "path_regex": {}, ... } } },
+      "severity_overrides": { ... },
+      "dedupe": { "fields": { "enabled": {}, "line_window": {} } }
+    },
+    "gitleaks": {
+      "accepted_findings": { "items": { "fields": { "rule_id": {}, "file_regex": {}, "description_regex": {}, "reason": {} } } }
+    }
+  },
+  "minimal_example": { "semgrep": { "accepted_findings": [ ... ] } }
+}
+```
+
+| Tool key | Special fields |
+|----------|----------------|
+| Most tools (`bandit`, `trivy`, `npm_audit`, …) | `accepted_findings[]` with `rule_id`, `path_regex`, `message_regex`, `reason` |
+| `codeql` | `rule_id` is matched as **regex** |
+| `gitleaks` | `file_regex`, `description_regex` (not `path_regex`) |
+| `detect_secrets` | `rule_id` (secret type), `path_regex`, `reason` — no `message_regex` |
+| `semgrep` | + `severity_overrides[]`, `dedupe` **inside** the `semgrep` block |
+
+Legacy: `GET /api/results/{scan_id}/ai-prompt` still embeds the same schema as Markdown in `prompt` (scan-specific findings + schema).
+
+---
+
 ## Optional endpoints
 
 | Method | Path | Use |
 |--------|------|-----|
+| `GET` | `/api/v1/finding-policy/schema` | Finding policy JSON structure (cache in agent) |
 | `GET` | `/api/user/targets` | List targets + `last_scan` metadata |
 | `GET` | `/api/user/targets/{id}` | Single target |
 | `POST` | `/api/user/targets/{id}/scan` | Manual rescan |
@@ -335,6 +389,7 @@ POST agent-callback { branch_name, trigger_rescan: true }
 ```text
 Auth:     Authorization: Bearer ssc_...
 
+Schema:   GET  /api/v1/finding-policy/schema
 Primary:  POST /api/v1/resolve-scan
 Poll:     GET  /api/v1/scans/{id}/status
 Findings: GET  /api/v1/scans/{id}/findings?limit=50&offset=0&severity=CRITICAL,HIGH
@@ -348,3 +403,4 @@ Rescan:   POST /api/user/targets/{target_id}/agent-callback
 | Version | Changes |
 |---------|---------|
 | 2026-05 | API key auth (`ssc_`), `GET .../findings`, `POST /api/v1/resolve-scan`, findings pagination (`limit`/`offset`/`severity`) |
+| 2026-05 | `GET /api/v1/finding-policy/schema` — machine-readable finding policy structure for agents |
