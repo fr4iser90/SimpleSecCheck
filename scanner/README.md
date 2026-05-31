@@ -160,14 +160,22 @@ scanners:
     rules: ["security/detect-unsafe-regex"]
 ```
 
-### Finding Policies
-```yaml
-# finding_policy.yaml
-severity_threshold: MEDIUM
-exclude_patterns:
-  - "path/to/ignore/*"
-  - "test/**/*"
-  - "vendor/**/*"
+### Finding policies
+
+Optional JSON file (`.scanning/finding-policy.json`) for broad acceptances. **Inline suppressions** (`# nosec`, `# nosemgrep`) work **without** any policy file. See [docs/FINDING_POLICY.md](../docs/FINDING_POLICY.md).
+
+```json
+{
+  "semgrep": {
+    "accepted_findings": [
+      {
+        "rule_id": "EXAMPLE_RULE",
+        "path_regex": "tests/.*",
+        "reason": "Test-only pattern"
+      }
+    ]
+  }
+}
 ```
 
 ## Plugin Development

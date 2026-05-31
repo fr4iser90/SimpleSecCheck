@@ -19,5 +19,10 @@ def generate_api_key(user_id: str) -> str:
 
 
 def hash_api_key(api_key: str) -> str:
-    """Hash an API key for storage (SHA-256 hex)."""
+    """Hash an API key for storage (SHA-256 hex).
+
+    High-entropy random tokens (see ``generate_api_key``) — not user passwords.
+    Slow KDFs (bcrypt/argon2) are for low-entropy secrets; SHA-256 lookup is
+    standard for API key verification at rest.
+    """
     return hashlib.sha256(api_key.encode()).hexdigest()

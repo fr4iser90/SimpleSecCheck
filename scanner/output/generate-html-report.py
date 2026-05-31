@@ -45,6 +45,11 @@ from scanner.output.html_utils import (
     _findings_count,
 )
 from scanner.core.finding_policy import load_policy
+from scanner.core.inline_suppressions import (
+    apply_inline_suppressions,
+    build_suppression_index,
+    get_inline_config,
+)
 from scanner.core.scan_metadata import load_metadata
 
 # Single source of truth: scanner names and paths come from ScannerRegistry only (required)
@@ -246,15 +251,23 @@ def generate_accepted_findings_section(accepted_findings):
         '<summary class="category-header"><span class="category-icon">✅</span> Accepted Findings (With Rationale)</summary>'
         '<div style="padding: 1rem 1.5rem;">'
     )
-    html_parts.append("<table><tr><th>Tool</th><th>ID</th><th>File</th><th>Line</th><th>Reason</th></tr>")
+    html_parts.append(
+        "<table><tr><th>Tool</th><th>ID</th><th>File</th><th>Line</th>"
+        "<th>Source</th><th>Reason</th></tr>"
+    )
     for finding in accepted_findings:
         tool = html.escape(str(finding.get("tool", "")))
         fid = html.escape(str(finding.get("id", "")))
         path = html.escape(str(finding.get("path", "")))
         line = html.escape(str(finding.get("line", "")))
+        source = html.escape(str(finding.get("accept_source", "policy")))
+        tag = finding.get("suppress_tag")
+        if tag and source == "inline":
+            source = f"{source} ({html.escape(str(tag))})"
         reason = html.escape(str(finding.get("reason", "Accepted by policy")))
         html_parts.append(
-            f"<tr><td>{tool}</td><td>{fid}</td><td>{path}</td><td>{line}</td><td>{reason}</td></tr>"
+            f"<tr><td>{tool}</td><td>{fid}</td><td>{path}</td><td>{line}</td>"
+            f"<td>{source}</td><td>{reason}</td></tr>"
         )
     html_parts.append("</table></div></details>")
     return "".join(html_parts)
@@ -297,8 +310,13 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
         html_parts.append(f'<p style="margin-bottom: 0.5rem;"><strong>Policy file:</strong> <code style="background: rgba(0,0,0,0.2); padding: 0.2rem 0.5rem; border-radius: 4px;">{html.escape(str(policy_path))}</code></p>')
         
         if has_accepted:
+            inline_count = sum(1 for f in accepted_findings if f.get("accept_source") == "inline")
+            policy_count = len(accepted_findings) - inline_count
             html_parts.append('<p style="margin-top: 1rem; margin-bottom: 0.5rem;">')
-            html_parts.append(f'<strong>Accepted findings:</strong> {len(accepted_findings)} finding(s) were accepted by the policy.')
+            html_parts.append(
+                f'<strong>Accepted findings:</strong> {len(accepted_findings)} total '
+                f'({policy_count} via policy, {inline_count} via inline comment).'
+            )
             html_parts.append('</p>')
             html_parts.append('<p style="margin-top: 0.5rem;">')
             html_parts.append('<a href="#accepted-findings-section" style="color: #0dcaf0; text-decoration: underline;">View accepted findings →</a>')
@@ -312,7 +330,11 @@ def generate_finding_policy_section(finding_policy, policy_path, accepted_findin
         html_parts.append('</p>')
         
         html_parts.append('<p style="margin-bottom: 1.5rem;">')
-        html_parts.append('If you want to suppress false positives or override severities, create a JSON-based finding policy file.')
+        html_parts.append(
+            'Suppress false positives with inline comments on the affected line '
+            '(<code># nosec</code>, <code># nosemgrep: rule-id</code>, '
+            '<code>// eslint-disable-next-line</code>) or with a JSON finding policy for broad patterns.'
+        )
         html_parts.append('</p>')
         
         # Example JSON from processors that support policy (no hardcoded tool names)
@@ -724,7 +746,34 @@ def main():
         finding_policy = {}
     else:
         finding_policy = load_policy(policy_path)
-    
+
+    inline_config = get_inline_config()
+    target_root = (
+        os.environ.get("TARGET_MOUNT_PATH", "").strip()
+        or os.environ.get("TARGET_PATH", "").strip()
+        or "/app/target"
+    )
+    suppression_index = {}
+    if inline_config.get("enabled", True) and os.path.isdir(target_root):
+        suppression_index = build_suppression_index(target_root)
+
+    if suppression_index and inline_config.get("enabled", True):
+        for scanner, processor in scanner_processors:
+            findings = findings_by_tool.get(scanner.name)
+            if findings is None:
+                continue
+            tool_key = getattr(processor, "policy_key", None) or ""
+            updated, inline_accepted = apply_inline_suppressions(
+                findings,
+                suppression_index,
+                tool_key=tool_key,
+                tool_name=scanner.name,
+                target_root=target_root,
+                config=inline_config,
+            )
+            findings_by_tool[scanner.name] = updated
+            accepted_findings.extend(inline_accepted)
+
     for scanner, processor in scanner_processors:
         if not getattr(processor, "policy_key", None) or not getattr(processor, "apply_policy", None):
             continue
@@ -733,6 +782,9 @@ def main():
             tool_policy = finding_policy.get(processor.policy_key, {}) if isinstance(finding_policy, dict) else {}
             updated, accepted = processor.apply_policy(findings, tool_policy)
             findings_by_tool[scanner.name] = updated
+            for record in accepted:
+                if isinstance(record, dict) and "accept_source" not in record:
+                    record["accept_source"] = "policy"
             accepted_findings.extend(accepted)
 
     try:

@@ -105,8 +105,11 @@ backend-refactored/
 ### Running the Backend
 
 ```bash
-# Install dependencies
+# Install production dependencies
 pip install -r requirements.txt
+
+# Development / tests (pytest, ruff, …)
+pip install -r requirements-dev.txt
 
 # Start database and Redis
 docker compose up postgres redis

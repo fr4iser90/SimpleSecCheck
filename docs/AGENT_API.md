@@ -308,6 +308,8 @@ POST agent-callback { branch_name, trigger_rescan: true }
 
 ## Finding policy schema (for false positives)
 
+See **[FINDING_POLICY.md](FINDING_POLICY.md)** for the hybrid model (inline `# nosec` / `# nosemgrep` **and** JSON policy), scope rules, and examples.
+
 Agents that write `.scanning/finding-policy.json` should load the schema **once** and cache it (no `scan_id` required).
 
 ```http
@@ -331,8 +333,15 @@ GET /api/v1/finding-policy/schema?tools=semgrep,gitleaks
   "rules": { "root_type": "object", "block_value_type": "object" },
   "notes": [
     "Semgrep dedupe is configured under the semgrep block (semgrep.dedupe), not at root.",
-    "A root-level dedupe key is ignored by the scanner (legacy); use semgrep.dedupe instead."
+    "Inline suppressions are separate — no finding-policy.json required; see inline_suppression_syntax in this response."
   ],
+  "inline_suppression_syntax": {
+    "python": ["# nosec", "# nosec B608", "# nosemgrep: rule-id"],
+    "javascript": ["// eslint-disable-next-line rule-id"]
+  },
+  "inline_suppression_env": {
+    "SSC_INLINE_SUPPRESSIONS_ENABLED": "Default on; set false to disable"
+  },
   "tools": {
     "semgrep": {
       "accepted_findings": { "items": { "fields": { "rule_id": {}, "path_regex": {}, ... } } },
@@ -354,6 +363,8 @@ GET /api/v1/finding-policy/schema?tools=semgrep,gitleaks
 | `gitleaks` | `file_regex`, `description_regex` (not `path_regex`) |
 | `detect_secrets` | `rule_id` (secret type), `path_regex`, `reason` — no `message_regex` |
 | `semgrep` | + `severity_overrides[]`, `dedupe` **inside** the `semgrep` block |
+
+Inline suppressions (`# nosec`, `# nosemgrep`, …) are **not** part of the policy file — see [FINDING_POLICY.md](FINDING_POLICY.md) and schema fields `inline_suppression_syntax` / `inline_suppression_env`.
 
 Legacy: `GET /api/results/{scan_id}/ai-prompt` still embeds the same schema as Markdown in `prompt` (scan-specific findings + schema).
 

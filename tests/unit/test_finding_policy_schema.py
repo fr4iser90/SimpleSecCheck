@@ -66,6 +66,15 @@ def test_get_finding_policy_schema_filters_tools():
     assert "dedupe" in filtered["tools"]["semgrep"]
 
 
+def test_schema_documents_inline_separately_from_policy_file():
+    schema = get_finding_policy_schema()
+    assert "inline_suppression_syntax" in schema
+    assert "inline_suppression_env" in schema
+    assert "inline_suppressions" not in schema
+    notes_text = " ".join(schema["notes"])
+    assert "no finding-policy" in notes_text.lower() or "separate" in notes_text.lower()
+
+
 def test_schema_notes_mention_root_dedupe_legacy():
     schema = get_finding_policy_schema()
     notes_text = " ".join(schema["notes"])

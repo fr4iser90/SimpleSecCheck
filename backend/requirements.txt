@@ -1,4 +1,4 @@
-# Backend Refactored Dependencies
+# Backend production dependencies (see requirements-dev.txt for pytest, ruff, etc.)
 # Core FastAPI and web framework
 fastapi==0.111.0
 uvicorn[standard]==0.30.1
@@ -17,7 +17,7 @@ aioredis==2.0.1
 # Authentication & Security
 PyJWT[crypto]>=2.12.0
 passlib[bcrypt]==1.7.4
-python-multipart==0.0.22
+python-multipart==0.0.27
 argon2-cffi==21.3.0
 
 # HTTP Client
@@ -29,14 +29,6 @@ structlog==24.3.0
 # Configuration
 pyyaml==6.0.2
 
-# Development & Testing
-pytest==8.3.4
-pytest-asyncio==0.24.0
-pytest-cov==5.0.0
-black>=26.3.1
-mypy==1.11.2
-ruff==0.5.7
-
 # Docker
 docker==7.1.0
 
@@ -44,7 +36,7 @@ docker==7.1.0
 python-dateutil==2.9.0.post0
 
 # Environment
-python-dotenv==1.1.1
+python-dotenv==1.2.2
 dependency-injector==4.45.0
 
 # Monitoring & Metrics

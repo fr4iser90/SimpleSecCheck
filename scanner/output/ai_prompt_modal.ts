@@ -12,6 +12,12 @@ let aiPromptModal: HTMLDivElement | null = null;
 let currentPrompt: string = '';
 let currentLanguage: Language = 'english';
 const DEFAULT_POLICY_PATH = '.scanning/finding-policy.json';
+const INLINE_FP_STEP_EN =
+  '3. For a single-line false positive: add an inline comment on that line (`# nosec B608 — reason`, `# nosemgrep: rule-id`, `// eslint-disable-next-line rule-id`, or `# ssc:accept rule-id`). For broad patterns (many files): add a finding policy JSON entry\n';
+const INLINE_FP_STEP_DE =
+  '3. Für ein zeilenweises False Positive: Inline-Kommentar an der Zeile (`# nosec B608 — Begründung`, `# nosemgrep: rule-id`, `// eslint-disable-next-line rule-id`, oder `# ssc:accept rule-id`). Für breite Muster (viele Dateien): finding-policy JSON-Eintrag\n';
+const INLINE_FP_STEP_ZH =
+  '3. 单行误报：在该行添加内联注释（`# nosec B608 — 原因`、`# nosemgrep: rule-id`、`// eslint-disable-next-line rule-id` 或 `# ssc:accept rule-id`）。广泛模式（多文件）：添加 finding policy JSON 条目\n';
 let currentPolicyPath: string = DEFAULT_POLICY_PATH;
 let currentIncludePRWorkflow: boolean = true;
 let currentOnlyCriticalHigh: boolean = false;
@@ -590,7 +596,7 @@ function generatePromptLocally(
       "我对代码库进行了安全扫描，发现以下问题。请分析每个发现并：\n",
       "1. 识别误报（非实际安全问题的发现）\n",
       "2. 对于误报，如可能，建议代码更改以避免触发规则\n",
-      "3. 如果无法/不适合更改代码，生成finding policy JSON条目\n",
+      INLINE_FP_STEP_ZH,
       `4. 提供包含所有误报的完整${policyPath.split('/').pop() || 'finding-policy.json'}结构\n\n`,
       "## 发现摘要\n",
       `总发现数: ${list.length}\n`,
@@ -632,7 +638,7 @@ function generatePromptLocally(
       "Bitte analysieren Sie jeden Fund und:\n",
       "1. Identifizieren Sie False Positives (Funde, die keine tatsächlichen Sicherheitsprobleme sind)\n",
       "2. Für False Positives schlagen Sie Code-Änderungen vor, falls möglich, um die Regel nicht auszulösen\n",
-      "3. Wenn Code-Änderungen nicht möglich/angemessen sind, generieren Sie einen finding policy JSON-Eintrag\n",
+      INLINE_FP_STEP_DE,
       `4. Stellen Sie die vollständige ${policyPath.split('/').pop() || 'finding-policy.json'}-Struktur mit allen False Positives bereit\n\n`,
       "## Funde-Zusammenfassung\n",
       `Gesamtanzahl Funde: ${list.length}\n`,
@@ -675,7 +681,7 @@ function generatePromptLocally(
       "Please analyze each finding and:\n",
       "1. Identify false positives (findings that are not actual security issues)\n",
       "2. For false positives, suggest code changes if possible to avoid triggering the rule\n",
-      "3. If code changes are not possible/appropriate, generate a finding policy JSON entry\n",
+      INLINE_FP_STEP_EN,
       `4. Provide the complete ${policyPath.split('/').pop() || 'finding-policy.json'} structure with all false positives\n\n`,
       "## Findings Summary\n",
       `Total findings: ${list.length}\n`,
@@ -836,7 +842,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
         "我对代码库进行了安全扫描，发现以下问题。请分析每个发现并：\n",
         "1. 识别误报（非实际安全问题的发现）\n",
         "2. 对于误报，如可能，建议代码更改以避免触发规则\n",
-        "3. 如果无法/不适合更改代码，生成finding policy JSON条目\n",
+        INLINE_FP_STEP_ZH,
         `4. 提供包含所有误报的完整${policyPath.split('/').pop() || 'finding-policy.json'}结构\n\n`,
         "## 发现摘要\n",
         `本部分总发现数: ${chunk.length}\n`,
@@ -878,7 +884,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
         "Bitte analysieren Sie jeden Fund und:\n",
         "1. Identifizieren Sie False Positives (Funde, die keine tatsächlichen Sicherheitsprobleme sind)\n",
         "2. Für False Positives schlagen Sie Code-Änderungen vor, falls möglich, um die Regel nicht auszulösen\n",
-        "3. Wenn Code-Änderungen nicht möglich/angemessen sind, generieren Sie einen finding policy JSON-Eintrag\n",
+        INLINE_FP_STEP_DE,
         `4. Stellen Sie die vollständige ${policyPath.split('/').pop() || 'finding-policy.json'}-Struktur mit allen False Positives bereit\n\n`,
         "## Funde-Zusammenfassung\n",
         `Gesamtanzahl Funde in diesem Teil: ${chunk.length}\n`,
@@ -921,7 +927,7 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
         "Please analyze each finding and:\n",
         "1. Identify false positives (findings that are not actual security issues)\n",
         "2. For false positives, suggest code changes if possible to avoid triggering the rule\n",
-        "3. If code changes are not possible/appropriate, generate a finding policy JSON entry\n",
+        INLINE_FP_STEP_EN,
         `4. Provide the complete ${policyPath.split('/').pop() || 'finding-policy.json'} structure with all false positives\n\n`,
         "## Findings Summary\n",
         `Total findings in this part: ${chunk.length}\n`,

@@ -267,9 +267,9 @@
             },
             {
                 "rule_id": "py/weak-sensitive-data-hashing",
-                "path_regex": "(.*/)?(backend/domain/entities/user\\.py|backend/api/routes/user\\.py)$",
+                "path_regex": "(.*/)?(backend/domain/entities/user\\.py|backend/api/routes/user\\.py|backend/api/auth/api_key_utils\\.py)$",
                 "message_regex": "SHA256.*insecure for password hashing",
-                "reason": "Domain entity uses SHA256 as placeholder (comment notes production should use bcrypt). API key hashing for storage; production should use stronger hashing. Accepted as known technical debt."
+                "reason": "user.py/domain entity: SHA256 placeholder for legacy paths; passwords use bcrypt/argon2 elsewhere. api_key_utils.py: SHA-256 stores high-entropy API keys (secrets.token_urlsafe), not user-chosen passwords — standard lookup hash, distinct from password threat model."
             },
             {
                 "rule_id": "py/incomplete-url-substring-sanitization",

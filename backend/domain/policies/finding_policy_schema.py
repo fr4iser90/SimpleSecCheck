@@ -212,7 +212,22 @@ NOTES: List[str] = [
     "Omitted rule fields (rule_id, path_regex, etc.) match any value for that field.",
     "Semgrep dedupe is configured under the semgrep block (semgrep.dedupe), not at root.",
     "A root-level dedupe key is ignored by the scanner (legacy); use semgrep.dedupe instead.",
+    "Inline suppressions (# nosec, # nosemgrep, etc.) are separate: no finding-policy.json required; see docs/FINDING_POLICY.md.",
+    "Hybrid workflow: single-line FP → inline comment in source; broad FP patterns → accepted_findings in this JSON file.",
 ]
+
+INLINE_SUPPRESSION_SYNTAX: Dict[str, List[str]] = {
+    "python": ["# nosec", "# nosec B608", "# nosemgrep: rule-id", "# ssc:accept rule-id — reason"],
+    "javascript": ["// eslint-disable-next-line rule-id", "// nosemgrep: rule-id"],
+    "gitleaks": ["# gitleaks:allow"],
+}
+
+INLINE_SUPPRESSION_ENV: Dict[str, str] = {
+    "SSC_INLINE_SUPPRESSIONS_ENABLED": "Default true. Set false/0/off to disable reading inline tags at report time.",
+    "SSC_INLINE_SUPPRESSIONS_LINE_LOOKBACK": "Default 1. Lines above finding to check for multi-line statements.",
+    "SSC_INLINE_SUPPRESSIONS_CROSS_TOOL_NOSEC": "Default true. Apply # nosec Bxxx to non-Bandit tools when id matches.",
+    "SSC_INLINE_SUPPRESSIONS_CROSS_TOOL_NOSEMGREP": "Default true. Apply # nosemgrep to non-Semgrep tools when rule matches.",
+}
 
 PATH_MATCH_HINTS: Dict[str, str] = {
     "bandit": "path_regex matches finding filename",
@@ -250,6 +265,8 @@ def get_finding_policy_schema(
             "validation": "Root dict; every top-level value must be a dict (see scanner/core/finding_policy.py).",
         },
         "notes": NOTES,
+        "inline_suppression_syntax": INLINE_SUPPRESSION_SYNTAX,
+        "inline_suppression_env": INLINE_SUPPRESSION_ENV,
         "path_match_hints": {
             k: PATH_MATCH_HINTS[k]
             for k in sorted(tools_out.keys())

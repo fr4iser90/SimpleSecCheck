@@ -152,8 +152,8 @@ class ActorContextDependency:
                 role=str(role) if role else "user",
                 expires_at=key_exp,
             )
-        except Exception as exc:
-            self.logger.warning("API key authentication failed: %s", exc, exc_info=True)
+        except Exception:
+            self.logger.warning("API key authentication failed", exc_info=True)
             return None
 
     async def _get_context_from_jwt(self, token: str) -> Optional[ActorContext]:
