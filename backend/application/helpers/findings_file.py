@@ -21,20 +21,23 @@ def _extract_findings_from_report_html(html_path: Path) -> List[Dict[str, Any]]:
         text = html_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return []
-    match = re.search(
-        r'<script[^>]*\sid="findings-data"[^>]*>\s*([\s\S]*?)\s*</script>',
-        text,
-    )
-    if not match:
-        return []
-    raw = match.group(1).strip()
-    if not raw:
-        return []
-    try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        return []
-    return data if isinstance(data, list) else []
+    for script_id in ("report-findings-data", "findings-data"):
+        match = re.search(
+            rf'<script[^>]*\sid="{re.escape(script_id)}"[^>]*>\s*([\s\S]*?)\s*</script>',
+            text,
+        )
+        if not match:
+            continue
+        raw = match.group(1).strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(data, list):
+            return data
+    return []
 
 
 def load_findings_payload(scan_id: str) -> Tuple[Optional[Dict[str, Any]], str]:

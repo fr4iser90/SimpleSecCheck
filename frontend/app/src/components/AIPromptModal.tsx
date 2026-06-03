@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation, Language } from '../i18n'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
 
@@ -11,11 +11,17 @@ interface AIPromptModalProps {
 interface PromptData {
   prompt: string
   findings_count: number
+  total_findings?: number
+  matched_findings?: number
+  included_by_severity?: Record<string, number>
   language: string
   policy_path: string
+  max_findings?: number
+  min_severity?: string
+  tool?: string | null
+  sort_by?: string
 }
 
-// Map UI language (en/zh/de) to backend prompt language (english/chinese/german)
 const mapUILanguageToPromptLanguage = (uiLang: Language): string => {
   const mapping: Record<Language, string> = {
     en: 'english',
@@ -25,10 +31,26 @@ const mapUILanguageToPromptLanguage = (uiLang: Language): string => {
   return mapping[uiLang] || 'english'
 }
 
+const MAX_PROMPT_FINDINGS = 10000
+
+function clampMaxFindings(raw: number): number {
+  if (Number.isNaN(raw) || raw < 1) return 100
+  return Math.min(raw, MAX_PROMPT_FINDINGS)
+}
+
+const selectStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '0.5rem 0.75rem',
+  background: 'var(--glass-bg-main)',
+  border: '1px solid var(--glass-border-main)',
+  borderRadius: '8px',
+  color: 'var(--text-main)',
+  boxSizing: 'border-box',
+}
+
 export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModalProps) {
   const { t, language: uiLanguage, setLanguage: setUILanguage, languages } = useTranslation()
-  
-  // Prompt language (for backend API)
+
   const [promptLanguage, setPromptLanguage] = useState<Language>(uiLanguage)
   const [policyPath, setPolicyPath] = useState('.scanning/finding-policy.json')
   const [prompt, setPrompt] = useState('')
@@ -37,38 +59,74 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
   const [promptData, setPromptData] = useState<PromptData | null>(null)
   const [copied, setCopied] = useState(false)
 
-  // Load prompt when modal opens or settings change
+  const [maxFindings, setMaxFindings] = useState(100)
+  const [maxFindingsDraft, setMaxFindingsDraft] = useState('100')
+  const [minSeverity, setMinSeverity] = useState('HIGH')
+  const [toolFilter, setToolFilter] = useState('')
+  const [toolFilterDraft, setToolFilterDraft] = useState('')
+  const [sortBy, setSortBy] = useState('severity')
+
+  const commitMaxFindings = () => {
+    const n = clampMaxFindings(parseInt(maxFindingsDraft, 10))
+    setMaxFindingsDraft(String(n))
+    setMaxFindings(n)
+  }
+
+  const commitToolFilter = () => {
+    setToolFilter(toolFilterDraft.trim())
+  }
+
+  const filterDeps = useMemo(
+    () => [isOpen, promptLanguage, policyPath, scanId, maxFindings, minSeverity, toolFilter, sortBy],
+    [isOpen, promptLanguage, policyPath, scanId, maxFindings, minSeverity, toolFilter, sortBy]
+  )
+
   useEffect(() => {
     if (isOpen) {
       loadPrompt()
     }
-  }, [isOpen, promptLanguage, policyPath, scanId])
+  }, filterDeps)
 
   const loadPrompt = async () => {
     setLoading(true)
     setError(null)
-    
+
     try {
       const backendLanguage = mapUILanguageToPromptLanguage(promptLanguage)
-      const policyParam = `policy_path=${encodeURIComponent(policyPath || '.scanning/finding-policy.json')}`
+      const params = new URLSearchParams({
+        language: backendLanguage,
+        policy_path: policyPath || '.scanning/finding-policy.json',
+        max_findings: String(maxFindings),
+        min_severity: minSeverity,
+        sort_by: sortBy,
+      })
+      if (toolFilter.trim()) {
+        params.set('tool', toolFilter.trim())
+      }
       const endpoint = scanId
-        ? `/api/results/${scanId}/ai-prompt?language=${backendLanguage}&${policyParam}`
-        : `/api/scan/ai-prompt?language=${backendLanguage}&${policyParam}`
+        ? `/api/results/${scanId}/ai-prompt?${params.toString()}`
+        : `/api/scan/ai-prompt?${params.toString()}`
 
       const response = await fetch(resolveApiUrl(endpoint))
-      
+
       if (response.ok) {
         const data: PromptData = await response.json()
         setPrompt(data.prompt)
         setPromptData(data)
+      } else if (response.status === 422) {
+        setError(t('aiPrompt.validationFailed', { max: String(MAX_PROMPT_FINDINGS) }))
+        setPrompt('')
+        setPromptData(null)
       } else {
         const errorText = await response.text()
         setError(`${t('aiPrompt.failedToLoad')}: ${errorText}`)
         setPrompt('')
+        setPromptData(null)
       }
     } catch (err) {
       setError(`${t('common.error')}: ${err instanceof Error ? err.message : 'Unknown error'}`)
       setPrompt('')
+      setPromptData(null)
     } finally {
       setLoading(false)
     }
@@ -76,7 +134,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
 
   const handleCopy = async () => {
     if (!prompt) return
-    
+
     try {
       await navigator.clipboard.writeText(prompt)
       setCopied(true)
@@ -89,15 +147,23 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
 
   const handleLanguageChange = (newLanguage: Language) => {
     setPromptLanguage(newLanguage)
-    setUILanguage(newLanguage) // Also update UI language
+    setUILanguage(newLanguage)
   }
 
   const estimateTokens = (text: string): number => {
-    // Rough estimation: ~4 characters per token for English/German, ~2 for Chinese
     if (promptLanguage === 'zh') {
       return Math.ceil(text.length / 2)
     }
     return Math.ceil(text.length / 4)
+  }
+
+  const severityBreakdown = (counts?: Record<string, number>) => {
+    if (!counts) return ''
+    const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
+    return order
+      .filter((s) => (counts[s] || 0) > 0)
+      .map((s) => `${counts[s]} ${s}`)
+      .join(' · ')
   }
 
   if (!isOpen) return null
@@ -143,7 +209,6 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div
           style={{
             display: 'flex',
@@ -172,9 +237,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
           </button>
         </div>
 
-        {/* Content */}
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* Prompt Preview */}
           <div className="form-group" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <label style={{ marginBottom: '0.5rem', fontWeight: 600 }}>📋 {t('aiPrompt.promptPreview')}:</label>
             {loading ? (
@@ -227,7 +290,6 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
             )}
           </div>
 
-          {/* Settings */}
           <div
             style={{
               background: 'var(--glass-bg-main)',
@@ -238,7 +300,6 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
           >
             <div style={{ marginBottom: '1rem', fontWeight: 600 }}>⚙️ {t('aiPrompt.settings')}:</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Language Selection */}
               <div className="form-group" style={{ margin: 0 }}>
                 <label style={{ marginBottom: '0.5rem', display: 'block' }}>{t('aiPrompt.language')}:</label>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -247,7 +308,10 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                       key={lang}
                       onClick={() => handleLanguageChange(lang)}
                       style={{
-                        background: promptLanguage === lang ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'var(--glass-bg-main)',
+                        background:
+                          promptLanguage === lang
+                            ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                            : 'var(--glass-bg-main)',
                         border: `1px solid ${promptLanguage === lang ? '#667eea' : 'var(--glass-border-main)'}`,
                         padding: '0.5rem 1rem',
                         borderRadius: '8px',
@@ -261,7 +325,6 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                 </div>
               </div>
 
-              {/* Policy Path */}
               <div className="form-group" style={{ margin: 0 }}>
                 <label style={{ marginBottom: '0.5rem', display: 'block' }}>{t('aiPrompt.policyPath')}:</label>
                 <input
@@ -279,31 +342,112 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                   }}
                 />
               </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                  gap: '0.75rem',
+                }}
+              >
+                <div>
+                  <label style={{ marginBottom: '0.35rem', display: 'block', fontSize: '0.9rem' }}>
+                    {t('aiPrompt.minSeverity')}
+                  </label>
+                  <select value={minSeverity} onChange={(e) => setMinSeverity(e.target.value)} style={selectStyle}>
+                    <option value="CRITICAL">{t('aiPrompt.severityCriticalOnly')}</option>
+                    <option value="HIGH">{t('aiPrompt.severityCriticalHigh')}</option>
+                    <option value="MEDIUM">{t('aiPrompt.severityMediumPlus')}</option>
+                    <option value="LOW">{t('aiPrompt.severityLowPlus')}</option>
+                    <option value="ALL">{t('aiPrompt.severityAll')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ marginBottom: '0.35rem', display: 'block', fontSize: '0.9rem' }}>
+                    {t('aiPrompt.filterTool')}
+                  </label>
+                  <input
+                    type="text"
+                    value={toolFilterDraft}
+                    onChange={(e) => setToolFilterDraft(e.target.value)}
+                    onBlur={commitToolFilter}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        commitToolFilter()
+                      }
+                    }}
+                    placeholder={t('aiPrompt.allTools')}
+                    style={selectStyle}
+                    list="ai-prompt-tool-suggestions"
+                  />
+                  <datalist id="ai-prompt-tool-suggestions">
+                    <option value="Semgrep" />
+                    <option value="Bandit" />
+                    <option value="Codeql" />
+                    <option value="Eslint" />
+                    <option value="Trivy" />
+                  </datalist>
+                </div>
+                <div>
+                  <label style={{ marginBottom: '0.35rem', display: 'block', fontSize: '0.9rem' }}>
+                    {t('aiPrompt.sortBy')}
+                  </label>
+                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={selectStyle}>
+                    <option value="severity">{t('aiPrompt.sortSeverity')}</option>
+                    <option value="tool">{t('aiPrompt.sortTool')}</option>
+                    <option value="path">{t('aiPrompt.sortPath')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ marginBottom: '0.35rem', display: 'block', fontSize: '0.9rem' }}>
+                    {t('aiPrompt.maxFindings')}
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={MAX_PROMPT_FINDINGS}
+                    value={maxFindingsDraft}
+                    onChange={(e) => setMaxFindingsDraft(e.target.value)}
+                    onBlur={commitMaxFindings}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        commitMaxFindings()
+                      }
+                    }}
+                    style={selectStyle}
+                  />
+                  <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.85 }}>
+                    {t('aiPrompt.maxFindingsHint', { max: String(MAX_PROMPT_FINDINGS) })}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Stats */}
           {promptData && !loading && !error && (
             <div
               style={{
-                display: 'flex',
-                gap: '1rem',
                 padding: '0.75rem',
                 background: 'var(--glass-bg-main)',
                 border: '1px solid var(--glass-border-main)',
                 borderRadius: '8px',
                 fontSize: '0.9rem',
-                opacity: 0.8,
+                opacity: 0.9,
+                lineHeight: 1.5,
               }}
             >
-              {t('aiPrompt.stats', {
-                count: promptData.findings_count.toString(),
+              {t('aiPrompt.statsDetail', {
+                included: String(promptData.findings_count),
+                breakdown: severityBreakdown(promptData.included_by_severity) || '—',
+                matched: String(promptData.matched_findings ?? promptData.findings_count),
+                total: String(promptData.total_findings ?? promptData.findings_count),
                 tokens: estimateTokens(prompt).toLocaleString(),
               })}
             </div>
           )}
 
-          {/* Actions */}
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
             <button
               onClick={onClose}

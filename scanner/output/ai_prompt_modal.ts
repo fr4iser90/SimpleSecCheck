@@ -20,8 +20,227 @@ const INLINE_FP_STEP_ZH =
   '3. 单行误报：在该行添加内联注释（`# nosec B608 — 原因`、`# nosemgrep: rule-id`、`// eslint-disable-next-line rule-id` 或 `# ssc:accept rule-id`）。广泛模式（多文件）：添加 finding policy JSON 条目\n';
 let currentPolicyPath: string = DEFAULT_POLICY_PATH;
 let currentIncludePRWorkflow: boolean = true;
-let currentOnlyCriticalHigh: boolean = false;
 let currentMaxFindings: number = 100;
+let currentMinSeverity: string = 'HIGH';
+let currentToolFilter: string = '';
+let currentSortBy: string = 'severity';
+
+/** Upper bound for prompt size (matches API validation). */
+const MAX_PROMPT_FINDINGS = 10000;
+
+const SEV_ORDER: Record<string, number> = {
+  CRITICAL: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+  INFO: 4,
+};
+
+const MIN_SEVERITY_THRESHOLD: Record<string, number> = {
+  CRITICAL: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+  INFO: 4,
+  ALL: 99,
+};
+
+type ReportFinding = {
+  tool?: string;
+  severity?: string;
+  path?: string;
+  line?: string | number;
+  message?: string;
+  rule_id?: string;
+};
+
+type PromptSelectionMeta = {
+  total: number;
+  matched: number;
+  included: number;
+  min_severity: string;
+  tool: string | null;
+  sort_by: string;
+  included_by_severity: Record<string, number>;
+};
+
+function normalizeSeverity(sev: unknown): string {
+  const raw = String(sev || '').trim().toUpperCase();
+  if (!raw) return 'INFO';
+  if (raw.indexOf('CRIT') !== -1) return 'CRITICAL';
+  if (raw === 'HIGH' || raw === 'ERROR') return 'HIGH';
+  if (raw === 'MEDIUM' || raw === 'MED' || raw === 'WARN' || raw === 'MODERATE') return 'MEDIUM';
+  if (raw === 'LOW') return 'LOW';
+  if (raw === 'INFO' || raw === 'INFORMATIONAL' || raw === 'NOTE') return 'INFO';
+  return raw;
+}
+
+function severityRank(sev: unknown): number {
+  return SEV_ORDER[normalizeSeverity(sev)] ?? 5;
+}
+
+function passesMinSeverity(sev: unknown, minSeverity: string): boolean {
+  const key = (minSeverity || 'ALL').trim().toUpperCase();
+  if (key === 'ALL') return true;
+  const threshold = MIN_SEVERITY_THRESHOLD[key] ?? 1;
+  return severityRank(sev) <= threshold;
+}
+
+function countBySeverity(findings: ReportFinding[]): Record<string, number> {
+  const counts: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
+  for (const f of findings) {
+    const s = normalizeSeverity(f.severity);
+    counts[s] = (counts[s] || 0) + 1;
+  }
+  return counts;
+}
+
+function sortFindingsList(findings: ReportFinding[], sortBy: string): ReportFinding[] {
+  const list = findings.slice();
+  const pathKey = (f: ReportFinding) => String(f.path || '').toLowerCase();
+  const toolKey = (f: ReportFinding) => String(f.tool || '').toLowerCase();
+  const key = (sortBy || 'severity').toLowerCase();
+  if (key === 'tool') {
+    return list.sort(
+      (a, b) =>
+        toolKey(a).localeCompare(toolKey(b)) ||
+        severityRank(a.severity) - severityRank(b.severity) ||
+        pathKey(a).localeCompare(pathKey(b))
+    );
+  }
+  if (key === 'path') {
+    return list.sort(
+      (a, b) =>
+        pathKey(a).localeCompare(pathKey(b)) ||
+        severityRank(a.severity) - severityRank(b.severity) ||
+        toolKey(a).localeCompare(toolKey(b))
+    );
+  }
+  return list.sort(
+    (a, b) =>
+      severityRank(a.severity) - severityRank(b.severity) ||
+      toolKey(a).localeCompare(toolKey(b)) ||
+      pathKey(a).localeCompare(pathKey(b))
+  );
+}
+
+function selectFindingsForPrompt(
+  findings: ReportFinding[],
+  options: {
+    maxFindings: number;
+    minSeverity: string;
+    tool?: string;
+    sortBy?: string;
+  }
+): { selected: ReportFinding[]; meta: PromptSelectionMeta } {
+  const total = findings.length;
+  const toolKey = (options.tool || '').trim();
+  const filtered: ReportFinding[] = [];
+  for (const f of findings) {
+    if (toolKey && String(f.tool || '').trim() !== toolKey) continue;
+    if (!passesMinSeverity(f.severity, options.minSeverity)) continue;
+    filtered.push(f);
+  }
+  const sorted = sortFindingsList(filtered, options.sortBy || 'severity');
+  const cap = Math.max(1, options.maxFindings);
+  const selected = sorted.slice(0, cap);
+  return {
+    selected,
+    meta: {
+      total,
+      matched: filtered.length,
+      included: selected.length,
+      min_severity: String(options.minSeverity || 'HIGH').toUpperCase(),
+      tool: toolKey || null,
+      sort_by: options.sortBy || 'severity',
+      included_by_severity: countBySeverity(selected),
+    },
+  };
+}
+
+function formatSeverityBreakdown(counts: Record<string, number>): string {
+  const parts: string[] = [];
+  for (const sev of ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']) {
+    const n = counts[sev] || 0;
+    if (n > 0) parts.push(`${n} ${sev}`);
+  }
+  return parts.join(' · ');
+}
+
+function loadReportFindingsFromPage(): ReportFinding[] {
+  const ids = ['report-findings-data', 'findings-data'];
+  for (let i = 0; i < ids.length; i++) {
+    const el = document.getElementById(ids[i]) as HTMLScriptElement | null;
+    if (!el) continue;
+    let jsonText = el.textContent || el.innerText || '';
+    if (jsonText.indexOf('&quot;') !== -1 || jsonText.indexOf('&amp;') !== -1) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString('<div>' + jsonText + '</div>', 'text/html');
+      const decoded = doc.body.firstElementChild as HTMLElement | null;
+      jsonText = decoded ? decoded.textContent || decoded.innerText || '' : jsonText;
+    }
+    if (!jsonText.trim()) continue;
+    try {
+      const data = JSON.parse(jsonText);
+      if (Array.isArray(data)) return data;
+    } catch (_) {
+      /* try next */
+    }
+  }
+  return [];
+}
+
+function populateToolFilterOptions(findings: ReportFinding[]): void {
+  const select = document.getElementById('ai-prompt-filter-tool') as HTMLSelectElement | null;
+  if (!select) return;
+  const tools = Array.from(
+    new Set(findings.map((f) => String(f.tool || '').trim()).filter(Boolean))
+  ).sort();
+  const prev = select.value;
+  select.innerHTML = '';
+  const allOpt = document.createElement('option');
+  allOpt.value = '';
+  setTextContent(allOpt, 'All tools');
+  select.appendChild(allOpt);
+  for (let i = 0; i < tools.length; i++) {
+    const opt = document.createElement('option');
+    opt.value = tools[i];
+    setTextContent(opt, tools[i]);
+    select.appendChild(opt);
+  }
+  if (prev && tools.indexOf(prev) !== -1) {
+    select.value = prev;
+  } else {
+    select.value = currentToolFilter;
+  }
+}
+
+function readPromptFilterSettings(): void {
+  const minEl = document.getElementById('ai-prompt-min-severity') as HTMLSelectElement | null;
+  const toolEl = document.getElementById('ai-prompt-filter-tool') as HTMLSelectElement | null;
+  const sortEl = document.getElementById('ai-prompt-sort-by') as HTMLSelectElement | null;
+  const maxEl = document.getElementById('ai-prompt-max-findings') as HTMLInputElement | null;
+  if (minEl) currentMinSeverity = minEl.value || 'HIGH';
+  if (toolEl) currentToolFilter = toolEl.value || '';
+  if (sortEl) currentSortBy = sortEl.value || 'severity';
+  if (maxEl) {
+    currentMaxFindings = clampMaxFindings(parseInt(maxEl.value, 10));
+    maxEl.value = String(currentMaxFindings);
+  }
+}
+
+function clampMaxFindings(n: number): number {
+  if (isNaN(n) || n < 1) return 100;
+  return Math.min(n, MAX_PROMPT_FINDINGS);
+}
+
+function applyMaxFindingsInput(reload: boolean): void {
+  const maxEl = document.getElementById('ai-prompt-max-findings') as HTMLInputElement | null;
+  if (!maxEl) return;
+  currentMaxFindings = clampMaxFindings(parseInt(maxEl.value, 10));
+  maxEl.value = String(currentMaxFindings);
+  if (reload) loadAIPrompt();
+}
 
 // Helper function to safely set text content (prevents XSS)
 function setTextContent(element: HTMLElement, text: string): void {
@@ -279,36 +498,11 @@ function openAIPromptModal(): void {
     prSection.appendChild(prCheck);
     prSection.appendChild(prLabel);
     
-    // Only Critical / High findings
-    const severitySection = document.createElement('div');
-    severitySection.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
-    const severityCheck = document.createElement('input');
-    severityCheck.id = 'ai-prompt-only-critical-high';
-    severityCheck.type = 'checkbox';
-    severityCheck.checked = currentOnlyCriticalHigh;
-    severityCheck.addEventListener('change', () => {
-      currentOnlyCriticalHigh = (severityCheck as HTMLInputElement).checked;
-      loadAIPrompt();
-    });
-    const severityLabel = document.createElement('label');
-    severityLabel.htmlFor = 'ai-prompt-only-critical-high';
-    setTextContent(severityLabel, 'Only Critical / High findings');
-    severitySection.appendChild(severityCheck);
-    severitySection.appendChild(severityLabel);
-    
-    // Max findings in prompt
-    const maxSection = document.createElement('div');
-    const maxLabel = document.createElement('label');
-    maxLabel.style.cssText = 'margin-bottom: 0.35rem; display: block; color: var(--text-secondary);';
-    maxLabel.htmlFor = 'ai-prompt-max-findings';
-    setTextContent(maxLabel, 'Max findings in prompt');
-    const maxInput = document.createElement('input');
-    maxInput.id = 'ai-prompt-max-findings';
-    maxInput.type = 'number';
-    maxInput.min = '1';
-    maxInput.value = String(currentMaxFindings);
-    maxInput.style.cssText = `
-      width: 6rem;
+    const filterSection = document.createElement('div');
+    filterSection.style.cssText =
+      'display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem;';
+    const selectStyle = `
+      width: 100%;
       padding: 0.5rem 0.75rem;
       background: var(--glass-bg-main);
       border: 1px solid var(--glass-border-main);
@@ -316,21 +510,149 @@ function openAIPromptModal(): void {
       color: var(--text-primary);
       box-sizing: border-box;
     `;
-    maxInput.addEventListener('change', () => {
-      const n = parseInt(maxInput.value, 10);
-      if (!isNaN(n) && n >= 1) {
-        currentMaxFindings = n;
-        loadAIPrompt();
+
+    const minSection = document.createElement('div');
+    const minLabel = document.createElement('label');
+    minLabel.style.cssText = 'margin-bottom: 0.35rem; display: block; color: var(--text-secondary);';
+    minLabel.htmlFor = 'ai-prompt-min-severity';
+    setTextContent(minLabel, 'Min. severity');
+    const minSelect = document.createElement('select');
+    minSelect.id = 'ai-prompt-min-severity';
+    minSelect.style.cssText = selectStyle;
+    [
+      { v: 'CRITICAL', l: 'Critical only' },
+      { v: 'HIGH', l: 'Critical + High' },
+      { v: 'MEDIUM', l: 'Medium+' },
+      { v: 'LOW', l: 'Low+' },
+      { v: 'ALL', l: 'All severities' },
+    ].forEach(({ v, l }) => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      setTextContent(opt, l);
+      minSelect.appendChild(opt);
+    });
+    minSelect.value = currentMinSeverity;
+    minSelect.addEventListener('change', () => {
+      readPromptFilterSettings();
+      loadAIPrompt();
+    });
+    minSection.appendChild(minLabel);
+    minSection.appendChild(minSelect);
+
+    const toolSection = document.createElement('div');
+    const toolLabel = document.createElement('label');
+    toolLabel.style.cssText = 'margin-bottom: 0.35rem; display: block; color: var(--text-secondary);';
+    toolLabel.htmlFor = 'ai-prompt-filter-tool';
+    setTextContent(toolLabel, 'Tool');
+    const toolSelect = document.createElement('select');
+    toolSelect.id = 'ai-prompt-filter-tool';
+    toolSelect.style.cssText = selectStyle;
+    toolSelect.addEventListener('change', () => {
+      readPromptFilterSettings();
+      loadAIPrompt();
+    });
+    toolSection.appendChild(toolLabel);
+    toolSection.appendChild(toolSelect);
+
+    const sortSection = document.createElement('div');
+    const sortLabel = document.createElement('label');
+    sortLabel.style.cssText = 'margin-bottom: 0.35rem; display: block; color: var(--text-secondary);';
+    sortLabel.htmlFor = 'ai-prompt-sort-by';
+    setTextContent(sortLabel, 'Sort by');
+    const sortSelect = document.createElement('select');
+    sortSelect.id = 'ai-prompt-sort-by';
+    sortSelect.style.cssText = selectStyle;
+    [
+      { v: 'severity', l: 'Severity (first)' },
+      { v: 'tool', l: 'Tool' },
+      { v: 'path', l: 'File' },
+    ].forEach(({ v, l }) => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      setTextContent(opt, l);
+      sortSelect.appendChild(opt);
+    });
+    sortSelect.value = currentSortBy;
+    sortSelect.addEventListener('change', () => {
+      readPromptFilterSettings();
+      loadAIPrompt();
+    });
+    sortSection.appendChild(sortLabel);
+    sortSection.appendChild(sortSelect);
+
+    const maxSection = document.createElement('div');
+    const maxLabel = document.createElement('label');
+    maxLabel.style.cssText = 'margin-bottom: 0.35rem; display: block; color: var(--text-secondary);';
+    maxLabel.htmlFor = 'ai-prompt-max-findings';
+    setTextContent(maxLabel, 'Max in prompt');
+    const maxInput = document.createElement('input');
+    maxInput.id = 'ai-prompt-max-findings';
+    maxInput.type = 'number';
+    maxInput.min = '1';
+    maxInput.max = String(MAX_PROMPT_FINDINGS);
+    maxInput.value = String(currentMaxFindings);
+    maxInput.style.cssText = selectStyle;
+    maxInput.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyMaxFindingsInput(true);
       }
     });
+    maxInput.addEventListener('blur', () => {
+      applyMaxFindingsInput(true);
+    });
+    const maxHint = document.createElement('div');
+    maxHint.style.cssText = 'margin-top: 0.25rem; font-size: 0.75rem; color: var(--text-secondary); opacity: 0.85;';
+    setTextContent(maxHint, `1–${MAX_PROMPT_FINDINGS}, prompt updates when you leave the field or press Enter`);
     maxSection.appendChild(maxLabel);
     maxSection.appendChild(maxInput);
-    
+    maxSection.appendChild(maxHint);
+
+    filterSection.appendChild(minSection);
+    filterSection.appendChild(toolSection);
+    filterSection.appendChild(sortSection);
+    filterSection.appendChild(maxSection);
+
+    const useTableBtn = document.createElement('button');
+    useTableBtn.type = 'button';
+    useTableBtn.style.cssText = `
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid var(--glass-border-main);
+      background: var(--glass-bg-main);
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      justify-self: start;
+    `;
+    setTextContent(useTableBtn, '↻ Use report table filters');
+    useTableBtn.addEventListener('click', () => {
+      const toolEl = document.getElementById('filter-tool') as HTMLSelectElement | null;
+      const sevEl = document.getElementById('filter-severity') as HTMLSelectElement | null;
+      const sortEl = document.getElementById('sort-findings') as HTMLSelectElement | null;
+      if (toolEl) {
+        currentToolFilter = toolEl.value || '';
+        const aiTool = document.getElementById('ai-prompt-filter-tool') as HTMLSelectElement | null;
+        if (aiTool) aiTool.value = currentToolFilter;
+      }
+      if (sevEl && sevEl.value) {
+        currentMinSeverity = sevEl.value;
+        const aiMin = document.getElementById('ai-prompt-min-severity') as HTMLSelectElement | null;
+        if (aiMin) aiMin.value = currentMinSeverity;
+      }
+      if (sortEl) {
+        currentSortBy = sortEl.value || 'severity';
+        const aiSort = document.getElementById('ai-prompt-sort-by') as HTMLSelectElement | null;
+        if (aiSort) aiSort.value = currentSortBy;
+      }
+      loadAIPrompt();
+    });
+
     settingsContent.appendChild(languageSection);
     settingsContent.appendChild(policySection);
     settingsContent.appendChild(prSection);
-    settingsContent.appendChild(severitySection);
-    settingsContent.appendChild(maxSection);
+    settingsContent.appendChild(filterSection);
+    settingsContent.appendChild(useTableBtn);
     
     settingsSection.appendChild(settingsTitle);
     settingsSection.appendChild(settingsContent);
@@ -434,9 +756,11 @@ function openAIPromptModal(): void {
       input.value = currentPolicyPath;
     }
     const maxInput = document.getElementById('ai-prompt-max-findings') as HTMLInputElement | null;
-    if (maxInput) {
-      maxInput.value = String(currentMaxFindings);
-    }
+    if (maxInput) maxInput.value = String(currentMaxFindings);
+    const minSelect = document.getElementById('ai-prompt-min-severity') as HTMLSelectElement | null;
+    if (minSelect) minSelect.value = currentMinSeverity;
+    const sortSelect = document.getElementById('ai-prompt-sort-by') as HTMLSelectElement | null;
+    if (sortSelect) sortSelect.value = currentSortBy;
   }
   loadAIPrompt();
 }
@@ -494,26 +818,23 @@ function openAIPromptInNewTab(): void {
 
 // Generate prompt locally from findings (same logic as backend)
 function generatePromptLocally(
-  findings: any[],
+  findings: ReportFinding[],
   language: Language,
   policyPath: string,
   maxFindingsPerPrompt: number,
-  onlyCriticalHigh: boolean,
+  minSeverity: string,
+  toolFilter: string,
+  sortBy: string,
   includePRWorkflow: boolean
 ): string {
-  let list = findings;
-  if (onlyCriticalHigh) {
-    list = list.filter((f: any) => {
-      const sev = String(f.severity || '').toUpperCase();
-      return sev === 'CRITICAL' || sev === 'HIGH' || sev.indexOf('CRIT') !== -1 || sev === 'ERROR';
-    });
-  }
-  list = list.slice(0, maxFindingsPerPrompt);
-  if (list.length === 0 && findings.length > 0) {
-    list = findings.slice(0, maxFindingsPerPrompt);
-  }
-  
-  const byTool: { [key: string]: any[] } = {};
+  const { selected: list } = selectFindingsForPrompt(findings, {
+    maxFindings: maxFindingsPerPrompt,
+    minSeverity: minSeverity,
+    tool: toolFilter,
+    sortBy: sortBy,
+  });
+
+  const byTool: { [key: string]: ReportFinding[] } = {};
   for (const f of list) {
     const tool = f.tool || 'Unknown';
     if (!byTool[tool]) {
@@ -983,71 +1304,53 @@ async function loadAIPrompt(): Promise<void> {
   stats.style.display = 'none';
 
   try {
-    const findingsScript = document.getElementById('findings-data') as HTMLScriptElement | null;
-    if (!findingsScript) {
+    readPromptFilterSettings();
+    const findings = loadReportFindingsFromPage();
+    if (!findings.length) {
       error.textContent =
-        'No embedded findings in this page (missing script#findings-data). Open the scan summary.html from a completed scan.';
+        'No embedded findings in this page (missing report-findings-data). Open the scan summary.html from a completed scan.';
       error.style.display = 'block';
       loading.style.display = 'none';
       return;
     }
 
-    let jsonText = findingsScript.textContent || findingsScript.innerText || '';
-    if (jsonText.includes('&quot;') || jsonText.includes('&amp;')) {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(`<div>${jsonText}</div>`, 'text/html');
-      const decodedElement = doc.body.firstElementChild as HTMLElement | null;
-      jsonText = decodedElement ? (decodedElement.textContent || decodedElement.innerText || '') : jsonText;
-    }
-
-    if (!jsonText.trim()) {
-      error.textContent = 'Embedded findings are empty. This report has no normalized findings for the AI prompt.';
-      error.style.display = 'block';
-      loading.style.display = 'none';
-      return;
-    }
-
-    const findings = JSON.parse(jsonText);
-    if (!Array.isArray(findings)) {
-      throw new Error('findings-data is not a JSON array');
-    }
+    populateToolFilterOptions(findings);
 
     const includePR =
       (document.getElementById('ai-prompt-include-pr') as HTMLInputElement | null)?.checked ??
       currentIncludePRWorkflow;
-    const onlyCH =
-      (document.getElementById('ai-prompt-only-critical-high') as HTMLInputElement | null)?.checked ??
-      currentOnlyCriticalHigh;
-    const maxF =
-      parseInt(
-        (document.getElementById('ai-prompt-max-findings') as HTMLInputElement | null)?.value ||
-          String(currentMaxFindings),
-        10
-      ) || currentMaxFindings;
+
+    const { selected, meta } = selectFindingsForPrompt(findings, {
+      maxFindings: currentMaxFindings,
+      minSeverity: currentMinSeverity,
+      tool: currentToolFilter,
+      sortBy: currentSortBy,
+    });
 
     const prompt = generatePromptLocally(
       findings,
       currentLanguage,
       currentPolicyPath,
-      maxF,
-      onlyCH,
+      currentMaxFindings,
+      currentMinSeverity,
+      currentToolFilter,
+      currentSortBy,
       includePR
     );
     currentPrompt = prompt;
     textarea.value = prompt;
     textarea.style.display = 'block';
     loading.style.display = 'none';
-    const n = onlyCH
-      ? Math.min(
-          findings.filter((f: any) =>
-            /^(CRITICAL|HIGH|ERROR)$/i.test(String(f.severity || ''))
-          ).length,
-          maxF
-        )
-      : Math.min(findings.length, maxF);
     const charK = Math.round(prompt.length / 1000);
-    stats.textContent = `📊 ${n} findings · ~${charK}k characters`;
+    const breakdown = formatSeverityBreakdown(meta.included_by_severity);
+    stats.textContent =
+      `📊 ${meta.included} in prompt (${breakdown}) · ${meta.matched} match filter · ${meta.total} total · ~${charK}k chars`;
     stats.style.display = 'block';
+    if (selected.length === 0 && meta.matched === 0) {
+      error.textContent =
+        'No findings match the current filters. Lower min. severity, clear tool filter, or raise max in prompt.';
+      error.style.display = 'block';
+    }
   } catch (parseErr) {
     console.error('AI prompt from embedded findings failed:', parseErr);
     error.textContent =

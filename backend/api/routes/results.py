@@ -15,6 +15,7 @@ from fastapi import status as fastapi_status
 from api.deps.actor_context import get_actor_context, ActorContext
 from domain.policies.finding_policy import DEFAULT_FINDING_POLICY_PATH
 from domain.policies.finding_policy_schema import format_policy_schema_markdown
+from application.helpers.prompt_findings_select import select_findings_for_prompt
 from application.services.scan_service import ScanService
 from domain.exceptions.scan_exceptions import ScanNotFoundException
 from domain.policies.scan_result_access_policy import can_read_scan_results
@@ -34,26 +35,33 @@ def _report_path(scan_id: str) -> Path:
     return base / scan_id / "summary" / "summary.html"
 
 
+def _extract_findings_json_from_html_text(text: str) -> List[Dict[str, Any]]:
+    for script_id in ("report-findings-data", "findings-data"):
+        match = re.search(
+            rf'<script[^>]*\sid="{re.escape(script_id)}"[^>]*>\s*([\s\S]*?)\s*</script>',
+            text,
+        )
+        if not match:
+            continue
+        raw = match.group(1).strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(data, list):
+            return data
+    return []
+
+
 def _extract_findings_from_report_html(html_path: Path) -> List[Dict[str, Any]]:
-    """Extract findings JSON from summary.html script id=\"findings-data\"."""
+    """Extract post-policy report findings from summary.html (report-findings-data preferred)."""
     try:
         text = html_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return []
-    match = re.search(
-        r'<script[^>]*\sid="findings-data"[^>]*>\s*([\s\S]*?)\s*</script>',
-        text,
-    )
-    if not match:
-        return []
-    raw = match.group(1).strip()
-    if not raw:
-        return []
-    try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        return []
-    return data if isinstance(data, list) else []
+    return _extract_findings_json_from_html_text(text)
 
 
 def _build_ai_prompt(
@@ -61,11 +69,14 @@ def _build_ai_prompt(
     language: str,
     policy_path: str,
     max_findings: int = 100,
+    min_severity: str = "HIGH",
+    tool: Optional[str] = None,
+    sort_by: str = "severity",
 ) -> str:
-    """Build AI prompt text from findings (same structure as report's generatePromptLocally)."""
+    """Build AI prompt text from findings (caller passes already filtered/sorted list)."""
     policy_file = policy_path.split("/")[-1] if policy_path else "finding-policy.json"
     by_tool: dict = {}
-    for f in findings[:max_findings]:
+    for f in findings:
         tool = (f.get("tool") or "Unknown").strip()
         if tool not in by_tool:
             by_tool[tool] = []
@@ -257,6 +268,17 @@ async def get_results_ai_prompt(
     share_token: Optional[str] = Query(None),
     language: str = Query("english", description="Prompt language: english, chinese, german"),
     policy_path: str = Query(DEFAULT_FINDING_POLICY_PATH, description="Policy file path in prompt"),
+    max_findings: int = Query(100, ge=1, le=10000, description="Max findings included in prompt"),
+    min_severity: str = Query(
+        "HIGH",
+        description="Minimum severity band: CRITICAL, HIGH, MEDIUM, LOW, ALL",
+    ),
+    tool: Optional[str] = Query(None, description="Filter by tool name (exact match)"),
+    sort_by: str = Query("severity", description="Sort order: severity, tool, path"),
+    only_critical_high: Optional[bool] = Query(
+        None,
+        description="Legacy: if true, equivalent to min_severity=HIGH",
+    ),
 ):
     """Return AI prompt built from scan report findings (same access as report)."""
     try:
@@ -280,15 +302,35 @@ async def get_results_ai_prompt(
         raise HTTPException(fastapi_status.HTTP_404_NOT_FOUND, "Report not found")
 
     findings = _extract_findings_from_report_html(html_path)
-    prompt = _build_ai_prompt(
+    min_sev = (min_severity or "HIGH").strip().upper()
+    if only_critical_high is True:
+        min_sev = "HIGH"
+    selected, meta = select_findings_for_prompt(
         findings,
+        max_findings=max_findings,
+        min_severity=min_sev,
+        tool=(tool or "").strip() or None,
+        sort_by=sort_by or "severity",
+    )
+    prompt = _build_ai_prompt(
+        selected,
         language=language,
         policy_path=policy_path or DEFAULT_FINDING_POLICY_PATH,
-        max_findings=100,
+        max_findings=max_findings,
+        min_severity=min_sev,
+        tool=(tool or "").strip() or None,
+        sort_by=sort_by or "severity",
     )
     return {
         "prompt": prompt,
-        "findings_count": len(findings),
+        "findings_count": meta["included"],
+        "total_findings": meta["total"],
+        "matched_findings": meta["matched"],
+        "included_by_severity": meta["included_by_severity"],
         "language": language,
         "policy_path": policy_path or DEFAULT_FINDING_POLICY_PATH,
+        "max_findings": max_findings,
+        "min_severity": min_sev,
+        "tool": (tool or "").strip() or None,
+        "sort_by": sort_by or "severity",
     }
