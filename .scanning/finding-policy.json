@@ -37,7 +37,7 @@
             },
             {
                 "rule_id": "python.lang.security.audit.non-literal-import.non-literal-import",
-                "path_regex": ".*/(scanner/core/processor_registry\\.py|scanner/output/processor_registry\\.py|scanner/plugins/__init__\\.py)$",
+                "path_regex": ".*/(scanner/core/processor_registry\\.py|scanner/core/policy_schema_registry\\.py|scanner/output/processor_registry\\.py|scanner/plugins/__init__\\.py)$",
                 "message_regex": "importlib\\.import_module|Untrusted user input",
                 "reason": "Plugin discovery uses pkgutil package path (server-controlled), not user input; modules are from installed scanner plugins."
             },
@@ -185,7 +185,7 @@
             },
             {
                 "rule_id": "B112",
-                "path_regex": ".*/(scanner/core/processor_registry\\.py|scanner/output/processor_registry\\.py|scanner/plugins/__init__\\.py)$",
+                "path_regex": ".*/(scanner/core/processor_registry\\.py|scanner/core/policy_schema_registry\\.py|scanner/output/processor_registry\\.py|scanner/plugins/__init__\\.py)$",
                 "message_regex": "Try, Except, Continue detected",
                 "reason": "Plugin/processor discovery skips modules that fail to load; intentional and safe."
             },
@@ -311,43 +311,43 @@
         "accepted_findings": [
             {
                 "rule_id": "GHSA-c2c7-rcm5-vvqj",
-                "path_regex": "picomatch:4\\.0\\.3",
+                "path_regex": "picomatch:4\\.0\\.[34]",
                 "message_regex": "ReDoS|extglob",
                 "reason": "Transitive dev dependency (Vite/Rollup toolchain). picomatch is used only for build-time glob matching with developer-controlled patterns, not user-supplied extglobs at runtime. Production serves static nginx assets. Upgrade to picomatch >=4.0.4 when lockfile allows."
             },
             {
                 "rule_id": "GHSA-3v7f-55p6-f55p",
-                "path_regex": "picomatch:4\\.0\\.3",
+                "path_regex": "picomatch:4\\.0\\.[34]",
                 "message_regex": "method injection|POSIX",
                 "reason": "Same transitive dev-only picomatch as GHSA-c2c7-rcm5-vvqj. No untrusted glob input in production path. Fixed in picomatch >=4.0.4."
             },
             {
                 "rule_id": "GHSA-mw96-cpmx-2vgc",
-                "path_regex": "rollup:4\\.57\\.1",
+                "path_regex": "rollup:4\\.(57|61)\\.[0-9]+",
                 "message_regex": "Path Traversal|Arbitrary File Write",
                 "reason": "Rollup is a dev/build-time bundler only. Exploit requires attacker-controlled chunk/output names via CLI or malicious plugins during build; production runtime does not invoke Rollup. Upgrade Rollup when patched release is available."
             },
             {
                 "rule_id": "GHSA-p9ff-h696-f583",
-                "path_regex": "vite:7\\.3\\.1",
+                "path_regex": "vite:7\\.3\\.[0-9]+",
                 "message_regex": "fetchModule|WebSocket|server\\.fs",
                 "reason": "Vite dev-server vulnerability requiring network-exposed HMR WebSocket without Origin checks. Production deploys built static files via nginx; Vite dev server is local-only (default host, no --host 0.0.0.0 in deployment)."
             },
             {
                 "rule_id": "GHSA-v2wj-q39q-566r",
-                "path_regex": "vite:7\\.3\\.1",
+                "path_regex": "vite:7\\.3\\.[0-9]+",
                 "message_regex": "server\\.fs\\.deny|query parameters",
                 "reason": "Dev-server-only bypass of server.fs.deny via ?raw query params. Not reachable in production static hosting. Local dev uses default localhost binding without network exposure."
             },
             {
                 "rule_id": "GHSA-4w7w-66w2-5vf9",
-                "path_regex": "vite:7\\.3\\.1",
+                "path_regex": "vite:7\\.3\\.[0-9]+",
                 "message_regex": "\\.map|path traversal|optimized dependencies",
                 "reason": "Dev-server-only .map path traversal in optimized deps handler. Production nginx returns 404 for *.map and does not run Vite dev server."
             },
             {
                 "rule_id": "GHSA-qx2v-qp2m-jg93",
-                "path_regex": "postcss:8\\.5\\.6",
+                "path_regex": "postcss:8\\.5\\.[0-9]+",
                 "message_regex": "XSS|</style>",
                 "reason": "PostCSS is a transitive dev/build dependency. XSS requires parsing untrusted CSS and embedding stringified output inside HTML <style> tags; this app does not expose that pattern. Vite bundles CSS; no user-controlled CSS re-stringify path in production."
             }

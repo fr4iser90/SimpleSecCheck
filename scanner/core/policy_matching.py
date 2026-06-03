@@ -30,6 +30,22 @@ def normalize_finding_paths(finding):
     return out
 
 
+def _policy_path_regex_variants(regex):
+    """
+    Expand legacy policy patterns for repo-root-relative scanner paths.
+
+    Patterns like ``.*/backend/foo.py`` fail on ``backend/foo.py`` because greedy
+    ``.*`` consumes the first path segment before the required ``/`` (e.g. it eats
+    ``backend`` and then cannot match ``/Dockerfile``). Accept both anchored and
+    nested forms.
+    """
+    s = str(regex)
+    variants = [s]
+    if s.startswith(".*/"):
+        variants.append("(?:^|.*/)" + s[3:])
+    return variants
+
+
 def matches_path_for_policy(path, regex):
     if regex is None:
         return True
@@ -39,8 +55,11 @@ def matches_path_for_policy(path, regex):
     normalized = normalize_policy_path(path)
     if normalized != candidates[0]:
         candidates.append(normalized)
-    try:
-        pat = re.compile(str(regex))
-    except re.error:
-        return False
-    return any(pat.search(c) is not None for c in candidates)
+    patterns = _policy_path_regex_variants(regex)
+    compiled = []
+    for pattern in patterns:
+        try:
+            compiled.append(re.compile(pattern))
+        except re.error:
+            return False
+    return any(pat.search(c) is not None for pat in compiled for c in candidates)
