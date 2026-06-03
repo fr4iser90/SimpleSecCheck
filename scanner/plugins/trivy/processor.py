@@ -1,118 +1,45 @@
 #!/usr/bin/env python3
-from scanner.output.processor_registry import ReportProcessor
-import sys
-import re
+from scanner.core.policy_engine import ToolPolicySpec
+from scanner.output.finding_parse_spec import ParseSpec, trivy_path, trivy_title
+from scanner.output.findings_html_renderer import ColumnSpec, ToolHtmlSpec
+from scanner.output.processor_builder import build_report_processor
 
-def debug(msg):
-    print(f"[trivy_processor] {msg}", file=sys.stderr)
+_TRIVY_PARSE = ParseSpec(
+    items_key="Results",
+    nested_items_key="Vulnerabilities",
+    fields=(
+        ("PkgName", "PkgName"),
+        ("Severity", "Severity"),
+        ("VulnerabilityID", "VulnerabilityID"),
+        ("Title", trivy_title),
+        ("Description", "Description"),
+        ("path", trivy_path),
+        ("file", "PkgName"),
+        ("message", trivy_title),
+        ("rule_id", "VulnerabilityID"),
+    ),
+)
 
-def trivy_summary(trivy_json):
-    vulns = []
-    if trivy_json and 'Results' in trivy_json:
-        for result in trivy_json['Results']:
-            target = result.get('Target', '')
-            for v in result.get('Vulnerabilities', []):
-                pkg = v.get('PkgName', '')
-                title = v.get('Title', '') or v.get('Description', '')
-                vuln_id = v.get('VulnerabilityID', '')
-                vulns.append({
-                    'PkgName': pkg,
-                    'Severity': v.get('Severity', ''),
-                    'VulnerabilityID': vuln_id,
-                    'Title': title,
-                    'Description': v.get('Description', ''),
-                    # Explicit keys for report table / UI so File and Rule/Message are never empty
-                    'path': f"{target} | {pkg}" if target else pkg,
-                    'file': pkg,
-                    'message': title,
-                    'rule_id': vuln_id,
-                })
-    else:
-        debug("No Trivy results found in JSON.")
-    return vulns
+_TRIVY_HTML = ToolHtmlSpec(
+    title="Trivy Dependency & Container Scan",
+    empty_html='<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No vulnerabilities found in dependencies or containers.</div>',
+    columns=(
+        ColumnSpec("Package", "PkgName"),
+        ColumnSpec("Severity", lambda f: str(f.get("Severity", "")).upper()),
+        ColumnSpec("CVE", "VulnerabilityID"),
+        ColumnSpec("Title", "Title"),
+    ),
+    severity_getter=lambda f: str(f.get("Severity", "")).upper(),
+)
 
-def generate_trivy_html_section(trivy_vulns):
-    html_parts = []
-    html_parts.append('<h2>Trivy Dependency & Container Scan</h2>')
-    if trivy_vulns:
-        html_parts.append('<table><tr><th>Package</th><th>Severity</th><th>CVE</th><th>Title</th></tr>')
-        for v in trivy_vulns:
-            sev = v['Severity'].upper()
-            icon = ''
-            if sev == 'CRITICAL': icon = '🚨'
-            elif sev == 'HIGH': icon = '🚨'
-            elif sev == 'MEDIUM': icon = '⚠️'
-            elif sev == 'LOW': icon = 'ℹ️'
-            elif sev in ('INFO', 'INFORMATIONAL'): icon = 'ℹ️'
-            
-            # Basic HTML escaping
-            pkg_name_escaped = sev_escaped = vuln_id_escaped = title_escaped = ""
-            try:
-                import html
-                pkg_name_escaped = html.escape(str(v["PkgName"]))
-                sev_escaped = html.escape(str(sev))
-                vuln_id_escaped = html.escape(str(v["VulnerabilityID"]))
-                title_escaped = html.escape(str(v["Title"]))
-            except ImportError:
-                pkg_name_escaped = str(v["PkgName"]).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                sev_escaped = str(sev).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                vuln_id_escaped = str(v["VulnerabilityID"]).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                title_escaped = str(v["Title"]).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-            html_parts.append(f'<tr class="row-{sev_escaped}"><td>{pkg_name_escaped}</td><td class="severity-{sev_escaped}">{icon} {sev_escaped}</td><td>{vuln_id_escaped}</td><td>{title_escaped}</td></tr>')
-        html_parts.append('</table>')
-    else:
-        html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No vulnerabilities found in dependencies or containers.</div>')
-    return "".join(html_parts)
-
-
-def _matches_pattern(value, pattern):
-    if pattern is None:
-        return True
-    if value is None:
-        value = ""
-    try:
-        return re.search(pattern, str(value)) is not None
-    except re.error:
-        return False
-
-
-def _matches_trivy_rule(finding, rule):
-    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("VulnerabilityID", ""), rule.get("rule_id"))
-    path_ok = _matches_pattern(finding.get("PkgName", ""), rule.get("path_regex"))
-    msg_ok = _matches_pattern(finding.get("Title", ""), rule.get("message_regex"))
-    return rule_ok and path_ok and msg_ok
-
-
-def _accept_record_trivy(finding, reason):
-    return {
-        "tool": "Trivy",
-        "reason": reason or "Accepted by policy",
-        "id": finding.get("VulnerabilityID", ""),
-        "path": finding.get("PkgName", ""),
-        "line": "",
-        "message": finding.get("Title", ""),
-    }
-
-
-def apply_trivy_policy(findings, tool_policy):
-    if not findings:
-        return [], []
-    accepted_rules = tool_policy.get("accepted_findings", [])
-    accepted_records = []
-    processed = []
-    for finding in findings:
-        accepted = None
-        for rule in accepted_rules:
-            if _matches_trivy_rule(finding, rule):
-                accepted = rule
-                break
-        if accepted:
-            accepted_records.append(_accept_record_trivy(finding, accepted.get("reason", "Accepted by policy")))
-            continue
-        processed.append(finding)
-    return processed, accepted_records
-
+_TRIVY_POLICY = ToolPolicySpec(
+    rule_id_field="VulnerabilityID",
+    path_field="PkgName",
+    message_field="Title",
+    rule_id_mode="regex",
+    accept_tool="Trivy",
+    accept_line_getter=lambda f: "",
+)
 
 TRIVY_POLICY_EXAMPLE = '''  "trivy": {
     "accepted_findings": [
@@ -125,23 +52,11 @@ TRIVY_POLICY_EXAMPLE = '''  "trivy": {
     ]
   }'''
 
-REPORT_PROCESSOR = ReportProcessor(
+REPORT_PROCESSOR = build_report_processor(
     name="Trivy",
-    summary_func=trivy_summary,
-    html_func=generate_trivy_html_section,
-    ai_normalizer=lambda findings: [
-        {
-            "tool": "Trivy",
-            "severity": str(f.get("severity", f.get("Severity", "UNKNOWN"))).upper(),
-            "rule_id": str(f.get("rule_id", f.get("id", f.get("VulnerabilityID", "")))),
-            "path": str(f.get("path", f.get("file", f.get("filename", f.get("PkgName", ""))))),
-            "line": str(f.get("line", f.get("line_number", f.get("start", "")))),
-            "message": str(f.get("message", f.get("description", f.get("title", f.get("Title", ""))))),
-        }
-        for f in (findings or [])
-    ],
-    json_file="report.json",
-    policy_key="trivy",
-    apply_policy=apply_trivy_policy,
+    parse_spec=_TRIVY_PARSE,
+    html_spec=_TRIVY_HTML,
+    policy_spec=_TRIVY_POLICY,
     policy_example_snippet=TRIVY_POLICY_EXAMPLE,
+    policy_key="trivy",
 )

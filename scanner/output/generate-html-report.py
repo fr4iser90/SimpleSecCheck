@@ -45,6 +45,7 @@ from scanner.output.html_utils import (
     _findings_count,
 )
 from scanner.core.finding_policy import load_policy
+from scanner.core.policy_matching import normalize_policy_path
 from scanner.core.inline_suppressions import (
     apply_inline_suppressions,
     build_suppression_index,
@@ -389,7 +390,9 @@ def _normalize_finding_for_report(tool_name, finding):
     if not isinstance(finding, dict):
         return None
     sev = str(finding.get("Severity", finding.get("severity", ""))).strip()
-    path = str(finding.get("path", finding.get("file", finding.get("filename", finding.get("PkgName", "")))))
+    path = normalize_policy_path(
+        str(finding.get("path", finding.get("file", finding.get("filename", finding.get("PkgName", "")))))
+    )
     line = finding.get("line") or finding.get("line_number") or (finding.get("start") if isinstance(finding.get("start"), (int, str)) else None)
     if line is None and isinstance(finding.get("start"), dict):
         line = finding["start"].get("line", "")

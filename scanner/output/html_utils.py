@@ -1,6 +1,26 @@
 #!/usr/bin/env python3
 import html as html_module
 
+
+def render_findings_table_section(
+    *,
+    title: str,
+    headers: list[str],
+    rows_html: list[str],
+    empty_html: str,
+) -> str:
+    """Small helper to avoid repeating the same <h2> + <table> boilerplate in every processor."""
+    out: list[str] = []
+    out.append(f"<h2>{html_module.escape(title)}</h2>")
+    if not rows_html:
+        out.append(empty_html)
+        return "".join(out)
+    out.append("<table class=\"findings-table\">")
+    out.append("<tr>" + "".join(f"<th>{html_module.escape(str(h))}</th>" for h in headers) + "</tr>")
+    out.extend(rows_html)
+    out.append("</table>")
+    return "".join(out)
+
 def html_header(title, embedded_scripts="", ai_prompt_disabled=False, overall_status=None, repo_url=None):
     # overall_status: "Critical" | "High" | "OK"; repo_url: optional link to repository
     badge_html = ""

@@ -12,14 +12,20 @@ def debug(msg):
     print(f"[finding_policy] {msg}", file=sys.stderr)
 
 
-def _is_valid_format(data):
-    """Check minimal finding-policy format: root must be dict, every value must be dict (tool/dedupe blocks)."""
+def _extract_tool_policies(data):
+    """Keep only tool blocks (dict values); ignore metadata keys like version, updated."""
     if not isinstance(data, dict):
-        return False
-    for v in data.values():
-        if not isinstance(v, dict):
-            return False
-    return True
+        return {}
+    policies = {}
+    skipped = []
+    for key, value in data.items():
+        if isinstance(value, dict):
+            policies[key] = value
+        else:
+            skipped.append(key)
+    if skipped:
+        debug(f"Ignoring non-tool top-level keys: {', '.join(skipped)}")
+    return policies
 
 
 def load_policy(policy_path):
@@ -34,10 +40,7 @@ def load_policy(policy_path):
         if not isinstance(data, dict):
             debug(f"Policy root is not a JSON object: {policy_path}")
             return {}
-        if not _is_valid_format(data):
-            debug(f"Policy format invalid (top-level values must be objects): {policy_path}")
-            return {}
-        return data
+        return _extract_tool_policies(data)
     except Exception as exc:
         debug(f"Failed to load policy file {policy_path}: {exc}")
         return {}

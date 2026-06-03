@@ -1,95 +1,44 @@
 #!/usr/bin/env python3
-from scanner.output.processor_registry import ReportProcessor
-import sys
-import html
-import json
+from scanner.core.policy_engine import ToolPolicySpec
+from scanner.output.finding_parse_spec import ParseSpec
+from scanner.output.findings_html_renderer import ColumnSpec, ToolHtmlSpec
+from scanner.output.processor_builder import build_report_processor
 
-import re
+_BRAKEMAN_PARSE = ParseSpec(
+    items_key="warnings",
+    fields=(
+        ("warning_type", "warning_type"),
+        ("warning_code", "warning_code"),
+        ("message", "message"),
+        ("file", "file"),
+        ("line", "line"),
+        ("link", "link"),
+        ("confidence", "confidence"),
+        ("description", "description"),
+    ),
+)
 
-def debug(msg):
-    print(f"[brakeman_processor] {msg}", file=sys.stderr)
+_BRAKEMAN_HTML = ToolHtmlSpec(
+    title="Brakeman Ruby on Rails Security Scan",
+    empty_html='<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No Ruby security vulnerabilities found.</div>',
+    columns=(
+        ColumnSpec("Type", "warning_type"),
+        ColumnSpec("Confidence", "confidence"),
+        ColumnSpec("File", "file"),
+        ColumnSpec("Line", "line"),
+        ColumnSpec("Message", "message"),
+    ),
+    severity_getter=lambda f: str(f.get("confidence", "")).upper(),
+)
 
-def brakeman_summary(brakeman_json):
-    findings = []
-    if brakeman_json and isinstance(brakeman_json, dict):
-        # Parse Brakeman JSON output
-        warnings = brakeman_json.get('warnings', [])
-        for warning in warnings:
-            finding = {
-                'warning_type': warning.get('warning_type', ''),
-                'warning_code': warning.get('warning_code', ''),
-                'message': warning.get('message', ''),
-                'file': warning.get('file', ''),
-                'line': warning.get('line', ''),
-                'link': warning.get('link', ''),
-                'confidence': warning.get('confidence', ''),
-                'description': warning.get('description', '')
-            }
-            findings.append(finding)
-    else:
-        debug("No Brakeman results found in JSON.")
-    return findings
-
-def generate_brakeman_html_section(brakeman_findings):
-    html_parts = []
-    html_parts.append('<h2>Brakeman Ruby on Rails Security Scan</h2>')
-    if brakeman_findings:
-        html_parts.append('<table><tr><th>Type</th><th>Confidence</th><th>File</th><th>Line</th><th>Message</th></tr>')
-        for finding in brakeman_findings:
-            type_escaped = html.escape(str(finding.get('warning_type', '')))
-            confidence_escaped = html.escape(str(finding.get('confidence', '')))
-            file_escaped = html.escape(str(finding.get('file', '')))
-            line_escaped = html.escape(str(finding.get('line', '')))
-            message_escaped = html.escape(str(finding.get('message', '')))
-            
-            # Add confidence icons
-            icon = ''
-            conf_class = confidence_escaped.upper()
-            if conf_class in ('HIGH', 'CERTAIN'): 
-                icon = '🔴'
-            elif conf_class == 'MEDIUM': 
-                icon = '🟡'
-            elif conf_class == 'WEAK': 
-                icon = '🟢'
-            
-            html_parts.append(f'<tr class="row-{conf_class}"><td>{type_escaped}</td><td>{confidence_escaped} {icon}</td><td>{file_escaped}</td><td>{line_escaped}</td><td>{message_escaped}</td></tr>')
-        html_parts.append('</table>')
-    else:
-        html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No Ruby security vulnerabilities found.</div>')
-    return "".join(html_parts)
-
-
-def _matches_pattern(value, pattern):
-    if pattern is None: return True
-    if value is None: value = ""
-    try: return re.search(pattern, str(value)) is not None
-    except re.error: return False
-
-
-def _matches_brakeman_rule(finding, rule):
-    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("warning_type", ""), rule.get("rule_id"))
-    path_ok = _matches_pattern(finding.get("file", ""), rule.get("path_regex"))
-    msg_ok = _matches_pattern(finding.get("message", ""), rule.get("message_regex"))
-    return rule_ok and path_ok and msg_ok
-
-
-def _accept_record_brakeman(finding, reason):
-    return {"tool": "Brakeman", "reason": reason or "Accepted by policy", "id": finding.get("warning_type", ""), "path": finding.get("file", ""), "line": str(finding.get("line", "")), "message": finding.get("message", "")}
-
-
-def apply_brakeman_policy(findings, tool_policy):
-    if not findings: return [], []
-    accepted_rules = tool_policy.get("accepted_findings", [])
-    accepted_records = []
-    processed = []
-    for finding in findings:
-        accepted = next((r for r in accepted_rules if _matches_brakeman_rule(finding, r)), None)
-        if accepted:
-            accepted_records.append(_accept_record_brakeman(finding, accepted.get("reason", "Accepted by policy")))
-            continue
-        processed.append(finding)
-    return processed, accepted_records
-
+_BRAKEMAN_POLICY = ToolPolicySpec(
+    rule_id_field="warning_type",
+    path_field="file",
+    message_field="message",
+    rule_id_mode="regex",
+    accept_tool="Brakeman",
+    accept_line_getter=lambda f: f.get("line", ""),
+)
 
 BRAKEMAN_POLICY_EXAMPLE = '''  "brakeman": {
     "accepted_findings": [
@@ -102,23 +51,11 @@ BRAKEMAN_POLICY_EXAMPLE = '''  "brakeman": {
     ]
   }'''
 
-REPORT_PROCESSOR = ReportProcessor(
+REPORT_PROCESSOR = build_report_processor(
     name="Brakeman",
-    summary_func=brakeman_summary,
-    html_func=generate_brakeman_html_section,
-    ai_normalizer=lambda findings: [
-        {
-            "tool": "Brakeman",
-            "severity": str(f.get("severity", f.get("Severity", "UNKNOWN"))).upper(),
-            "rule_id": str(f.get("rule_id", f.get("id", f.get("warning_type", "")))),
-            "path": str(f.get("path", f.get("file", f.get("filename", "")))),
-            "line": str(f.get("line", f.get("line_number", f.get("start", "")))),
-            "message": str(f.get("message", f.get("description", f.get("title", "")))),
-        }
-        for f in (findings or [])
-    ],
-    json_file="report.json",
-    policy_key="brakeman",
-    apply_policy=apply_brakeman_policy,
+    parse_spec=_BRAKEMAN_PARSE,
+    html_spec=_BRAKEMAN_HTML,
+    policy_spec=_BRAKEMAN_POLICY,
     policy_example_snippet=BRAKEMAN_POLICY_EXAMPLE,
+    policy_key="brakeman",
 )

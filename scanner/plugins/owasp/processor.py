@@ -1,195 +1,50 @@
 #!/usr/bin/env python3
-from scanner.output.processor_registry import ReportProcessor
-import sys
-import json
-import re
-# Security: Use defusedxml instead of xml.etree to prevent XXE attacks
-# defusedxml is a REQUIRED dependency - no fallback, script will fail if missing
-from defusedxml.ElementTree import parse as safe_parse
-from defusedxml import defuse_stdlib
-defuse_stdlib()
+from scanner.core.policy_engine import ToolPolicySpec
+from scanner.output.finding_parse_spec import ParseSpec
+from scanner.output.findings_html_renderer import ColumnSpec, ToolHtmlSpec
+from scanner.output.processor_builder import build_report_processor
 
-def debug(msg):
-    print(f"[owasp_dependency_check_processor] {msg}", file=sys.stderr)
+_OWASP_PARSE = ParseSpec(
+    items_key="dependencies",
+    nested_items_key="vulnerabilities",
+    parent_fields=(
+        (
+            "Dependency",
+            lambda item, parent: f"{parent.get('fileName', 'Unknown')} ({parent.get('version', 'Unknown')})",
+        ),
+    ),
+    fields=(
+        ("Severity", "severity"),
+        ("CVE", "name"),
+        ("Title", "title"),
+        ("Description", "description"),
+        ("CVSS", "cvssScore"),
+        ("CVSS_Vector", "cvssVector"),
+        ("References", "references"),
+    ),
+)
 
-def owasp_dependency_check_summary(owasp_dc_json):
-    """Extract vulnerability summary from OWASP Dependency Check JSON report"""
-    vulnerabilities = []
-    
-    if not owasp_dc_json:
-        debug("No OWASP Dependency Check results found in JSON.")
-        return vulnerabilities
-    
-    try:
-        # OWASP Dependency Check JSON structure
-        if 'dependencies' in owasp_dc_json:
-            for dependency in owasp_dc_json['dependencies']:
-                dep_name = dependency.get('fileName', 'Unknown')
-                dep_version = dependency.get('version', 'Unknown')
-                
-                # Process vulnerabilities for this dependency
-                if 'vulnerabilities' in dependency:
-                    for vuln in dependency['vulnerabilities']:
-                        vulnerabilities.append({
-                            'Dependency': f"{dep_name} ({dep_version})",
-                            'Severity': vuln.get('severity', 'UNKNOWN'),
-                            'CVE': vuln.get('name', ''),
-                            'Title': vuln.get('title', ''),
-                            'Description': vuln.get('description', ''),
-                            'CVSS': vuln.get('cvssScore', 0.0),
-                            'CVSS_Vector': vuln.get('cvssVector', ''),
-                            'References': vuln.get('references', [])
-                        })
-                        
-        debug(f"Found {len(vulnerabilities)} OWASP Dependency Check vulnerabilities")
-        
-    except Exception as e:
-        debug(f"Error parsing OWASP Dependency Check JSON: {e}")
-        
-    return vulnerabilities
+_OWASP_HTML = ToolHtmlSpec(
+    title="OWASP Dependency Check - Dependency Vulnerabilities",
+    empty_html='<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No dependency vulnerabilities found.</div>',
+    columns=(
+        ColumnSpec("Dependency", "Dependency"),
+        ColumnSpec("Severity", lambda f: str(f.get("Severity", "")).upper()),
+        ColumnSpec("CVE", "CVE"),
+        ColumnSpec("CVSS Score", "CVSS"),
+        ColumnSpec("Title", "Title"),
+    ),
+    severity_getter=lambda f: str(f.get("Severity", "")).upper(),
+)
 
-def generate_owasp_dependency_check_html_section(owasp_dc_vulns):
-    """Generate HTML section for OWASP Dependency Check vulnerabilities"""
-    html_parts = []
-    html_parts.append('<h2>OWASP Dependency Check - Dependency Vulnerabilities</h2>')
-    
-    if owasp_dc_vulns:
-        html_parts.append('<table><tr><th>Dependency</th><th>Severity</th><th>CVE</th><th>CVSS Score</th><th>Title</th></tr>')
-        
-        for vuln in owasp_dc_vulns:
-            sev = vuln['Severity'].upper()
-            icon = ''
-            if sev == 'CRITICAL': icon = '🚨'
-            elif sev == 'HIGH': icon = '🚨'
-            elif sev == 'MEDIUM': icon = '⚠️'
-            elif sev == 'LOW': icon = 'ℹ️'
-            elif sev in ('INFO', 'INFORMATIONAL'): icon = 'ℹ️'
-            else: icon = '❓'
-            
-            # Basic HTML escaping
-            dep_escaped = sev_escaped = cve_escaped = title_escaped = ""
-            try:
-                import html
-                dep_escaped = html.escape(str(vuln["Dependency"]))
-                sev_escaped = html.escape(str(sev))
-                cve_escaped = html.escape(str(vuln["CVE"]))
-                title_escaped = html.escape(str(vuln["Title"]))
-            except ImportError:
-                dep_escaped = str(vuln["Dependency"]).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                sev_escaped = str(sev).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                cve_escaped = str(vuln["CVE"]).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                title_escaped = str(vuln["Title"]).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            
-            cvss_score = vuln.get('CVSS', 0.0)
-            cvss_class = ""
-            if cvss_score >= 9.0: cvss_class = "cvss-critical"
-            elif cvss_score >= 7.0: cvss_class = "cvss-high"
-            elif cvss_score >= 4.0: cvss_class = "cvss-medium"
-            else: cvss_class = "cvss-low"
-            
-            html_parts.append(f'<tr class="row-{sev_escaped}"><td>{dep_escaped}</td><td class="severity-{sev_escaped}">{icon} {sev_escaped}</td><td>{cve_escaped}</td><td class="{cvss_class}">{cvss_score}</td><td>{title_escaped}</td></tr>')
-        
-        html_parts.append('</table>')
-        
-        # Add summary statistics
-        critical_count = sum(1 for v in owasp_dc_vulns if v['Severity'].upper() == 'CRITICAL')
-        high_count = sum(1 for v in owasp_dc_vulns if v['Severity'].upper() == 'HIGH')
-        medium_count = sum(1 for v in owasp_dc_vulns if v['Severity'].upper() == 'MEDIUM')
-        low_count = sum(1 for v in owasp_dc_vulns if v['Severity'].upper() == 'LOW')
-        
-        html_parts.append(f'<div class="vulnerability-summary">')
-        html_parts.append(f'<h3>Vulnerability Summary</h3>')
-        html_parts.append(f'<ul>')
-        if critical_count > 0: html_parts.append(f'<li class="severity-CRITICAL">🚨 Critical: {critical_count}</li>')
-        if high_count > 0: html_parts.append(f'<li class="severity-HIGH">🚨 High: {high_count}</li>')
-        if medium_count > 0: html_parts.append(f'<li class="severity-MEDIUM">⚠️ Medium: {medium_count}</li>')
-        if low_count > 0: html_parts.append(f'<li class="severity-LOW">ℹ️ Low: {low_count}</li>')
-        html_parts.append(f'</ul>')
-        html_parts.append(f'</div>')
-        
-    else:
-        html_parts.append('<div class="all-clear"><span class="icon sev-PASSED">✅</span> All clear! No dependency vulnerabilities found.</div>')
-    
-    return "".join(html_parts)
-
-def parse_owasp_dependency_check_xml(xml_path):
-    """Parse OWASP Dependency Check XML report for additional details"""
-    try:
-        tree = safe_parse(xml_path)
-        root = tree.getroot()
-        
-        vulnerabilities = []
-        
-        # Parse XML structure
-        for dependency in root.findall('.//dependency'):
-            dep_name = dependency.get('fileName', 'Unknown')
-            dep_version = dependency.get('version', 'Unknown')
-            
-            for vuln in dependency.findall('.//vulnerability'):
-                vulnerabilities.append({
-                    'Dependency': f"{dep_name} ({dep_version})",
-                    'Severity': vuln.get('severity', 'UNKNOWN'),
-                    'CVE': vuln.get('name', ''),
-                    'Title': vuln.findtext('title', ''),
-                    'Description': vuln.findtext('description', ''),
-                    'CVSS': float(vuln.get('cvssScore', 0.0)),
-                    'CVSS_Vector': vuln.get('cvssVector', '')
-                })
-        
-        return vulnerabilities
-        
-    except Exception as e:
-        debug(f"Error parsing OWASP Dependency Check XML: {e}")
-        return []
-
-if __name__ == "__main__":
-    # Test the processor
-    if len(sys.argv) > 1:
-        json_file = sys.argv[1]
-        try:
-            with open(json_file, 'r') as f:
-                data = json.load(f)
-            vulns = owasp_dependency_check_summary(data)
-            html = generate_owasp_dependency_check_html_section(vulns)
-            print(html)
-        except Exception as e:
-            debug(f"Error processing file {json_file}: {e}")
-            sys.exit(1)
-    else:
-        debug("Usage: python3 owasp_dependency_check_processor.py <json_file>")
-        sys.exit(1)
-
-def _matches_pattern(value, pattern):
-    if pattern is None: return True
-    if value is None: value = ""
-    try: return re.search(pattern, str(value)) is not None
-    except re.error: return False
-
-
-def _matches_owasp_rule(finding, rule):
-    rule_ok = rule.get("rule_id") is None or _matches_pattern(finding.get("CVE", ""), rule.get("rule_id"))
-    path_ok = _matches_pattern(finding.get("Dependency", ""), rule.get("path_regex"))
-    msg_ok = _matches_pattern(finding.get("Title", "") or finding.get("Description", ""), rule.get("message_regex"))
-    return rule_ok and path_ok and msg_ok
-
-
-def _accept_record_owasp(finding, reason):
-    return {"tool": "OWASP DC", "reason": reason or "Accepted by policy", "id": finding.get("CVE", ""), "path": finding.get("Dependency", ""), "line": "", "message": finding.get("Title", "") or finding.get("Description", "")}
-
-
-def apply_owasp_policy(findings, tool_policy):
-    if not findings: return [], []
-    accepted_rules = tool_policy.get("accepted_findings", [])
-    accepted_records = []
-    processed = []
-    for finding in findings:
-        accepted = next((r for r in accepted_rules if _matches_owasp_rule(finding, r)), None)
-        if accepted:
-            accepted_records.append(_accept_record_owasp(finding, accepted.get("reason", "Accepted by policy")))
-            continue
-        processed.append(finding)
-    return processed, accepted_records
-
+_OWASP_POLICY = ToolPolicySpec(
+    rule_id_field="CVE",
+    path_field="Dependency",
+    message_getter=lambda f: f.get("Title", "") or f.get("Description", ""),
+    rule_id_mode="regex",
+    accept_tool="OWASP DC",
+    accept_line_getter=lambda f: "",
+)
 
 OWASP_POLICY_EXAMPLE = '''  "owasp_dc": {
     "accepted_findings": [
@@ -202,23 +57,12 @@ OWASP_POLICY_EXAMPLE = '''  "owasp_dc": {
     ]
   }'''
 
-REPORT_PROCESSOR = ReportProcessor(
+REPORT_PROCESSOR = build_report_processor(
     name="OWASP DC",
-    summary_func=owasp_dependency_check_summary,
-    html_func=generate_owasp_dependency_check_html_section,
-    ai_normalizer=lambda findings: [
-        {
-            "tool": "OWASP DC",
-            "severity": str(f.get("severity", f.get("Severity", "UNKNOWN"))).upper(),
-            "rule_id": str(f.get("rule_id", f.get("id", f.get("CVE", "")))),
-            "path": str(f.get("path", f.get("file", f.get("filename", f.get("Dependency", "")))),
-            "line": str(f.get("line", f.get("line_number", f.get("start", "")))),
-            "message": str(f.get("message", f.get("description", f.get("title", "")))),
-        }
-        for f in (findings or [])
-    ],
-    json_file="report.json",
-    policy_key="owasp_dc",
-    apply_policy=apply_owasp_policy,
+    parse_spec=_OWASP_PARSE,
+    html_spec=_OWASP_HTML,
+    policy_spec=_OWASP_POLICY,
     policy_example_snippet=OWASP_POLICY_EXAMPLE,
+    policy_key="owasp_dc",
+    ai_tool_name="OWASP DC",
 )
