@@ -1,0 +1,10 @@
+{
+  "name": "ssc-eslint-toolchain",
+  "private": true,
+  "description": "Pinned ESLint security toolchain baked into the scanner image",
+  "dependencies": {
+    "eslint": "9.16.0",
+    "eslint-plugin-security": "4.0.0",
+    "@typescript-eslint/parser": "8.57.1"
+  }
+}

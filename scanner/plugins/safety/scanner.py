@@ -88,11 +88,103 @@ class SafetyScanner(BaseScanner):
             f.write("===================\n")
             f.write("No Python dependency files found.\n")
             f.write(f"Scan completed at: {datetime.now().isoformat()}\n")
+
+    def _safety_cli_works(self) -> bool:
+        cached = getattr(self, "_safety_cli_works_cache", None)
+        if cached is not None:
+            return cached
+        result = self.run_command(
+            ["python3", "-c", "from safety.cli import cli"],
+            capture_output=True,
+        )
+        ok = result.returncode == 0
+        self._safety_cli_works_cache = ok
+        return ok
+
+    def _pip_audit_args_for_file(self, dep_file: Path) -> List[str]:
+        name = dep_file.name.lower()
+        if name in ("pyproject.toml", "pipfile"):
+            return ["--path", str(dep_file.parent)]
+        return ["--requirement", str(dep_file)]
+
+    def _parse_pip_audit_json(self, raw: str) -> List[dict]:
+        data = json.loads(raw)
+        vulns: List[dict] = []
+        if isinstance(data, list):
+            for dep in data:
+                for v in dep.get("vulns") or []:
+                    vulns.append(
+                        {
+                            "package": dep.get("name", ""),
+                            "installed_version": dep.get("version", ""),
+                            "vulnerability_id": v.get("id", ""),
+                            "severity": "MEDIUM",
+                            "description": v.get("description", ""),
+                            "cve": v.get("id", "")
+                            if (v.get("id") or "").startswith("CVE")
+                            else "",
+                        }
+                    )
+            return vulns
+        for v in data.get("vulnerabilities") or []:
+            vulns.append(
+                {
+                    "package": v.get("name", v.get("package", "")),
+                    "installed_version": v.get("version", v.get("installed_version", "")),
+                    "vulnerability_id": v.get("id", v.get("vulnerability_id", "")),
+                    "severity": v.get("severity", "MEDIUM"),
+                    "description": v.get("description", ""),
+                    "cve": v.get("id", "")
+                    if (v.get("id") or "").startswith("CVE")
+                    else v.get("cve", ""),
+                }
+            )
+        return vulns
+
+    def _run_pip_audit_all(self, dependency_files: List[Path], json_output: Path) -> bool:
+        merged: List[dict] = []
+        seen: set = set()
+        for dep_file in dependency_files:
+            cmd = ["pip-audit", "--format", "json", *self._pip_audit_args_for_file(dep_file)]
+            try:
+                result = self.run_command(cmd, capture_output=True, cwd=self.target_path)
+            except FileNotFoundError:
+                self.log("pip-audit not installed; cannot scan Python dependencies.", "WARNING")
+                return False
+            if result.returncode not in (0, 1):
+                self.log(
+                    f"pip-audit failed for {dep_file} (exit {result.returncode})",
+                    "WARNING",
+                )
+                continue
+            content = (result.stdout or "").strip()
+            if not content:
+                continue
+            try:
+                for item in self._parse_pip_audit_json(content):
+                    key = (
+                        item.get("package"),
+                        item.get("vulnerability_id"),
+                        item.get("installed_version"),
+                    )
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    merged.append(item)
+            except json.JSONDecodeError as e:
+                self.log(f"pip-audit JSON parse failed for {dep_file}: {e}", "WARNING")
+        if not merged:
+            return False
+        payload = {"vulnerabilities": merged, "packages": []}
+        json_output.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return True
     
     def scan(self) -> bool:
         """Run Safety scan with standardized substeps"""
-        if not self.check_tool_installed("safety"):
-            self.log("safety not found in PATH", "ERROR")
+        has_safety = self.check_tool_installed("safety")
+        has_pip_audit = self.check_tool_installed("pip-audit")
+        if not has_safety and not has_pip_audit:
+            self.log("Neither safety nor pip-audit found in PATH", "ERROR")
             return False
         
         self.log(f"Running Python dependency security scan on {self.target_path}...")
@@ -118,9 +210,6 @@ class SafetyScanner(BaseScanner):
         
         json_output = self.results_dir / "report.json"
         text_output = self.results_dir / "report.txt"
-        
-        # Use first dependency file
-        dep_file = dependency_files[0]
         
         # PREPARE: Dependency Extraction
         self.start_substep("Dependency Extraction", "Extracting dependencies from files...", SubStepType.ACTION)
@@ -168,75 +257,63 @@ class SafetyScanner(BaseScanner):
 
         # SCAN: Vulnerability Lookup
         self.start_substep("Vulnerability Lookup", "Checking dependencies against vulnerability database...", SubStepType.PHASE)
-        
-        # JSON report (main scan)
-        self.log("Running Safety scan with JSON output...")
+
         scan_success = False
-        if not run_safety("json", json_output, file_arg=True):
-            self.log("JSON report generation failed, trying alternative approach...", "WARNING")
-            if not run_safety("json", json_output, file_arg=False):
-                self.log("Trying pip-audit as fallback (safety may be broken on this Python).", "WARNING")
-                try:
-                    pip_audit_ok = self.run_command(
-                        ["pip-audit", "--format", "json", "--requirement", str(dep_file)],
-                        capture_output=True,
-                    )
-                    if pip_audit_ok.returncode in (0, 1) and (pip_audit_ok.stdout or "").strip():
-                        try:
-                            import json as _json
-                            data = _json.loads(pip_audit_ok.stdout)
-                            vulns = data.get("vulnerabilities") or []
-                            safety_like = {
-                                "vulnerabilities": [
-                                    {
-                                        "package": v.get("name", ""),
-                                        "installed_version": v.get("version", ""),
-                                        "vulnerability_id": v.get("id", ""),
-                                        "severity": "MEDIUM",
-                                        "description": v.get("description", ""),
-                                        "cve": v.get("id", "") if (v.get("id") or "").startswith("CVE") else "",
-                                    }
-                                    for v in vulns
-                                ],
-                                "packages": [],
-                            }
-                            json_output.write_text(_json.dumps(safety_like, indent=2), encoding="utf-8")
-                            scan_success = True
-                        except Exception as e:
-                            self.log(f"pip-audit fallback failed: {e}", "WARNING")
-                except FileNotFoundError:
-                    self.log("pip-audit not installed; cannot fallback.", "WARNING")
-                except Exception as e:
-                    self.log(f"pip-audit fallback error: {e}", "WARNING")
-                if not scan_success:
-                    self.log("Directory scan also failed; no report written (no fake data).", "WARNING")
-            else:
-                scan_success = True
+        use_pip_audit = not self._safety_cli_works()
+        if use_pip_audit:
+            self.log(
+                "Safety CLI is broken on this image (typer/safety mismatch); using pip-audit.",
+                "WARNING",
+            )
+            scan_success = self._run_pip_audit_all(dependency_files, json_output)
         else:
-            scan_success = True
-        
+            dep_file = dependency_files[0]
+            self.log("Running Safety scan with JSON output...")
+            if run_safety("json", json_output, file_arg=True):
+                scan_success = True
+            elif run_safety("json", json_output, file_arg=False):
+                scan_success = True
+            else:
+                self.log("Safety JSON failed; falling back to pip-audit.", "WARNING")
+                scan_success = self._run_pip_audit_all(dependency_files, json_output)
+
         if scan_success:
             self.complete_substep("Vulnerability Lookup", "Vulnerability lookup completed")
         else:
             self.complete_substep("Vulnerability Lookup", "Vulnerability lookup completed (with warnings)")
-        
+
         # PROCESS: Result Processing
         self.substep_process("Result Processing", "Processing scan results...")
         self.complete_substep("Result Processing", "Results processed")
-        
+
         # REPORT: JSON Report
         self.substep_report("JSON", "Generating JSON report...")
         if json_output.exists() and json_output.stat().st_size > 0:
             self.complete_substep("Generating JSON Report", "JSON report generated successfully")
         else:
             self.fail_substep("Generating JSON Report", "JSON report generation failed")
-        
-        # Text report (for completeness, but not part of standard schema)
-        self.log("Running Safety scan with text output...")
-        if not run_safety("text", text_output, file_arg=True):
-            self.log("Text report generation failed, trying alternative approach...", "WARNING")
-            if not run_safety("text", text_output, file_arg=False):
-                self.log("Directory text scan also failed; no text report written.", "WARNING")
+
+        if not use_pip_audit and scan_success:
+            self.log("Running Safety scan with text output...")
+            dep_file = dependency_files[0]
+            if not run_safety("text", text_output, file_arg=True):
+                if not run_safety("text", text_output, file_arg=False):
+                    self.log("Text report generation failed; JSON report is still valid.", "WARNING")
+        elif scan_success and json_output.exists():
+            try:
+                data = json.loads(json_output.read_text(encoding="utf-8"))
+                lines = ["Safety / pip-audit Scan Results", "===========================", ""]
+                for v in data.get("vulnerabilities") or []:
+                    lines.append(
+                        f"- {v.get('package', '?')} {v.get('installed_version', '')}: "
+                        f"{v.get('vulnerability_id', '')} — {v.get('description', '')[:120]}"
+                    )
+                if len(lines) <= 3:
+                    lines.append("No vulnerabilities reported.")
+                lines.append(f"\nScan completed at: {datetime.now().isoformat()}\n")
+                text_output.write_text("\n".join(lines), encoding="utf-8")
+            except (OSError, json.JSONDecodeError):
+                pass
         
         # Check if reports were generated
         if json_output.exists() or text_output.exists():

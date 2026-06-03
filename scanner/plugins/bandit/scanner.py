@@ -34,7 +34,8 @@ class BanditScanner(BaseScanner):
         target_path: str,
         results_dir: str,
         log_file: str,
-        config_path: Optional[str] = None
+        config_path: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
         Initialize Bandit scanner
@@ -44,8 +45,11 @@ class BanditScanner(BaseScanner):
             results_dir: Results directory
             log_file: Log file path
             config_path: Path to Bandit config file (optional)
+            step_name: Registry step label (orchestrator)
         """
-        super().__init__("Bandit", target_path, results_dir, log_file, config_path)
+        super().__init__(
+            "Bandit", target_path, results_dir, log_file, config_path, step_name=step_name
+        )
     
     def find_python_files(self) -> int:
         """Count Python files"""

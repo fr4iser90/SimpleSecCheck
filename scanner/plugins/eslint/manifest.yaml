@@ -22,11 +22,11 @@ documentation: https://eslint.org/docs/latest/
 install:
 - - npm
   - install
-  - -g
-  - eslint
-  - eslint-plugin-security
-  - '@typescript-eslint/parser'
-  - '@typescript-eslint/eslint-plugin'
+  - --prefix
+  - /app/scanner/plugins/eslint/toolchain
+  - --no-fund
+  - --no-audit
+  - --omit=dev
 - - npm
   - install
   - -g

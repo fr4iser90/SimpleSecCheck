@@ -234,12 +234,23 @@ function clampMaxFindings(n: number): number {
   return Math.min(n, MAX_PROMPT_FINDINGS);
 }
 
-function applyMaxFindingsInput(reload: boolean): void {
+let promptRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleRefreshAIPrompt(delayMs: number = 120): void {
+  if (promptRefreshTimer !== null) {
+    clearTimeout(promptRefreshTimer);
+  }
+  promptRefreshTimer = setTimeout(() => {
+    promptRefreshTimer = null;
+    refreshAIPromptContent();
+  }, delayMs);
+}
+
+function applyMaxFindingsFromInput(): void {
   const maxEl = document.getElementById('ai-prompt-max-findings') as HTMLInputElement | null;
   if (!maxEl) return;
   currentMaxFindings = clampMaxFindings(parseInt(maxEl.value, 10));
   maxEl.value = String(currentMaxFindings);
-  if (reload) loadAIPrompt();
 }
 
 // Helper function to safely set text content (prevents XSS)
@@ -466,11 +477,7 @@ function openAIPromptModal(): void {
     policyInput.value = currentPolicyPath;
     policyInput.addEventListener('input', () => {
       currentPolicyPath = policyInput.value.trim() || DEFAULT_POLICY_PATH;
-      loadAIPrompt();
-    });
-    policyInput.addEventListener('change', () => {
-      currentPolicyPath = policyInput.value.trim() || DEFAULT_POLICY_PATH;
-      loadAIPrompt();
+      scheduleRefreshAIPrompt(200);
     });
     
     const policyHint = document.createElement('div');
@@ -490,7 +497,7 @@ function openAIPromptModal(): void {
     prCheck.checked = currentIncludePRWorkflow;
     prCheck.addEventListener('change', () => {
       currentIncludePRWorkflow = (prCheck as HTMLInputElement).checked;
-      loadAIPrompt();
+      refreshAIPromptContent();
     });
     const prLabel = document.createElement('label');
     prLabel.htmlFor = 'ai-prompt-include-pr';
@@ -534,7 +541,7 @@ function openAIPromptModal(): void {
     minSelect.value = currentMinSeverity;
     minSelect.addEventListener('change', () => {
       readPromptFilterSettings();
-      loadAIPrompt();
+      refreshAIPromptContent();
     });
     minSection.appendChild(minLabel);
     minSection.appendChild(minSelect);
@@ -549,7 +556,7 @@ function openAIPromptModal(): void {
     toolSelect.style.cssText = selectStyle;
     toolSelect.addEventListener('change', () => {
       readPromptFilterSettings();
-      loadAIPrompt();
+      refreshAIPromptContent();
     });
     toolSection.appendChild(toolLabel);
     toolSection.appendChild(toolSelect);
@@ -575,7 +582,7 @@ function openAIPromptModal(): void {
     sortSelect.value = currentSortBy;
     sortSelect.addEventListener('change', () => {
       readPromptFilterSettings();
-      loadAIPrompt();
+      refreshAIPromptContent();
     });
     sortSection.appendChild(sortLabel);
     sortSection.appendChild(sortSelect);
@@ -592,18 +599,13 @@ function openAIPromptModal(): void {
     maxInput.max = String(MAX_PROMPT_FINDINGS);
     maxInput.value = String(currentMaxFindings);
     maxInput.style.cssText = selectStyle;
-    maxInput.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        applyMaxFindingsInput(true);
-      }
-    });
-    maxInput.addEventListener('blur', () => {
-      applyMaxFindingsInput(true);
+    maxInput.addEventListener('input', () => {
+      applyMaxFindingsFromInput();
+      scheduleRefreshAIPrompt(150);
     });
     const maxHint = document.createElement('div');
     maxHint.style.cssText = 'margin-top: 0.25rem; font-size: 0.75rem; color: var(--text-secondary); opacity: 0.85;';
-    setTextContent(maxHint, `1–${MAX_PROMPT_FINDINGS}, prompt updates when you leave the field or press Enter`);
+    setTextContent(maxHint, `1–${MAX_PROMPT_FINDINGS}, prompt updates as you type`);
     maxSection.appendChild(maxLabel);
     maxSection.appendChild(maxInput);
     maxSection.appendChild(maxHint);
@@ -645,7 +647,7 @@ function openAIPromptModal(): void {
         const aiSort = document.getElementById('ai-prompt-sort-by') as HTMLSelectElement | null;
         if (aiSort) aiSort.value = currentSortBy;
       }
-      loadAIPrompt();
+      refreshAIPromptContent();
     });
 
     settingsContent.appendChild(languageSection);
@@ -762,7 +764,7 @@ function openAIPromptModal(): void {
     const sortSelect = document.getElementById('ai-prompt-sort-by') as HTMLSelectElement | null;
     if (sortSelect) sortSelect.value = currentSortBy;
   }
-  loadAIPrompt();
+  loadAIPrompt(true);
 }
 
 function closeAIPromptModal(): void {
@@ -789,7 +791,7 @@ function setAIPromptLanguage(lang: Language): void {
       }
     }
   });
-  loadAIPrompt();
+  refreshAIPromptContent();
 }
 
 function updateAIPromptPolicyPath(path: string): void {
@@ -798,7 +800,7 @@ function updateAIPromptPolicyPath(path: string): void {
   if (input) {
     input.value = currentPolicyPath;
   }
-  loadAIPrompt();
+  refreshAIPromptContent();
 }
 
 function openAIPromptInNewTab(): void {
@@ -1290,7 +1292,83 @@ function generateSplitPrompt(findings: any[], language: Language, policyPath: st
   return separator + prompts.join(separator);
 }
 
-async function loadAIPrompt(): Promise<void> {
+function buildPromptFromPageSettings(): {
+  prompt: string;
+  meta: PromptSelectionMeta;
+  selectedCount: number;
+  matchedCount: number;
+} | null {
+  readPromptFilterSettings();
+  const findings = loadReportFindingsFromPage();
+  if (!findings.length) {
+    return null;
+  }
+  populateToolFilterOptions(findings);
+  const includePR =
+    (document.getElementById('ai-prompt-include-pr') as HTMLInputElement | null)?.checked ??
+    currentIncludePRWorkflow;
+  const { selected, meta } = selectFindingsForPrompt(findings, {
+    maxFindings: currentMaxFindings,
+    minSeverity: currentMinSeverity,
+    tool: currentToolFilter,
+    sortBy: currentSortBy,
+  });
+  const prompt = generatePromptLocally(
+    findings,
+    currentLanguage,
+    currentPolicyPath,
+    currentMaxFindings,
+    currentMinSeverity,
+    currentToolFilter,
+    currentSortBy,
+    includePR
+  );
+  return { prompt, meta, selectedCount: selected.length, matchedCount: meta.matched };
+}
+
+function refreshAIPromptContent(): void {
+  const error = document.getElementById('ai-prompt-error') as HTMLDivElement | null;
+  const textarea = document.getElementById('ai-prompt-textarea') as HTMLTextAreaElement | null;
+  const stats = document.getElementById('ai-prompt-stats') as HTMLDivElement | null;
+  const loading = document.getElementById('ai-prompt-loading') as HTMLDivElement | null;
+  if (!error || !textarea || !stats) return;
+
+  try {
+    const built = buildPromptFromPageSettings();
+    if (!built) {
+      error.textContent =
+        'No embedded findings in this page (missing report-findings-data). Open the scan summary.html from a completed scan.';
+      error.style.display = 'block';
+      return;
+    }
+    const { prompt, meta, selectedCount, matchedCount } = built;
+    currentPrompt = prompt;
+    textarea.value = prompt;
+    textarea.style.display = 'block';
+    if (loading) loading.style.display = 'none';
+    const charK = Math.round(prompt.length / 1000);
+    const breakdown = formatSeverityBreakdown(meta.included_by_severity);
+    stats.textContent =
+      `📊 ${meta.included} in prompt (${breakdown}) · ${meta.matched} match filter · ${meta.total} total · ~${charK}k chars`;
+    stats.style.display = 'block';
+    if (selectedCount === 0 && matchedCount === 0) {
+      error.textContent =
+        'No findings match the current filters. Lower min. severity, clear tool filter, or raise max in prompt.';
+      error.style.display = 'block';
+    } else {
+      error.style.display = 'none';
+    }
+  } catch (parseErr) {
+    console.error('AI prompt refresh failed:', parseErr);
+    error.textContent =
+      parseErr instanceof Error
+        ? `Could not build prompt: ${parseErr.message}`
+        : 'Could not build prompt from embedded findings.';
+    error.style.display = 'block';
+  }
+}
+
+async function loadAIPrompt(initialOpen: boolean = false): Promise<void> {
   const loading = document.getElementById('ai-prompt-loading') as HTMLDivElement | null;
   const error = document.getElementById('ai-prompt-error') as HTMLDivElement | null;
   const textarea = document.getElementById('ai-prompt-textarea') as HTMLTextAreaElement | null;
@@ -1298,68 +1376,15 @@ async function loadAIPrompt(): Promise<void> {
 
   if (!loading || !error || !textarea || !stats) return;
 
-  loading.style.display = 'flex';
-  error.style.display = 'none';
-  textarea.style.display = 'none';
-  stats.style.display = 'none';
-
-  try {
-    readPromptFilterSettings();
-    const findings = loadReportFindingsFromPage();
-    if (!findings.length) {
-      error.textContent =
-        'No embedded findings in this page (missing report-findings-data). Open the scan summary.html from a completed scan.';
-      error.style.display = 'block';
-      loading.style.display = 'none';
-      return;
-    }
-
-    populateToolFilterOptions(findings);
-
-    const includePR =
-      (document.getElementById('ai-prompt-include-pr') as HTMLInputElement | null)?.checked ??
-      currentIncludePRWorkflow;
-
-    const { selected, meta } = selectFindingsForPrompt(findings, {
-      maxFindings: currentMaxFindings,
-      minSeverity: currentMinSeverity,
-      tool: currentToolFilter,
-      sortBy: currentSortBy,
-    });
-
-    const prompt = generatePromptLocally(
-      findings,
-      currentLanguage,
-      currentPolicyPath,
-      currentMaxFindings,
-      currentMinSeverity,
-      currentToolFilter,
-      currentSortBy,
-      includePR
-    );
-    currentPrompt = prompt;
-    textarea.value = prompt;
-    textarea.style.display = 'block';
-    loading.style.display = 'none';
-    const charK = Math.round(prompt.length / 1000);
-    const breakdown = formatSeverityBreakdown(meta.included_by_severity);
-    stats.textContent =
-      `📊 ${meta.included} in prompt (${breakdown}) · ${meta.matched} match filter · ${meta.total} total · ~${charK}k chars`;
-    stats.style.display = 'block';
-    if (selected.length === 0 && meta.matched === 0) {
-      error.textContent =
-        'No findings match the current filters. Lower min. severity, clear tool filter, or raise max in prompt.';
-      error.style.display = 'block';
-    }
-  } catch (parseErr) {
-    console.error('AI prompt from embedded findings failed:', parseErr);
-    error.textContent =
-      parseErr instanceof Error
-        ? `Could not build prompt: ${parseErr.message}`
-        : 'Could not build prompt from embedded findings.';
-    error.style.display = 'block';
-    loading.style.display = 'none';
+  const hasExistingPrompt = textarea.style.display !== 'none' && textarea.value.length > 0;
+  if (initialOpen && !hasExistingPrompt) {
+    loading.style.display = 'flex';
+    error.style.display = 'none';
+    textarea.style.display = 'none';
+    stats.style.display = 'none';
   }
+
+  refreshAIPromptContent();
 }
 
 async function copyAIPrompt(): Promise<void> {

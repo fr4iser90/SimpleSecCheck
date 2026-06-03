@@ -93,54 +93,70 @@ class ESLintScanner(BaseScanner):
         json_output = self.results_dir / "report.json"  # Changed from eslint.json
         text_output = self.results_dir / "report.txt"   # Changed from eslint.txt
 
-        # Install plugins in results_dir so we don't pollute the target repo.
-        # Minimal package.json keeps npm layout stable (scoped packages under node_modules).
-        pkg_json = self.results_dir / "package.json"
-        if not pkg_json.is_file():
-            try:
-                pkg_json.write_text('{"name":"ssc-eslint-plugins","private":true}\n', encoding="utf-8")
-            except OSError as e:
-                self.log(f"Cannot write {pkg_json}: {e}", "WARNING")
-
-        # Local ESLint 9 + eslint-plugin-security 4: system ESLint (often v10) breaks v3 rules
-        # (context.getSourceCode). Install a pinned toolchain under results_dir and prefer
-        # node_modules/.bin/eslint over PATH.
-        install_result = self.run_command(
-            [
-                "npm",
-                "install",
-                "--no-fund",
-                "--no-audit",
-                "eslint@9.16.0",
-                "eslint-plugin-security@4.0.0",
-                "@typescript-eslint/parser@8.57.1",
-            ],
-            capture_output=True,
-            cwd=self.results_dir,
+        bundled_nm = Path(
+            os.getenv(
+                "SSC_ESLINT_TOOLCHAIN",
+                "/app/scanner/plugins/eslint/toolchain/node_modules",
+            )
         )
-        if install_result.returncode != 0:
-            self.log("npm install for eslint plugins failed (will try anyway): " + (install_result.stderr or install_result.stdout or "")[:200], "WARNING")
-
-        plugins_nm = str((self.results_dir / "node_modules").resolve())
-        local_eslint = self.results_dir / "node_modules" / ".bin" / "eslint"
+        local_eslint = bundled_nm / ".bin" / "eslint"
+        install_result = None
         if local_eslint.is_file():
             tool_cmd = [str(local_eslint)]
+            plugins_nm = str(bundled_nm.resolve())
+            self.log("Using image-baked ESLint toolchain (no per-scan npm install).")
         else:
-            tool_cmd = self.get_tool_command("eslint")
-            if not tool_cmd:
-                self.log("eslint not found (local install missing and no PATH eslint)", "ERROR")
-                return False
-            self.log("Using PATH eslint (local node_modules/.bin/eslint missing); may mismatch plugins.", "WARNING")
+            pkg_json = self.results_dir / "package.json"
+            if not pkg_json.is_file():
+                try:
+                    pkg_json.write_text(
+                        '{"name":"ssc-eslint-plugins","private":true}\n', encoding="utf-8"
+                    )
+                except OSError as e:
+                    self.log(f"Cannot write {pkg_json}: {e}", "WARNING")
+            install_result = self.run_command(
+                [
+                    "npm",
+                    "install",
+                    "--no-fund",
+                    "--no-audit",
+                    "eslint@9.16.0",
+                    "eslint-plugin-security@4.0.0",
+                    "@typescript-eslint/parser@8.57.1",
+                ],
+                capture_output=True,
+                cwd=self.results_dir,
+            )
+            if install_result.returncode != 0:
+                self.log(
+                    "npm install for eslint plugins failed (will try anyway): "
+                    + (install_result.stderr or install_result.stdout or "")[:200],
+                    "WARNING",
+                )
+            plugins_nm = str((self.results_dir / "node_modules").resolve())
+            fallback_eslint = self.results_dir / "node_modules" / ".bin" / "eslint"
+            if fallback_eslint.is_file():
+                tool_cmd = [str(fallback_eslint)]
+            else:
+                tool_cmd = self.get_tool_command("eslint")
+                if not tool_cmd:
+                    self.log("eslint not found (bundled toolchain and npm install missing)", "ERROR")
+                    return False
+                self.log(
+                    "Using PATH eslint (bundled toolchain missing); may mismatch plugins.",
+                    "WARNING",
+                )
 
-        parser_pkg = self.results_dir / "node_modules" / "@typescript-eslint" / "parser"
+        parser_pkg = Path(plugins_nm) / "@typescript-eslint" / "parser"
         if not (parser_pkg / "package.json").is_file():
             self.log(
-                f"ESLint plugin layout incomplete (missing {parser_pkg}); npm install may have failed.",
+                f"ESLint plugin layout incomplete (missing {parser_pkg}); rebuild scanner image.",
                 "ERROR",
             )
-            tail = (install_result.stderr or install_result.stdout or "").strip()
-            if tail:
-                self.log(f"npm output (truncated): {tail[:800]}", "WARNING")
+            if install_result is not None:
+                tail = (install_result.stderr or install_result.stdout or "").strip()
+                if tail:
+                    self.log(f"npm output (truncated): {tail[:800]}", "WARNING")
 
         # ESLint 9 flat config: "files" are relative to the config file's directory. So we write
         # the config inside the target and run with cwd=target; then **/*.js matches target files.

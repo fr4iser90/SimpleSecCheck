@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslation, Language } from '../i18n'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
 
@@ -55,25 +55,28 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
   const [policyPath, setPolicyPath] = useState('.scanning/finding-policy.json')
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [promptData, setPromptData] = useState<PromptData | null>(null)
   const [copied, setCopied] = useState(false)
 
   const [maxFindings, setMaxFindings] = useState(100)
-  const [maxFindingsDraft, setMaxFindingsDraft] = useState('100')
+  const maxDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [minSeverity, setMinSeverity] = useState('HIGH')
   const [toolFilter, setToolFilter] = useState('')
-  const [toolFilterDraft, setToolFilterDraft] = useState('')
   const [sortBy, setSortBy] = useState('severity')
 
-  const commitMaxFindings = () => {
-    const n = clampMaxFindings(parseInt(maxFindingsDraft, 10))
-    setMaxFindingsDraft(String(n))
+  const applyMaxFindingsValue = (raw: string) => {
+    const n = clampMaxFindings(parseInt(raw, 10))
     setMaxFindings(n)
   }
 
-  const commitToolFilter = () => {
-    setToolFilter(toolFilterDraft.trim())
+  const scheduleMaxFindingsUpdate = (raw: string) => {
+    if (maxDebounceRef.current) clearTimeout(maxDebounceRef.current)
+    maxDebounceRef.current = setTimeout(() => {
+      maxDebounceRef.current = null
+      applyMaxFindingsValue(raw)
+    }, 150)
   }
 
   const filterDeps = useMemo(
@@ -88,7 +91,12 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
   }, filterDeps)
 
   const loadPrompt = async () => {
-    setLoading(true)
+    const showFullLoading = !prompt
+    if (showFullLoading) {
+      setLoading(true)
+    } else {
+      setRefreshing(true)
+    }
     setError(null)
 
     try {
@@ -129,6 +137,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
       setPromptData(null)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -240,7 +249,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div className="form-group" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <label style={{ marginBottom: '0.5rem', fontWeight: 600 }}>📋 {t('aiPrompt.promptPreview')}:</label>
-            {loading ? (
+            {loading && !prompt ? (
               <div
                 style={{
                   flex: 1,
@@ -255,7 +264,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
               >
                 <div style={{ opacity: 0.7 }}>⏳ {t('aiPrompt.loadingPrompt')}</div>
               </div>
-            ) : error ? (
+            ) : error && !prompt ? (
               <div
                 style={{
                   padding: '1rem',
@@ -268,25 +277,48 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                 {error}
               </div>
             ) : (
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                style={{
-                  flex: 1,
-                  minHeight: '400px',
-                  background: 'var(--code-bg)',
-                  border: '1px solid var(--glass-border-main)',
-                  borderRadius: '8px',
-                  padding: '1rem',
-                  color: 'var(--code-text)',
-                  fontFamily: "'Courier New', monospace",
-                  fontSize: '0.9rem',
-                  resize: 'vertical',
-                  whiteSpace: 'pre-wrap',
-                  wordWrap: 'break-word',
-                }}
-                placeholder={t('aiPrompt.placeholder')}
-              />
+              <>
+                {refreshing && (
+                  <div style={{ marginBottom: '0.35rem', fontSize: '0.85rem', opacity: 0.75 }}>
+                    {t('aiPrompt.updating')}
+                  </div>
+                )}
+                {error && (
+                  <div
+                    style={{
+                      marginBottom: '0.5rem',
+                      padding: '0.75rem',
+                      background: 'rgba(220, 53, 69, 0.2)',
+                      border: '1px solid #dc3545',
+                      borderRadius: '8px',
+                      color: '#dc3545',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    {error}
+                  </div>
+                )}
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  style={{
+                    flex: 1,
+                    minHeight: '400px',
+                    background: 'var(--code-bg)',
+                    border: '1px solid var(--glass-border-main)',
+                    borderRadius: '8px',
+                    padding: '1rem',
+                    color: 'var(--code-text)',
+                    fontFamily: "'Courier New', monospace",
+                    fontSize: '0.9rem',
+                    resize: 'vertical',
+                    whiteSpace: 'pre-wrap',
+                    wordWrap: 'break-word',
+                    opacity: refreshing ? 0.92 : 1,
+                  }}
+                  placeholder={t('aiPrompt.placeholder')}
+                />
+              </>
             )}
           </div>
 
@@ -368,15 +400,8 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                   </label>
                   <input
                     type="text"
-                    value={toolFilterDraft}
-                    onChange={(e) => setToolFilterDraft(e.target.value)}
-                    onBlur={commitToolFilter}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        commitToolFilter()
-                      }
-                    }}
+                    value={toolFilter}
+                    onChange={(e) => setToolFilter(e.target.value)}
                     placeholder={t('aiPrompt.allTools')}
                     style={selectStyle}
                     list="ai-prompt-tool-suggestions"
@@ -407,15 +432,8 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
                     type="number"
                     min={1}
                     max={MAX_PROMPT_FINDINGS}
-                    value={maxFindingsDraft}
-                    onChange={(e) => setMaxFindingsDraft(e.target.value)}
-                    onBlur={commitMaxFindings}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        commitMaxFindings()
-                      }
-                    }}
+                    value={maxFindings}
+                    onChange={(e) => scheduleMaxFindingsUpdate(e.target.value)}
                     style={selectStyle}
                   />
                   <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.85 }}>
@@ -426,7 +444,7 @@ export default function AIPromptModal({ isOpen, onClose, scanId }: AIPromptModal
             </div>
           </div>
 
-          {promptData && !loading && !error && (
+          {promptData && !loading && (
             <div
               style={{
                 padding: '0.75rem',

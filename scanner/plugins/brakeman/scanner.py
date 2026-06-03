@@ -33,7 +33,8 @@ class BrakemanScanner(BaseScanner):
         target_path: str,
         results_dir: str,
         log_file: str,
-        config_path: Optional[str] = None
+        config_path: Optional[str] = None,
+        step_name: Optional[str] = None,
     ):
         """
         Initialize Brakeman scanner
@@ -43,8 +44,11 @@ class BrakemanScanner(BaseScanner):
             results_dir: Results directory
             log_file: Log file path
             config_path: Path to Brakeman config file (optional)
+            step_name: Registry step label (orchestrator)
         """
-        super().__init__("Brakeman", target_path, results_dir, log_file, config_path)
+        super().__init__(
+            "Brakeman", target_path, results_dir, log_file, config_path, step_name=step_name
+        )
     
     def find_ruby_files(self) -> List[Path]:
         """Find Ruby/Rails files"""
