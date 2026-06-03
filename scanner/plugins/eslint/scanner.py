@@ -41,7 +41,7 @@ class ESLintScanner(BaseScanner):
         step_name: From registry/manifest (single source).
         """
         super().__init__("ESLint", target_path, results_dir, log_file, config_path, step_name=step_name)
-        self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
+        self.exclude_paths = self.scan_exclude_paths(exclude_paths)
     
     def find_js_files(self) -> List[Path]:
         """Find JavaScript/TypeScript files"""
@@ -54,15 +54,7 @@ class ESLintScanner(BaseScanner):
                 if "node_modules" in str(file):
                     continue
                 
-                skip = False
-                if self.exclude_paths:
-                    for exclude in self.exclude_paths.split(","):
-                        exclude = exclude.strip()
-                        if exclude and exclude in str(file):
-                            skip = True
-                            break
-                
-                if not skip:
+                if not self.should_skip_scan_path(file):
                     js_files.append(file)
         
         return js_files

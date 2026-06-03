@@ -50,20 +50,10 @@ class SemgrepScanner(BaseScanner):
         """
         super().__init__("Semgrep", target_path, results_dir, log_file, step_name=step_name)
         self.rules_path = Path(rules_path) if rules_path else Path("/app/scanner/plugins/semgrep/rules")
-        self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
-    
+        self.exclude_paths = self.scan_exclude_paths(exclude_paths)
+
     def get_exclude_args(self) -> List[str]:
-        """Get Semgrep exclude arguments"""
-        if not self.exclude_paths:
-            return []
-        
-        exclude_args = []
-        for path in self.exclude_paths.split(","):
-            path = path.strip()
-            if path:
-                exclude_args.extend(["--exclude", path])
-        
-        return exclude_args
+        return self.semgrep_exclude_cli()
     
     def _profile_registry_configs(self) -> List[str]:
         """Optional rule packs from manifest scan profile (SEMGREP_PROFILE_CONFIGS=p/ci,p/owasp-top-ten)."""

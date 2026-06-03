@@ -518,10 +518,14 @@ class ScanOrchestrator:
         try:
             from scanner.core.scan_metadata import collect_scan_metadata, save_metadata
             
-            # Get finding policy (auto-discover conventional path if not set)
-            finding_policy = os.getenv("FINDING_POLICY_FILE_IN_CONTAINER", "").strip()
+            from scanner.core.finding_policy import (
+                default_policy_path_under_target,
+                publish_finding_policy_path_to_env,
+            )
+
+            finding_policy = publish_finding_policy_path_to_env(self.target_path)
             if not finding_policy:
-                finding_policy = str(self.target_path / ".scanning" / "finding-policy.json")
+                finding_policy = str(default_policy_path_under_target(self.target_path))
             # Store in metadata so report can use it; load_policy will return {} if file missing
             
             # Get CI mode
@@ -917,6 +921,14 @@ class ScanOrchestrator:
         self.log_message(
             "[Checkpoint] Step states synced from checkpoint (pending / restored) for this run."
         )
+
+        from scanner.core.scan_excludes import prepare_scan_excludes_env
+
+        merged_excludes = prepare_scan_excludes_env(self.target_path)
+        if merged_excludes:
+            self.log_message(
+                f"Scan excludes (policy file + SIMPLESECCHECK_EXCLUDE_PATHS): {merged_excludes}"
+            )
 
         for scanner in scanners:
             if not self._scanner_admin_enabled(scanner):

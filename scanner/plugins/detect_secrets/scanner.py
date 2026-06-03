@@ -41,19 +41,10 @@ class DetectSecretsScanner(BaseScanner):
         step_name: From registry/manifest (single source).
         """
         super().__init__("Detect-secrets", target_path, results_dir, log_file, config_path, step_name=step_name)
-        self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
-    
+        self.exclude_paths = self.scan_exclude_paths(exclude_paths)
+
     def get_exclude_args(self) -> List[str]:
-        """Get detect-secrets exclude arguments"""
-        exclude_args = []
-        
-        if self.exclude_paths:
-            for path in self.exclude_paths.split(","):
-                path = path.strip()
-                if path:
-                    exclude_args.extend(["--exclude-files", f".*/{path}/.*"])
-        
-        return exclude_args
+        return self.detect_secrets_exclude_cli()
     
     def scan(self) -> bool:
         """Run Detect-secrets scan"""

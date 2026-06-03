@@ -102,6 +102,7 @@ class BanditScanner(BaseScanner):
         text_output = self.results_dir / "report.txt"   # Changed from bandit.txt
 
         extra = shlex.split(os.getenv("BANDIT_EXTRA_ARGS", "").strip())
+        extra = [*extra, *self.bandit_exclude_cli()]
 
         # JSON report
         cmd = ["bandit", "-r", str(self.target_path), *extra, "-f", "json", "-o", str(json_output)]

@@ -20,15 +20,18 @@ from application.helpers.findings_pagination import (
 
 
 def finding_item_from_dict(raw: Dict[str, Any]) -> ScanFindingItemSchema:
+    from scanner.output.ai_normalizer_utils import normalize_finding_fields
+
+    fields = normalize_finding_fields(raw) if isinstance(raw, dict) else {}
     cwe = raw.get("cwe") or raw.get("CWE") or raw.get("cwe_id")
     fix_hint = raw.get("fix_hint") or raw.get("remediation") or raw.get("fix")
     return ScanFindingItemSchema(
         tool=str(raw.get("tool") or ""),
-        severity=str(raw.get("severity") or ""),
-        path=str(raw.get("path") or raw.get("file") or ""),
-        line=str(raw.get("line") or raw.get("line_number") or ""),
-        message=str(raw.get("message") or ""),
-        rule_id=str(raw.get("rule_id") or raw.get("check_id") or ""),
+        severity=str(raw.get("severity") or fields.get("severity") or ""),
+        path=str(fields.get("path") or raw.get("path") or raw.get("file") or ""),
+        line=str(fields.get("line") or raw.get("line") or raw.get("line_number") or ""),
+        message=str(fields.get("message") or raw.get("message") or ""),
+        rule_id=str(fields.get("rule_id") or raw.get("rule_id") or raw.get("check_id") or ""),
         cwe=str(cwe) if cwe else None,
         fix_hint=str(fix_hint) if fix_hint else None,
     )

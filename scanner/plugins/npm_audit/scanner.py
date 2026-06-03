@@ -42,7 +42,7 @@ class NpmAuditScanner(BaseScanner):
         step_name: From registry/manifest (single source).
         """
         super().__init__("npm audit", target_path, results_dir, log_file, config_path, step_name=step_name)
-        self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
+        self.exclude_paths = self.scan_exclude_paths(exclude_paths)
     
     def find_package_json_files(self) -> List[Path]:
         """Find package.json files (excluding node_modules)"""
@@ -53,16 +53,7 @@ class NpmAuditScanner(BaseScanner):
             if "node_modules" in str(package_json):
                 continue
             
-            # Check exclude paths
-            skip = False
-            if self.exclude_paths:
-                for exclude in self.exclude_paths.split(","):
-                    exclude = exclude.strip()
-                    if exclude and exclude != "node_modules" and exclude in str(package_json):
-                        skip = True
-                        break
-            
-            if not skip:
+            if not self.should_skip_scan_path(package_json):
                 package_files.append(package_json)
         
         return package_files

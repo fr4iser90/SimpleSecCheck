@@ -169,7 +169,7 @@ class CheckovScanner(BaseScanner):
         step_name: From registry/manifest (single source).
         """
         super().__init__("Checkov", target_path, results_dir, log_file, config_path, step_name=step_name)
-        self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
+        self.exclude_paths = self.scan_exclude_paths(exclude_paths)
     
     def find_infra_files(self) -> List[Path]:
         """Find infrastructure files only (no generic *.yml/*.json to avoid Semgrep rules, package.json, etc.)."""
@@ -206,15 +206,7 @@ class CheckovScanner(BaseScanner):
             for file in self.target_path.rglob(pattern):
                 if "node_modules" in file.parts or ".git" in file.parts:
                     continue
-                skip = False
-                if self.exclude_paths:
-                    for exclude in self.exclude_paths.split(","):
-                        exclude = exclude.strip()
-                        if exclude and exclude in str(file):
-                            skip = True
-                            break
-
-                if not skip:
+                if not self.should_skip_scan_path(file):
                     infra_files.append(file)
 
         by_key: dict = {}

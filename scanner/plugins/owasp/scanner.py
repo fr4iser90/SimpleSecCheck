@@ -65,7 +65,7 @@ class OWASPScanner(BaseScanner):
         display_name = get_plugin_display_name(PLUGIN_NAME)
         super().__init__(display_name, target_path, results_dir, log_file, config_path, step_name=step_name)
         self.data_dir = Path(data_dir) if data_dir else get_plugin_data_dir(PLUGIN_NAME)
-        self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
+        self.exclude_paths = self.scan_exclude_paths(exclude_paths)
     
     def initialize_database(self):
         """Initialize OWASP Dependency Check database if not present"""
@@ -137,16 +137,7 @@ class OWASPScanner(BaseScanner):
         return True
     
     def get_exclude_args(self) -> List[str]:
-        """Get OWASP exclude arguments"""
-        exclude_args = []
-        
-        if self.exclude_paths:
-            for path in self.exclude_paths.split(","):
-                path = path.strip()
-                if path:
-                    exclude_args.extend(["--exclude", f"**/{path}/**"])
-        
-        return exclude_args
+        return self.owasp_exclude_cli()
     
     def scan(self) -> bool:
         """Run OWASP Dependency Check scan with standardized substeps"""

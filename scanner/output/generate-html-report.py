@@ -221,21 +221,23 @@ def generate_all_findings_section(report_findings):
         '<thead><tr><th>Severity</th><th>Tool</th><th>File</th><th>Line</th><th>Rule / Message</th></tr></thead>'
         '<tbody id="findings-tbody">'
     )
+    from scanner.output.ai_normalizer_utils import format_rule_message_cell
+
     for f in report_findings:
         sev = f["severity"]
         icon = _severity_icon(sev)
         path_esc = html.escape(f["path"])
         line_esc = html.escape(f["line"])
         tool_esc = html.escape(f["tool"])
-        msg_esc = html.escape(f["message"])[:200] + ("…" if len(f["message"]) > 200 else "")
-        rule_esc = html.escape(f["rule_id"])
-        title_attr = html.escape(f"{f['rule_id']}: {f['message'][:100]}")
+        cell_text = format_rule_message_cell(f["rule_id"], f["message"])
+        rule_msg_esc = html.escape(cell_text[:200] + ("…" if len(cell_text) > 200 else ""))
+        title_attr = html.escape(format_rule_message_cell(f["rule_id"], f["message"][:200]))
         html_parts.append(
             f'<tr class="finding-row sev-{sev}" data-tool="{tool_esc}" data-severity="{sev}" data-path="{path_esc}" '
             f'data-line="{line_esc}" title="{title_attr}">'
             f'<td class="sev-{sev}"><span class="finding-icon" title="{title_attr}">{icon}</span> {sev}</td>'
             f'<td>{tool_esc}</td><td><code>{path_esc}</code></td><td>{line_esc}</td>'
-            f'<td><span title="{html.escape(f["message"])}">{rule_esc}: {msg_esc}</span></td></tr>'
+            f'<td><span title="{html.escape(f["message"])}">{rule_msg_esc}</span></td></tr>'
         )
     html_parts.append("</tbody></table>")
     html_parts.append("</div></details></div>")
@@ -387,37 +389,40 @@ def _normalize_severity(sev):
 
 def _normalize_finding_for_report(tool_name, finding):
     """Extract tool, severity, path, line, message, rule_id from any finding dict for report table."""
+    from scanner.output.ai_normalizer_utils import normalize_finding_fields
+
     if not isinstance(finding, dict):
         return None
-    sev = str(finding.get("Severity", finding.get("severity", ""))).strip()
-    path = normalize_policy_path(
-        str(finding.get("path", finding.get("file", finding.get("filename", finding.get("PkgName", "")))))
-    )
-    line = finding.get("line") or finding.get("line_number") or (finding.get("start") if isinstance(finding.get("start"), (int, str)) else None)
-    if line is None and isinstance(finding.get("start"), dict):
-        line = finding["start"].get("line", "")
-    line = str(line) if line is not None else ""
-    message = str(finding.get("message", finding.get("issue_text", finding.get("description", finding.get("Description", finding.get("title", finding.get("Title", "")))))))
-    rule_id = str(finding.get("rule_id", finding.get("check_id", finding.get("id", finding.get("VulnerabilityID", "")))))
+    fields = normalize_finding_fields(finding)
     return {
         "tool": tool_name,
-        "severity": _normalize_severity(sev),
-        "path": path,
-        "line": line,
-        "message": message,
-        "rule_id": rule_id,
+        "severity": _normalize_severity(fields["severity"]),
+        "path": normalize_policy_path(fields["path"]),
+        "line": fields["line"],
+        "message": fields["message"],
+        "rule_id": fields["rule_id"],
     }
 
 
 def build_report_findings(all_findings):
     """Build a flat list of normalized findings for filter/sort/export. Structure-based (dict with 'alerts' etc.), no tool names."""
+    from scanner.core.scan_excludes import path_matches_exclude
+
+    target_root = (
+        os.environ.get("TARGET_MOUNT_PATH", "").strip()
+        or os.environ.get("TARGET_PATH", "").strip()
+        or "/target"
+    )
     report_findings = []
     for tool, findings in all_findings.items():
         findings_list = _findings_as_list(findings)
         for f in findings_list:
             norm = _normalize_finding_for_report(tool, f)
-            if norm:
-                report_findings.append(norm)
+            if not norm:
+                continue
+            if norm.get("path") and path_matches_exclude(target_root, norm["path"]):
+                continue
+            report_findings.append(norm)
     return report_findings
 
 

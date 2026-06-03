@@ -3,9 +3,43 @@
 import json
 import os
 import sys
+from pathlib import Path
 
-# Conventional path under project root when no path is specified
+# Conventional path under project root when no path is specified (only default in repo)
 DEFAULT_POLICY_RELATIVE = ".scanning/finding-policy.json"
+ENV_POLICY_IN_CONTAINER = "FINDING_POLICY_FILE_IN_CONTAINER"
+ENV_POLICY_FILE = "FINDING_POLICY_FILE"
+
+
+def default_policy_path_under_target(target_path: str | Path) -> Path:
+    target = Path(target_path)
+    return target.joinpath(*DEFAULT_POLICY_RELATIVE.split("/"))
+
+
+def resolve_finding_policy_absolute_path(target_path: str | Path) -> str:
+    """User/env path, else default file if it exists. Empty if none."""
+    target = Path(target_path)
+    for env_key in (ENV_POLICY_IN_CONTAINER, ENV_POLICY_FILE):
+        raw = os.getenv(env_key, "").strip()
+        if not raw:
+            continue
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            candidate = target / raw.lstrip("/")
+        if candidate.is_file():
+            return str(candidate.resolve())
+    default = default_policy_path_under_target(target)
+    if default.is_file():
+        return str(default.resolve())
+    return ""
+
+
+def publish_finding_policy_path_to_env(target_path: str | Path) -> str:
+    """Set FINDING_POLICY_FILE_IN_CONTAINER once per scan (orchestrator calls this)."""
+    abs_path = resolve_finding_policy_absolute_path(target_path)
+    if abs_path:
+        os.environ[ENV_POLICY_IN_CONTAINER] = abs_path
+    return abs_path
 
 
 def debug(msg):

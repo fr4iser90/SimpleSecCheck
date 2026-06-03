@@ -4,10 +4,28 @@ Python implementation of run_trivy.sh
 """
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
+
 from scanner.core.base_scanner import BaseScanner
+from scanner.core.command_retry import run_with_retry
 from scanner.core.scanner_registry import ScanType, TargetType, ScannerCapability
 from scanner.core.step_registry import SubStepType
+
+_MIN_TRIVY_DB_BYTES = 1024 * 1024
+
+
+def trivy_db_usable(cache_dir: Optional[str]) -> bool:
+    """True when TRIVY_CACHE_DIR contains a plausible vulnerability DB."""
+    if not cache_dir:
+        return False
+    db_path = Path(cache_dir) / "db"
+    if not db_path.is_dir():
+        return False
+    trivy_db = db_path / "trivy.db"
+    if trivy_db.is_file() and trivy_db.stat().st_size >= _MIN_TRIVY_DB_BYTES:
+        return True
+    meta = db_path / "metadata.json"
+    return meta.is_file() and meta.stat().st_size > 32
 
 
 class TrivyScanner(BaseScanner):
@@ -64,18 +82,11 @@ class TrivyScanner(BaseScanner):
         """
         super().__init__("Trivy", target_path, results_dir, log_file, config_path, step_name=step_name)
         self.scan_type = scan_type or os.getenv("TRIVY_SCAN_TYPE", "fs")
-        self.exclude_paths = exclude_paths or os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "")
-    
+        self.exclude_paths = self.scan_exclude_paths(exclude_paths)
+
     def get_skip_args(self) -> List[str]:
-        """Get Trivy skip arguments"""
         skip_args = ["--skip-files", "**/*.log", "--skip-dirs", "*/node_modules"]
-        
-        if self.exclude_paths:
-            for path in self.exclude_paths.split(","):
-                path = path.strip()
-                if path:
-                    skip_args.extend(["--skip-dirs", f"*/{path}"])
-        
+        skip_args.extend(self.trivy_extra_skip_cli())
         return skip_args
     
     def get_config_args(self) -> List[str]:
@@ -102,12 +113,91 @@ class TrivyScanner(BaseScanner):
 
     def _trivy_run_license_scan(self) -> bool:
         return os.getenv("TRIVY_RUN_LICENSE_SCAN", "1") == "1"
+
+    def _trivy_db_download_timeout(self) -> int:
+        raw = os.getenv("TRIVY_DB_DOWNLOAD_TIMEOUT", "900").strip()
+        try:
+            return max(120, int(raw))
+        except ValueError:
+            return 900
+
+    def _trivy_db_download_retries(self) -> int:
+        raw = os.getenv("TRIVY_DB_DOWNLOAD_RETRIES", "3").strip()
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            return 3
+
+    def _trivy_command_env(self) -> Dict[str, str]:
+        env = os.environ.copy()
+        cache = os.getenv("TRIVY_CACHE_DIR", "").strip()
+        if cache:
+            env["TRIVY_CACHE_DIR"] = cache
+        repo = os.getenv("TRIVY_DB_REPOSITORY", "").strip()
+        if repo:
+            env["TRIVY_DB_REPOSITORY"] = repo
+        return env
+
+    def _scan_flags(self) -> List[str]:
+        force = os.getenv("TRIVY_FORCE_DB_UPDATE", "").strip().lower() in ("1", "true", "yes")
+        if force:
+            return []
+        if self._skip_db_update or os.getenv("TRIVY_SKIP_DB_UPDATE", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
+            return ["--skip-db-update"]
+        return []
+
+    def _ensure_vuln_db(self) -> bool:
+        cache_dir = os.getenv("TRIVY_CACHE_DIR", "").strip()
+        if trivy_db_usable(cache_dir):
+            self.log("Vulnerability database found in cache")
+            self._skip_db_update = True
+            return True
+
+        cmd = ["trivy", "image", "--download-db-only"]
+        env = self._trivy_command_env()
+        timeout = self._trivy_db_download_timeout()
+        retries = self._trivy_db_download_retries()
+        delay = float(os.getenv("TRIVY_DB_DOWNLOAD_RETRY_DELAY", "8") or "8")
+
+        self.log(
+            f"Downloading vulnerability DB (timeout={timeout}s, retries={retries})…"
+        )
+
+        def _download(_attempt: int):
+            if _attempt > 1:
+                self.log(f"Trivy DB download retry {_attempt}/{retries}", "WARNING")
+            return self.run_command(cmd, capture_output=True, timeout=timeout, env=env)
+
+        result = run_with_retry(_download, max_attempts=retries, delay_seconds=delay)
+
+        if result.returncode == 0 or trivy_db_usable(cache_dir):
+            if result.returncode != 0:
+                self.log(
+                    "DB download reported failure but cache is usable; continuing with --skip-db-update",
+                    "WARNING",
+                )
+            self._skip_db_update = True
+            return True
+
+        self.log(
+            "Vulnerability database download failed after retries "
+            "(network/registry). Set TRIVY_DB_REPOSITORY or pre-warm cache via "
+            "scanner asset update.",
+            "ERROR",
+        )
+        return False
     
     def scan(self) -> bool:
         """Run Trivy scan with detailed substeps"""
         if not self.check_tool_installed("trivy"):
             self.log("trivy not found in PATH", "ERROR")
             return False
+
+        self._skip_db_update = False
 
         # Use cache path from manifest (asset id=cache) so Trivy DB is on results volume, not /tmp
         if not os.environ.get("TRIVY_CACHE_DIR"):
@@ -142,28 +232,15 @@ class TrivyScanner(BaseScanner):
         except Exception as e:
             self.complete_substep("Environment Check", f"Environment check completed: {e}")
         
-        # PREPARE: Download Vulnerability Database (only when not already in cache, like OWASP)
+        # PREPARE: Download Vulnerability Database (retry + persistent cache)
         self.substep_prepare("Download Vulnerability Database", "Checking/downloading vulnerability database...")
-        cache_dir = os.environ.get("TRIVY_CACHE_DIR")
-        db_exists = False
-        if cache_dir:
-            db_path = Path(cache_dir) / "db"
-            # Trivy stores vuln DB at cache_dir/db/trivy.db (and metadata.json)
-            if db_path.is_dir():
-                db_exists = (db_path / "trivy.db").exists() or (db_path / "metadata.json").exists()
-        if db_exists:
-            self.log("Vulnerability database found in cache, skipping download")
-            self.complete_substep("Download Vulnerability Database", "Using existing database")
-        else:
-            try:
-                result = self.run_command(["trivy", "image", "--download-db-only"], capture_output=True)
-                if result.returncode == 0:
-                    self.complete_substep("Download Vulnerability Database", "Vulnerability database ready")
-                else:
-                    self.complete_substep("Download Vulnerability Database", "Using existing database")
-            except Exception as e:
-                self.log(f"DB update check failed: {e}", "WARNING")
-                self.complete_substep("Download Vulnerability Database", "Using existing database")
+        if not self._ensure_vuln_db():
+            self.fail_substep("Download Vulnerability Database", "Vulnerability database unavailable")
+            return False
+        self.complete_substep(
+            "Download Vulnerability Database",
+            "Using cached database (--skip-db-update on scan steps)",
+        )
         
         # PREPARE: Updating DB
         self.start_substep("Updating DB", "Updating vulnerability database...", SubStepType.ACTION)
@@ -199,9 +276,11 @@ class TrivyScanner(BaseScanner):
         
         # SCAN: Vulnerability Scanning
         self.substep_scan("Vulnerability Scanning", "Scanning for known vulnerabilities...")
+        scan_flags = self._scan_flags()
         cmd = [
             "trivy",
             self.scan_type,
+            *scan_flags,
             *config_args,
             "--format", "json",
             "-o", str(json_output),
@@ -225,6 +304,7 @@ class TrivyScanner(BaseScanner):
                 secret_cmd = [
                     "trivy",
                     self.scan_type,
+                    *scan_flags,
                     "--scanners", "secret",
                     "--format", "json",
                     *skip_args,
@@ -247,6 +327,7 @@ class TrivyScanner(BaseScanner):
                 config_cmd = [
                     "trivy",
                     self.scan_type,
+                    *scan_flags,
                     "--scanners", "config",
                     "--format", "json",
                     *skip_args,
@@ -269,6 +350,7 @@ class TrivyScanner(BaseScanner):
                 license_cmd = [
                     "trivy",
                     self.scan_type,
+                    *scan_flags,
                     "--scanners", "license",
                     "--format", "json",
                     *skip_args,
@@ -290,6 +372,7 @@ class TrivyScanner(BaseScanner):
             comprehensive_cmd = [
                 "trivy",
                 self.scan_type,
+                *scan_flags,
                 *config_args,
                 "--format", "json",
                 "-o", str(json_output),
@@ -318,6 +401,7 @@ class TrivyScanner(BaseScanner):
         cmd = [
             "trivy",
             self.scan_type,
+            *scan_flags,
             *config_args,
             "--format", "table",
             "-o", str(text_output),
@@ -339,6 +423,7 @@ class TrivyScanner(BaseScanner):
             sarif_cmd = [
                 "trivy",
                 self.scan_type,
+                *scan_flags,
                 *config_args,
                 "--format", "sarif",
                 "-o", str(sarif_output),
@@ -369,6 +454,7 @@ class TrivyScanner(BaseScanner):
                 cmd = [
                     "trivy",
                     self.scan_type,
+                    *scan_flags,
                     "--scanners", scanners,
                     "--format", "json",
                     "-o", str(secrets_output),

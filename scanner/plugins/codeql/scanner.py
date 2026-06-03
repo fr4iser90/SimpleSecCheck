@@ -13,6 +13,18 @@ from scanner.core.scanner_registry import ScanType, TargetType, ScannerCapabilit
 from scanner.core.step_registry import SubStepType
 
 
+def codeql_pack_cached(pack_name: str, codeql_home: Optional[Path] = None) -> bool:
+    """True when codeql/<lang>-queries is already present under CODEQL_HOME/packages."""
+    parts = pack_name.split("/")
+    if len(parts) != 2:
+        return False
+    root = (codeql_home or Path(os.getenv("CODEQL_HOME", str(Path.home() / ".codeql")))) / "packages"
+    pack_dir = root / parts[0] / parts[1]
+    if not pack_dir.is_dir():
+        return False
+    return any(entry.is_dir() for entry in pack_dir.iterdir())
+
+
 class CodeQLScanner(BaseScanner):
     """CodeQL scanner implementation"""
     
@@ -102,6 +114,41 @@ class CodeQLScanner(BaseScanner):
             languages.append("objectivec")
 
         return languages
+
+    def _codeql_home(self) -> Path:
+        raw = os.getenv("CODEQL_HOME", "").strip()
+        if raw:
+            return Path(raw)
+        return Path.home() / ".codeql"
+
+    def _pack_download_timeout(self) -> int:
+        raw = os.getenv("CODEQL_PACK_DOWNLOAD_TIMEOUT", "").strip()
+        if raw:
+            try:
+                return max(120, int(raw))
+            except ValueError:
+                pass
+        return max(600, self.get_timeout())
+
+    def _ensure_query_pack(self, tool_cmd: List[str], lang: str) -> bool:
+        pack_name = f"codeql/{lang}-queries"
+        if codeql_pack_cached(pack_name, self._codeql_home()):
+            self.log(f"Query pack {pack_name} already cached, skipping download")
+            return True
+        timeout = self._pack_download_timeout()
+        self.log(f"Downloading query pack {pack_name} (timeout={timeout}s)…")
+        dl = self.run_command(
+            [*tool_cmd, "pack", "download", pack_name],
+            capture_output=True,
+            timeout=timeout,
+        )
+        if dl.returncode == 0 or codeql_pack_cached(pack_name, self._codeql_home()):
+            return True
+        self.log(
+            f"CodeQL pack download {pack_name} failed (exit {dl.returncode}); analyze may fail.",
+            "WARNING",
+        )
+        return False
     
     def scan(self) -> bool:
         """Run CodeQL scan with standardized substeps"""
@@ -137,13 +184,10 @@ class CodeQLScanner(BaseScanner):
         self.complete_substep("Language Detection", f"Detected languages: {', '.join(detected_languages)}")
         self.log(f"Detected languages: {', '.join(detected_languages)}")
         
-        # PREPARE: Query Pack Loading
+        # PREPARE: Query Pack Loading (skip when image-baked; long timeout when needed)
         self.start_substep("Query Pack Loading", "Loading CodeQL query packs...", SubStepType.ACTION)
         for lang in detected_languages:
-            pack_name = f"codeql/{lang}-queries"
-            dl = self.run_command([*tool_cmd, "pack", "download", pack_name], capture_output=True)
-            if dl.returncode != 0:
-                self.log(f"CodeQL pack download {pack_name} failed (exit {dl.returncode}); analyze may fail.", "WARNING")
+            self._ensure_query_pack(tool_cmd, lang)
         self.complete_substep("Query Pack Loading", "Query packs ready")
         
         db_dir = self.results_dir / "codeql-database"

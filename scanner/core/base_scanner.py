@@ -344,6 +344,44 @@ class BaseScanner(ABC):
         """Check if a tool is installed and executable."""
         return self.get_tool_command(tool_name) is not None
     
+    def scan_exclude_paths(self, override: Optional[str] = None) -> str:
+        """Central SIMPLESECCHECK_EXCLUDE_PATHS (set by orchestrator before scanners run)."""
+        if override is not None and str(override).strip():
+            from scanner.core.scan_excludes import merged_exclude_list
+
+            return ",".join(merged_exclude_list(self.target_path, extra_csv=override))
+        return os.getenv("SIMPLESECCHECK_EXCLUDE_PATHS", "").strip()
+
+    def should_skip_scan_path(self, path: Path | str) -> bool:
+        from scanner.core.scan_excludes import path_matches_exclude
+
+        return path_matches_exclude(self.target_path, path)
+
+    def semgrep_exclude_cli(self) -> List[str]:
+        from scanner.core.scan_excludes import semgrep_exclude_argv
+
+        return semgrep_exclude_argv(self.scan_exclude_paths())
+
+    def bandit_exclude_cli(self) -> List[str]:
+        from scanner.core.scan_excludes import bandit_extra_argv
+
+        return bandit_extra_argv(self.target_path)
+
+    def detect_secrets_exclude_cli(self) -> List[str]:
+        from scanner.core.scan_excludes import detect_secrets_exclude_argv
+
+        return detect_secrets_exclude_argv(self.scan_exclude_paths())
+
+    def owasp_exclude_cli(self) -> List[str]:
+        from scanner.core.scan_excludes import owasp_exclude_argv
+
+        return owasp_exclude_argv(self.scan_exclude_paths())
+
+    def trivy_extra_skip_cli(self) -> List[str]:
+        from scanner.core.scan_excludes import trivy_skip_argv
+
+        return trivy_skip_argv(self.scan_exclude_paths())
+
     def get_exclude_args(self, exclude_paths: Optional[str] = None) -> List[str]:
         """
         Parse exclude paths and return command arguments

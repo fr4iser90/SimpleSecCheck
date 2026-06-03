@@ -76,10 +76,12 @@ scan_profiles:
   standard:
     timeout: 240
   deep:
-    timeout: 300
+    timeout: 600
     hints:
       depth: deep
       intensity: high
+    env:
+      CODEQL_PACK_DOWNLOAD_TIMEOUT: "720"
 exit_codes:
   binary: codeql
   codes:

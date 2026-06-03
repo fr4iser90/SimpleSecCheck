@@ -77,6 +77,9 @@ scan_profiles:
       TRIVY_RUN_SECRET_SCAN: "1"
       TRIVY_RUN_CONFIG_SCAN: "1"
       TRIVY_RUN_LICENSE_SCAN: "1"
+      TRIVY_DB_DOWNLOAD_TIMEOUT: "900"
+      TRIVY_DB_DOWNLOAD_RETRIES: "3"
+      TRIVY_DB_DOWNLOAD_RETRY_DELAY: "8"
 exit_codes:
   binary: trivy
   codes:
