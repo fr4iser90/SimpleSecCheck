@@ -50,11 +50,23 @@ def _extract_tool_policies(data):
     """Keep only tool blocks (dict values); ignore metadata keys like version, updated."""
     if not isinstance(data, dict):
         return {}
+    try:
+        from scanner.core.policy_schema_registry import resolve_policy_key
+    except ImportError:
+        resolve_policy_key = None  # type: ignore
+
     policies = {}
     skipped = []
     for key, value in data.items():
         if isinstance(value, dict):
-            policies[key] = value
+            store_key = key
+            if resolve_policy_key is not None:
+                store_key, hint = resolve_policy_key(key)
+                if hint:
+                    debug(f"Policy alias: {hint}")
+                if store_key in policies and store_key != key:
+                    debug(f"Policy: merging duplicate block '{key}' into '{store_key}'")
+            policies[store_key] = value
         else:
             skipped.append(key)
     if skipped:
@@ -74,7 +86,24 @@ def load_policy(policy_path):
         if not isinstance(data, dict):
             debug(f"Policy root is not a JSON object: {policy_path}")
             return {}
-        return _extract_tool_policies(data)
+        policies = _extract_tool_policies(data)
+        _validate_loaded_policy(policies, policy_path)
+        return policies
     except Exception as exc:
         debug(f"Failed to load policy file {policy_path}: {exc}")
         return {}
+
+
+def _validate_loaded_policy(policies: dict, policy_path: str) -> None:
+    """Log validation warnings/errors when a policy file is loaded (non-fatal)."""
+    if not policies:
+        return
+    try:
+        from scanner.core.finding_policy_validate import validate_policy_data
+    except ImportError:
+        return
+    result = validate_policy_data(policies)
+    for w in result.get("warnings") or []:
+        debug(f"Policy warning ({policy_path}): {w}")
+    for e in result.get("errors") or []:
+        debug(f"Policy error ({policy_path}): {e}")

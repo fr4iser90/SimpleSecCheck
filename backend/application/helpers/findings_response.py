@@ -25,8 +25,19 @@ def finding_item_from_dict(raw: Dict[str, Any]) -> ScanFindingItemSchema:
     fields = normalize_finding_fields(raw) if isinstance(raw, dict) else {}
     cwe = raw.get("cwe") or raw.get("CWE") or raw.get("cwe_id")
     fix_hint = raw.get("fix_hint") or raw.get("remediation") or raw.get("fix")
+    policy_key = str(raw.get("policy_key") or "").strip()
+    if not policy_key:
+        try:
+            from scanner.core.policy_schema_registry import display_name_to_policy_key
+
+            tool_name = str(raw.get("tool") or "").strip()
+            policy_key = display_name_to_policy_key().get(tool_name, "")
+        except ImportError:
+            policy_key = ""
+
     return ScanFindingItemSchema(
         tool=str(raw.get("tool") or ""),
+        policy_key=policy_key,
         severity=str(raw.get("severity") or fields.get("severity") or ""),
         path=str(fields.get("path") or raw.get("path") or raw.get("file") or ""),
         line=str(fields.get("line") or raw.get("line") or raw.get("line_number") or ""),

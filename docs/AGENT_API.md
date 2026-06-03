@@ -323,11 +323,21 @@ Optional filter (smaller payload):
 GET /api/v1/finding-policy/schema?tools=semgrep,gitleaks
 ```
 
+Validate a policy object before commit (optional dry-run against sample findings):
+
+```http
+POST /api/v1/finding-policy/validate
+Authorization: Bearer ssc_...
+Content-Type: application/json
+
+{"policy": { "npm_audit": { "accepted_findings": [...] } }}
+```
+
 **Response (abbreviated):**
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "default_path": ".scanning/finding-policy.json",
   "format": "json",
   "rules": { "root_type": "object", "block_value_type": "object" },
@@ -342,9 +352,20 @@ GET /api/v1/finding-policy/schema?tools=semgrep,gitleaks
   "inline_suppression_env": {
     "SSC_INLINE_SUPPRESSIONS_ENABLED": "Default on; set false to disable"
   },
+  "policy_key_aliases": { "owasp_dependency_check": "owasp_dc" },
   "tools": {
+    "npm_audit": {
+      "policy_key": "npm_audit",
+      "display_names": ["npm audit"],
+      "matchers": {
+        "rule_id": { "finding_field": "package", "mode": "regex" },
+        "path_regex": { "finding_field": "dependency_path" },
+        "message_regex": { "finding_field": "severity" }
+      },
+      "accepted_findings": { "items": { "fields": { ... } } }
+    },
     "semgrep": {
-      "accepted_findings": { "items": { "fields": { "rule_id": {}, "path_regex": {}, ... } } },
+      "accepted_findings": { ... },
       "severity_overrides": { ... },
       "dedupe": { "fields": { "enabled": {}, "line_window": {} } }
     },
@@ -358,7 +379,9 @@ GET /api/v1/finding-policy/schema?tools=semgrep,gitleaks
 
 | Tool key | Special fields |
 |----------|----------------|
-| Most tools (`bandit`, `trivy`, `npm_audit`, …) | `accepted_findings[]` with `rule_id`, `path_regex`, `message_regex`, `reason` |
+| Most tools (`bandit`, `trivy`, `npm_audit`, …) | `accepted_findings[]` — see per-tool `matchers` for which finding fields each regex uses |
+| `npm_audit` | `path_regex` → `dependency_path`; `message_regex` → `severity` (not advisory text) |
+| `owasp_dc` | `rule_id` → CVE/GHSA; `path_regex` → `Dependency` column value |
 | `codeql` | `rule_id` is matched as **regex** |
 | `gitleaks` | `file_regex`, `description_regex` (not `path_regex`) |
 | `detect_secrets` | `rule_id` (secret type), `path_regex`, `reason` — no `message_regex` |

@@ -368,7 +368,11 @@ class ScanFindingsSummarySchema(BaseModel):
 class ScanFindingItemSchema(BaseModel):
     """Normalized finding for automation integrations."""
 
-    tool: str = Field(description="Scanner/tool name")
+    tool: str = Field(description="Scanner/tool display name")
+    policy_key: str = Field(
+        default="",
+        description="Key for finding-policy.json top-level blocks (e.g. npm_audit, owasp_dc)",
+    )
     severity: str = Field(description="Severity (CRITICAL, HIGH, …)")
     path: str = Field(default="", description="File or target path")
     line: str = Field(default="", description="Line number if known")

@@ -40,10 +40,12 @@ def build_report_processor(
         name=name,
         summary_func=make_summary_parser(parse_spec),
         html_func=make_html_renderer(html_spec),
-        ai_normalizer=default_ai_normalizer(tool),
+        ai_normalizer=default_ai_normalizer(tool, policy_key=pk if policy_spec else None, policy_spec=policy_spec),
         json_file=json_file,
         html_file=html_file,
         policy_key=pk if policy_spec else None,
+        policy_spec=policy_spec,
+        ai_tool_name=tool,
         apply_policy=_default_apply if policy_spec else None,
         policy_example_snippet=policy_example_snippet if policy_spec else None,
     )

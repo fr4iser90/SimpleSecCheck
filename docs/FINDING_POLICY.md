@@ -58,7 +58,9 @@ Not part of `finding-policy.json`.
 
 For projects that want central, reviewable acceptances. Default path: `.scanning/finding-policy.json`
 
-Schema: `GET /api/v1/finding-policy/schema` — see [AGENT_API.md](AGENT_API.md#finding-policy-schema-for-false-positives).
+Schema: `GET /api/v1/finding-policy/schema` (per-tool `matchers` show which finding fields each regex uses). Validate before commit: `POST /api/v1/finding-policy/validate`. See [AGENT_API.md](AGENT_API.md#finding-policy-schema-for-false-positives).
+
+Top-level keys must be **policy_key** values (e.g. `owasp_dc`, `npm_audit`), not UI labels like “OWASP Dependency Check”. Deprecated alias `owasp_dependency_check` is auto-mapped to `owasp_dc` at load time.
 
 ### Example
 

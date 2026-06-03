@@ -1,9 +1,9 @@
 {
-    "dedupe": {
-        "enabled": true,
-        "line_window": 2
-    },
     "semgrep": {
+        "dedupe": {
+            "enabled": true,
+            "line_window": 2
+        },
         "accepted_findings": [
             {
                 "rule_id": "javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop",
@@ -304,6 +304,96 @@
                 "file_regex": ".*/docs/ADMIN_USER_FEATURES\\.md$",
                 "description_regex": ".*",
                 "reason": "Documentation example curl command with placeholder Authorization: Bearer YOUR_API_KEY; not a real secret."
+            }
+        ]
+    },
+    "owasp_dc": {
+        "accepted_findings": [
+            {
+                "rule_id": "GHSA-c2c7-rcm5-vvqj",
+                "path_regex": "picomatch:4\\.0\\.3",
+                "message_regex": "ReDoS|extglob",
+                "reason": "Transitive dev dependency (Vite/Rollup toolchain). picomatch is used only for build-time glob matching with developer-controlled patterns, not user-supplied extglobs at runtime. Production serves static nginx assets. Upgrade to picomatch >=4.0.4 when lockfile allows."
+            },
+            {
+                "rule_id": "GHSA-3v7f-55p6-f55p",
+                "path_regex": "picomatch:4\\.0\\.3",
+                "message_regex": "method injection|POSIX",
+                "reason": "Same transitive dev-only picomatch as GHSA-c2c7-rcm5-vvqj. No untrusted glob input in production path. Fixed in picomatch >=4.0.4."
+            },
+            {
+                "rule_id": "GHSA-mw96-cpmx-2vgc",
+                "path_regex": "rollup:4\\.57\\.1",
+                "message_regex": "Path Traversal|Arbitrary File Write",
+                "reason": "Rollup is a dev/build-time bundler only. Exploit requires attacker-controlled chunk/output names via CLI or malicious plugins during build; production runtime does not invoke Rollup. Upgrade Rollup when patched release is available."
+            },
+            {
+                "rule_id": "GHSA-p9ff-h696-f583",
+                "path_regex": "vite:7\\.3\\.1",
+                "message_regex": "fetchModule|WebSocket|server\\.fs",
+                "reason": "Vite dev-server vulnerability requiring network-exposed HMR WebSocket without Origin checks. Production deploys built static files via nginx; Vite dev server is local-only (default host, no --host 0.0.0.0 in deployment)."
+            },
+            {
+                "rule_id": "GHSA-v2wj-q39q-566r",
+                "path_regex": "vite:7\\.3\\.1",
+                "message_regex": "server\\.fs\\.deny|query parameters",
+                "reason": "Dev-server-only bypass of server.fs.deny via ?raw query params. Not reachable in production static hosting. Local dev uses default localhost binding without network exposure."
+            },
+            {
+                "rule_id": "GHSA-4w7w-66w2-5vf9",
+                "path_regex": "vite:7\\.3\\.1",
+                "message_regex": "\\.map|path traversal|optimized dependencies",
+                "reason": "Dev-server-only .map path traversal in optimized deps handler. Production nginx returns 404 for *.map and does not run Vite dev server."
+            },
+            {
+                "rule_id": "GHSA-qx2v-qp2m-jg93",
+                "path_regex": "postcss:8\\.5\\.6",
+                "message_regex": "XSS|</style>",
+                "reason": "PostCSS is a transitive dev/build dependency. XSS requires parsing untrusted CSS and embedding stringified output inside HTML <style> tags; this app does not expose that pattern. Vite bundles CSS; no user-controlled CSS re-stringify path in production."
+            }
+        ]
+    },
+    "checkov": {
+        "accepted_findings": [
+            {
+                "rule_id": "CKV_DOCKER_3",
+                "path_regex": ".*/(backend|scanner|worker)/Dockerfile$",
+                "message_regex": ".*",
+                "reason": "USER is intentionally omitted so entrypoint runs as root for one-time volume permission and UID/GID setup, then drops to non-root (backend/scanner/worker) via gosu. Same pattern documented for Semgrep Dockerfile rules."
+            },
+            {
+                "rule_id": "CKV_DOCKER_2",
+                "path_regex": ".*/(scanner|worker)/Dockerfile$",
+                "message_regex": ".*",
+                "reason": "Scanner and worker are batch/CLI workloads without HTTP health endpoints suitable for Docker HEALTHCHECK. Backend image includes HEALTHCHECK; orchestrator monitors worker/scanner via queue heartbeats instead."
+            },
+            {
+                "rule_id": "CKV2_DOCKER_1",
+                "path_regex": ".*/scanner/Dockerfile$",
+                "message_regex": "sudo",
+                "reason": "Passwordless sudo for scanner user is required for security tools (e.g. nikto, nmap) that expect elevated privileges inside the isolated scan container. Scope is limited to the scanner image, not backend/worker."
+            }
+        ]
+    },
+    "eslint": {
+        "accepted_findings": [
+            {
+                "rule_id": "security/detect-object-injection",
+                "path_regex": ".*/(frontend/app/src/.*\\.(tsx?|ts)|scanner/output/ai_prompt_modal\\.ts)$",
+                "message_regex": "Object Injection",
+                "reason": "Bracket notation accesses static translation maps, form state keys, or API-derived keys from trusted server responses—not attacker-controlled property names. Keys are validated or drawn from fixed enums/options before use."
+            },
+            {
+                "rule_id": "security/detect-possible-timing-attacks",
+                "path_regex": ".*/frontend/app/src/components/AddTargetModal\\.tsx$",
+                "message_regex": "timing attack",
+                "reason": "Comparisons are boolean feature-flag checks (allowedTargets[apiKey] !== false), not secret or credential comparisons. No cryptographic timing side channel."
+            },
+            {
+                "rule_id": "security/detect-unsafe-regex",
+                "path_regex": ".*/frontend/app/src/components/ScanForm\\.tsx$",
+                "message_regex": "Unsafe Regular Expression",
+                "reason": "CONTAINER_REGISTRY_PATTERN validates user-entered image references with bounded quantifiers on short strings (form input), not unbounded backtracking on attacker-sized input. ReDoS risk is negligible for typical image ref lengths."
             }
         ]
     }

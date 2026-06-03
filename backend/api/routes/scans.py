@@ -1040,22 +1040,9 @@ async def delete_scan(
 
 def _finding_item_from_dict(raw: Dict[str, Any]) -> ScanFindingItemSchema:
     """Map stored finding dict to API schema."""
-    cwe = raw.get("cwe") or raw.get("CWE") or raw.get("cwe_id")
-    fix_hint = (
-        raw.get("fix_hint")
-        or raw.get("remediation")
-        or raw.get("fix")
-    )
-    return ScanFindingItemSchema(
-        tool=str(raw.get("tool") or ""),
-        severity=str(raw.get("severity") or ""),
-        path=str(raw.get("path") or raw.get("file") or ""),
-        line=str(raw.get("line") or raw.get("line_number") or ""),
-        message=str(raw.get("message") or ""),
-        rule_id=str(raw.get("rule_id") or raw.get("check_id") or ""),
-        cwe=str(cwe) if cwe else None,
-        fix_hint=str(fix_hint) if fix_hint else None,
-    )
+    from application.helpers.findings_response import finding_item_from_dict
+
+    return finding_item_from_dict(raw)
 
 
 def _summary_from_payload_or_scan(

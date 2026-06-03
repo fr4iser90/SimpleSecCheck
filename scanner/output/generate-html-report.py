@@ -387,14 +387,14 @@ def _normalize_severity(sev):
     return "INFO"
 
 
-def _normalize_finding_for_report(tool_name, finding):
+def _normalize_finding_for_report(tool_name, finding, policy_key=None):
     """Extract tool, severity, path, line, message, rule_id from any finding dict for report table."""
     from scanner.output.ai_normalizer_utils import normalize_finding_fields
 
     if not isinstance(finding, dict):
         return None
     fields = normalize_finding_fields(finding)
-    return {
+    row = {
         "tool": tool_name,
         "severity": _normalize_severity(fields["severity"]),
         "path": normalize_policy_path(fields["path"]),
@@ -402,9 +402,12 @@ def _normalize_finding_for_report(tool_name, finding):
         "message": fields["message"],
         "rule_id": fields["rule_id"],
     }
+    if policy_key:
+        row["policy_key"] = policy_key
+    return row
 
 
-def build_report_findings(all_findings):
+def build_report_findings(all_findings, policy_keys_by_tool=None):
     """Build a flat list of normalized findings for filter/sort/export. Structure-based (dict with 'alerts' etc.), no tool names."""
     from scanner.core.scan_excludes import path_matches_exclude
 
@@ -413,11 +416,13 @@ def build_report_findings(all_findings):
         or os.environ.get("TARGET_PATH", "").strip()
         or "/target"
     )
+    policy_keys_by_tool = policy_keys_by_tool or {}
     report_findings = []
     for tool, findings in all_findings.items():
+        pk = policy_keys_by_tool.get(tool)
         findings_list = _findings_as_list(findings)
         for f in findings_list:
-            norm = _normalize_finding_for_report(tool, f)
+            norm = _normalize_finding_for_report(tool, f, policy_key=pk)
             if not norm:
                 continue
             if norm.get("path") and path_matches_exclude(target_root, norm["path"]):
@@ -849,7 +854,14 @@ def main():
         debug(f"Embedded {len(normalized_findings)} normalized findings for AI prompt")
 
         # Report findings for filter/sort/export (flat list)
-        report_findings = build_report_findings(all_findings)
+        policy_keys_by_tool = {
+            scanner.name: getattr(processor, "policy_key", None) or ""
+            for scanner, processor in scanner_processors
+        }
+        report_findings = build_report_findings(
+            all_findings,
+            policy_keys_by_tool=policy_keys_by_tool,
+        )
         embedded_scripts += f'<script type="application/json" id="report-findings-data">{_safe_json_for_script_tag(report_findings)}</script>\n'
         # Pre-fill AI prompt modal: policy path from scan (or default)
         display_policy_path = (policy_path or ".scanning/finding-policy.json").replace("/target/", "").strip()

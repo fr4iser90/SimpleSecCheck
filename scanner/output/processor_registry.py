@@ -8,6 +8,8 @@ from typing import Callable, Dict, List, Optional, Any
 import importlib
 import pkgutil
 
+from scanner.core.policy_engine import ToolPolicySpec
+
 
 @dataclass
 class ReportProcessor:
@@ -19,6 +21,8 @@ class ReportProcessor:
     html_file: Optional[str] = None
     extra_files: Optional[List[str]] = None
     policy_key: Optional[str] = None
+    policy_spec: Optional[ToolPolicySpec] = None
+    ai_tool_name: Optional[str] = None
     apply_policy: Optional[Callable[[Any, dict], tuple]] = None
     policy_example_snippet: Optional[str] = None
 

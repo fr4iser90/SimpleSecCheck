@@ -14,7 +14,10 @@ from fastapi import status as fastapi_status
 
 from api.deps.actor_context import get_actor_context, ActorContext
 from domain.policies.finding_policy import DEFAULT_FINDING_POLICY_PATH
-from domain.policies.finding_policy_schema import format_policy_schema_markdown
+from domain.policies.finding_policy_schema import (
+    format_policy_schema_markdown,
+    policy_keys_from_findings,
+)
 from application.helpers.prompt_findings_select import select_findings_for_prompt
 from application.services.scan_service import ScanService
 from domain.exceptions.scan_exceptions import ScanNotFoundException
@@ -90,21 +93,21 @@ def _build_ai_prompt(
     lang = (language or "english").lower()
     parts: List[str] = []
 
-    tools_in_findings = {t.strip() for t in by_tool if t and t != "Unknown"}
+    policy_keys = policy_keys_from_findings(findings)
     policy_schema_en = format_policy_schema_markdown(
         policy_path=policy_path,
         language="english",
-        tools_filter=tools_in_findings or None,
+        tools_filter=policy_keys or None,
     )
     policy_schema_de = format_policy_schema_markdown(
         policy_path=policy_path,
         language="german",
-        tools_filter=tools_in_findings or None,
+        tools_filter=policy_keys or None,
     )
     policy_schema_zh = format_policy_schema_markdown(
         policy_path=policy_path,
         language="chinese",
-        tools_filter=tools_in_findings or None,
+        tools_filter=policy_keys or None,
     )
 
     if lang == "german":
@@ -130,6 +133,11 @@ def _build_ai_prompt(
                     parts.append(f"- **Zeile**: {finding['line']}\n")
                 if finding.get("rule_id"):
                     parts.append(f"- **Regel-ID**: `{finding['rule_id']}`\n")
+                if finding.get("policy_key"):
+                    parts.append(f"- **Policy-Key**: `{finding['policy_key']}`\n")
+                pm = finding.get("policy_match")
+                if isinstance(pm, dict) and pm:
+                    parts.append(f"- **Policy-Match-Werte**: `{pm}`\n")
                 parts.append(f"- **Nachricht**: {finding.get('message') or ''}\n\n")
         parts.append(policy_schema_de)
         parts.extend([
@@ -164,6 +172,11 @@ def _build_ai_prompt(
                     parts.append(f"- **行号**: {finding['line']}\n")
                 if finding.get("rule_id"):
                     parts.append(f"- **规则ID**: `{finding['rule_id']}`\n")
+                if finding.get("policy_key"):
+                    parts.append(f"- **Policy key**: `{finding['policy_key']}`\n")
+                pm = finding.get("policy_match")
+                if isinstance(pm, dict) and pm:
+                    parts.append(f"- **Policy match values**: `{pm}`\n")
                 parts.append(f"- **消息**: {finding.get('message') or ''}\n\n")
         parts.append(policy_schema_zh)
         parts.extend([
@@ -199,6 +212,11 @@ def _build_ai_prompt(
                     parts.append(f"- **Line**: {finding['line']}\n")
                 if finding.get("rule_id"):
                     parts.append(f"- **Rule ID**: `{finding['rule_id']}`\n")
+                if finding.get("policy_key"):
+                    parts.append(f"- **Policy key**: `{finding['policy_key']}`\n")
+                pm = finding.get("policy_match")
+                if isinstance(pm, dict) and pm:
+                    parts.append(f"- **Policy match values**: `{pm}`\n")
                 parts.append(f"- **Message**: {finding.get('message') or ''}\n\n")
         parts.append(policy_schema_en)
         parts.extend([
