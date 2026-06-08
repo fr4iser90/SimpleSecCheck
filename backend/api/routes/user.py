@@ -4,7 +4,7 @@ User API Routes
 Handles user-specific operations like API keys, GitHub repos, and profile management.
 """
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 from pydantic import BaseModel, Field
@@ -24,8 +24,10 @@ from infrastructure.container import (
     get_github_repo_service,
     get_repo_scan_history_repository,
     get_scan_repository,
+    get_scan_service,
 )
 from application.services.scan_target_service import ScanTargetService
+from application.services.scan_service import ScanService
 from application.services.user_service import UserService
 from application.services.api_key_service import ApiKeyService
 from application.services.github_repo_service import GitHubRepoService
@@ -33,6 +35,7 @@ from domain.entities.github_repo import GitHubRepo
 from domain.repositories.repo_scan_history_repository import RepoScanHistoryRepository
 from domain.repositories.scan_repository import ScanRepository
 from domain.services.audit_log_service import AuditLogService
+from api.schemas.scan_schemas import ScanFindingsResponseSchema
 from domain.exceptions.scan_exceptions import (
     ScanValidationException,
     ScanExecutionRateLimitException,
@@ -71,6 +74,11 @@ def get_repo_scan_history_repository_dependency() -> RepoScanHistoryRepository:
 def get_scan_repository_dependency() -> ScanRepository:
     """FastAPI dependency for ScanRepository (DDD)."""
     return get_scan_repository()
+
+
+def get_scan_service_dependency() -> ScanService:
+    """FastAPI dependency for ScanService (DDD)."""
+    return get_scan_service()
 
 
 def _github_repo_to_response(
@@ -1387,6 +1395,56 @@ async def create_scan_target(
     return out
 
 
+@router.get("/targets/by-source")
+async def get_scan_target_by_source(
+    source: str = Query(..., min_length=1, max_length=1000, description="Target source (repo URL, image, path)"),
+    target_type: Optional[str] = Query(None, description="Optional target type filter, e.g. git_repo"),
+    actor_context: ActorContext = Depends(get_authenticated_user),
+    scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
+) -> Dict[str, Any]:
+    """Resolve target_id (and last_scan) from source without listing all targets."""
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    target = await scan_target_service.get_by_user_and_source(
+        actor_context.user_id,
+        source,
+        target_type=target_type,
+    )
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
+    from application.helpers.target_scan_helper import get_default_scanner_names_for_target_type
+
+    _custom = target.config.get("scanners") if isinstance(target.config, dict) else None
+    _scanners = _custom if isinstance(_custom, list) else await get_default_scanner_names_for_target_type(target.type)
+    latest_by_url = await scan_repository.get_latest_scans_by_target_urls(actor_context.user_id, [target.source])
+    _last = _last_scan_to_summary(latest_by_url.get(target.source))
+    _active = await _active_scan_for_source(scan_repository, actor_context.user_id, target.source)
+    row = ScanTargetResponse(
+        id=target.id,
+        user_id=target.user_id,
+        type=target.type,
+        source=target.source,
+        display_name=target.display_name,
+        auto_scan=target.auto_scan.to_dict(),
+        config=target.config,
+        created_at=isoformat_utc(target.created_at),
+        updated_at=isoformat_utc(target.updated_at),
+        scanners=_scanners,
+        last_scan=_last,
+        next_scan_at=_next_scan_at(target.auto_scan.to_dict(), _last),
+        initial_scan_paused=_initial_scan_flags(target.config)[0],
+        initial_scan_triggered_at=_initial_scan_flags(target.config)[1],
+        active_scan=_active,
+    )
+    return {
+        "target_id": row.id,
+        "source": row.source,
+        "type": row.type,
+        "target": row.model_dump(mode="json"),
+    }
+
+
 @router.get("/targets/{target_id}", response_model=ScanTargetResponse)
 async def get_scan_target(
     target_id: str,
@@ -1422,6 +1480,122 @@ async def get_scan_target(
         initial_scan_paused=_initial_scan_flags(target.config)[0],
         initial_scan_triggered_at=_initial_scan_flags(target.config)[1],
         active_scan=_active,
+    )
+
+
+@router.get("/targets/{target_id}/history")
+async def get_target_scan_history(
+    target_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    actor_context: ActorContext = Depends(get_authenticated_user),
+    scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
+) -> Dict[str, Any]:
+    """
+    Paginated scan history for a saved target (same shape as GitHub repo history).
+    Returns finished scans only; use scan_id with GET .../findings for full results.
+    """
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    target = await scan_target_service.get_by_id(target_id, actor_context.user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
+    try:
+        from application.helpers.target_scan_history import scan_to_target_history_entry
+
+        entries, total = await scan_repository.get_target_scan_history_page(
+            actor_context.user_id,
+            target.source,
+            limit,
+            offset,
+        )
+        return {
+            "target_id": target.id,
+            "source": target.source,
+            "entries": [scan_to_target_history_entry(s) for s in entries],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get target scan history: {str(e)}",
+        )
+
+
+@router.get(
+    "/targets/{target_id}/findings",
+    response_model=ScanFindingsResponseSchema,
+    summary="Get findings for a target",
+    description=(
+        "Return findings for the latest finished scan on this target, or for scan_id if provided. "
+        "Does not start a new scan."
+    ),
+)
+async def get_target_findings(
+    target_id: str,
+    scan_id: Optional[str] = Query(
+        None,
+        description="Specific scan ID (must belong to this target); default is latest finished scan",
+    ),
+    limit: Optional[int] = Query(None, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    severity: Optional[str] = Query(None, description="Comma-separated severities, e.g. CRITICAL,HIGH"),
+    tool: Optional[str] = Query(None, description="Filter by tool name (exact match)"),
+    path_prefix: Optional[str] = Query(None, description="Filter findings where path starts with this prefix"),
+    rule_id: Optional[str] = Query(None, description="Filter by rule_id (regex)"),
+    actor_context: ActorContext = Depends(get_authenticated_user),
+    scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
+    scan_service: ScanService = Depends(get_scan_service_dependency),
+) -> ScanFindingsResponseSchema:
+    """Findings for a target without triggering a scan."""
+    if not actor_context.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    target = await scan_target_service.get_by_id(target_id, actor_context.user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
+
+    resolved_scan_id = scan_id
+    if resolved_scan_id:
+        scan = await scan_repository.get_by_id(resolved_scan_id)
+        if (
+            not scan
+            or str(scan.user_id) != str(actor_context.user_id)
+            or (scan.target_url or "") != target.source
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Scan not found for this target",
+            )
+    else:
+        last = await scan_repository.find_latest_finished_scan_by_user_and_target(
+            actor_context.user_id,
+            target.source,
+        )
+        if not last:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No finished scan found for this target",
+            )
+        resolved_scan_id = str(last.id)
+
+    from application.helpers.scan_findings_handler import get_scan_findings_response
+
+    return await get_scan_findings_response(
+        scan_service,
+        resolved_scan_id,
+        actor_context,
+        limit=limit,
+        offset=offset,
+        severity=severity,
+        tool=tool,
+        path_prefix=path_prefix,
+        rule_id=rule_id,
     )
 
 

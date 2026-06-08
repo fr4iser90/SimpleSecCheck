@@ -62,3 +62,13 @@ class ScanTargetRepository(ABC):
     async def exists_for_user(self, user_id: str, source: str, target_type: str) -> bool:
         """True if user already has a target with this source and type (for uniqueness)."""
         pass
+
+    @abstractmethod
+    async def get_by_user_and_source(
+        self,
+        user_id: str,
+        source: str,
+        target_type: Optional[str] = None,
+    ) -> Optional[ScanTarget]:
+        """Find target by normalized source match; optional type filter."""
+        pass

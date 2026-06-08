@@ -6,7 +6,7 @@ This is a domain layer interface that should be implemented by infrastructure la
 """
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
 
 from domain.entities.scan import Scan, ScanStatus, ScanType
@@ -64,6 +64,7 @@ class ScanRepository(ABC):
         status: Optional[ScanStatus] = None,
         scan_type: Optional[ScanType] = None,
         tags: Optional[List[str]] = None,
+        target_url: Optional[str] = None,
         limit: int = 100,
         offset: int = 0
     ) -> List[Scan]:
@@ -78,7 +79,8 @@ class ScanRepository(ABC):
         project_id: Optional[str] = None,
         status: Optional[ScanStatus] = None,
         scan_type: Optional[ScanType] = None,
-        tags: Optional[List[str]] = None
+        tags: Optional[List[str]] = None,
+        target_url: Optional[str] = None,
     ) -> int:
         """Count scans with optional filtering."""
         pass
@@ -155,6 +157,17 @@ class ScanRepository(ABC):
         self, user_id: str, target_url: str
     ) -> Optional[Scan]:
         """Latest scan for user+target_url with status in completed/failed/cancelled/interrupted (for interval scheduling)."""
+        pass
+
+    @abstractmethod
+    async def get_target_scan_history_page(
+        self,
+        user_id: str,
+        target_url: str,
+        limit: int,
+        offset: int,
+    ) -> Tuple[List[Scan], int]:
+        """Finished scans for user+target_url, newest first. Returns (entries, total_count)."""
         pass
 
     @abstractmethod

@@ -1,10 +1,13 @@
 """Sort, filter, and paginate findings for API responses."""
 from __future__ import annotations
 
+import re
 from typing import List, Optional, Sequence, Set
 from urllib.parse import quote, urlencode
 
 from api.schemas.scan_schemas import ScanFindingItemSchema, ScanFindingsPaginationSchema
+
+MAX_RULE_ID_PATTERN_LEN = 200
 
 SEVERITY_RANK = {
     "CRITICAL": 0,
@@ -57,6 +60,91 @@ def filter_findings_by_severity(
     ]
 
 
+def _compile_rule_id_pattern(rule_id: Optional[str]) -> Optional[re.Pattern[str]]:
+    raw = (rule_id or "").strip()
+    if not raw:
+        return None
+    if len(raw) > MAX_RULE_ID_PATTERN_LEN:
+        raw = raw[:MAX_RULE_ID_PATTERN_LEN]
+    try:
+        return re.compile(raw, re.IGNORECASE)
+    except re.error:
+        escaped = re.escape(raw)
+        return re.compile(f"^{escaped}$", re.IGNORECASE)
+
+
+def filter_findings_by_tool(
+    items: Sequence[ScanFindingItemSchema],
+    tool: Optional[str],
+) -> List[ScanFindingItemSchema]:
+    needle = (tool or "").strip().lower()
+    if not needle:
+        return list(items)
+    return [f for f in items if (f.tool or "").strip().lower() == needle]
+
+
+def filter_findings_by_path_prefix(
+    items: Sequence[ScanFindingItemSchema],
+    path_prefix: Optional[str],
+) -> List[ScanFindingItemSchema]:
+    prefix = (path_prefix or "").strip()
+    if not prefix:
+        return list(items)
+    prefix_lower = prefix.lower()
+    return [
+        f for f in items
+        if (f.path or "").lower().startswith(prefix_lower)
+    ]
+
+
+def filter_findings_by_rule_id(
+    items: Sequence[ScanFindingItemSchema],
+    rule_id: Optional[str],
+) -> List[ScanFindingItemSchema]:
+    pattern = _compile_rule_id_pattern(rule_id)
+    if pattern is None:
+        return list(items)
+    return [
+        f for f in items
+        if pattern.search((f.rule_id or "").strip())
+    ]
+
+
+def apply_findings_filters(
+    items: Sequence[ScanFindingItemSchema],
+    *,
+    severities: Optional[Set[str]] = None,
+    tool: Optional[str] = None,
+    path_prefix: Optional[str] = None,
+    rule_id: Optional[str] = None,
+) -> List[ScanFindingItemSchema]:
+    """Apply severity, tool, path_prefix, and rule_id filters in stable order."""
+    out = filter_findings_by_severity(items, severities)
+    out = filter_findings_by_tool(out, tool)
+    out = filter_findings_by_path_prefix(out, path_prefix)
+    out = filter_findings_by_rule_id(out, rule_id)
+    return out
+
+
+def findings_filters_active(
+    *,
+    severities: Optional[Set[str]] = None,
+    tool: Optional[str] = None,
+    path_prefix: Optional[str] = None,
+    rule_id: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
+) -> bool:
+    return bool(
+        severities
+        or (tool or "").strip()
+        or (path_prefix or "").strip()
+        or (rule_id or "").strip()
+        or limit is not None
+        or offset > 0
+    )
+
+
 def paginate_findings(
     items: Sequence[ScanFindingItemSchema],
     *,
@@ -76,6 +164,9 @@ def build_findings_poll_path(
     limit: Optional[int] = None,
     offset: int = 0,
     severity: Optional[str] = None,
+    tool: Optional[str] = None,
+    path_prefix: Optional[str] = None,
+    rule_id: Optional[str] = None,
 ) -> str:
     """Relative path for GET /api/v1/scans/{id}/findings with query params."""
     params: dict[str, str | int] = {}
@@ -85,6 +176,12 @@ def build_findings_poll_path(
         params["offset"] = offset
     if severity and str(severity).strip():
         params["severity"] = str(severity).strip()
+    if tool and str(tool).strip():
+        params["tool"] = str(tool).strip()
+    if path_prefix and str(path_prefix).strip():
+        params["path_prefix"] = str(path_prefix).strip()
+    if rule_id and str(rule_id).strip():
+        params["rule_id"] = str(rule_id).strip()
     base = f"/api/v1/scans/{scan_id}/findings"
     if not params:
         return base
@@ -99,6 +196,9 @@ def build_pagination_meta(
     offset: int,
     returned_count: int,
     severity: Optional[str] = None,
+    tool: Optional[str] = None,
+    path_prefix: Optional[str] = None,
+    rule_id: Optional[str] = None,
 ) -> ScanFindingsPaginationSchema:
     if limit is not None:
         has_more = offset + returned_count < total
@@ -114,6 +214,9 @@ def build_pagination_meta(
             limit=limit,
             offset=next_offset,
             severity=severity,
+            tool=tool,
+            path_prefix=path_prefix,
+            rule_id=rule_id,
         )
 
     return ScanFindingsPaginationSchema(

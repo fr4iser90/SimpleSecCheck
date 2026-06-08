@@ -11,8 +11,9 @@ from api.schemas.scan_schemas import (
 from application.dtos.scan_dto import ScanDTO
 from application.helpers.findings_file import load_findings_payload
 from application.helpers.findings_pagination import (
+    apply_findings_filters,
     build_pagination_meta,
-    filter_findings_by_severity,
+    findings_filters_active,
     paginate_findings,
     parse_severity_filter,
     sort_findings,
@@ -79,6 +80,9 @@ def build_findings_response(
     limit: Optional[int] = None,
     offset: int = 0,
     severity: Optional[str] = None,
+    tool: Optional[str] = None,
+    path_prefix: Optional[str] = None,
+    rule_id: Optional[str] = None,
 ) -> Optional[ScanFindingsResponseSchema]:
     """Return findings response if report data exists; else None."""
     payload, source = load_findings_payload(scan_id)
@@ -100,15 +104,27 @@ def build_findings_response(
     items = sort_findings(items)
 
     severity_set = parse_severity_filter(severity)
-    filtered = filter_findings_by_severity(items, severity_set)
+    filtered = apply_findings_filters(
+        items,
+        severities=severity_set,
+        tool=tool,
+        path_prefix=path_prefix,
+        rule_id=rule_id,
+    )
     total = len(filtered)
     page = paginate_findings(filtered, limit=limit, offset=offset)
 
     generated_at = payload.get("generated_at") if isinstance(payload, dict) else None
 
-    use_pagination = limit is not None or offset > 0 or severity_set is not None
     pagination = None
-    if use_pagination:
+    if findings_filters_active(
+        severities=severity_set,
+        tool=tool,
+        path_prefix=path_prefix,
+        rule_id=rule_id,
+        limit=limit,
+        offset=offset,
+    ):
         pagination = build_pagination_meta(
             scan_id=scan_id,
             total=total,
@@ -116,6 +132,9 @@ def build_findings_response(
             offset=offset,
             returned_count=len(page),
             severity=severity,
+            tool=tool,
+            path_prefix=path_prefix,
+            rule_id=rule_id,
         )
 
     return ScanFindingsResponseSchema(

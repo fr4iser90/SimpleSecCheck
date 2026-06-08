@@ -190,3 +190,26 @@ class DatabaseScanTargetRepository(ScanTargetRepository):
                 if normalize_repo_url_for_target_type(target_type, stored) == want:
                     return True
             return False
+
+    async def get_by_user_and_source(
+        self,
+        user_id: str,
+        source: str,
+        target_type: Optional[str] = None,
+    ) -> Optional[ScanTarget]:
+        """Find a target by source (normalized per type)."""
+        targets = await self.list_by_user(user_id, target_type=target_type, limit=500)
+        source_clean = (source or "").strip()
+        if not source_clean:
+            return None
+        if target_type:
+            want = normalize_repo_url_for_target_type(target_type, source_clean)
+            for t in targets:
+                if normalize_repo_url_for_target_type(target_type, t.source) == want:
+                    return t
+            return None
+        for t in targets:
+            want = normalize_repo_url_for_target_type(t.type, source_clean)
+            if normalize_repo_url_for_target_type(t.type, t.source) == want:
+                return t
+        return None

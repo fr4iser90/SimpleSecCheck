@@ -169,6 +169,7 @@ class ScanFilterDTO:
     status: Optional[str] = None
     scan_type: Optional[str] = None
     tags: Optional[List[str]] = None
+    target_url: Optional[str] = None
     
     # Pagination
     limit: int = 100
@@ -201,6 +202,7 @@ class ScanFilterDTO:
             'status': self.status,
             'scan_type': self.scan_type,
             'tags': self.tags,
+            'target_url': self.target_url,
             'limit': self.limit,
             'offset': self.offset,
             'sort_by': self.sort_by,

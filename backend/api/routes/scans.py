@@ -545,6 +545,7 @@ async def list_scans(
     project_id: Optional[str] = Query(None, description="Filter by project ID"),
     status: Optional[str] = Query(None, description="Filter by status"),
     scan_type: Optional[str] = Query(None, description="Filter by scan type"),
+    target_url: Optional[str] = Query(None, description="Filter by exact target URL"),
     tags: Optional[List[str]] = Query(None, description="Filter by tags"),
     limit: int = Query(100, ge=1, le=1000, description="Limit results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
@@ -577,6 +578,7 @@ async def list_scans(
                 status=status,
                 scan_type=scan_type,
                 tags=tags,
+                target_url=target_url,
                 limit=limit,
                 offset=offset,
                 sort_by=sort_by,
@@ -592,6 +594,7 @@ async def list_scans(
                 status=status,
                 scan_type=scan_type,
                 tags=tags,
+                target_url=target_url,
                 limit=limit,
                 offset=offset,
                 sort_by=sort_by,
@@ -1076,7 +1079,7 @@ def _summary_from_payload_or_scan(
         "Return normalized findings from results/{scan_id}/summary/findings.json. "
         "Falls back to embedded report data for older scans. Requires read access to the scan. "
         "Use limit and offset for pagination (stable sort: severity, path, rule_id). "
-        "Optional severity filter: comma-separated, e.g. CRITICAL,HIGH."
+        "Optional filters: severity (comma-separated), tool (exact), path_prefix, rule_id (regex)."
     ),
 )
 async def get_scan_findings(
@@ -1092,70 +1095,25 @@ async def get_scan_findings(
         None,
         description="Comma-separated severities, e.g. CRITICAL,HIGH",
     ),
+    tool: Optional[str] = Query(None, description="Filter by tool name (exact match)"),
+    path_prefix: Optional[str] = Query(None, description="Filter findings where path starts with this prefix"),
+    rule_id: Optional[str] = Query(None, description="Filter by rule_id (regex; invalid patterns match literally)"),
     actor_context: ActorContext = Depends(get_actor_context),
     scan_service: ScanService = Depends(get_scan_service_dependency),
 ) -> ScanFindingsResponseSchema:
-    from application.helpers.findings_file import load_findings_payload
-    from application.helpers.findings_response import build_findings_response
+    from application.helpers.scan_findings_handler import get_scan_findings_response
 
-    try:
-        scan_dto = await scan_service.get_scan_by_id(scan_id)
-        _require_scan_read(scan_dto, actor_context)
-
-        status_str = (
-            scan_dto.status.value
-            if hasattr(scan_dto.status, "value")
-            else str(scan_dto.status or "")
-        ).lower()
-
-        payload, _source = load_findings_payload(scan_id)
-        terminal = status_str in (
-            ScanStatus.COMPLETED.value,
-            ScanStatus.FAILED.value,
-            ScanStatus.CANCELLED.value,
-            ScanStatus.INTERRUPTED.value,
-        )
-
-        if payload is None:
-            if not terminal:
-                raise HTTPException(
-                    status_code=fastapi_status.HTTP_409_CONFLICT,
-                    detail={
-                        "message": "Scan still in progress; findings not available yet",
-                        "status": status_str,
-                    },
-                )
-            raise HTTPException(
-                status_code=fastapi_status.HTTP_404_NOT_FOUND,
-                detail="Findings not found for this scan",
-            )
-
-        response = build_findings_response(
-            scan_id,
-            scan_dto,
-            status_str=status_str,
-            limit=limit,
-            offset=offset,
-            severity=severity,
-        )
-        if response is None:
-            raise HTTPException(
-                status_code=fastapi_status.HTTP_404_NOT_FOUND,
-                detail="Findings not found for this scan",
-            )
-        return response
-    except ScanNotFoundException as e:
-        raise HTTPException(
-            status_code=fastapi_status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
-    except HTTPException:
-        raise
-    except ScanException as e:
-        raise HTTPException(
-            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )
+    return await get_scan_findings_response(
+        scan_service,
+        scan_id,
+        actor_context,
+        limit=limit,
+        offset=offset,
+        severity=severity,
+        tool=tool,
+        path_prefix=path_prefix,
+        rule_id=rule_id,
+    )
 
 
 @router.get(
@@ -1653,8 +1611,8 @@ async def websocket_scan_stream(websocket: WebSocket, scan_id: str):
                 await websocket.send_json(message)
                 last_steps_hash = steps_hash
             
-            # Wait 1 second before next check
-            await asyncio.sleep(1)
+            # Poll interval — 2s is enough for step UI; 1s per client caused idle CPU load
+            await asyncio.sleep(2)
             
     except WebSocketDisconnect:
         pass

@@ -19,11 +19,14 @@ from domain.policies.finding_policy_schema import (
     policy_keys_from_findings,
 )
 from application.helpers.prompt_findings_select import select_findings_for_prompt
+from application.helpers.findings_file import findings_json_path
 from application.services.scan_service import ScanService
 from domain.exceptions.scan_exceptions import ScanNotFoundException
 from domain.policies.scan_result_access_policy import can_read_scan_results
+from domain.entities.scan import ScanStatus
 from config.settings import get_settings
-from infrastructure.container import get_scan_service
+from infrastructure.container import get_scan_service, get_scan_repository
+from api.json_datetime import isoformat_utc
 
 router = APIRouter(
     prefix="/api",
@@ -266,6 +269,79 @@ async def _serve_report(
         media_type="text/html; charset=utf-8",
         headers={"Content-Disposition": 'inline; filename="summary.html"'},
     )
+
+
+def _scan_user_id_str(user_id) -> Optional[str]:
+    if user_id in (None, ""):
+        return None
+    return str(user_id)
+
+
+def _scan_has_report(scan_id: str) -> bool:
+    if findings_json_path(scan_id).is_file():
+        return True
+    return _report_path(scan_id).is_file()
+
+
+@router.get("/results")
+async def list_results(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    actor_context: ActorContext = Depends(get_actor_context),
+):
+    """
+    List scan results available to the current user/session (completed scans with reports).
+    Used by Results Browser and agents that need scan_id discovery without creating a scan.
+    """
+    scan_repository = get_scan_repository()
+    user_id = None
+    guest_session_id = None
+    if actor_context.is_authenticated and actor_context.user_id:
+        user_id = actor_context.user_id
+    elif actor_context.session_id:
+        guest_session_id = actor_context.session_id
+    else:
+        return {"scans": [], "total": 0, "limit": limit, "offset": offset}
+
+    scans = await scan_repository.list_scans(
+        user_id=user_id,
+        guest_session_id=guest_session_id,
+        status=ScanStatus.COMPLETED,
+        limit=limit,
+        offset=offset,
+    )
+    total = await scan_repository.count_scans(
+        user_id=user_id,
+        guest_session_id=guest_session_id,
+        status=ScanStatus.COMPLETED,
+    )
+
+    items = []
+    for scan in scans:
+        if not can_read_scan_results(
+            metadata=getattr(scan, "scan_metadata", None) or {},
+            scan_user_id=_scan_user_id_str(getattr(scan, "user_id", None)),
+            actor_user_id=actor_context.user_id,
+            actor_session_id=actor_context.session_id,
+            actor_is_authenticated=bool(actor_context.is_authenticated),
+            share_token_query=None,
+        ):
+            continue
+        sid = str(scan.id)
+        has_report = _scan_has_report(sid)
+        ts = getattr(scan, "completed_at", None) or getattr(scan, "created_at", None)
+        items.append(
+            {
+                "id": sid,
+                "timestamp": isoformat_utc(ts) if ts else None,
+                "has_report": has_report,
+                "report_path": f"/api/results/{sid}/report" if has_report else None,
+                "status": getattr(scan.status, "value", scan.status),
+                "target_url": getattr(scan, "target_url", None),
+            }
+        )
+
+    return {"scans": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/results/{scan_id}/report")

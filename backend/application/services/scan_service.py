@@ -265,6 +265,7 @@ class ScanService:
                 status=ScanStatus(filter_dto.status) if filter_dto.status else None,
                 scan_type=ScanType(filter_dto.scan_type) if filter_dto.scan_type else None,
                 tags=filter_dto.tags,
+                target_url=filter_dto.target_url,
                 limit=filter_dto.limit,
                 offset=filter_dto.offset,
             )

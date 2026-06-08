@@ -7,7 +7,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from urllib.parse import urlparse
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -291,6 +291,7 @@ class DatabaseScanRepository(ScanRepository):
         status: Optional[ScanStatus] = None,
         scan_type: Optional[ScanType] = None,
         tags: Optional[List[str]] = None,
+        target_url: Optional[str] = None,
         limit: int = 100,
         offset: int = 0
     ) -> List[Scan]:
@@ -317,6 +318,8 @@ class DatabaseScanRepository(ScanRepository):
                 if tags:
                     for tag in tags:
                         conditions.append(ScanModel.tags.contains([tag]))
+                if target_url:
+                    conditions.append(ScanModel.target_url == target_url)
                 
                 if conditions:
                     query = query.where(and_(*conditions))
@@ -338,7 +341,8 @@ class DatabaseScanRepository(ScanRepository):
         project_id: Optional[str] = None,
         status: Optional[ScanStatus] = None,
         scan_type: Optional[ScanType] = None,
-        tags: Optional[List[str]] = None
+        tags: Optional[List[str]] = None,
+        target_url: Optional[str] = None,
     ) -> int:
         """Count scans with optional filtering."""
         await self.db_adapter.ensure_initialized()
@@ -363,6 +367,8 @@ class DatabaseScanRepository(ScanRepository):
                 if tags:
                     for tag in tags:
                         conditions.append(ScanModel.tags.contains([tag]))
+                if target_url:
+                    conditions.append(ScanModel.target_url == target_url)
                 
                 if conditions:
                     query = query.where(and_(*conditions))
@@ -781,6 +787,39 @@ class DatabaseScanRepository(ScanRepository):
                 logger.error(
                     f"find_latest_finished_scan_by_user_and_target failed: {e}"
                 )
+                raise
+
+    async def get_target_scan_history_page(
+        self,
+        user_id: str,
+        target_url: str,
+        limit: int,
+        offset: int,
+    ) -> Tuple[List[Scan], int]:
+        await self.db_adapter.ensure_initialized()
+        finished = ["completed", "failed", "cancelled", "interrupted"]
+        async with self.db_adapter.async_session() as session:
+            try:
+                base = and_(
+                    ScanModel.user_id == UUID(user_id),
+                    ScanModel.target_url == target_url,
+                    ScanModel.status.in_(finished),
+                )
+                count_result = await session.execute(
+                    select(func.count(ScanModel.id)).where(base)
+                )
+                total = count_result.scalar() or 0
+                history_result = await session.execute(
+                    select(ScanModel)
+                    .where(base)
+                    .order_by(ScanModel.created_at.desc())
+                    .limit(limit)
+                    .offset(offset)
+                )
+                models = history_result.scalars().all()
+                return [await self._model_to_entity(m) for m in models], total
+            except Exception as e:
+                logger.error(f"get_target_scan_history_page failed: {e}")
                 raise
 
     async def get_queue_position(self, scan_id: str, user_id: str) -> Optional[int]:

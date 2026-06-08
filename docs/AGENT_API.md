@@ -174,6 +174,9 @@ GET /api/v1/scans/{scan_id}/findings?limit=50&offset=0&severity=CRITICAL,HIGH
 | `limit` | Page size (1–200). Omit = return all. |
 | `offset` | Skip N findings after sort/filter |
 | `severity` | Comma-separated: `CRITICAL,HIGH,MEDIUM,LOW,INFO` |
+| `tool` | Exact tool name match (case-insensitive), e.g. `semgrep` |
+| `path_prefix` | Only findings whose `path` starts with this prefix |
+| `rule_id` | Regex match on `rule_id` (invalid regex → literal match) |
 
 **Sort order (stable for pagination):** severity (CRITICAL first) → `path` → `rule_id` → `line` → `message`.
 
@@ -306,6 +309,90 @@ POST agent-callback { branch_name, trigger_rescan: true }
 
 ---
 
+## Reading existing data (no new scan)
+
+Use these flows when you only need stored results — **no** `POST /api/v1/resolve-scan` and no new scan job.
+
+All flows below require the same auth as other API calls (`Authorization: Bearer ssc_...` or user JWT). Findings for a specific scan always go through:
+
+```http
+GET /api/v1/scans/{scan_id}/findings?limit=50&offset=0&severity=CRITICAL,HIGH
+```
+
+See [Step 3 — Fetch findings (paginated)](#step-3--fetch-findings-paginated) for pagination and response shape.
+
+### Last state per target (My Targets)
+
+List saved targets; each row includes `last_scan` with `scan_id`, status, and vulnerability counts.
+
+```bash
+curl -sS "$BASE/api/user/targets" -H "Authorization: Bearer $KEY"
+```
+
+**One call for latest findings** (no new scan):
+
+```bash
+curl -sS "$BASE/api/user/targets/$TARGET_ID/findings?limit=50&severity=CRITICAL,HIGH" \
+  -H "Authorization: Bearer $KEY"
+```
+
+Or pick `targets[].last_scan.scan_id` and call `GET /api/v1/scans/{scan_id}/findings`.
+
+**Paginated history** for any saved target (not only GitHub repos):
+
+```bash
+curl -sS "$BASE/api/user/targets/$TARGET_ID/history?limit=50&offset=0" \
+  -H "Authorization: Bearer $KEY"
+```
+
+Single target metadata: `GET /api/user/targets/{target_id}` returns the same `last_scan` block.
+
+**Resolve target without listing all targets:**
+
+```bash
+curl -sS "$BASE/api/user/targets/by-source?source=https%3A%2F%2Fgithub.com%2Forg%2Frepo&type=git_repo" \
+  -H "Authorization: Bearer $KEY"
+```
+
+Returns `target_id`, `source`, `type`, and full `target` object (including `last_scan`).
+
+### All scans for the current user
+
+Two equivalent list endpoints (metadata only — no inline findings):
+
+| Endpoint | Notes |
+|----------|--------|
+| `GET /api/queue/my-scans?limit=100&status=completed` | Used by the UI “My Scans” view; includes branch, commit, duration |
+| `GET /api/v1/scans/?status=completed&limit=100&offset=0` | Scan summaries with vulnerability counts; supports `sort_by`, `scan_type`, `tags` |
+
+```bash
+curl -sS "$BASE/api/queue/my-scans?limit=100" -H "Authorization: Bearer $KEY"
+curl -sS "$BASE/api/v1/scans/?status=completed&limit=100" -H "Authorization: Bearer $KEY"
+```
+
+Use `scan_id` from any row, then `GET /api/v1/scans/{scan_id}/findings` for full results.  
+Filter by exact target URL: `GET /api/v1/scans/?target_url=https%3A%2F%2Fgithub.com%2Forg%2Frepo`.
+
+### GitHub repo scan history
+
+For repos registered under **My GitHub repos**, paginated history returns one row per completed scan (not full findings):
+
+```bash
+curl -sS "$BASE/api/user/github/repos/$REPO_ID/history?limit=50&offset=0" \
+  -H "Authorization: Bearer $KEY"
+```
+
+Each entry includes `scan_id`, `branch`, `commit_hash`, `score`, and `vulnerabilities`. Fetch findings per entry:
+
+```bash
+curl -sS "$BASE/api/v1/scans/$SCAN_ID/findings?limit=50&offset=0" \
+  -H "Authorization: Bearer $KEY"
+```
+
+For **My Targets** (any target type), use `GET /api/user/targets/{target_id}/history` instead of the GitHub-specific path above.
+
+---
+
 ## Finding policy schema (for false positives)
 
 See **[FINDING_POLICY.md](FINDING_POLICY.md)** for the hybrid model (inline `# nosec` / `# nosemgrep` **and** JSON policy), scope rules, and examples.
@@ -398,10 +485,18 @@ Legacy: `GET /api/results/{scan_id}/ai-prompt` still embeds the same schema as M
 | Method | Path | Use |
 |--------|------|-----|
 | `GET` | `/api/v1/finding-policy/schema` | Finding policy JSON structure (cache in agent) |
-| `GET` | `/api/user/targets` | List targets + `last_scan` metadata |
-| `GET` | `/api/user/targets/{id}` | Single target |
+| `GET` | `/api/user/targets` | List targets + `last_scan` → then `GET .../findings` |
+| `GET` | `/api/user/targets/by-source?source=...` | Resolve `target_id` from repo URL / source |
+| `GET` | `/api/user/targets/{id}/history` | Paginated scan history for any saved target |
+| `GET` | `/api/user/targets/{id}/findings` | Latest (or `?scan_id=`) findings without new scan |
+| `GET` | `/api/results` | List completed scans with report links |
+| `GET` | `/api/queue/my-scans` | All scans for user/session (metadata) |
+| `GET` | `/api/v1/scans/` | Scan list with filters (metadata) |
+| `GET` | `/api/user/github/repos/{repo_id}/history` | Paginated repo scan history → `scan_id` per row |
+| `GET` | `/api/v1/scans/{id}/findings` | JSON findings for a known `scan_id` |
 | `POST` | `/api/user/targets/{id}/scan` | Manual rescan |
 | `POST` | `/api/v1/scans/` | Start scan (lower-level than resolve-scan) |
+| `GET` | `/api/results/{scan_id}/report` | HTML report |
 | `GET` | `/api/results/{scan_id}/ai-prompt` | Text prompt for LLM (legacy; prefer JSON findings) |
 | `GET` | `/api/health` | Health check (no auth) |
 
@@ -428,6 +523,14 @@ Primary:  POST /api/v1/resolve-scan
 Poll:     GET  /api/v1/scans/{id}/status
 Findings: GET  /api/v1/scans/{id}/findings?limit=50&offset=0&severity=CRITICAL,HIGH
 Rescan:   POST /api/user/targets/{target_id}/agent-callback
+
+Read-only (no new scan):
+  Target by URL:    GET /api/user/targets/by-source?source=...
+  Last per target:  GET /api/user/targets/{id}/findings
+  Target history:   GET /api/user/targets/{id}/history
+  Results list:     GET /api/results
+  All my scans:     GET /api/queue/my-scans  or  GET /api/v1/scans/?target_url=...
+  Repo history:     GET /api/user/github/repos/{repo_id}/history → scan_id → GET .../findings
 ```
 
 ---
@@ -436,5 +539,8 @@ Rescan:   POST /api/user/targets/{target_id}/agent-callback
 
 | Version | Changes |
 |---------|---------|
+| 2026-06 | Findings filters (`tool`, `path_prefix`, `rule_id`), `GET /api/user/targets/by-source`, `GET /api/results` |
+| 2026-06 | `GET /api/user/targets/{id}/history`, `GET .../findings`, `target_url` filter on `GET /api/v1/scans/` |
+| 2026-06 | Document read-only flows: targets `last_scan`, `my-scans`, GitHub repo history → findings |
 | 2026-05 | API key auth (`ssc_`), `GET .../findings`, `POST /api/v1/resolve-scan`, findings pagination (`limit`/`offset`/`severity`) |
 | 2026-05 | `GET /api/v1/finding-policy/schema` — machine-readable finding policy structure for agents |

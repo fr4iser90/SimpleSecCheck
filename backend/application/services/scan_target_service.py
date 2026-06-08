@@ -42,6 +42,15 @@ class ScanTargetService:
         """Get target by id; must belong to user."""
         return await self._repo.get_by_id(target_id, user_id)
 
+    async def get_by_user_and_source(
+        self,
+        user_id: str,
+        source: str,
+        target_type: Optional[str] = None,
+    ) -> Optional[ScanTarget]:
+        """Resolve target by primary source identifier (URL, image, path)."""
+        return await self._repo.get_by_user_and_source(user_id, source, target_type=target_type)
+
     async def create_target(
         self,
         user_id: str,

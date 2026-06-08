@@ -24,14 +24,25 @@ export class WebSocketService {
   private heartbeatTimer: number | null = null
   private callbacks: WebSocketCallbacks = {}
   private isConnecting = false
+  private intentionalClose = false
+  private activeScanId: string | null = null
 
   connect(scanId: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (this.isConnecting || this.ws?.readyState === WebSocket.OPEN) {
+      if (
+        this.activeScanId === scanId &&
+        (this.isConnecting || this.ws?.readyState === WebSocket.OPEN)
+      ) {
         resolve()
         return
       }
 
+      if (this.ws) {
+        this.disconnect()
+      }
+
+      this.intentionalClose = false
+      this.activeScanId = scanId
       this.isConnecting = true
 
       try {
@@ -89,7 +100,7 @@ export class WebSocketService {
           this.callbacks.onClose?.()
 
           // Auto-reconnect if not manually closed and within max attempts
-          if (this.reconnectAttempts < 10) {
+          if (!this.intentionalClose && this.reconnectAttempts < 10) {
             this.reconnectAttempts++
             console.log(`[WebSocketService] Reconnecting in 3000ms (attempt ${this.reconnectAttempts}/10)`)
             this.reconnectTimer = window.setTimeout(() => {
@@ -108,6 +119,8 @@ export class WebSocketService {
   }
 
   disconnect(): void {
+    this.intentionalClose = true
+
     // Clear reconnect timer
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
@@ -128,6 +141,7 @@ export class WebSocketService {
 
     this.isConnecting = false
     this.reconnectAttempts = 0
+    this.activeScanId = null
   }
 
   onMessage(callback: (data: WebSocketMessage) => void): void {
@@ -178,13 +192,9 @@ export function useWebSocket(scanId: string | null) {
       return
     }
 
-    if (!wsService.current) {
-      wsService.current = new WebSocketService()
-    }
+    const service = new WebSocketService()
+    wsService.current = service
 
-    const service = wsService.current
-
-    // Set up callbacks
     service.onOpen(() => {
       setIsConnected(true)
       setReconnectAttempts(0)
@@ -195,11 +205,13 @@ export function useWebSocket(scanId: string | null) {
       setReconnectAttempts(service.getReconnectAttempts())
     })
 
-    // Connect
     service.connect(scanId).catch(console.error)
 
     return () => {
-      // Cleanup is handled by the service itself when scanId changes
+      service.disconnect()
+      if (wsService.current === service) {
+        wsService.current = null
+      }
     }
   }, [scanId])
 
