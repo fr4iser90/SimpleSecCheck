@@ -43,6 +43,7 @@ from api.schemas.scan_schemas import (
 from application.services.scan_service import ScanService
 from application.services.user_service import UserService
 from application.dtos.scan_dto import ScanDTO
+from api.scan_response_builder import scan_dto_to_response
 from application.dtos.request_dto import (
     ScanRequestDTO,
     ScanUpdateRequestDTO,
@@ -471,29 +472,7 @@ async def create_scan(
 
             await sse_notify_scan(actor_context.user_id, scan_dto.id, scan_dto.status)
 
-        return ScanResponseSchema(
-            id=scan_dto.id,
-            name=scan_dto.name,
-            description=scan_dto.description,
-            scan_type=scan_dto.scan_type,
-            target_url=scan_dto.target_url,
-            target_type=scan_dto.target_type,
-            user_id=scan_dto.user_id,
-            project_id=scan_dto.project_id,
-            status=scan_dto.status,
-            created_at=scan_dto.created_at,
-            started_at=scan_dto.started_at,
-            completed_at=scan_dto.completed_at,
-            scheduled_at=scan_dto.scheduled_at,
-            tags=scan_dto.tags,
-            total_vulnerabilities=scan_dto.total_vulnerabilities,
-            critical_vulnerabilities=scan_dto.critical_vulnerabilities,
-            high_vulnerabilities=scan_dto.high_vulnerabilities,
-            medium_vulnerabilities=scan_dto.medium_vulnerabilities,
-            low_vulnerabilities=scan_dto.low_vulnerabilities,
-            info_vulnerabilities=scan_dto.info_vulnerabilities,
-            metadata=scan_dto.metadata,
-        )
+        return await scan_dto_to_response(scan_dto)
         
     except ScanConcurrencyLimitException as e:
         raise HTTPException(
@@ -886,29 +865,7 @@ async def get_scan(
         scan_dto = await scan_service.get_scan_by_id(scan_id)
         _require_scan_read(scan_dto, actor_context)
 
-        return ScanResponseSchema(
-            id=scan_dto.id,
-            name=scan_dto.name,
-            description=scan_dto.description,
-            scan_type=scan_dto.scan_type,
-            target_url=scan_dto.target_url,
-            target_type=scan_dto.target_type,
-            user_id=scan_dto.user_id,
-            project_id=scan_dto.project_id,
-            status=scan_dto.status,
-            created_at=scan_dto.created_at,
-            started_at=scan_dto.started_at,
-            completed_at=scan_dto.completed_at,
-            scheduled_at=scan_dto.scheduled_at,
-            tags=scan_dto.tags,
-            total_vulnerabilities=scan_dto.total_vulnerabilities,
-            critical_vulnerabilities=scan_dto.critical_vulnerabilities,
-            high_vulnerabilities=scan_dto.high_vulnerabilities,
-            medium_vulnerabilities=scan_dto.medium_vulnerabilities,
-            low_vulnerabilities=scan_dto.low_vulnerabilities,
-            info_vulnerabilities=scan_dto.info_vulnerabilities,
-            metadata=scan_dto.metadata,
-        )
+        return await scan_dto_to_response(scan_dto)
 
     except ScanNotFoundException as e:
         raise HTTPException(
@@ -958,29 +915,7 @@ async def update_scan(
 
         scan_dto = await scan_service.update_scan(scan_id, update_dto)
         
-        return ScanResponseSchema(
-            id=scan_dto.id,
-            name=scan_dto.name,
-            description=scan_dto.description,
-            scan_type=scan_dto.scan_type,
-            target_url=scan_dto.target_url,
-            target_type=scan_dto.target_type,
-            user_id=scan_dto.user_id,
-            project_id=scan_dto.project_id,
-            status=scan_dto.status,
-            created_at=scan_dto.created_at,
-            started_at=scan_dto.started_at,
-            completed_at=scan_dto.completed_at,
-            scheduled_at=scan_dto.scheduled_at,
-            tags=scan_dto.tags,
-            total_vulnerabilities=scan_dto.total_vulnerabilities,
-            critical_vulnerabilities=scan_dto.critical_vulnerabilities,
-            high_vulnerabilities=scan_dto.high_vulnerabilities,
-            medium_vulnerabilities=scan_dto.medium_vulnerabilities,
-            low_vulnerabilities=scan_dto.low_vulnerabilities,
-            info_vulnerabilities=scan_dto.info_vulnerabilities,
-            metadata=scan_dto.metadata,
-        )
+        return await scan_dto_to_response(scan_dto)
         
     except ScanNotFoundException as e:
         raise HTTPException(
@@ -1288,29 +1223,7 @@ async def cancel_scan(
 
             await sse_notify_scan(actor_context.user_id, scan_dto.id, scan_dto.status)
 
-        return ScanResponseSchema(
-            id=scan_dto.id,
-            name=scan_dto.name,
-            description=scan_dto.description,
-            scan_type=scan_dto.scan_type,
-            target_url=scan_dto.target_url,
-            target_type=scan_dto.target_type,
-            user_id=scan_dto.user_id,
-            project_id=scan_dto.project_id,
-            status=scan_dto.status,
-            created_at=scan_dto.created_at,
-            started_at=scan_dto.started_at,
-            completed_at=scan_dto.completed_at,
-            scheduled_at=scan_dto.scheduled_at,
-            tags=scan_dto.tags,
-            total_vulnerabilities=scan_dto.total_vulnerabilities,
-            critical_vulnerabilities=scan_dto.critical_vulnerabilities,
-            high_vulnerabilities=scan_dto.high_vulnerabilities,
-            medium_vulnerabilities=scan_dto.medium_vulnerabilities,
-            low_vulnerabilities=scan_dto.low_vulnerabilities,
-            info_vulnerabilities=scan_dto.info_vulnerabilities,
-            metadata=scan_dto.metadata,
-        )
+        return await scan_dto_to_response(scan_dto)
 
     except ScanNotFoundException as e:
         raise HTTPException(
@@ -1395,29 +1308,7 @@ async def retry_scan(
         _require_scan_owner(existing, actor_context)
         scan_dto = await scan_service.retry_scan(scan_id)
 
-        return ScanResponseSchema(
-            id=scan_dto.id,
-            name=scan_dto.name,
-            description=scan_dto.description,
-            scan_type=scan_dto.scan_type,
-            target_url=scan_dto.target_url,
-            target_type=scan_dto.target_type,
-            user_id=scan_dto.user_id,
-            project_id=scan_dto.project_id,
-            status=scan_dto.status,
-            created_at=scan_dto.created_at,
-            started_at=scan_dto.started_at,
-            completed_at=scan_dto.completed_at,
-            scheduled_at=scan_dto.scheduled_at,
-            tags=scan_dto.tags,
-            total_vulnerabilities=scan_dto.total_vulnerabilities,
-            critical_vulnerabilities=scan_dto.critical_vulnerabilities,
-            high_vulnerabilities=scan_dto.high_vulnerabilities,
-            medium_vulnerabilities=scan_dto.medium_vulnerabilities,
-            low_vulnerabilities=scan_dto.low_vulnerabilities,
-            info_vulnerabilities=scan_dto.info_vulnerabilities,
-            metadata=scan_dto.metadata,
-        )
+        return await scan_dto_to_response(scan_dto)
 
     except ScanNotFoundException as e:
         raise HTTPException(

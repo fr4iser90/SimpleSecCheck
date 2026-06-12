@@ -23,6 +23,7 @@ COPY worker/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Worker code
+COPY shared/ /app/shared/
 COPY worker/ /app/worker/
 
 # Create docker group and non-root user

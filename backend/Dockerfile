@@ -25,6 +25,7 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
+COPY shared/ /app/shared/
 COPY backend/ /app/backend/
 
 # Non-root user; UID/GID matched to host via docker-entrypoint.sh (/project mount)
@@ -40,7 +41,7 @@ EXPOSE 8080
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONPATH=/app/backend
+ENV PYTHONPATH=/app/backend:/app
 
 # Health check (run as backend after gosu; use same python as app)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

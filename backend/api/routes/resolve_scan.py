@@ -79,6 +79,13 @@ class ResolveScanResponseSchema(BaseModel):
     findings_poll_path: str = Field(
         description="Relative path to fetch findings after scan completes",
     )
+    estimated_time_seconds: Optional[int] = Field(
+        None,
+        description=(
+            "Measured estimate for pending/running scan (null when findings returned "
+            "immediately or when tool history is incomplete)"
+        ),
+    )
     findings: Optional[ScanFindingsResponseSchema] = None
 
 
@@ -149,6 +156,8 @@ async def resolve_scan(
         )
 
     from application.helpers.findings_pagination import build_findings_poll_path
+    from api.scan_response_builder import estimated_time_seconds_for_scan_dto
+    from infrastructure.container import get_scan_service
 
     sid = result.scan_id
     poll_status = f"/api/v1/scans/{sid}/status"
@@ -158,6 +167,14 @@ async def resolve_scan(
         offset=body.findings_offset,
         severity=body.findings_severity,
     )
+
+    estimated_time_seconds = None
+    if result.status in ("started", "scanning"):
+        try:
+            scan_dto = await get_scan_service().get_scan_by_id(sid)
+            estimated_time_seconds = await estimated_time_seconds_for_scan_dto(scan_dto)
+        except Exception:
+            estimated_time_seconds = None
 
     payload = ResolveScanResponseSchema(
         status=result.status,
@@ -171,6 +188,7 @@ async def resolve_scan(
         progress=result.progress,
         status_poll_path=poll_status,
         findings_poll_path=poll_findings,
+        estimated_time_seconds=estimated_time_seconds,
         findings=result.findings_response,
     )
 

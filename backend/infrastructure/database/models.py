@@ -564,6 +564,7 @@ class ScannerDurationStats(Base):
     min_duration_seconds = Column(Integer, nullable=True)
     max_duration_seconds = Column(Integer, nullable=True)
     sample_count = Column(Integer, nullable=False, default=0)
+    recent_durations = Column(JSON, default=list)  # Last N duration samples (rolling window)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
     def __repr__(self):

@@ -447,6 +447,39 @@ input:focus, select:focus {
   margin-bottom: 2rem;
 }
 
+.statistics-scope-tabs {
+  display: flex;
+  gap: 0;
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--glass-border-main);
+}
+
+.statistics-scope-tab {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.statistics-scope-tab:hover {
+  color: var(--text-main);
+  background: transparent;
+  transform: none;
+}
+
+.statistics-scope-tab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
 .statistics-header h2 {
   margin-bottom: 0.35rem;
 }

@@ -182,7 +182,7 @@ export default function StatisticsPage() {
   const [error, setError] = useState<string | null>(null)
   const [chartMode, setChartMode] = useState<ChartMode>('all')
   const [chartView, setChartView] = useState<ChartView>('cumulative')
-  const [statsScope, setStatsScope] = useState<StatsScope>('own')
+  const [statsScope, setStatsScope] = useState<StatsScope>('global')
 
   useEffect(() => {
     const fetchStatistics = async () => {
@@ -303,25 +303,31 @@ export default function StatisticsPage() {
       <div className="card statistics-card">
         <header className="statistics-header">
           <h2>Statistics</h2>
-          <p className="statistics-subtitle">
-            {statsScope === 'global' ? 'Global statistics across all scans' : 'Your own statistics'}
-          </p>
-          <div className="statistics-chart-toolbar" style={{ marginTop: '0.8rem', marginBottom: 0 }}>
+          <div className="statistics-scope-tabs" role="tablist" aria-label="Statistics scope">
             <button
               type="button"
-              className={`statistics-chip ${statsScope === 'own' ? 'statistics-chip--active' : ''}`}
-              onClick={() => setStatsScope('own')}
-            >
-              Own
-            </button>
-            <button
-              type="button"
-              className={`statistics-chip ${statsScope === 'global' ? 'statistics-chip--active' : ''}`}
+              role="tab"
+              aria-selected={statsScope === 'global'}
+              className={`statistics-scope-tab ${statsScope === 'global' ? 'statistics-scope-tab--active' : ''}`}
               onClick={() => setStatsScope('global')}
             >
               Global
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={statsScope === 'own'}
+              className={`statistics-scope-tab ${statsScope === 'own' ? 'statistics-scope-tab--active' : ''}`}
+              onClick={() => setStatsScope('own')}
+            >
+              Own
+            </button>
           </div>
+          <p className="statistics-subtitle">
+            {statsScope === 'global'
+              ? 'Global statistics across all scans on this instance'
+              : 'Your own statistics (account or current guest session)'}
+          </p>
         </header>
 
         {error && (

@@ -8,6 +8,7 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from domain.repositories.scanner_duration_stats_repository import ScannerDurationStatsRepository
+from shared.scanner_duration_stats import MAX_SAMPLES
 
 logger = logging.getLogger(__name__)
 
@@ -39,17 +40,56 @@ class ScannerDurationService:
             logger.error("Failed to update scanner duration stats: %s", e, exc_info=True)
     
     @staticmethod
-    async def get_estimated_time(scanners: List[str]) -> float:
-        """Estimated time in seconds (sum of average durations)."""
+    async def get_estimated_time(scanners: List[str]) -> Optional[float]:
+        """Estimated time in seconds when every scanner has measured data; else None."""
         if not scanners:
-            return 0.0
+            return None
         try:
             repo = _get_repo()
-            avgs = await repo.get_avgs_for_scanners(scanners)
-            return float(sum(avgs.values()))
+            total = await repo.estimate_total_seconds(scanners)
+            return float(total) if total is not None else None
         except Exception as e:
             logger.error("Failed to get estimated time: %s", e, exc_info=True)
-            return 0.0
+            return None
+
+    @staticmethod
+    async def get_estimate_breakdown(scanners: List[str]) -> Dict[str, Any]:
+        """Per-scanner measured estimates; total only when all selected scanners have data."""
+        cleaned = [s.strip() for s in (scanners or []) if s and str(s).strip()]
+        if not cleaned:
+            return {
+                "estimated_time_seconds": None,
+                "max_samples": MAX_SAMPLES,
+                "scanners": [],
+            }
+        try:
+            repo = _get_repo()
+            avgs = await repo.get_avgs_for_scanners(cleaned)
+            all_stats = await repo.get_all()
+            counts = {s["scanner_name"]: s.get("sample_count", 0) for s in all_stats}
+            total = await repo.estimate_total_seconds(cleaned)
+        except Exception as e:
+            logger.error("Failed to get estimate breakdown: %s", e, exc_info=True)
+            avgs = {}
+            counts = {}
+            total = None
+
+        items = []
+        for name in cleaned:
+            measured = avgs.get(name)
+            if measured is None:
+                continue
+            items.append({
+                "scanner_name": name,
+                "duration_seconds": measured,
+                "sample_count": counts.get(name),
+            })
+
+        return {
+            "estimated_time_seconds": total,
+            "max_samples": MAX_SAMPLES,
+            "scanners": items,
+        }
     
     @staticmethod
     async def get_scanner_stats(scanner_name: str) -> Optional[Dict[str, Any]]:

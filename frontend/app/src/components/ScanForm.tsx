@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import ScanStep from './ScanStep'
 import ScannerCardGrid from './ScannerCardGrid'
 import { apiFetch } from '../utils/apiClient'
+import { formatEstimatedTime } from '../utils/timeUtils'
 
 import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
 
@@ -129,6 +130,8 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [uploadingZip, setUploadingZip] = useState(false)
   const [zipUploadError, setZipUploadError] = useState<string | null>(null)
+  const [estimatedSeconds, setEstimatedSeconds] = useState<number | null>(null)
+  const [loadingEstimate, setLoadingEstimate] = useState(false)
 
   useEffect(() => {
     if (allowedScanProfiles.length === 0) return
@@ -287,6 +290,38 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
     loadScanners()
   }, [scanType])
 
+  useEffect(() => {
+    if (selectedScanners.length === 0) {
+      setEstimatedSeconds(null)
+      return
+    }
+    let cancelled = false
+    const loadEstimate = async () => {
+      setLoadingEstimate(true)
+      try {
+        const response = await apiFetch(
+          `/api/scanners/estimate-duration?scanners=${encodeURIComponent(selectedScanners.join(','))}`,
+        )
+        if (!cancelled && response.ok) {
+          const data = await response.json()
+          setEstimatedSeconds(
+            typeof data.estimated_time_seconds === 'number' ? data.estimated_time_seconds : null,
+          )
+        } else if (!cancelled) {
+          setEstimatedSeconds(null)
+        }
+      } catch {
+        if (!cancelled) setEstimatedSeconds(null)
+      } finally {
+        if (!cancelled) setLoadingEstimate(false)
+      }
+    }
+    loadEstimate()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedScanners.join('|')])
+
   // Fetch branches when Git URL is detected
   useEffect(() => {
     if (isGitRepo && target.trim()) {
@@ -411,7 +446,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
           description: `Security scan for ${scanTypeConfig?.label || scanType} target`,
           scan_type: backendScanType,
           target_url: scanType === 'network' ? 'network' : cleanTarget,
-          // target_type wird automatisch vom Backend bestimmt - NICHT hardcoden!
+          // target_type wird automatisch vom Backend bestimmt
           config: Object.keys(scanConfig).length > 0 ? scanConfig : undefined,
           scanners: selectedScanners.length > 0 ? selectedScanners : [],
           tags: [],
@@ -732,6 +767,18 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
             loading={loadingScanners}
             error={scannerError}
           />
+          {selectedScanners.length > 0 && loadingEstimate && (
+            <p className="form-help-text info" style={{ marginTop: '1rem', opacity: 0.85 }}>
+              Calculating estimated duration…
+            </p>
+          )}
+          {selectedScanners.length > 0 && !loadingEstimate && estimatedSeconds != null && estimatedSeconds > 0 && (
+            <p className="form-help-text info" style={{ marginTop: '1rem' }}>
+              Estimated scan duration:{' '}
+              <strong>{formatEstimatedTime(estimatedSeconds)}</strong>
+              <span style={{ opacity: 0.85 }}> (measured avg, last ~100 runs per tool)</span>
+            </p>
+          )}
         </ScanStep>
       )}
 

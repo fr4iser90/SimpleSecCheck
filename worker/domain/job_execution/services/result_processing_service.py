@@ -13,6 +13,48 @@ from uuid import UUID
 
 from worker.domain.job_execution.entities.execution_result import ExecutionResult
 from worker.infrastructure.database_adapter import PostgreSQLAdapter
+from shared.scanner_duration_stats import apply_duration_sample, MAX_SAMPLES
+
+
+async def _record_scanner_duration_sample(session, scanner_name: str, duration_sec: int, now: datetime) -> None:
+    """Upsert rolling-window duration stats (last MAX_SAMPLES samples)."""
+    from sqlalchemy import text
+
+    row = await session.execute(
+        text(
+            "SELECT recent_durations, sample_count FROM scanner_duration_stats WHERE scanner_name = :n"
+        ),
+        {"n": scanner_name},
+    )
+    existing = row.mappings().first()
+    recent = (existing or {}).get("recent_durations") or []
+    total_count = int((existing or {}).get("sample_count") or 0) + 1
+    computed = apply_duration_sample(recent, duration_sec, max_samples=MAX_SAMPLES)
+    await session.execute(
+        text("""
+            INSERT INTO scanner_duration_stats
+                (scanner_name, avg_duration_seconds, min_duration_seconds, max_duration_seconds,
+                 sample_count, recent_durations, last_updated)
+            VALUES
+                (:scanner_name, :avg, :min_d, :max_d, 1, CAST(:recent AS jsonb), :last_updated)
+            ON CONFLICT (scanner_name) DO UPDATE SET
+                avg_duration_seconds = EXCLUDED.avg_duration_seconds,
+                min_duration_seconds = EXCLUDED.min_duration_seconds,
+                max_duration_seconds = EXCLUDED.max_duration_seconds,
+                sample_count = :sample_count,
+                recent_durations = EXCLUDED.recent_durations,
+                last_updated = EXCLUDED.last_updated
+        """),
+        {
+            "scanner_name": scanner_name,
+            "avg": computed["avg_duration_seconds"],
+            "min_d": computed["min_duration_seconds"],
+            "max_d": computed["max_duration_seconds"],
+            "sample_count": total_count,
+            "recent": json.dumps(computed["recent_durations"]),
+            "last_updated": now,
+        },
+    )
 
 
 def _normalize_severity(severity: Any) -> str:
@@ -445,24 +487,8 @@ class ResultProcessingService:
                             duration_sec = item.get("duration")
                             if not scanner_name or not duration_sec or duration_sec <= 0:
                                 continue
-                            upsert_sql = text("""
-                                INSERT INTO scanner_duration_stats
-                                    (scanner_name, avg_duration_seconds, min_duration_seconds, max_duration_seconds, sample_count, last_updated)
-                                VALUES (:scanner_name, :duration_seconds, :duration_seconds, :duration_seconds, 1, :last_updated)
-                                ON CONFLICT (scanner_name) DO UPDATE SET
-                                    avg_duration_seconds = (scanner_duration_stats.avg_duration_seconds * scanner_duration_stats.sample_count + :duration_seconds) / (scanner_duration_stats.sample_count + 1),
-                                    sample_count = scanner_duration_stats.sample_count + 1,
-                                    min_duration_seconds = LEAST(COALESCE(scanner_duration_stats.min_duration_seconds, 999999), :duration_seconds),
-                                    max_duration_seconds = GREATEST(COALESCE(scanner_duration_stats.max_duration_seconds, 0), :duration_seconds),
-                                    last_updated = :last_updated
-                            """)
-                            await session.execute(
-                                upsert_sql,
-                                {
-                                    "scanner_name": scanner_name,
-                                    "duration_seconds": duration_sec,
-                                    "last_updated": now,
-                                }
+                            await _record_scanner_duration_sample(
+                                session, scanner_name, int(duration_sec), now
                             )
                         await session.commit()
                         self.logger.info(f"Updated scanner_duration_stats for {len(scan_results)} tool(s) from scan {scan_id}")

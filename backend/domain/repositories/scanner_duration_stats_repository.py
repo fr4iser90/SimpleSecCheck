@@ -25,3 +25,9 @@ class ScannerDurationStatsRepository(ABC):
     async def get_all(self) -> List[Dict]:
         """Get all stats (for admin). List of dicts with scanner_name, avg, min, max, sample_count, last_updated."""
         pass
+
+    async def estimate_total_seconds(self, scanner_names: List[str]) -> Optional[int]:
+        """Sum rolling averages; None if any scanner lacks measured data."""
+        avgs = await self.get_avgs_for_scanners(scanner_names)
+        from shared.scanner_duration_stats import estimate_total_seconds
+        return estimate_total_seconds(scanner_names, avgs)

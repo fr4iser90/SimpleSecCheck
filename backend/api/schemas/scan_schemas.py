@@ -206,6 +206,13 @@ class ScanResponseSchema(BaseModel):
     low_vulnerabilities: int = Field(ge=0, description="Low vulnerabilities")
     info_vulnerabilities: int = Field(ge=0, description="Info vulnerabilities")
     
+    estimated_time_seconds: Optional[int] = Field(
+        None,
+        description=(
+            "Estimated scan duration in seconds (sum of measured per-tool averages). "
+            "Only set for pending/running scans when every selected tool has history; otherwise null."
+        ),
+    )
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 

@@ -35,6 +35,7 @@ from domain.policies.role_capabilities_policy import merge_role_capabilities_raw
 from infrastructure.logging_config import get_logger
 from infrastructure.container import get_scanner_repository, run_database_migrations
 from domain.repositories.scanner_repository import ScannerRepository
+from domain.services.scanner_duration_service import ScannerDurationService
 
 logger = get_logger("api.scanners")
 
@@ -118,6 +119,18 @@ class PublicCapabilitiesResponse(BaseModel):
     guest: RoleCapabilitiesSnapshot
     user: RoleCapabilitiesSnapshot
     auth: PublicCapabilitiesAuthSnippet
+
+
+class ScannerEstimateItemSchema(BaseModel):
+    scanner_name: str
+    duration_seconds: int
+    sample_count: Optional[int] = None
+
+
+class ScanDurationEstimateResponse(BaseModel):
+    estimated_time_seconds: Optional[int] = None
+    max_samples: int
+    scanners: List[ScannerEstimateItemSchema]
     help: str = Field(description="Short explanation for UI")
 
 
@@ -416,6 +429,39 @@ async def get_public_capabilities(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get capabilities: {str(e)}",
+        )
+
+
+@config_router.get("/scanners/estimate-duration", response_model=ScanDurationEstimateResponse)
+async def estimate_scan_duration(
+    scanners: str = Query(..., description="Comma-separated scanner/tool names"),
+) -> ScanDurationEstimateResponse:
+    """
+    Estimate total scan duration from rolling per-scanner averages (last N samples).
+    Returns null when any selected scanner has no measured data yet.
+    """
+    scanner_list = [s.strip() for s in scanners.split(",") if s.strip()]
+    if not scanner_list:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one scanner name is required",
+        )
+    try:
+        breakdown = await ScannerDurationService.get_estimate_breakdown(scanner_list)
+        return ScanDurationEstimateResponse(
+            estimated_time_seconds=breakdown["estimated_time_seconds"],
+            max_samples=breakdown["max_samples"],
+            scanners=[ScannerEstimateItemSchema(**item) for item in breakdown["scanners"]],
+            help=(
+                "Sum of measured average run times per tool (last N completed scans). "
+                "Shown only when every selected tool has enough history; otherwise omitted."
+            ),
+        )
+    except Exception as e:
+        logger.error("Failed to estimate scan duration", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to estimate scan duration: {str(e)}",
         )
 
 

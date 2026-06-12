@@ -7,8 +7,15 @@ from domain.repositories.scanner_duration_stats_repository import ScannerDuratio
 from domain.datetime_serialization import isoformat_utc
 from infrastructure.database.models import ScannerDurationStats as ScannerDurationStatsModel
 from infrastructure.database.adapter import db_adapter
+from shared.scanner_duration_stats import (
+    MAX_SAMPLES,
+    apply_duration_sample,
+)
 
-MAX_SAMPLES = 100
+__all__ = [
+    "DatabaseScannerDurationStatsRepository",
+    "MAX_SAMPLES",
+]
 
 
 class DatabaseScannerDurationStatsRepository(ScannerDurationStatsRepository):
@@ -26,23 +33,25 @@ class DatabaseScannerDurationStatsRepository(ScannerDurationStatsRepository):
                 )
             )
             stats = r.scalar_one_or_none()
+            computed = apply_duration_sample(
+                stats.recent_durations if stats else None,
+                duration_seconds,
+                max_samples=MAX_SAMPLES,
+            )
             if stats:
-                old_count = min(stats.sample_count, MAX_SAMPLES - 1)
-                new_count = old_count + 1
-                new_avg = int((stats.avg_duration_seconds * old_count + duration_seconds) / new_count)
-                stats.avg_duration_seconds = new_avg
+                stats.avg_duration_seconds = computed["avg_duration_seconds"]
+                stats.min_duration_seconds = computed["min_duration_seconds"]
+                stats.max_duration_seconds = computed["max_duration_seconds"]
+                stats.recent_durations = computed["recent_durations"]
                 stats.sample_count = stats.sample_count + 1
-                if stats.min_duration_seconds is None or duration_seconds < stats.min_duration_seconds:
-                    stats.min_duration_seconds = duration_seconds
-                if stats.max_duration_seconds is None or duration_seconds > stats.max_duration_seconds:
-                    stats.max_duration_seconds = duration_seconds
                 stats.last_updated = datetime.utcnow()
             else:
                 s = ScannerDurationStatsModel(
                     scanner_name=scanner_name,
-                    avg_duration_seconds=duration_seconds,
-                    min_duration_seconds=duration_seconds,
-                    max_duration_seconds=duration_seconds,
+                    avg_duration_seconds=computed["avg_duration_seconds"],
+                    min_duration_seconds=computed["min_duration_seconds"],
+                    max_duration_seconds=computed["max_duration_seconds"],
+                    recent_durations=computed["recent_durations"],
                     sample_count=1,
                 )
                 session.add(s)
@@ -88,6 +97,7 @@ class DatabaseScannerDurationStatsRepository(ScannerDurationStatsRepository):
                     "min_duration_seconds": s.min_duration_seconds,
                     "max_duration_seconds": s.max_duration_seconds,
                     "sample_count": s.sample_count,
+                    "window_sample_count": len(s.recent_durations or []),
                     "last_updated": isoformat_utc(s.last_updated),
                 }
                 for s in r.scalars().all()

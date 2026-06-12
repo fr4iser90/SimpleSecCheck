@@ -139,23 +139,14 @@ class StartScanUseCase:
             self.validation_service.validate_target_url(target_url, target_type)
     
     def estimate_scan_duration(self, scan_type: ScanType, target_url: str, scanners: List[str]) -> int:
-        """Estimate scan duration in seconds."""
-        # This would typically use historical data and scanner estimates
-        # For now, return a basic estimate
-        base_duration = 300  # 5 minutes base
-        
-        # Add time based on number of scanners
-        scanner_factor = len(scanners) * 60  # 1 minute per scanner
-        
-        # Add time based on scan type
-        type_factor = {
-            ScanType.CODE: 120,
-            ScanType.CONTAINER: 180,
-            ScanType.INFRASTRUCTURE: 300,
-            ScanType.WEB_APPLICATION: 240,
-        }.get(scan_type, 120)
-        
-        return base_duration + scanner_factor + type_factor
+        """Sync fallback: no estimate without async DB lookup."""
+        return 0
+
+    async def estimate_scan_duration_async(self, scanners: List[str]) -> Optional[int]:
+        """Estimate scan duration from rolling scanner duration stats (measured only)."""
+        from domain.services.scanner_duration_service import ScannerDurationService
+        est = await ScannerDurationService.get_estimated_time(scanners)
+        return int(est) if est is not None else None
     
     def validate_scan_cost(self, scan_type: ScanType, scanners: List[str], duration_estimate: int) -> None:
         """Validate that scan cost is within acceptable limits."""

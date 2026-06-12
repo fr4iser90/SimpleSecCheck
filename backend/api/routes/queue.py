@@ -306,11 +306,15 @@ async def get_scan_queue_status(
         if queue_status in ["pending", "running"] and position and position > 1:
             scans_before = await scan_repository.get_scans_before_in_queue(scan_id)
             wait_total = 0.0
+            has_estimate = False
             for s in scans_before:
                 sc = getattr(s, "scanners", None) or []
                 if sc:
-                    wait_total += await ScannerDurationService.get_estimated_time(sc)
-            estimated_wait_seconds = int(wait_total) if wait_total else 0
+                    est = await ScannerDurationService.get_estimated_time(sc)
+                    if est is not None:
+                        wait_total += est
+                        has_estimate = True
+            estimated_wait_seconds = int(wait_total) if has_estimate else None
         created_at = getattr(scan, "created_at", None)
         started_at = getattr(scan, "started_at", None)
         completed_at = getattr(scan, "completed_at", None)

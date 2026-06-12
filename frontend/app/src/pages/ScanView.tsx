@@ -5,7 +5,7 @@ import StepsSidebar from '../components/StepsSidebar'
 import AIPromptModal from '../components/AIPromptModal'
 import { SubstepSlot } from '../components/SubstepSlot'
 import { useWebSocket } from '../services/websocketService'
-import { formatDuration, parseStepInstantMs } from '../utils/timeUtils'
+import { formatDuration, formatEstimatedTime, parseStepInstantMs } from '../utils/timeUtils'
 import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
 
 type ScanStatusData = ScanStatusState
@@ -356,6 +356,7 @@ export default function ScanView() {
   // Show queue waiting state (Backend queue status: 'pending')
   if (status.status === 'pending') {
     const estimatedWaitSeconds = queueStatus?.estimated_wait_seconds ?? null
+    const estimatedScanSeconds = queueStatus?.estimated_time_seconds ?? null
     const formatWait = (sec: number): string => {
       if (sec < 60) return `${sec}s`
       const m = Math.floor(sec / 60)
@@ -401,10 +402,16 @@ export default function ScanView() {
                     <strong>{formatWait(estimatedWaitSeconds)}</strong>
                   </div>
                 )}
-                {estimatedWaitSeconds === 0 && (
+                {queueStatus.position === 1 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                     <span style={{ opacity: 0.8 }}>Estimated Wait:</span>
                     <strong>Next in line</strong>
+                  </div>
+                )}
+                {estimatedScanSeconds != null && estimatedScanSeconds > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                    <span style={{ opacity: 0.8 }}>Estimated Scan Duration:</span>
+                    <strong>{formatEstimatedTime(estimatedScanSeconds)}</strong>
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -488,6 +495,11 @@ export default function ScanView() {
           <p style={{ opacity: 0.7, marginTop: '0.5rem' }}>
             Scan ID: {status.scan_id}
           </p>
+          {queueStatus?.estimated_time_seconds != null && queueStatus.estimated_time_seconds > 0 && (
+            <p style={{ opacity: 0.75, marginTop: '0.35rem', fontSize: '0.95rem' }}>
+              Estimated duration: {formatEstimatedTime(queueStatus.estimated_time_seconds)}
+            </p>
+          )}
           {status.scan_id && (
             <div style={{ marginTop: '1rem' }}>
               <button type="button" onClick={handleCancelScan} disabled={cancelLoading} style={cancelButtonStyle}>
