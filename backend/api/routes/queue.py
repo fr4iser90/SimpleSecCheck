@@ -18,6 +18,7 @@ from application.services.user_service import UserService
 from infrastructure.logging_config import get_logger
 from domain.services.scanner_duration_service import ScannerDurationService
 from domain.datetime_serialization import isoformat_utc
+from api.scan_response_builder import compute_queue_estimates
 
 logger = get_logger("api.queue")
 
@@ -296,25 +297,17 @@ async def get_scan_queue_status(
                 status_code=fastapi_status.HTTP_404_NOT_FOUND,
                 detail=f"Scan {scan_id} not found"
             )
-        position = await scan_repository.get_position_in_queue(scan_id)
         queue_status = {"pending": "pending", "running": "running", "completed": "completed", "failed": "failed", "cancelled": "failed"}.get(_scan_status_str(scan), _scan_status_str(scan))
         scanners = getattr(scan, "scanners", None) or []
-        estimated_time_seconds = None
-        if queue_status in ["pending", "running"] and scanners:
-            estimated_time_seconds = await ScannerDurationService.get_estimated_time(scanners)
-        estimated_wait_seconds = None
-        if queue_status in ["pending", "running"] and position and position > 1:
-            scans_before = await scan_repository.get_scans_before_in_queue(scan_id)
-            wait_total = 0.0
-            has_estimate = False
-            for s in scans_before:
-                sc = getattr(s, "scanners", None) or []
-                if sc:
-                    est = await ScannerDurationService.get_estimated_time(sc)
-                    if est is not None:
-                        wait_total += est
-                        has_estimate = True
-            estimated_wait_seconds = int(wait_total) if has_estimate else None
+        estimates = await compute_queue_estimates(
+            scan_id,
+            scanners,
+            getattr(scan, "status", None),
+            scan_repository,
+        )
+        estimated_time_seconds = estimates["estimated_time_seconds"]
+        estimated_wait_seconds = estimates["estimated_wait_seconds"]
+        position = estimates["queue_position"]
         created_at = getattr(scan, "created_at", None)
         started_at = getattr(scan, "started_at", None)
         completed_at = getattr(scan, "completed_at", None)

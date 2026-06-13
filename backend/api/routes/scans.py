@@ -43,7 +43,7 @@ from api.schemas.scan_schemas import (
 from application.services.scan_service import ScanService
 from application.services.user_service import UserService
 from application.dtos.scan_dto import ScanDTO
-from api.scan_response_builder import scan_dto_to_response
+from api.scan_response_builder import scan_dto_to_response, compute_queue_estimates
 from application.dtos.request_dto import (
     ScanRequestDTO,
     ScanUpdateRequestDTO,
@@ -69,7 +69,8 @@ import re
 
 
 # Import dependency injection container
-from infrastructure.container import get_scan_service, get_scan_steps_repository, get_user_service
+from infrastructure.container import get_scan_service, get_scan_steps_repository, get_user_service, get_scan_repository
+from domain.repositories.scan_repository import ScanRepository
 from domain.entities.target_type import TargetType
 
 
@@ -233,6 +234,10 @@ def get_scan_service_dependency():
 
 def get_user_service_dependency() -> UserService:
     return get_user_service()
+
+
+def get_scan_repository_dependency() -> ScanRepository:
+    return get_scan_repository()
 
 
 router = APIRouter(
@@ -1055,13 +1060,17 @@ async def get_scan_findings(
     "/{scan_id}/status",
     response_model=ScanStatusResponseSchema,
     summary="Get scan status",
-    description="Get current status and progress of a scan.",
+    description=(
+        "Current status, progress, elapsed duration, and queue estimates "
+        "(estimated_wait_seconds until start, estimated_time_seconds for scan run)."
+    ),
     response_description="Scan status information",
 )
 async def get_scan_status(
     scan_id: str,
     actor_context: ActorContext = Depends(get_actor_context),
     scan_service: ScanService = Depends(get_scan_service_dependency),
+    scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
 ) -> ScanStatusResponseSchema:
     """
     Get scan status.
@@ -1074,6 +1083,12 @@ async def get_scan_status(
         scan_dto = await scan_service.get_scan_by_id(scan_id)
         _require_scan_read(scan_dto, actor_context)
         status_info = await scan_service.get_scan_status(scan_id)
+        estimates = await compute_queue_estimates(
+            scan_id,
+            scan_dto.scanners,
+            scan_dto.status,
+            scan_repository,
+        )
 
         return ScanStatusResponseSchema(
             scan_id=status_info["scan_id"],
@@ -1083,6 +1098,9 @@ async def get_scan_status(
             completed_at=status_info["completed_at"],
             duration=status_info["duration"],
             vulnerabilities_found=status_info["vulnerabilities_found"],
+            queue_position=estimates["queue_position"],
+            estimated_time_seconds=estimates["estimated_time_seconds"],
+            estimated_wait_seconds=estimates["estimated_wait_seconds"],
             metadata=status_info["metadata"],
         )
 

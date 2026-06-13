@@ -435,6 +435,26 @@ class ScanStatusResponseSchema(BaseModel):
     completed_at: Optional[datetime] = Field(None, description="Completion time")
     duration: Optional[float] = Field(None, ge=0, description="Duration in seconds")
     vulnerabilities_found: int = Field(ge=0, description="Vulnerabilities found")
+    queue_position: Optional[int] = Field(
+        None,
+        ge=1,
+        description="1-based queue position while pending or running; null otherwise",
+    )
+    estimated_time_seconds: Optional[int] = Field(
+        None,
+        description=(
+            "Measured estimated scan duration in seconds (sum of per-tool averages). "
+            "Pending/running only; null when tool history is incomplete."
+        ),
+    )
+    estimated_wait_seconds: Optional[int] = Field(
+        None,
+        ge=0,
+        description=(
+            "Measured estimated wait until this scan starts (sum of durations of scans "
+            "ahead in queue). Pending/running only; null at position 1 or when estimates unavailable."
+        ),
+    )
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 
