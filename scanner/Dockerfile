@@ -28,6 +28,7 @@ ENV SIMPLE_SECCHECK_ROOT=/app
 RUN python3 -m scanner.core.scanner_assets.install_assets
 
 # Copy full SimpleSecCheck files after assets install
+COPY shared/ /app/shared/
 COPY scanner/ /app/scanner/
 
 # Copy entrypoint script

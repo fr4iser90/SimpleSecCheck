@@ -95,8 +95,8 @@ def _get_processor_for_scanner(scanner):
                 fromlist=["REPORT_PROCESSOR"],
             )
             return getattr(processor_module, "REPORT_PROCESSOR", None)
-    except Exception:
-        pass
+    except Exception as exc:
+        debug(f"Could not load processor for {getattr(scanner, 'name', scanner)}: {exc}")
     return None
 
 

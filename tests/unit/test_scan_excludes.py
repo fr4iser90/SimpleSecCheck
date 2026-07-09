@@ -75,6 +75,13 @@ def test_cli_builders_support_single_file(tmp_path, monkeypatch):
     assert bandit.count("-x") >= 1
 
 
+def test_path_matches_exclude_ignores_empty_normalized_patterns(tmp_path, monkeypatch):
+    target = tmp_path / "repo"
+    target.mkdir()
+    monkeypatch.setenv(ENV_EXCLUDE_PATHS, "/target/,/")
+    assert not path_matches_exclude(target, target / "src" / "main.py")
+
+
 def test_base_scanner_helpers(tmp_path, monkeypatch):
     from scanner.plugins.semgrep.scanner import SemgrepScanner
 

@@ -78,6 +78,8 @@ def path_matches_exclude(target: Union[str, Path], candidate: Union[str, Path]) 
         rel = normalize_policy_path(str(candidate))
     for pattern in merged_exclude_list(target_p):
         pat = normalize_policy_path(pattern)
+        if not pat:
+            continue
         if rel == pat:
             return True
         if pat in rel or pat in str(candidate):
