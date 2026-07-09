@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
-import { useTranslation } from '../i18n'
+import { legalDocumentLanguage, t as translate } from '../i18n'
 import './LegalPage.css'
 
 interface LegalPageContent {
@@ -66,8 +66,8 @@ function renderMarkdownSimple(text: string): JSX.Element[] {
 
 export default function LegalPage() {
   const { slug } = useParams<{ slug: string }>()
-  const { t } = useTranslation()
   const [page, setPage] = useState<LegalPageContent | null>(null)
+  const [legalLocale, setLegalLocale] = useState<string>('de')
   const [enabled, setEnabled] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -83,6 +83,7 @@ export default function LegalPage() {
         const data = await res.json()
         if (cancelled) return
         setEnabled(Boolean(data.enabled))
+        setLegalLocale(data.locale || 'de')
         const pages = data.pages || {}
         const content = pages[slug || '']
         if (!content) {
@@ -103,10 +104,13 @@ export default function LegalPage() {
     }
   }, [slug])
 
+  const legalLang = legalDocumentLanguage(legalLocale)
+  const legalT = (key: string) => translate(key, undefined, legalLang)
+
   if (loading) {
     return (
       <div className="legal-page shell-content">
-        <div className="card legal-page__card">{t('legal.pageLoading')}</div>
+        <div className="card legal-page__card">{legalT('legal.pageLoading')}</div>
       </div>
     )
   }
@@ -115,9 +119,9 @@ export default function LegalPage() {
     return (
       <div className="legal-page shell-content">
         <div className="card legal-page__card">
-          <h1>{t('legal.pageDisabledTitle')}</h1>
-          <p>{t('legal.pageDisabledBody')}</p>
-          <Link to="/">{t('legal.backHome')}</Link>
+          <h1>{legalT('legal.pageDisabledTitle')}</h1>
+          <p>{legalT('legal.pageDisabledBody')}</p>
+          <Link to="/">{legalT('legal.backHome')}</Link>
         </div>
       </div>
     )
@@ -127,8 +131,8 @@ export default function LegalPage() {
     return (
       <div className="legal-page shell-content">
         <div className="card legal-page__card">
-          <h1>{error === 'not_found' ? t('legal.pageNotFound') : t('legal.pageLoadFailed')}</h1>
-          <Link to="/">{t('legal.backHome')}</Link>
+          <h1>{error === 'not_found' ? legalT('legal.pageNotFound') : legalT('legal.pageLoadFailed')}</h1>
+          <Link to="/">{legalT('legal.backHome')}</Link>
         </div>
       </div>
     )
@@ -140,7 +144,7 @@ export default function LegalPage() {
         <h1>{page.title}</h1>
         <div className="legal-page__body">{renderMarkdownSimple(page.content)}</div>
         <p className="legal-page__back">
-          <Link to="/">{t('legal.backHome')}</Link>
+          <Link to="/">{legalT('legal.backHome')}</Link>
         </p>
       </article>
     </div>

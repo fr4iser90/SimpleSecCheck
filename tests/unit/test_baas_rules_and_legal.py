@@ -101,11 +101,12 @@ def test_english_legal_templates():
         "terms_enabled": True,
     })
     pages = build_public_legal_response(cfg, state_config={"use_case": "public_web"})["pages"]
-    assert "Legal Notice" in pages["impressum"]["content"]
-    assert "Privacy Policy" in pages["privacy"]["content"]
-    assert "Terms of Service" in pages["terms"]["content"]
+    assert pages["impressum"]["title"] == "Legal Notice"
+    assert pages["privacy"]["title"] == "Privacy Policy"
+    assert pages["terms"]["title"] == "Terms of Service"
+    assert "TMG" in pages["impressum"]["content"]
     assert "GDPR" in pages["privacy"]["content"]
-    assert render_terms_en(cfg).startswith("## Terms of Service")
+    assert render_terms_en(cfg).startswith("Effective when published")
 
 
 def test_public_legal_disabled_by_default():

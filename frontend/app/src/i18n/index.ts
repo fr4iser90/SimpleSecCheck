@@ -5,6 +5,14 @@ import de from './locales/de.json'
 
 export type Language = 'en' | 'zh' | 'de'
 
+/** Map legal document locale (admin config) to UI translation language. */
+export function legalDocumentLanguage(locale?: string | null): Language {
+  const normalized = (locale || 'de').toLowerCase()
+  if (normalized.startsWith('de')) return 'de'
+  if (normalized.startsWith('zh')) return 'zh'
+  return 'en'
+}
+
 export const languages: Record<Language, { name: string; flag: string }> = {
   en: { name: 'English', flag: '🇬🇧' },
   zh: { name: '中文', flag: '🇨🇳' },

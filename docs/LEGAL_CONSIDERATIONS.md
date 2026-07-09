@@ -23,7 +23,7 @@ SimpleSecCheck supports this **optionally**:
 | Öffentliche Demo (DE) | ✅ | ✅ | optional | ❌ |
 | Echte Accounts + Login | ✅ | ✅ | ✅ (Registrierung) | Hosting/E-Mail in Admin |
 
-Templates are starting points only — verify with your legal advisor. Use custom Markdown fields to override generated text.
+Templates are starting points only — verify with your legal advisor. Boilerplate text lives in **`content/legal/{de,en}/*.md`** (Markdown with `{{placeholders}}` filled from Admin → Legal). Use custom Markdown fields in admin to override a page entirely.
 
 For **solo/internal** deployments, leave legal pages disabled.
 

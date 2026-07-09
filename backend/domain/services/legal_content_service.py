@@ -1,13 +1,15 @@
 """
-Legal content service — generates Impressum and privacy policy text from configuration.
+Legal content service — config, validation, and template rendering from content/legal/*.md.
 
-Templates are informational defaults for DE/EU self-hosted deployments. Operators remain
-responsible for legal accuracy; custom markdown overrides take precedence.
+Operator data lives in system_state.config.legal. Boilerplate text lives in
+content/legal/{de,en}/*.md with {{placeholders}}. Custom admin markdown overrides templates.
 """
 from __future__ import annotations
 
+import os
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional
-
 
 DEFAULT_LEGAL_CONFIG: Dict[str, Any] = {
     "enabled": False,
@@ -26,6 +28,30 @@ DEFAULT_LEGAL_CONFIG: Dict[str, Any] = {
     "terms_custom": "",
     "hosting_provider": "",
     "email_provider": "",
+}
+
+PAGE_TITLES: Dict[str, Dict[str, str]] = {
+    "de": {
+        "impressum": "Impressum",
+        "privacy": "Datenschutzerklärung",
+        "terms": "Nutzungsbedingungen",
+    },
+    "en": {
+        "impressum": "Legal Notice",
+        "privacy": "Privacy Policy",
+        "terms": "Terms of Service",
+    },
+}
+
+COOKIE_NOTICE_TEXT: Dict[str, str] = {
+    "de": (
+        "Diese Website verwendet technisch notwendige Cookies für Anmeldung und "
+        "Sitzungsverwaltung. Details in der Datenschutzerklärung."
+    ),
+    "en": (
+        "This site uses essential cookies for login and session management. "
+        "See the privacy policy."
+    ),
 }
 
 
@@ -88,23 +114,72 @@ async def upgrade_legal_terms_for_accounts(system_state_repo) -> None:
     await system_state_repo.save(state)
 
 
+def legal_locale_folder(locale: str) -> str:
+    """Map config locale to content/legal subfolder (de | en)."""
+    return "de" if (locale or "de").lower().startswith("de") else "en"
+
+
+def legal_templates_root() -> Path:
+    """Resolve content/legal directory (Docker image, compose mount, or repo checkout)."""
+    env_dir = os.environ.get("LEGAL_CONTENT_DIR", "").strip()
+    candidates = [
+        Path(env_dir) if env_dir else None,
+        Path("/app/content/legal"),
+        Path("/project/content/legal"),
+        Path(__file__).resolve().parents[3] / "content" / "legal",
+    ]
+    for path in candidates:
+        if path is not None and path.is_dir():
+            return path
+    raise FileNotFoundError(
+        "Legal templates directory not found. Expected content/legal in the repo or LEGAL_CONTENT_DIR."
+    )
+
+
+@lru_cache(maxsize=32)
+def _load_template_file(locale_folder: str, page: str) -> str:
+    path = legal_templates_root() / locale_folder / f"{page}.md"
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing legal template: {path}")
+    return path.read_text(encoding="utf-8")
+
+
+def load_legal_template(locale: str, page: str) -> str:
+    """Load raw markdown template for a legal page."""
+    return _load_template_file(legal_locale_folder(locale), page)
+
+
+def substitute_template(template: str, variables: Dict[str, str]) -> str:
+    """Replace {{key}} placeholders in a template."""
+    result = template
+    for key, value in variables.items():
+        result = result.replace(f"{{{{{key}}}}}", value)
+    return result.strip()
+
+
 def _contact_block(cfg: Dict[str, Any], locale: str = "de") -> str:
     lines = []
     if cfg.get("company_name"):
-        lines.append(cfg["company_name"])
+        lines.append(str(cfg["company_name"]))
     if cfg.get("legal_representative"):
         if locale.startswith("de"):
             lines.append(f"Vertreten durch: {cfg['legal_representative']}")
         else:
             lines.append(f"Represented by: {cfg['legal_representative']}")
     if cfg.get("address"):
-        lines.append(cfg["address"].replace("\n", ", "))
+        lines.append(str(cfg["address"]).replace("\n", ", "))
     if cfg.get("email"):
-        lines.append(f"E-Mail: {cfg['email']}" if locale.startswith("de") else f"Email: {cfg['email']}")
+        lines.append(
+            f"E-Mail: {cfg['email']}" if locale.startswith("de") else f"Email: {cfg['email']}"
+        )
     if cfg.get("phone"):
-        lines.append(f"Telefon: {cfg['phone']}" if locale.startswith("de") else f"Phone: {cfg['phone']}")
+        lines.append(
+            f"Telefon: {cfg['phone']}" if locale.startswith("de") else f"Phone: {cfg['phone']}"
+        )
     if cfg.get("vat_id"):
-        lines.append(f"USt-IdNr.: {cfg['vat_id']}" if locale.startswith("de") else f"VAT ID: {cfg['vat_id']}")
+        lines.append(
+            f"USt-IdNr.: {cfg['vat_id']}" if locale.startswith("de") else f"VAT ID: {cfg['vat_id']}"
+        )
     if not lines:
         return (
             "_Bitte Impressumsdaten in den Admin-Einstellungen ergänzen._"
@@ -114,375 +189,118 @@ def _contact_block(cfg: Dict[str, Any], locale: str = "de") -> str:
     return "\n\n".join(lines)
 
 
-def render_impressum_de(cfg: Dict[str, Any]) -> str:
-    if cfg.get("impressum_custom", "").strip():
-        return cfg["impressum_custom"].strip()
-
-    contact = _contact_block(cfg, "de")
+def template_variables(cfg: Dict[str, Any], locale: str, app_name: str) -> Dict[str, str]:
+    """Build placeholder map for content/legal templates."""
+    folder = legal_locale_folder(locale)
+    contact_email = cfg.get("privacy_contact_email") or cfg.get("email") or "privacy@example.com"
+    operator = cfg.get("company_name") or (
+        "Betreiber dieser Instanz" if folder == "de" else "Operator of this instance"
+    )
+    hosting = cfg.get("hosting_provider") or (
+        "vom Betreiber (siehe Impressum)" if folder == "de" else "the operator (see legal notice)"
+    )
+    email_provider = cfg.get("email_provider") or (
+        "vom Betreiber konfigurierter SMTP-Dienst"
+        if folder == "de"
+        else "SMTP service configured by the operator"
+    )
+    contact = cfg.get("email") or ("kontakt@example.de" if folder == "de" else "contact@example.com")
     responsible = cfg.get("legal_representative") or cfg.get("company_name") or "—"
-    return f"""## Impressum
 
-Angaben gemäß § 5 TMG
+    return {
+        "company_name": str(cfg.get("company_name") or ""),
+        "legal_representative": str(cfg.get("legal_representative") or ""),
+        "address": str(cfg.get("address") or ""),
+        "email": str(cfg.get("email") or ""),
+        "phone": str(cfg.get("phone") or ""),
+        "vat_id": str(cfg.get("vat_id") or ""),
+        "contact_block": _contact_block(cfg, folder),
+        "responsible": str(responsible),
+        "operator": str(operator),
+        "privacy_contact": str(contact_email),
+        "hosting": str(hosting),
+        "email_provider": str(email_provider),
+        "contact": str(contact),
+        "app_name": app_name,
+    }
 
-{contact}
 
-### Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV
+def render_legal_page(
+    page: str,
+    cfg: Dict[str, Any],
+    locale: str,
+    app_name: str = "SimpleSecCheck",
+) -> str:
+    """Render one legal page from custom markdown or content/legal template."""
+    custom_key = {
+        "impressum": "impressum_custom",
+        "privacy": "privacy_custom",
+        "terms": "terms_custom",
+    }.get(page)
+    if custom_key and str(cfg.get(custom_key, "")).strip():
+        return str(cfg[custom_key]).strip()
 
-{responsible}
+    template = load_legal_template(locale, page)
+    return substitute_template(template, template_variables(cfg, locale, app_name))
 
----
 
-_Diese Vorlage dient als Ausgangspunkt. Prüfe die Angaben mit deinem Rechtsberater._
-"""
+def render_impressum_de(cfg: Dict[str, Any], app_name: str = "SimpleSecCheck") -> str:
+    return render_legal_page("impressum", cfg, "de", app_name)
+
+
+def render_impressum_en(cfg: Dict[str, Any], app_name: str = "SimpleSecCheck") -> str:
+    return render_legal_page("impressum", cfg, "en", app_name)
 
 
 def render_privacy_de(cfg: Dict[str, Any], app_name: str = "SimpleSecCheck") -> str:
-    if cfg.get("privacy_custom", "").strip():
-        return cfg["privacy_custom"].strip()
-
-    contact_email = cfg.get("privacy_contact_email") or cfg.get("email") or "privacy@example.com"
-    operator = cfg.get("company_name") or "Betreiber dieser Instanz"
-    hosting = cfg.get("hosting_provider") or "vom Betreiber (siehe Impressum)"
-    email_provider = cfg.get("email_provider") or "vom Betreiber konfigurierter SMTP-Dienst"
-
-    return f"""## Datenschutzerklärung
-
-### 1. Verantwortlicher
-
-{operator}
-
-Kontakt Datenschutz: {contact_email}
-
-### 2. Welche Daten wir verarbeiten
-
-Bei Nutzung von {app_name} können folgende personenbezogene Daten verarbeitet werden:
-
-- **Kontodaten** (E-Mail, Benutzername, Passwort-Hash) bei Registrierung/Login
-- **Sitzungsdaten** (technisch notwendige Cookies: `refresh_token`, `session_id`)
-- **Scan-Metadaten** (Ziele, Ergebnisse, die du einreichst)
-- **Server-Logs** (IP-Adresse, Zeitstempel, User-Agent) zur Sicherheit und Fehleranalyse
-
-### 3. Cookies
-
-Wir setzen **technisch notwendige Cookies** für Anmeldung und Gast-Sitzungen ein.
-Diese Cookies sind für den Betrieb erforderlich und benötigen nach gängiger Auslegung
-keine separate Einwilligung. Es werden keine Marketing- oder Tracking-Cookies eingesetzt.
-
-### 4. Registrierung & Vertragsschluss
-
-Bei Registrierung stimmst du den **Nutzungsbedingungen** zu. Die Verarbeitung deiner
-Kontodaten erfolgt zur Bereitstellung des Accounts (Art. 6 Abs. 1 lit. b DSGVO).
-
-### 5. Speicherdauer & Löschung
-
-- **Kontodaten:** bis zur Löschung deines Accounts oder auf Anfrage
-- **Server-Logs:** in der Regel 7–30 Tage (Sicherheit/Fehleranalyse)
-- **Scan-Ergebnisse:** solange du sie aufbewahrst bzw. bis du sie löschst
-
-Du kannst jederzeit die **Löschung deines Accounts** verlangen ({contact_email}).
-
-### 6. Auftragsverarbeiter (AVV)
-
-Sofern externe Dienstleister eingesetzt werden, werden diese nur im Rahmen von
-Auftragsverarbeitungsverträgen (Art. 28 DSGVO) genutzt, z. B.:
-
-- **Hosting:** {hosting}
-- **E-Mail-Versand:** {email_provider}
-
-Details zu Subprozessoren kannst du beim Verantwortlichen anfragen.
-
-### 7. Rechtsgrundlagen (DSGVO)
-
-- Art. 6 Abs. 1 lit. b DSGVO — Vertrag/Nutzungsverhältnis (Login, Scans)
-- Art. 6 Abs. 1 lit. f DSGVO — berechtigtes Interesse (Sicherheit, Logs)
-
-### 8. Deine Rechte
-
-Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit
-und Widerspruch. Beschwerden kannst du bei einer Datenschutz-Aufsichtsbehörde einreichen.
-
-### 9. Hosting
-
-Diese Instanz wird vom Betreiber selbst gehostet. Details im Impressum.
-
----
-
-_Vorlage — passe den Text an deinen konkreten Betrieb an (z. B. SMTP-Anbieter, Analytics)._
-"""
-
-
-def render_terms_de(cfg: Dict[str, Any], app_name: str = "SimpleSecCheck") -> str:
-    if cfg.get("terms_custom", "").strip():
-        return cfg["terms_custom"].strip()
-    operator = cfg.get("company_name") or "Betreiber"
-    contact = cfg.get("email") or "kontakt@example.de"
-    return f"""## Nutzungsbedingungen (AGB)
-
-Stand: bei Veröffentlichung auf dieser Instanz
-
-### 1. Geltungsbereich
-
-Diese Nutzungsbedingungen gelten für die Nutzung von **{app_name}**, betrieben durch
-**{operator}**. Mit Registrierung oder Login akzeptierst du diese Bedingungen.
-
-### 2. Leistungsbeschreibung
-
-{app_name} ist eine Security-Scanning-Plattform. Der Betreiber stellt die Software
-„wie besehen“ zur Verfügung und kann Funktionen, Limits oder Verfügbarkeit anpassen.
-
-### 3. Registrierung & Account
-
-- Du musst wahrheitsgemäße Angaben machen und deine Zugangsdaten geheim halten.
-- Du bist für alle Aktivitäten unter deinem Account verantwortlich.
-- Der Betreiber kann Accounts bei Missbrauch sperren oder löschen.
-
-### 4. Erlaubte Nutzung (Scanning)
-
-Du darfst **ausschließlich Systeme scannen, die dir gehören oder für die du
-ausdrückliche schriftliche Erlaubnis hast** (eigene Infrastruktur, autorisierte
-Pentests, Bug-Bounty innerhalb des Programms).
-
-**Untersagt** sind insbesondere:
-- Scans ohne Einwilligung des Betreibers des Zielsystems
-- Denial-of-Service, Datenzerstörung oder andere rechtswidrige Eingriffe
-- Umgehung von Rate-Limits, Sperren oder Sicherheitsmechanismen
-
-### 5. Pflichten des Nutzers
-
-- Einhaltung geltender Gesetze (u. a. StGB, DSGVO, CFAA-Äquivalente im Ausland)
-- Keine Weitergabe von Scan-Ergebnissen, die personenbezogene Daten Dritter enthalten,
-  ohne Rechtsgrundlage
-- Meldung erkannter Sicherheitslücken in der Plattform an {contact}
-
-### 6. Haftung
-
-Der Betreiber haftet unbeschränkt nur bei Vorsatz und grober Fahrlässigkeit.
-Für leichte Fahrlässigkeit haftet der Betreiber nur bei Verletzung wesentlicher
-Vertragspflichten, begrenzt auf vorhersehbare Schäden. Scan-Ergebnisse sind
-Hilfsmittel — du bleibst für die Bewertung und Nutzung verantwortlich.
-
-### 7. Verfügbarkeit & Änderungen
-
-Es gibt keinen Anspruch auf ununterbrochene Verfügbarkeit. Der Betreiber kann
-diese Bedingungen anpassen; wesentliche Änderungen werden auf der Website bekannt gegeben.
-
-### 8. Kündigung & Löschung
-
-Du kannst deinen Account jederzeit löschen lassen ({contact}).
-Der Betreiber kann das Nutzungsverhältnis bei schwerwiegendem Verstoß fristlos beenden.
-
-### 9. Datenschutz
-
-Es gilt die Datenschutzerklärung auf dieser Website (`/legal/privacy`).
-
-### 10. Schlussbestimmungen
-
-Es gilt deutsches Recht. Gerichtsstand ist — soweit zulässig — der Sitz des Betreibers.
-
----
-
-_Vorlage — für produktiven Betrieb mit echten Nutzern rechtlich prüfen lassen._
-"""
-
-
-def render_impressum_en(cfg: Dict[str, Any]) -> str:
-    if cfg.get("impressum_custom", "").strip():
-        return cfg["impressum_custom"].strip()
-
-    contact = _contact_block(cfg, "en")
-    responsible = cfg.get("legal_representative") or cfg.get("company_name") or "—"
-    return f"""## Legal Notice
-
-Information pursuant to applicable provider identification laws (e.g. TMG in Germany).
-
-{contact}
-
-### Responsible for content
-
-{responsible}
-
----
-
-_Template only — verify with qualified legal counsel for your jurisdiction._
-"""
+    return render_legal_page("privacy", cfg, "de", app_name)
 
 
 def render_privacy_en(cfg: Dict[str, Any], app_name: str = "SimpleSecCheck") -> str:
-    if cfg.get("privacy_custom", "").strip():
-        return cfg["privacy_custom"].strip()
+    return render_legal_page("privacy", cfg, "en", app_name)
 
-    contact_email = cfg.get("privacy_contact_email") or cfg.get("email") or "privacy@example.com"
-    operator = cfg.get("company_name") or "Operator of this instance"
-    hosting = cfg.get("hosting_provider") or "the operator (see legal notice)"
-    email_provider = cfg.get("email_provider") or "SMTP service configured by the operator"
 
-    return f"""## Privacy Policy
-
-### 1. Controller
-
-{operator}
-
-Privacy contact: {contact_email}
-
-### 2. Data we process
-
-When using {app_name}, we may process:
-
-- **Account data** (email, username, password hash) when you register or sign in
-- **Session data** (essential cookies: `refresh_token`, `session_id`)
-- **Scan metadata** (targets and results you submit)
-- **Server logs** (IP address, timestamps, user agent) for security and troubleshooting
-
-### 3. Cookies
-
-We use **strictly necessary cookies** for login and guest sessions. We do not use
-marketing or analytics cookies. Essential cookies are required for the service to function.
-
-### 4. Registration & contract
-
-By registering you accept the **terms of service**. Account data is processed to
-provide the service (GDPR Art. 6(1)(b) where applicable).
-
-### 5. Retention & deletion
-
-- **Account data:** until you delete your account or request deletion
-- **Server logs:** typically 7–30 days (security / operations)
-- **Scan results:** as long as you keep them or until you delete them
-
-You may request **account deletion** at any time: {contact_email}
-
-### 6. Processors (sub-processors)
-
-External providers, if any, are used under data processing agreements (GDPR Art. 28), e.g.:
-
-- **Hosting:** {hosting}
-- **Email delivery:** {email_provider}
-
-Contact the controller for an up-to-date list of sub-processors.
-
-### 7. Legal bases (GDPR)
-
-- Art. 6(1)(b) — performance of contract (login, scans)
-- Art. 6(1)(f) — legitimate interests (security, logs)
-
-### 8. Your rights
-
-You may have rights of access, rectification, erasure, restriction, portability, and
-objection. You may lodge a complaint with a supervisory authority.
-
-### 9. Hosting
-
-This instance is operated by the provider named in the legal notice.
-
----
-
-_Template — adapt to your hosting, email provider, and jurisdiction._
-"""
+def render_terms_de(cfg: Dict[str, Any], app_name: str = "SimpleSecCheck") -> str:
+    return render_legal_page("terms", cfg, "de", app_name)
 
 
 def render_terms_en(cfg: Dict[str, Any], app_name: str = "SimpleSecCheck") -> str:
-    if cfg.get("terms_custom", "").strip():
-        return cfg["terms_custom"].strip()
-    operator = cfg.get("company_name") or "Operator"
-    contact = cfg.get("email") or "contact@example.com"
-    return f"""## Terms of Service
-
-Effective when published on this instance.
-
-### 1. Scope
-
-These terms govern use of **{app_name}**, operated by **{operator}**.
-By registering or signing in you accept these terms.
-
-### 2. Service description
-
-{app_name} is a security scanning platform. The service is provided **as is**;
-features, limits, and availability may change.
-
-### 3. Registration & accounts
-
-- You must provide accurate information and keep credentials confidential.
-- You are responsible for activity under your account.
-- The operator may suspend or delete accounts for abuse.
-
-### 4. Permitted use (scanning)
-
-You may **only scan systems you own or have explicit written authorization to test**
-(own infrastructure, authorized pentests, in-scope bug bounty programs).
-
-**Prohibited** includes:
-- Scanning without the target owner's consent
-- Denial-of-service, data destruction, or other unlawful interference
-- Bypassing rate limits, blocks, or security controls
-
-### 5. User obligations
-
-- Comply with applicable laws
-- Do not share scan results containing third-party personal data without legal basis
-- Report platform security issues to {contact}
-
-### 6. Liability
-
-To the extent permitted by law, liability is limited for negligence; scan results are
-aids only — you remain responsible for evaluation and use.
-
-### 7. Availability & changes
-
-No guarantee of uninterrupted availability. Material changes to these terms will be
-announced on this site.
-
-### 8. Termination & deletion
-
-You may request account deletion at any time ({contact}).
-The operator may terminate for serious breach.
-
-### 9. Privacy
-
-The privacy policy at `/legal/privacy` applies.
-
-### 10. Governing law
-
-Applicable law is that of the operator's jurisdiction unless mandatory consumer
-protections require otherwise.
-
----
-
-_Template — have terms reviewed before production use with real users._
-"""
+    return render_legal_page("terms", cfg, "en", app_name)
 
 
 def build_legal_pages(cfg: Dict[str, Any], app_name: str = "SimpleSecCheck") -> Dict[str, Any]:
     """Build public legal page payloads."""
-    locale = (cfg.get("locale") or "de").lower()
-    pages: Dict[str, Any] = {}
-
-    if locale.startswith("de"):
-        pages["impressum"] = {"title": "Impressum", "content": render_impressum_de(cfg)}
-        pages["privacy"] = {"title": "Datenschutzerklärung", "content": render_privacy_de(cfg, app_name)}
-        if cfg.get("terms_enabled"):
-            pages["terms"] = {"title": "Nutzungsbedingungen", "content": render_terms_de(cfg, app_name)}
-    else:
-        pages["impressum"] = {"title": "Legal Notice", "content": render_impressum_en(cfg)}
-        pages["privacy"] = {"title": "Privacy Policy", "content": render_privacy_en(cfg, app_name)}
-        if cfg.get("terms_enabled"):
-            pages["terms"] = {"title": "Terms of Service", "content": render_terms_en(cfg, app_name)}
-
+    folder = legal_locale_folder(cfg.get("locale") or "de")
+    titles = PAGE_TITLES[folder]
+    pages: Dict[str, Any] = {
+        "impressum": {
+            "title": titles["impressum"],
+            "content": render_legal_page("impressum", cfg, cfg.get("locale") or "de", app_name),
+        },
+        "privacy": {
+            "title": titles["privacy"],
+            "content": render_legal_page("privacy", cfg, cfg.get("locale") or "de", app_name),
+        },
+    }
+    if cfg.get("terms_enabled"):
+        pages["terms"] = {
+            "title": titles["terms"],
+            "content": render_legal_page("terms", cfg, cfg.get("locale") or "de", app_name),
+        }
     return pages
 
 
 def build_footer_links(cfg: Dict[str, Any]) -> List[Dict[str, str]]:
     if not cfg.get("enabled"):
         return []
-    locale = (cfg.get("locale") or "de").lower()
+    folder = legal_locale_folder(cfg.get("locale") or "de")
+    titles = PAGE_TITLES[folder]
     links = [
-        {"slug": "impressum", "label": "Impressum" if locale.startswith("de") else "Legal Notice"},
-        {"slug": "privacy", "label": "Datenschutz" if locale.startswith("de") else "Privacy"},
+        {"slug": "impressum", "label": titles["impressum"]},
+        {"slug": "privacy", "label": titles["privacy"]},
     ]
     if cfg.get("terms_enabled"):
-        links.append({
-            "slug": "terms",
-            "label": "Nutzungsbedingungen" if locale.startswith("de") else "Terms",
-        })
+        links.append({"slug": "terms", "label": titles["terms"]})
     return links
 
 
@@ -494,18 +312,14 @@ def build_public_legal_response(
     cfg = normalize_legal_config(cfg, state_config)
     enabled = bool(cfg.get("enabled"))
     terms_on = bool(cfg.get("terms_enabled")) and enabled
+    folder = legal_locale_folder(cfg.get("locale") or "de")
     return {
         "enabled": enabled,
         "locale": cfg.get("locale", "de"),
         "terms_enabled": terms_on,
         "require_terms_acceptance": terms_on,
         "cookie_notice_enabled": bool(cfg.get("cookie_notice_enabled")) and enabled,
-        "cookie_notice_text": (
-            "Diese Website verwendet technisch notwendige Cookies für Anmeldung und "
-            "Sitzungsverwaltung. Details in der Datenschutzerklärung."
-            if (cfg.get("locale") or "de").startswith("de")
-            else "This site uses essential cookies for login and session management. See the privacy policy."
-        ),
+        "cookie_notice_text": COOKIE_NOTICE_TEXT[folder],
         "pages": build_legal_pages(cfg, app_name) if enabled else {},
         "footer_links": build_footer_links(cfg),
     }

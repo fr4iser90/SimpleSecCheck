@@ -167,7 +167,7 @@ button.primary {
 }
 
 /* Inputs */
-input, select {
+input, select, textarea {
   background: var(--glass-bg-main);
   border: 1px solid var(--glass-border-main);
   border-radius: 8px;
@@ -175,9 +175,17 @@ input, select {
   padding: 0.75rem;
   font-size: 1rem;
   width: 100%;
+  font-family: inherit;
+  box-sizing: border-box;
 }
 
-input:focus, select:focus {
+textarea {
+  min-height: 5rem;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: #667eea;
 }
@@ -684,6 +692,25 @@ input:focus, select:focus {
 .form-group input[type="checkbox"] {
   width: auto;
   margin-right: 0.5rem;
+}
+
+.form-group .form-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .form-row {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .radio-group {

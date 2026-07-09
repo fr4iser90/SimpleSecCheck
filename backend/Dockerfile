@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY shared/ /app/shared/
+COPY content/legal/ /app/content/legal/
 COPY backend/ /app/backend/
 
 # Non-root user; UID/GID matched to host via docker-entrypoint.sh (/project mount)

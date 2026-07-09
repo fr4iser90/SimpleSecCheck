@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
-import { useTranslation } from '../i18n'
+import { legalDocumentLanguage, t as translate } from '../i18n'
 
 export interface LegalFooterLink {
   slug: string
@@ -16,12 +16,6 @@ export interface LegalPublicConfig {
 }
 
 const COOKIE_DISMISS_KEY = 'ssc_cookie_notice_dismissed'
-
-const FOOTER_SLUG_KEYS: Record<string, string> = {
-  impressum: 'legal.footer.impressum',
-  privacy: 'legal.footer.privacy',
-  terms: 'legal.footer.terms',
-}
 
 export function useLegalConfig() {
   const [legal, setLegal] = useState<LegalPublicConfig | null>(null)
@@ -48,7 +42,8 @@ export function useLegalConfig() {
 }
 
 export function CookieNotice({ legal }: { legal: LegalPublicConfig | null }) {
-  const { t } = useTranslation()
+  const legalLang = legalDocumentLanguage(legal?.locale)
+  const legalT = (key: string) => translate(key, undefined, legalLang)
   const [dismissed, setDismissed] = useState(() => {
     try {
       return sessionStorage.getItem(COOKIE_DISMISS_KEY) === '1'
@@ -71,14 +66,14 @@ export function CookieNotice({ legal }: { legal: LegalPublicConfig | null }) {
   }
 
   return (
-    <div className="cookie-notice" role="region" aria-label={t('legal.cookieNoticeAria')}>
-      <p>{t('legal.cookieNoticeText')}</p>
+    <div className="cookie-notice" role="region" aria-label={legalT('legal.cookieNoticeAria')}>
+      <p>{legalT('legal.cookieNoticeText')}</p>
       <div className="cookie-notice__actions">
         <Link to="/legal/privacy" className="cookie-notice__link">
-          {t('legal.privacyLink')}
+          {legalT('legal.privacyLink')}
         </Link>
         <button type="button" className="cookie-notice__btn" onClick={dismiss}>
-          {t('legal.dismiss')}
+          {legalT('legal.dismiss')}
         </button>
       </div>
     </div>
@@ -86,8 +81,6 @@ export function CookieNotice({ legal }: { legal: LegalPublicConfig | null }) {
 }
 
 export default function LegalFooterLinks({ legal }: { legal: LegalPublicConfig | null }) {
-  const { t } = useTranslation()
-
   if (!legal?.enabled || !legal.footer_links?.length) {
     return null
   }
@@ -99,9 +92,7 @@ export default function LegalFooterLinks({ legal }: { legal: LegalPublicConfig |
           <span className="app-footer-minimal__sep" aria-hidden>
             ·
           </span>
-          <Link to={`/legal/${link.slug}`}>
-            {FOOTER_SLUG_KEYS[link.slug] ? t(FOOTER_SLUG_KEYS[link.slug]) : link.label}
-          </Link>
+          <Link to={`/legal/${link.slug}`}>{link.label}</Link>
         </span>
       ))}
     </>
