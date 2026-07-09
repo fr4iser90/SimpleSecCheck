@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import AdminPageShell from '../components/AdminPageShell'
 import AdminPanel from '../components/AdminPanel'
+import { useToast } from '../context/ToastContext'
 import { apiFetch } from '../utils/apiClient'
 
 interface User {
@@ -18,6 +19,7 @@ interface User {
 type ListFilter = 'all' | 'active' | 'pending'
 
 export default function UserManagementPage() {
+  const toast = useToast()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<ListFilter>('all')
@@ -65,13 +67,14 @@ export default function UserManagementPage() {
         setShowCreateModal(false)
         setFormData({ email: '', username: '', password: '', role: 'user' })
         loadUsers()
+        toast.success('User created')
       } else {
         const error = await response.json()
-        alert(error.detail || 'Failed to create user')
+        toast.error(error.detail || 'Failed to create user')
       }
     } catch (error) {
       console.error('Failed to create user:', error)
-      alert('Failed to create user')
+      toast.error('Failed to create user')
     }
   }
 
@@ -92,13 +95,14 @@ export default function UserManagementPage() {
         setEditingUser(null)
         setFormData({ email: '', username: '', password: '', role: 'user' })
         loadUsers()
+        toast.success('User updated')
       } else {
         const error = await response.json()
-        alert(error.detail || 'Failed to update user')
+        toast.error(error.detail || 'Failed to update user')
       }
     } catch (error) {
       console.error('Failed to update user:', error)
-      alert('Failed to update user')
+      toast.error('Failed to update user')
     }
   }
 
@@ -110,13 +114,14 @@ export default function UserManagementPage() {
       })
       if (response.ok) {
         loadUsers()
+        toast.success('User deleted')
       } else {
         const error = await response.json()
-        alert(error.detail || 'Failed to delete user')
+        toast.error(error.detail || 'Failed to delete user')
       }
     } catch (error) {
       console.error('Failed to delete user:', error)
-      alert('Failed to delete user')
+      toast.error('Failed to delete user')
     }
   }
 
@@ -129,13 +134,14 @@ export default function UserManagementPage() {
       })
       if (response.ok) {
         loadUsers()
+        toast.success('User activated')
       } else {
         const error = await response.json()
-        alert(error.detail || 'Failed to activate user')
+        toast.error(error.detail || 'Failed to activate user')
       }
     } catch (error) {
       console.error('Failed to activate user:', error)
-      alert('Failed to activate user')
+      toast.error('Failed to activate user')
     }
   }
 

@@ -1,4 +1,4 @@
-import { GITHUB_REPO, HAS_DONATE_LINK, SUPPORT_DONATE_URL } from '../constants/support'
+import { GITHUB_REPO, PAYPAL_DONATE_URL } from '../constants/support'
 import { formatEstimatedTime } from '../utils/timeUtils'
 
 interface AsideStep {
@@ -100,24 +100,22 @@ export default function ScanProgressAside({
         <p className="scan-progress-aside__text">
           Open source — donations help cover hosting and scanner infrastructure while your scan runs.
         </p>
+        <a
+          href={PAYPAL_DONATE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="scan-progress-aside__paypal-link"
+        >
+          Donate via PayPal
+        </a>
         <div className="scan-progress-aside__actions">
-          {HAS_DONATE_LINK ? (
-            <a
-              href={SUPPORT_DONATE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-primary scan-progress-aside__donate"
-            >
-              Donate
-            </a>
-          ) : null}
           <a
             href={GITHUB_REPO}
             target="_blank"
             rel="noopener noreferrer"
-            className={HAS_DONATE_LINK ? 'btn-secondary' : 'btn-primary'}
+            className="btn-primary"
           >
-            {HAS_DONATE_LINK ? 'Star on GitHub' : 'Support on GitHub'}
+            Support on GitHub
           </a>
         </div>
       </section>

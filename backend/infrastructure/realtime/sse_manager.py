@@ -38,18 +38,33 @@ async def sse_unsubscribe(user_id: str, q: asyncio.Queue) -> None:
             del _subscribers[user_id]
 
 
-async def sse_emit_envelope(user_id: str, envelope: Dict[str, Any]) -> None:
-    """Push one structured SSE envelope (`v`, `type`, `scope`, `payload`) to all connections for this user."""
-    async with _lock:
-        queues = list(_subscribers.get(user_id, []))
-    if not queues:
-        return
+def _put_envelope_on_queues(queues: List[asyncio.Queue], envelope: Dict[str, Any], label: str) -> None:
     for q in queues:
         try:
             q.put_nowait(envelope)
         except asyncio.QueueFull:
             logger.warning(
-                "SSE queue full for user %s, dropping event %s",
-                user_id,
+                "SSE queue full for %s, dropping event %s",
+                label,
                 envelope.get("type"),
             )
+
+
+async def sse_emit_envelope(subscriber_key: str, envelope: Dict[str, Any]) -> None:
+    """Push one envelope to all connections for this subscriber key (user_id or guest:session_id)."""
+    async with _lock:
+        queues = list(_subscribers.get(subscriber_key, []))
+    if not queues:
+        return
+    _put_envelope_on_queues(queues, envelope, subscriber_key)
+
+
+async def sse_broadcast_envelope(envelope: Dict[str, Any]) -> None:
+    """Push one envelope to every open SSE connection (e.g. public queue view)."""
+    async with _lock:
+        queues: List[asyncio.Queue] = []
+        for lst in _subscribers.values():
+            queues.extend(lst)
+    if not queues:
+        return
+    _put_envelope_on_queues(queues, envelope, "broadcast")

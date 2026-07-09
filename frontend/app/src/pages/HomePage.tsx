@@ -20,7 +20,12 @@ export default function HomePage() {
   const showBulkScan = (config?.features.bulk_scan ?? true) && (isAuthenticated || (config?.features.bulk_scan_allow_guests ?? false))
 
   const handleScanStart = (scanStatus: ScanStatusData) => {
-    navigate('/scan', { state: scanStatus })
+    const id = scanStatus.scan_id
+    if (id) {
+      navigate(`/scan?scan_id=${encodeURIComponent(id)}`, { state: scanStatus })
+    } else {
+      navigate('/scan', { state: scanStatus })
+    }
   }
 
   const handleBatchStart = (batchId: string) => {

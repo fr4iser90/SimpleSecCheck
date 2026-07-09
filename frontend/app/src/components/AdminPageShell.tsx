@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import PageHeader from './PageHeader'
 import PageCallout from './PageCallout'
+import { useToast } from '../context/ToastContext'
 
 interface AdminPageShellProps {
   title: string
@@ -27,22 +28,34 @@ export default function AdminPageShell({
   loadingText = 'Loading…',
   children,
 }: AdminPageShellProps) {
+  const toast = useToast()
+  const prevSuccess = useRef<string | null>(null)
+  const prevError = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (success && success !== prevSuccess.current) {
+      toast.success(success)
+      prevSuccess.current = success
+    } else if (!success) {
+      prevSuccess.current = null
+    }
+  }, [success, toast])
+
+  useEffect(() => {
+    if (error && error !== prevError.current) {
+      toast.error(error)
+      prevError.current = error
+    } else if (!error) {
+      prevError.current = null
+    }
+  }, [error, toast])
+
   return (
     <div className="container admin-page">
       <PageHeader title={title} subtitle={subtitle}>
         {actions}
       </PageHeader>
       {callout ? <PageCallout title={calloutTitle}>{callout}</PageCallout> : null}
-      {error && (
-        <div className="error-message" role="alert">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="success-message" role="alert">
-          {success}
-        </div>
-      )}
       {loading ? (
         <div className="panel">
           <div className="panel__body loading">{loadingText}</div>

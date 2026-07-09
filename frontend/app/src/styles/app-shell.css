@@ -350,8 +350,10 @@
 }
 
 .app-shell__page {
+  width: 100%;
+  max-width: var(--ds-page-max-width);
+  margin: 0 auto;
   padding: 1.75rem 2rem 2.5rem;
-  max-width: 1100px;
 }
 
 .app-shell__page--wide {

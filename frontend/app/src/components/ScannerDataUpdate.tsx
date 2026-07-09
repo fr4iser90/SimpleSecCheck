@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
+import { useToast } from '../context/ToastContext'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface UpdateStatus {
@@ -50,6 +51,7 @@ const badgeBase: CSSProperties = {
 }
 
 export default function ScannerDataUpdate() {
+  const toast = useToast()
   const { config } = useConfig()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
@@ -122,14 +124,15 @@ export default function ScannerDataUpdate() {
       )
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        alert(`Failed to start update: ${(error as { detail?: string }).detail || 'Unknown error'}`)
+        toast.error(`Failed to start update: ${(error as { detail?: string }).detail || 'Unknown error'}`)
         return
       }
       const data = await response.json()
       setStatus(data)
+      toast.success('Asset update started')
     } catch (err) {
       console.error('[ScannerDataUpdate] Error starting update:', err)
-      alert('Failed to start update. Check console for details.')
+      toast.error('Failed to start update. Check console for details.')
     }
   }
 
@@ -161,9 +164,9 @@ export default function ScannerDataUpdate() {
     const failCount = results.filter(r => !r.success).length
 
     if (failCount === 0) {
-      alert(`Started ${successCount} asset update(s).`)
+      toast.success(`Started ${successCount} asset update(s).`)
     } else {
-      alert(`Started ${successCount} update(s), ${failCount} failed. Check console.`)
+      toast.error(`Started ${successCount} update(s), ${failCount} failed. Check console.`)
     }
   }
 

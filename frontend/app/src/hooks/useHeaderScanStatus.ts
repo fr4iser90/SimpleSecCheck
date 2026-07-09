@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { SSE_ENVELOPE_EVENT, type SseEnvelope } from '../hooks/useGlobalSse'
-import { useAuth } from '../hooks/useAuth'
 import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
 
 export function useHeaderScanStatus(): ScanStatusState {
-  const { isAuthenticated } = useAuth()
   const [scanStatus, setScanStatus] = useState<ScanStatusState>({
     status: 'idle',
     scan_id: null,
@@ -75,31 +73,23 @@ export function useHeaderScanStatus(): ScanStatusState {
           started_at: d.started_at ?? null,
         })
       } catch (e) {
-        console.error('Scan status poll:', e)
+        console.error('Scan status refresh:', e)
       }
     }
 
     void tick()
 
-    if (!isAuthenticated) {
-      const iv = setInterval(tick, 30000)
-      return () => {
-        cancelled = true
-        clearInterval(iv)
-      }
-    }
-
     const onEnv = (e: Event) => {
       const env = (e as CustomEvent<SseEnvelope>).detail
       if (!env || env.v !== 1) return
-      if (env.type === 'scan_update' && env.scope === 'all') void tick()
+      if (env.type === 'scan_update' || env.type === 'queue_update') void tick()
     }
     window.addEventListener(SSE_ENVELOPE_EVENT, onEnv)
     return () => {
       cancelled = true
       window.removeEventListener(SSE_ENVELOPE_EVENT, onEnv)
     }
-  }, [isAuthenticated])
+  }, [])
 
   return scanStatus
 }

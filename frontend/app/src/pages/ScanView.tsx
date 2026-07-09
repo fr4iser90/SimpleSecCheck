@@ -7,10 +7,18 @@ import PageHeader from '../components/PageHeader'
 import ScanProgressAside from '../components/ScanProgressAside'
 import { SubstepSlot } from '../components/SubstepSlot'
 import { useWebSocket } from '../services/websocketService'
+import { SSE_ENVELOPE_EVENT, type SseEnvelope } from '../hooks/useGlobalSse'
 import { formatDuration, formatEstimatedTime, parseStepInstantMs } from '../utils/timeUtils'
 import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
 
 type ScanStatusData = ScanStatusState
+
+const TERMINAL_SCAN_STATUSES = new Set<ScanRunStatus>([
+  'completed',
+  'failed',
+  'cancelled',
+  'interrupted',
+])
 
 interface QueueStatus {
   queue_id: string
@@ -84,102 +92,132 @@ export default function ScanView() {
   /** Re-render every second while scan runs so step/substep durations tick */
   const [, setLiveTick] = useState(0)
 
-  // Check if scan_id is a queue_id (UUID format)
-  const isQueueId = (id: string | null): boolean => {
-    if (!id) return false
-    // UUID format: 8-4-4-4-12 hex characters
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    return uuidRegex.test(id)
-  }
-
-  // Poll queue status if scan_id is a queue_id (ALWAYS poll, not just when pending/idle!)
-  useEffect(() => {
-    if (status.scan_id && isQueueId(status.scan_id) && (status.status === 'pending' || status.status === 'idle' || status.status === 'running')) {
-      const fetchQueueStatus = async () => {
-        try {
-          const { apiFetch } = await import('../utils/apiClient')
-          const response = await apiFetch(`/api/queue/${status.scan_id}/status`)
-          if (response.ok) {
-            const data = await response.json()
-            setQueueStatus(data)
-            
-            if (data.status === 'running') {
-              setStatus((prev) => ({ ...prev, status: 'running' as ScanRunStatus }))
-            } else if (data.status === 'completed' && data.scan_id) {
-              setStatus((prev) => ({
-                ...prev,
-                status: 'completed',
-                scan_id: data.scan_id,
-                results_dir:
-                  data.results_dir ||
-                  data.scan_id ||
-                  prev.results_dir ||
-                  prev.scan_id,
-              }))
-            } else if (data.status === 'completed') {
-              setStatus((prev) => ({ ...prev, status: 'completed' }))
-            } else if (data.status === 'failed') {
-              setStatus((prev) => ({ ...prev, status: 'failed' }))
-            } else if (data.status === 'pending') {
-              setStatus((prev) => ({ ...prev, status: 'pending' }))
-            }
-          }
-        } catch (error) {
-          console.error('Failed to fetch queue status:', error)
-        }
-      }
-
-      fetchQueueStatus()
-      const interval = setInterval(fetchQueueStatus, 6000) // Poll every 6 seconds
-      return () => clearInterval(interval)
+  const fetchAndApplyScanStatus = useCallback(async (scanId: string): Promise<boolean> => {
+    try {
+      const { apiFetch } = await import('../utils/apiClient')
+      const response = await apiFetch(
+        `/api/v1/scans/${encodeURIComponent(scanId)}/status`,
+      )
+      if (!response.ok) return false
+      const data = await response.json()
+      const st = data.status as ScanRunStatus
+      setStatus((prev) => ({
+        ...prev,
+        scan_id: data.scan_id ?? scanId,
+        status: st,
+        started_at: data.started_at ?? prev.started_at,
+        results_dir:
+          st === 'completed'
+            ? prev.results_dir || data.scan_id || scanId
+            : prev.results_dir,
+      }))
+      return TERMINAL_SCAN_STATUSES.has(st)
+    } catch (error) {
+      console.error('Failed to fetch scan status:', error)
+      return false
     }
-  }, [status.scan_id, status.status])
+  }, [])
 
-  // Poll scan status if running (non-queue scan or after queue scan started)
-  useEffect(() => {
-    if (status.status === 'running' && status.scan_id && !isQueueId(status.scan_id)) {
-      const sid = status.scan_id
-      let intervalId: ReturnType<typeof setInterval> | null = null
-      const poll = async () => {
-        try {
-          const { apiFetch } = await import('../utils/apiClient')
-          const response = await apiFetch(
-            `/api/v1/scans/${encodeURIComponent(sid)}/status`
-          )
-          if (response.ok) {
-            const data = await response.json()
-            const st = data.status as ScanRunStatus
-            setStatus((prev) => ({
-              ...prev,
-              scan_id: data.scan_id ?? prev.scan_id,
-              status: st,
-              started_at: data.started_at ?? prev.started_at,
-              results_dir:
-                st === 'completed'
-                  ? prev.results_dir || data.scan_id || prev.scan_id
-                  : prev.results_dir,
-            }))
-            if (
-              ['completed', 'failed', 'cancelled', 'interrupted'].includes(
-                data.status
-              ) &&
-              intervalId != null
-            ) {
-              clearInterval(intervalId)
-              intervalId = null
-            }
-          }
-        } catch (error) {
-          console.error('Failed to fetch scan status:', error)
-        }
+  const fetchQueueStatusOnce = useCallback(async (queueScanId: string) => {
+    try {
+      const { apiFetch } = await import('../utils/apiClient')
+      const response = await apiFetch(`/api/queue/${queueScanId}/status`)
+      if (!response.ok) return
+      const data = await response.json()
+      setQueueStatus(data)
+
+      if (data.status === 'running') {
+        setStatus((prev) => ({ ...prev, status: 'running' as ScanRunStatus }))
+      } else if (data.status === 'completed') {
+        const resolvedId = data.scan_id || queueScanId
+        setStatus((prev) => ({
+          ...prev,
+          status: 'completed',
+          scan_id: resolvedId,
+          results_dir: data.results_dir || resolvedId || prev.results_dir,
+        }))
+      } else if (data.status === 'failed') {
+        setStatus((prev) => ({ ...prev, status: 'failed' }))
+      } else if (data.status === 'pending') {
+        setStatus((prev) => ({ ...prev, status: 'pending' }))
       }
-      void poll()
-      intervalId = setInterval(poll, 2000)
-      return () => {
-        if (intervalId != null) clearInterval(intervalId)
+    } catch (error) {
+      console.error('Failed to fetch queue status:', error)
+    }
+  }, [])
+
+  // Restore scan from ?scan_id= (refresh / deep link)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const queryScanId = params.get('scan_id')?.trim()
+    if (!queryScanId) return
+    setStatus((prev) => {
+      if (prev.scan_id === queryScanId && prev.status !== 'idle') return prev
+      return {
+        ...prev,
+        scan_id: queryScanId,
+        status: prev.status === 'idle' ? 'running' : prev.status,
+      }
+    })
+    void fetchAndApplyScanStatus(queryScanId)
+  }, [location.search, fetchAndApplyScanStatus])
+
+  // Keep scan_id in URL so refresh keeps the same scan
+  useEffect(() => {
+    if (!status.scan_id) return
+    const params = new URLSearchParams(location.search)
+    if (params.get('scan_id') === status.scan_id) return
+    params.set('scan_id', status.scan_id)
+    navigate(`${location.pathname}?${params.toString()}`, {
+      replace: true,
+      state: status,
+    })
+  }, [status.scan_id, status.status, location.pathname, location.search, navigate, status])
+
+  // Queue position: one REST fetch on pending + SSE push (no polling)
+  useEffect(() => {
+    if (!status.scan_id || status.status !== 'pending') return
+    void fetchQueueStatusOnce(status.scan_id)
+  }, [status.scan_id, status.status, fetchQueueStatusOnce])
+
+  // SSE: scan lifecycle + queue hints (all sessions — guest session_id cookie or user JWT)
+  useEffect(() => {
+    const scanId = status.scan_id
+    if (!scanId) return
+
+    const onSse = (e: Event) => {
+      const env = (e as CustomEvent<SseEnvelope>).detail
+      if (!env || env.v !== 1) return
+
+      const payload = env.payload
+
+      if (env.type === 'queue_update') {
+        const affected = payload.scan_id
+        if (affected == null || String(affected) === scanId) {
+          void fetchQueueStatusOnce(scanId)
+        }
+        return
+      }
+
+      if (env.type !== 'scan_update') return
+
+      const eventScanId = String(payload.scan_id ?? '')
+      if (eventScanId !== scanId) return
+
+      const st = String(payload.status ?? '')
+      if (st === 'completed' || st === 'failed' || st === 'cancelled') {
+        void fetchAndApplyScanStatus(scanId)
+      } else if (st === 'running') {
+        setStatus((prev) => ({ ...prev, status: 'running' as ScanRunStatus }))
+      } else if (st === 'pending') {
+        setStatus((prev) => ({ ...prev, status: 'pending' }))
+        void fetchQueueStatusOnce(scanId)
       }
     }
-  }, [status.status, status.scan_id])
+
+    window.addEventListener(SSE_ENVELOPE_EVENT, onSse)
+    return () => window.removeEventListener(SSE_ENVELOPE_EVENT, onSse)
+  }, [status.scan_id, fetchAndApplyScanStatus, fetchQueueStatusOnce])
 
   useEffect(() => {
     if (status.status !== 'running') return
@@ -344,7 +382,6 @@ export default function ScanView() {
   }, [status.scan_id, cancelLoading, navigate])
 
   const cancelButtonStyle = {
-    marginTop: '1.25rem',
     padding: '0.6rem 1.25rem',
     background: 'transparent',
     color: 'var(--text-muted, #adb5bd)',
@@ -432,12 +469,12 @@ export default function ScanView() {
             </div>
 
             {status.scan_id && (
-              <div style={{ textAlign: 'center', marginTop: '1.25rem' }}>
+              <div className="scan-progress-header__actions">
                 <button type="button" onClick={handleCancelScan} disabled={cancelLoading} style={cancelButtonStyle}>
                   {cancelLoading ? 'Cancelling…' : 'Cancel scan (leave queue)'}
                 </button>
                 {cancelError && (
-                  <div style={{ marginTop: '0.75rem', color: '#dc3545', fontSize: '0.875rem' }}>{cancelError}</div>
+                  <div style={{ color: '#dc3545', fontSize: '0.875rem' }}>{cancelError}</div>
                 )}
               </div>
             )}
@@ -455,7 +492,7 @@ export default function ScanView() {
   }
 
   // Show loading/running state with steps (Backend status: 'running' from both systems)
-  if (status.status === 'running' || (status.status === 'completed' && !status.results_dir)) {
+  if (status.status === 'running') {
     
     return (
       <div className="scan-progress-layout">
@@ -472,12 +509,12 @@ export default function ScanView() {
             </p>
           )}
           {status.scan_id && (
-            <div style={{ marginTop: '1rem' }}>
+            <div className="scan-progress-header__actions">
               <button type="button" onClick={handleCancelScan} disabled={cancelLoading} style={cancelButtonStyle}>
                 {cancelLoading ? 'Cancelling…' : 'Cancel scan'}
               </button>
               {cancelError && (
-                <div style={{ marginTop: '0.5rem', color: '#dc3545', fontSize: '0.875rem' }}>{cancelError}</div>
+                <div style={{ color: '#dc3545', fontSize: '0.875rem' }}>{cancelError}</div>
               )}
             </div>
           )}
@@ -574,46 +611,49 @@ export default function ScanView() {
                       }
                     }}
                   >
-                    {hasSubsteps && (
-                      <span
-                        className={`scan-step-card-chevron${expanded ? ' scan-step-card-chevron--open' : ''}`}
-                        aria-hidden
-                      >
-                        ▶
-                      </span>
-                    )}
-                    <span className="scan-step-card-emoji">{getStepIcon()}</span>
-                    <div className="scan-step-card-title-block">
-                      <div className="scan-step-card-step-num">Step {step.number}</div>
-                      <div className="scan-step-card-name">{step.name}</div>
-                    </div>
-                    {hasSubsteps && (
-                      <span className="scan-step-card-count" title="Completed substeps / total">
-                        {completedSubs}/{totalSubs}
-                      </span>
-                    )}
-                    {(() => {
-                      const elapsed = getStepElapsedSeconds(step)
-                      if (elapsed == null && step.timeout_seconds == null) return null
-                      return (
+                    <div className="scan-step-card-header__lead">
+                      {hasSubsteps && (
                         <span
-                          className="scan-step-card-duration"
-                          title={
-                            step.timeout_seconds != null
-                              ? elapsed != null
-                                ? `Elapsed / max: ${formatDuration(elapsed)} / ${formatDuration(step.timeout_seconds)}`
-                                : `Max duration: ${formatDuration(step.timeout_seconds)}`
-                              : elapsed != null
-                                ? `Elapsed: ${formatDuration(elapsed)}`
-                                : undefined
-                          }
+                          className={`scan-step-card-chevron${expanded ? ' scan-step-card-chevron--open' : ''}`}
+                          aria-hidden
                         >
-                          {elapsed != null && formatDuration(elapsed)}
-                          {elapsed != null && step.timeout_seconds != null && ' / '}
-                          {step.timeout_seconds != null && `max ${formatDuration(step.timeout_seconds)}`}
+                          ▶
                         </span>
-                      )
-                    })()}
+                      )}
+                      <span className="scan-step-card-emoji">{getStepIcon()}</span>
+                    </div>
+                    <div className="scan-step-card-header__body">
+                      <div className="scan-step-card-header__row">
+                        <span className="scan-step-card-step-num">Step {step.number}</span>
+                        {hasSubsteps && (
+                          <span className="scan-step-card-count" title="Completed substeps / total">
+                            {completedSubs}/{totalSubs}
+                          </span>
+                        )}
+                      </div>
+                      <div className="scan-step-card-name" title={step.name}>
+                        {step.name}
+                      </div>
+                      {(() => {
+                        const elapsed = getStepElapsedSeconds(step)
+                        if (elapsed == null && step.timeout_seconds == null) return null
+                        const durationTitle =
+                          step.timeout_seconds != null
+                            ? elapsed != null
+                              ? `Elapsed / max: ${formatDuration(elapsed)} / ${formatDuration(step.timeout_seconds)}`
+                              : `Max duration: ${formatDuration(step.timeout_seconds)}`
+                            : elapsed != null
+                              ? `Elapsed: ${formatDuration(elapsed)}`
+                              : undefined
+                        return (
+                          <div className="scan-step-card-duration" title={durationTitle}>
+                            {elapsed != null && formatDuration(elapsed)}
+                            {elapsed != null && step.timeout_seconds != null && ' · '}
+                            {step.timeout_seconds != null && `max ${formatDuration(step.timeout_seconds)}`}
+                          </div>
+                        )
+                      })()}
+                    </div>
                   </div>
                   {hasSubsteps && (
                     <div
@@ -771,7 +811,7 @@ export default function ScanView() {
     )
   }
 
-  if (status.status === 'completed' && status.results_dir) {
+  if (status.status === 'completed' && status.scan_id) {
     return (
       <div style={{ 
         position: 'relative',

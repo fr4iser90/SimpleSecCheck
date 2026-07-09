@@ -6,6 +6,7 @@ Handles the processing and storage of execution results including findings and r
 
 import json
 import logging
+import os
 from typing import Dict, List, Optional, Any, Union
 from pathlib import Path
 from datetime import datetime
@@ -14,6 +15,69 @@ from uuid import UUID
 from worker.domain.job_execution.entities.execution_result import ExecutionResult
 from worker.infrastructure.database_adapter import PostgreSQLAdapter
 from shared.scanner_duration_stats import apply_duration_sample, MAX_SAMPLES
+
+
+async def _load_scan_owner(
+    database_adapter: PostgreSQLAdapter, scan_id: str
+) -> tuple[Optional[str], Optional[str]]:
+    """Return (user_id, guest_session_id) for a scan."""
+    from sqlalchemy import text
+
+    async with database_adapter.get_session() as session:
+        row = await session.execute(
+            text("SELECT user_id, scan_metadata FROM scans WHERE id = :scan_id"),
+            {"scan_id": scan_id},
+        )
+        rec = row.mappings().first()
+        if not rec:
+            return None, None
+        uid = rec.get("user_id")
+        meta = rec.get("scan_metadata") or {}
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except json.JSONDecodeError:
+                meta = {}
+        gsid = meta.get("session_id") if isinstance(meta, dict) else None
+        return (str(uid) if uid else None, str(gsid) if gsid else None)
+
+
+async def _publish_scan_events(
+    *,
+    scan_id: str,
+    status: str,
+    user_id: Optional[str],
+    guest_session_id: Optional[str],
+    logger: logging.Logger,
+) -> None:
+    """Notify API SSE bridge via Redis scan_events (same channel as orchestrator)."""
+    try:
+        import redis.asyncio as redis_async
+
+        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+        client = redis_async.from_url(redis_url, decode_responses=True)
+        if status == "completed":
+            event_type = "scan_completed"
+        elif status == "failed":
+            event_type = "scan_failed"
+        elif status == "running":
+            event_type = "scan_running"
+        else:
+            event_type = f"scan_{status}"
+        payload = json.dumps(
+            {
+                "type": event_type,
+                "scan_id": scan_id,
+                "status": status,
+                "user_id": user_id,
+                "guest_session_id": guest_session_id,
+            }
+        )
+        await client.publish("scan_events", payload)
+        await client.aclose()
+        logger.info("Published scan_events %s for scan %s", event_type, scan_id)
+    except Exception as exc:
+        logger.warning("Failed to publish scan_events for %s: %s", scan_id, exc)
 
 
 async def _record_scanner_duration_sample(session, scanner_name: str, duration_sec: int, now: datetime) -> None:
@@ -222,8 +286,17 @@ async def update_scan_status_to_running(database_adapter: PostgreSQLAdapter, sca
                 }
             )
             await session.commit()
-            
+
             logger.info(f"Updated scan {scan_id} status to running")
+
+            user_id, guest_session_id = await _load_scan_owner(database_adapter, scan_id)
+            await _publish_scan_events(
+                scan_id=scan_id,
+                status="running",
+                user_id=user_id,
+                guest_session_id=guest_session_id,
+                logger=logger,
+            )
             
     except Exception as e:
         logger = logging.getLogger(__name__)
@@ -494,11 +567,23 @@ class ResultProcessingService:
                         self.logger.info(f"Updated scanner_duration_stats for {len(scan_results)} tool(s) from scan {scan_id}")
                     except Exception as stats_err:
                         self.logger.warning(f"Failed to update scanner_duration_stats: {stats_err}")
-                
+
+                user_id, guest_session_id = await _load_scan_owner(
+                    self.database_adapter, scan_id
+                )
+
                 self.logger.info(
                     f"Updated scan {scan_id} status to {status} "
                     f"(total_vuln={vuln_counts['total_vulnerabilities']}, duration={duration_seconds}s)"
                 )
+
+            await _publish_scan_events(
+                scan_id=scan_id,
+                status=status,
+                user_id=user_id,
+                guest_session_id=guest_session_id,
+                logger=self.logger,
+            )
             
         except Exception as e:
             self.logger.error(f"Error updating scan status: {e}")

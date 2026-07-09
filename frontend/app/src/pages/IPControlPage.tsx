@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import AdminPageShell from '../components/AdminPageShell'
 import AdminPanel from '../components/AdminPanel'
+import { useToast } from '../context/ToastContext'
 import { apiFetch } from '../utils/apiClient'
 
 interface BlockedIP {
@@ -19,6 +20,7 @@ interface SuspiciousActivity {
 }
 
 export default function IPControlPage() {
+  const toast = useToast()
   const [blockedIPs, setBlockedIPs] = useState<BlockedIP[]>([])
   const [suspicious, setSuspicious] = useState<SuspiciousActivity[]>([])
   const [statistics, setStatistics] = useState({ total_blocked: 0, total_activity_24h: 0 })
@@ -65,13 +67,14 @@ export default function IPControlPage() {
         setShowBlockModal(false)
         setBlockForm({ ip_address: '', reason: 'manual', expires_at: '' })
         loadData()
+        toast.success(`Blocked ${blockForm.ip_address}`)
       } else {
         const error = await response.json()
-        alert(error.detail || 'Failed to block IP')
+        toast.error(error.detail || 'Failed to block IP')
       }
     } catch (error) {
       console.error('Failed to block IP:', error)
-      alert('Failed to block IP')
+      toast.error('Failed to block IP')
     }
   }
 
@@ -83,13 +86,14 @@ export default function IPControlPage() {
       })
       if (response.ok) {
         loadData()
+        toast.success(`Unblocked ${ip}`)
       } else {
         const error = await response.json()
-        alert(error.detail || 'Failed to unblock IP')
+        toast.error(error.detail || 'Failed to unblock IP')
       }
     } catch (error) {
       console.error('Failed to unblock IP:', error)
-      alert('Failed to unblock IP')
+      toast.error('Failed to unblock IP')
     }
   }
 

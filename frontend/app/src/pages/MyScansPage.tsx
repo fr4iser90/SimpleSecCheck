@@ -4,8 +4,7 @@ import PageHeader from '../components/PageHeader'
 import AdminPanel from '../components/AdminPanel'
 import RefreshToolbar from '../components/RefreshToolbar'
 import { useConfig } from '../hooks/useConfig'
-import { useAutoRefresh } from '../hooks/useAutoRefresh'
-import { POLL_MY_SCANS_MS } from '../constants/polling'
+import { useSseRefresh } from '../hooks/useSseRefresh'
 import { formatEstimatedTime, formatDuration, formatQueuePosition } from '../utils/timeUtils'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
 
@@ -147,10 +146,29 @@ export default function MyScansPage() {
     }
   }, [])
 
-  const { autoRefresh, setAutoRefresh, refresh, isRefreshing, initialLoad, lastUpdated } = useAutoRefresh(
-    loadScans,
-    { intervalMs: POLL_MY_SCANS_MS }
-  )
+  const [autoRefresh] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [initialLoad, setInitialLoad] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) setIsRefreshing(true)
+    try {
+      await loadScans({ silent })
+      setLastUpdated(new Date())
+    } finally {
+      setIsRefreshing(false)
+      setInitialLoad(false)
+    }
+  }, [loadScans])
+
+  useSseRefresh(['scan_update', 'queue_update'], () => {
+    void refresh(true)
+  })
+
+  useEffect(() => {
+    void refresh(false)
+  }, [refresh])
 
   const sortedScans = useMemo(() => {
     if (!scansData?.scans.length) return []
@@ -273,14 +291,17 @@ export default function MyScansPage() {
             type="button"
             className="btn-primary"
             onClick={() => {
-              navigate('/scan', {
-                state: {
-                  status: item.status,
-                  scan_id: item.scan_id || item.queue_id,
-                  results_dir: item.status === 'completed' && item.scan_id ? item.scan_id : null,
-                  started_at: item.started_at || null,
-                },
-              })
+              const sid = item.scan_id || item.queue_id
+              const scanState = {
+                status: item.status,
+                scan_id: sid,
+                results_dir: item.status === 'completed' && item.scan_id ? item.scan_id : null,
+                started_at: item.started_at || null,
+              }
+              navigate(
+                sid ? `/scan?scan_id=${encodeURIComponent(sid)}` : '/scan',
+                { state: scanState },
+              )
             }}
             title="View steps and progress"
           >
@@ -326,11 +347,10 @@ export default function MyScansPage() {
       <PageHeader title="My Scans" subtitle="Your scan requests in the queue">
         <RefreshToolbar
           autoRefresh={autoRefresh}
-          onAutoRefreshChange={setAutoRefresh}
-          onRefresh={refresh}
+          onAutoRefreshChange={() => {}}
+          onRefresh={() => void refresh(false)}
           isRefreshing={isRefreshing}
           lastUpdated={lastUpdated}
-          intervalMs={POLL_MY_SCANS_MS}
         />
       </PageHeader>
 

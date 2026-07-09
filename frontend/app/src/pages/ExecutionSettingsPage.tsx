@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import AdminPageShell from '../components/AdminPageShell'
 import AppIcon from '../components/AppIcon'
+import { useToast } from '../context/ToastContext'
 import { POLL_ADMIN_EXECUTION_MS } from '../constants/polling'
 import { apiFetch } from '../utils/apiClient'
 
@@ -58,10 +59,10 @@ const STRATEGIES = [
 ] as const
 
 export default function ExecutionSettingsPage() {
+  const toast = useToast()
   const [maxConcurrentJobs, setMaxConcurrentJobs] = useState(3)
   const [jobsLoading, setJobsLoading] = useState(true)
   const [jobsSaving, setJobsSaving] = useState(false)
-  const [jobsSuccess, setJobsSuccess] = useState<string | null>(null)
 
   const [queueConfig, setQueueConfig] = useState<QueueConfig>({
     queue_strategy: 'fifo',
@@ -71,7 +72,6 @@ export default function ExecutionSettingsPage() {
   })
   const [queueLoading, setQueueLoading] = useState(true)
   const [queueSaving, setQueueSaving] = useState(false)
-  const [queueSuccess, setQueueSuccess] = useState<string | null>(null)
 
   const [error, setError] = useState<string | null>(null)
   const [overview, setOverview] = useState<QueueOverview | null>(null)
@@ -79,7 +79,6 @@ export default function ExecutionSettingsPage() {
 
   const [enforceLoading, setEnforceLoading] = useState(true)
   const [enforceSaving, setEnforceSaving] = useState(false)
-  const [enforceSuccess, setEnforceSuccess] = useState<string | null>(null)
   const [enforceForm, setEnforceForm] = useState({
     max_scans_per_hour_global: '',
     max_scans_per_hour_per_user: '',
@@ -93,7 +92,6 @@ export default function ExecutionSettingsPage() {
 
   const [scanDefaultsLoading, setScanDefaultsLoading] = useState(true)
   const [scanDefaultsSaving, setScanDefaultsSaving] = useState(false)
-  const [scanDefaultsSuccess, setScanDefaultsSuccess] = useState<string | null>(null)
   const [scanProfileCatalog, setScanProfileCatalog] = useState<string[]>([])
   const [scanDefaultsForm, setScanDefaultsForm] = useState<ScanDefaultsFormState>({
     default_finding_policy_path: '.scanning/finding-policy.json',
@@ -226,7 +224,6 @@ export default function ExecutionSettingsPage() {
   const saveJobs = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    setJobsSuccess(null)
     setJobsSaving(true)
     try {
       const response = await apiFetch('/api/admin/config/worker-jobs', {
@@ -238,7 +235,7 @@ export default function ExecutionSettingsPage() {
         const err = await response.json().catch(() => ({}))
         throw new Error(err.detail || 'Failed to save')
       }
-      setJobsSuccess(
+      toast.success(
         'Saved. Restart the worker container for this to take effect unless MAX_CONCURRENT_JOBS is set in the environment (env overrides DB).',
       )
       await loadJobs()
@@ -252,7 +249,6 @@ export default function ExecutionSettingsPage() {
   const saveQueue = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    setQueueSuccess(null)
     setQueueSaving(true)
     try {
       const response = await apiFetch('/api/admin/config/queue', {
@@ -264,7 +260,7 @@ export default function ExecutionSettingsPage() {
         const err = await response.json().catch(() => ({}))
         throw new Error(err.detail || 'Failed to save queue configuration')
       }
-      setQueueSuccess('Queue settings saved. Worker uses the new strategy on next dequeue.')
+      toast.success('Queue settings saved. Worker uses the new strategy on next dequeue.')
       await loadQueue()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save')
@@ -283,7 +279,6 @@ export default function ExecutionSettingsPage() {
   const saveEnforcement = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    setEnforceSuccess(null)
     setEnforceSaving(true)
     try {
       const maxWall = parseInt(enforceForm.max_scan_duration_seconds, 10)
@@ -315,7 +310,7 @@ export default function ExecutionSettingsPage() {
         const err = await response.json().catch(() => ({}))
         throw new Error((err as { detail?: string }).detail || 'Failed to save')
       }
-      setEnforceSuccess(
+      toast.success(
         'Saved. Rate limits apply on new scan submissions. Max duration applies to new queue jobs (worker wall-clock wait).',
       )
       await loadEnforcement()
@@ -329,7 +324,6 @@ export default function ExecutionSettingsPage() {
   const saveScanDefaults = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    setScanDefaultsSuccess(null)
     setScanDefaultsSaving(true)
     try {
       const r = await apiFetch('/api/admin/config/scan-defaults', {
@@ -341,7 +335,7 @@ export default function ExecutionSettingsPage() {
         const err = await r.json().catch(() => ({}))
         throw new Error((err as { detail?: string }).detail || 'Failed to save')
       }
-      setScanDefaultsSuccess('Saved. New scans use these server defaults (policy + role-based scan profile).')
+      toast.success('Saved. New scans use these server defaults (policy + role-based scan profile).')
       await loadScanDefaults()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save scan defaults')
@@ -517,11 +511,6 @@ export default function ExecutionSettingsPage() {
                 Range 1–50. Same value as in setup wizard; change here anytime.
               </small>
             </div>
-            {jobsSuccess && (
-              <div className="success-message" role="status" style={{ marginTop: '0.75rem' }}>
-                {jobsSuccess}
-              </div>
-            )}
             <div style={{ marginTop: '1rem' }}>
               <button type="submit" className="btn-primary" disabled={jobsSaving}>
                 {jobsSaving ? 'Saving…' : 'Save parallel scans'}
@@ -610,11 +599,6 @@ export default function ExecutionSettingsPage() {
                 }
               />
             </div>
-            {queueSuccess && (
-              <div className="success-message" role="status" style={{ marginTop: '0.75rem' }}>
-                {queueSuccess}
-              </div>
-            )}
             <div style={{ marginTop: '1rem' }}>
               <button type="submit" className="btn-primary" disabled={queueSaving}>
                 {queueSaving ? 'Saving…' : 'Save queue settings'}
@@ -740,11 +724,6 @@ export default function ExecutionSettingsPage() {
                   Apply hourly / concurrent limits to admins too
                 </label>
               </div>
-              {enforceSuccess && (
-                <div className="success-message" role="status" style={{ marginTop: '0.75rem' }}>
-                  {enforceSuccess}
-                </div>
-              )}
               <div style={{ marginTop: '1rem' }}>
                 <button type="submit" className="btn-primary" disabled={enforceSaving}>
                   {enforceSaving ? 'Saving…' : 'Save enforcement limits'}
@@ -909,11 +888,6 @@ export default function ExecutionSettingsPage() {
               {!hasProfileCatalog && (
                 <div className="error-message" role="alert" style={{ marginTop: '0.75rem' }}>
                   No scan profiles available from scanner manifests. Please check scanner discovery and plugin manifests.
-                </div>
-              )}
-              {scanDefaultsSuccess && (
-                <div className="success-message" role="status" style={{ marginTop: '0.75rem' }}>
-                  {scanDefaultsSuccess}
                 </div>
               )}
               <div style={{ marginTop: '1rem' }}>

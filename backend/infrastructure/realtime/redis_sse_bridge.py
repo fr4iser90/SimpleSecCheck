@@ -43,55 +43,102 @@ async def _list_revision_for_sse(user_id: str) -> str:
     return rev
 
 
-async def _user_id_for_scan_event(data: Dict[str, Any]) -> Optional[str]:
-    uid = data.get("user_id")
-    if uid:
-        return str(uid)
+async def _guest_session_id_for_scan(scan_id: str) -> Optional[str]:
+    try:
+        from infrastructure.container import get_scan_repository
+
+        repo = get_scan_repository()
+        scan = await repo.get_by_id(str(scan_id))
+        if not scan:
+            return None
+        meta = getattr(scan, "scan_metadata", None) or {}
+        if isinstance(meta, dict):
+            gsid = meta.get("session_id")
+            return str(gsid) if gsid else None
+    except Exception:
+        logger.debug("SSE bridge: guest session lookup failed", exc_info=True)
+    return None
+
+
+async def _recipient_keys_for_scan_event(data: Dict[str, Any]) -> list[str]:
+    """Resolve SSE subscriber keys (user_id and/or guest:session_id) for a scan_events payload."""
+    from infrastructure.realtime.sse_notify import GUEST_SSE_PREFIX, sse_subscriber_key
+
+    user_id = data.get("user_id")
+    guest_session_id = data.get("guest_session_id")
+    if user_id or guest_session_id:
+        key = sse_subscriber_key(
+            str(user_id) if user_id else None,
+            str(guest_session_id) if guest_session_id else None,
+        )
+        return [key] if key else []
+
     scan_id = data.get("scan_id")
     if not scan_id:
-        return None
+        return []
+
+    keys: list[str] = []
     try:
         from infrastructure.container import get_scan_repository
 
         repo = get_scan_repository()
         scan = await repo.get_by_id(str(scan_id))
         if scan and getattr(scan, "user_id", None):
-            return str(scan.user_id)
+            keys.append(str(scan.user_id))
+        gsid = await _guest_session_id_for_scan(str(scan_id))
+        guest_key = sse_subscriber_key(None, gsid)
+        if guest_key and guest_key not in keys:
+            keys.append(guest_key)
     except Exception:
-        logger.debug("SSE bridge: lookup user_id for scan failed", exc_info=True)
-    return None
+        logger.debug("SSE bridge: scan owner lookup failed", exc_info=True)
+    return keys
 
 
 async def _deliver_scan_event_payload(data: Dict[str, Any]) -> None:
-    """Resolve user, compute revision, emit to SSE — same behaviour as before."""
-    from infrastructure.realtime.sse_notify import make_envelope, sse_emit_envelope
+    """Resolve owners, emit scan_update to each, broadcast queue_update."""
+    from infrastructure.realtime.sse_notify import (
+        make_envelope,
+        sse_emit_envelope,
+        sse_notify_queue_changed,
+    )
 
-    user_id = await _user_id_for_scan_event(data)
-    if not user_id:
+    recipient_keys = await _recipient_keys_for_scan_event(data)
+    if not recipient_keys:
         logger.warning(
-            "SSE Redis bridge: drop scan_events message (no user_id): scan_id=%s type=%s",
+            "SSE Redis bridge: drop scan_events message (no recipient): scan_id=%s type=%s",
             data.get("scan_id"),
             data.get("type"),
         )
         return
-    try:
-        list_rev = await _list_revision_for_sse(user_id)
-    except Exception:
-        logger.exception("SSE Redis bridge: list revision failed for user %s", user_id)
-        list_rev = ""
-    await sse_emit_envelope(
-        user_id,
-        make_envelope(
-            "scan_update",
-            "all",
-            {
-                "source": "redis",
-                "event_type": data.get("type", "scan_event"),
-                "scan_id": data.get("scan_id"),
-                "status": data.get("status"),
-                "list_revision": list_rev,
-            },
-        ),
+
+    list_rev = ""
+    primary_user = data.get("user_id")
+    if not primary_user and recipient_keys and not recipient_keys[0].startswith("guest:"):
+        primary_user = recipient_keys[0]
+    if primary_user and not str(primary_user).startswith("guest:"):
+        try:
+            list_rev = await _list_revision_for_sse(str(primary_user))
+        except Exception:
+            logger.exception("SSE Redis bridge: list revision failed for user %s", primary_user)
+            list_rev = ""
+
+    envelope = make_envelope(
+        "scan_update",
+        "all",
+        {
+            "source": "redis",
+            "event_type": data.get("type", "scan_event"),
+            "scan_id": data.get("scan_id"),
+            "status": data.get("status"),
+            "list_revision": list_rev,
+        },
+    )
+    for key in recipient_keys:
+        await sse_emit_envelope(key, envelope)
+
+    await sse_notify_queue_changed(
+        reason=str(data.get("type") or data.get("status") or "updated"),
+        scan_id=str(data.get("scan_id")) if data.get("scan_id") else None,
     )
 
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import AdminPageShell from '../components/AdminPageShell'
 import AdminPanel from '../components/AdminPanel'
+import { useToast } from '../context/ToastContext'
 import { POLL_ADMIN_SCANNER_MS } from '../constants/polling'
 import { apiFetch } from '../utils/apiClient'
 
@@ -31,6 +32,7 @@ interface ScannerStatus {
 }
 
 export default function ScannerManagementPage() {
+  const toast = useToast()
   const [status, setStatus] = useState<ScannerStatus | null>(null)
   const [registry, setRegistry] = useState<RegistryScanner[]>([])
   const [loading, setLoading] = useState(true)
@@ -77,15 +79,15 @@ export default function ScannerManagementPage() {
       const response = await apiFetch(endpoint, { method: 'POST' })
       if (response.ok) {
         const data = await response.json()
-        alert(data.message || `${action} successful`)
+        toast.success(data.message || `${action} successful`)
         loadStatus()
       } else {
         const error = await response.json()
-        alert(error.detail || `Failed to ${action}`)
+        toast.error(error.detail || `Failed to ${action}`)
       }
     } catch (error) {
       console.error(`Failed to ${action}:`, error)
-      alert(`Failed to ${action}`)
+      toast.error(`Failed to ${action}`)
     } finally {
       setActionLoading(null)
     }

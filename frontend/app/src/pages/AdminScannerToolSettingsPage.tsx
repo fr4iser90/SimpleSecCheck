@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminPageShell from '../components/AdminPageShell'
 import AdminPanel from '../components/AdminPanel'
+import { useToast } from '../context/ToastContext'
 import { apiFetch } from '../utils/apiClient'
 
 interface ScannerRow {
@@ -19,6 +20,7 @@ interface ScannerRow {
 }
 
 export default function AdminScannerToolSettingsPage() {
+  const toast = useToast()
   const [items, setItems] = useState<ScannerRow[]>([])
   const [help, setHelp] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
@@ -102,6 +104,7 @@ export default function AdminScannerToolSettingsPage() {
       if (!res.ok) throw new Error(await res.text())
       setEditing(null)
       await load()
+      toast.success('Scanner tool settings saved')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
     } finally {
@@ -116,6 +119,7 @@ export default function AdminScannerToolSettingsPage() {
       const res = await apiFetch(`/api/admin/scanner-tool-settings/${enc}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(await res.text())
       await load()
+      toast.success(`Cleared overrides for ${key}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed')
     }

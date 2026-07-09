@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { useAuth } from './useAuth'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 /** Raw SSE envelope from `event: ssc` (detail = full object). */
@@ -13,20 +12,13 @@ export type SseEnvelope = {
 }
 
 /**
- * One EventSource per signed-in user (cookies + same origin).
+ * One EventSource per browser session (user JWT or guest session_id cookie).
  * All server messages use `event: ssc` with JSON body `{ v, type, scope, payload }`.
  */
 export function useGlobalSse(): void {
-  const { isAuthenticated } = useAuth()
   const esRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      esRef.current?.close()
-      esRef.current = null
-      return
-    }
-
     const url = resolveApiUrl('/api/v1/events/stream')
     const es = new EventSource(url, { withCredentials: true })
     esRef.current = es
@@ -48,5 +40,5 @@ export function useGlobalSse(): void {
       es.close()
       esRef.current = null
     }
-  }, [isAuthenticated])
+  }, [])
 }

@@ -472,10 +472,18 @@ async def create_scan(
             ),
         )
 
-        if actor_context.user_id:
-            from infrastructure.realtime.sse_notify import sse_notify_scan
+        if actor_context.user_id or actor_context.session_id:
+            from infrastructure.realtime.sse_notify import sse_notify_queue_changed, sse_notify_scan
 
-            await sse_notify_scan(actor_context.user_id, scan_dto.id, scan_dto.status)
+            await sse_notify_scan(
+                actor_context.user_id if actor_context.is_authenticated else None,
+                scan_dto.id,
+                scan_dto.status,
+                guest_session_id=(
+                    actor_context.session_id if not actor_context.is_authenticated else None
+                ),
+            )
+            await sse_notify_queue_changed(reason="created", scan_id=scan_dto.id)
 
         return await scan_dto_to_response(scan_dto)
         
@@ -1236,10 +1244,18 @@ async def cancel_scan(
         
         scan_dto = await scan_service.cancel_scan(cancel_dto)
 
-        if actor_context.user_id:
-            from infrastructure.realtime.sse_notify import sse_notify_scan
+        if actor_context.user_id or actor_context.session_id:
+            from infrastructure.realtime.sse_notify import sse_notify_queue_changed, sse_notify_scan
 
-            await sse_notify_scan(actor_context.user_id, scan_dto.id, scan_dto.status)
+            await sse_notify_scan(
+                actor_context.user_id if actor_context.is_authenticated else None,
+                scan_dto.id,
+                scan_dto.status,
+                guest_session_id=(
+                    actor_context.session_id if not actor_context.is_authenticated else None
+                ),
+            )
+            await sse_notify_queue_changed(reason="cancelled", scan_id=scan_dto.id)
 
         return await scan_dto_to_response(scan_dto)
 

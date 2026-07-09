@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './hooks/useAuth'
+import { ToastProvider } from './context/ToastContext'
 import BootstrapLoader, { SetupStatus } from './components/BootstrapLoader'
 import MainLayout from './components/MainLayout'
 import { ProtectedRoute, AdminRoute } from './components/RouteGuards'
@@ -316,12 +317,14 @@ function AppContent() {
     <BootstrapLoader>
       {(setupStatus) => (
         <BrowserRouter>
-          <div className="app">
-            <div className="app__body">
-              <AppRoutes setupStatus={setupStatus} />
+          <ToastProvider>
+            <div className="app">
+              <div className="app__body">
+                <AppRoutes setupStatus={setupStatus} />
+              </div>
+              {setupStatus.setup_complete ? <LegalCookieNotice /> : null}
             </div>
-            {setupStatus.setup_complete ? <LegalCookieNotice /> : null}
-          </div>
+          </ToastProvider>
         </BrowserRouter>
       )}
     </BootstrapLoader>

@@ -1,10 +1,9 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import RefreshToolbar from '../components/RefreshToolbar'
 import { useConfig } from '../hooks/useConfig'
-import { useAutoRefresh } from '../hooks/useAutoRefresh'
-import { POLL_QUEUE_MS } from '../constants/polling'
+import { useSseRefresh } from '../hooks/useSseRefresh'
 import { formatQueuePosition } from '../utils/timeUtils'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
 
@@ -73,10 +72,29 @@ export default function QueueView() {
     }
   }, [])
 
-  const { autoRefresh, setAutoRefresh, refresh, isRefreshing, initialLoad, lastUpdated } = useAutoRefresh(
-    fetchQueue,
-    { intervalMs: POLL_QUEUE_MS }
-  )
+  const [autoRefresh] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [initialLoad, setInitialLoad] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) setIsRefreshing(true)
+    try {
+      await fetchQueue({ silent })
+      setLastUpdated(new Date())
+    } finally {
+      setIsRefreshing(false)
+      setInitialLoad(false)
+    }
+  }, [fetchQueue])
+
+  useSseRefresh(['queue_update', 'scan_update'], () => {
+    void refresh(true)
+  })
+
+  useEffect(() => {
+    void refresh(false)
+  }, [refresh])
 
   return (
     <div className="container">
@@ -91,11 +109,10 @@ export default function QueueView() {
       >
         <RefreshToolbar
           autoRefresh={autoRefresh}
-          onAutoRefreshChange={setAutoRefresh}
-          onRefresh={refresh}
+          onAutoRefreshChange={() => {}}
+          onRefresh={() => void refresh(false)}
           isRefreshing={isRefreshing}
           lastUpdated={lastUpdated}
-          intervalMs={POLL_QUEUE_MS}
         />
       </PageHeader>
 
