@@ -23,7 +23,7 @@ Authoritative **tool names and categories**: [TOOLS.md](TOOLS.md). **Technical p
 | Secrets | `detect_secrets`, `gitleaks`, `trufflehog` |
 | Containers / infra / IaC | `anchore`, `checkov`, `clair`, `docker_bench`, `kube_bench`, `kube_hunter`, `trivy` |
 | Web / DAST | `burp`, `nikto`, `nuclei`, `wapiti`, `zap` |
-| Mobile / extra | `android`, `ios`, `ios_plist` |
+| Mobile / extra | `android`, `ios`, `ios_plist`, `baas_rules` |
 | Internal test | `test` |
 
 Roadmap items below are **not** “implement Semgrep again”—those scanners are already wired through the plugin model. Follow-up work is **quality**, **ops**, **UX**, and **optional external services**.

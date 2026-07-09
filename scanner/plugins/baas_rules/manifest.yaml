@@ -1,0 +1,34 @@
+id: baas_rules
+version: '1.0'
+display_name: BaaS Rules & RLS
+description: >-
+  Analyzes Firebase Security Rules and Supabase Row Level Security (RLS) policies
+  for overly permissive or missing access controls.
+categories:
+- config
+- cloud
+icon: 🛡️
+languages: null
+severity_supported: true
+checkpoint:
+  primary_artifact: report.json
+  artifact_format: json
+  note: Pure Python analysis — no external CLI.
+homepage: https://firebase.google.com/docs/rules
+documentation: https://supabase.com/docs/guides/database/postgres/row-level-security
+install: []
+scan_profiles:
+  quick:
+    timeout: 60
+    hints:
+      depth: shallow
+      intensity: low
+  standard:
+    timeout: 90
+  deep:
+    timeout: 120
+    hints:
+      depth: deep
+      intensity: high
+exit_codes:
+  note: Python-based rules analysis; see scan logs for errors.

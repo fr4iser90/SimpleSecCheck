@@ -29,6 +29,12 @@ const DASHBOARD_GROUPS: DashboardGroup[] = [
         icon: '📧',
       },
       {
+        to: '/admin/legal',
+        title: 'Legal & Compliance',
+        description: 'Impressum, Datenschutz, Cookie-Hinweis (DE/EU)',
+        icon: '⚖️',
+      },
+      {
         to: '/admin/auth',
         title: 'Auth Settings',
         description: 'Auth mode, guest access, self-registration',

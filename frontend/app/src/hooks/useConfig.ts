@@ -62,6 +62,14 @@ export interface FrontendConfig {
   }
   scan_profile_order?: string[]
   scan_profiles_catalog?: string[]
+  legal?: {
+    enabled: boolean
+    terms_enabled?: boolean
+    require_terms_acceptance?: boolean
+    cookie_notice_enabled?: boolean
+    footer_links?: { slug: string; label: string }[]
+    locale?: string
+  }
 }
 
 export function useConfig() {

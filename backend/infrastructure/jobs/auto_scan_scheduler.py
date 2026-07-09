@@ -19,6 +19,18 @@ from domain.services.auto_scan_service import AutoScanService
 logger = logging.getLogger(__name__)
 
 
+def _log_scheduler_db_error(context: str, exc: Exception) -> None:
+    """Postgres/Redis may be unavailable briefly during container startup."""
+    if isinstance(exc, (ConnectionRefusedError, OSError)) and getattr(exc, "errno", None) in (
+        111,
+        61,
+        110,
+    ):
+        logger.warning("%s: database not ready yet (%s)", context, exc)
+        return
+    logger.error("%s: %s", context, exc, exc_info=True)
+
+
 class AutoScanScheduler:
     def __init__(self, delay_seconds: int = 45, check_interval_seconds: int = 30):
         self.delay_seconds = delay_seconds
@@ -113,7 +125,7 @@ class AutoScanScheduler:
                 except Exception as e:
                     logger.error("Error processing repo %s for initial scan: %s", repo.id, e, exc_info=True)
         except Exception as e:
-            logger.error("Error checking for initial scans: %s", e, exc_info=True)
+            _log_scheduler_db_error("Error checking for initial scans", e)
 
     async def _check_and_schedule_periodic_repo_scans(self):
         """Daily/weekly repos: one due repo per tick (frequency + commit SHA diff)."""
@@ -161,7 +173,7 @@ class AutoScanScheduler:
                     next_repo.get("repo_name"),
                 )
         except Exception as e:
-            logger.error("Error scheduling periodic repo scans: %s", e, exc_info=True)
+            _log_scheduler_db_error("Error scheduling periodic repo scans", e)
 
     async def _check_and_schedule_target_scans(self):
         try:
@@ -197,4 +209,4 @@ class AutoScanScheduler:
                 else:
                     logger.error("Failed to create scan for target %s", target.id)
         except Exception as e:
-            logger.error("Error checking for target scans: %s", e, exc_info=True)
+            _log_scheduler_db_error("Error checking for target scans", e)

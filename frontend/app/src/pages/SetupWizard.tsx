@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useTranslation } from '../i18n'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
 
 interface SetupStatus {
@@ -33,11 +34,41 @@ interface SystemConfig {
     from_email: string
     from_name: string
   }
+  legal?: LegalConfig
+}
+
+interface LegalConfig {
+  enabled: boolean
+  locale: string
+  cookie_notice_enabled: boolean
+  terms_enabled: boolean
+  company_name: string
+  legal_representative: string
+  address: string
+  email: string
+  phone: string
+  vat_id: string
+  privacy_contact_email: string
+}
+
+const DEFAULT_LEGAL: LegalConfig = {
+  enabled: false,
+  locale: 'de',
+  cookie_notice_enabled: true,
+  terms_enabled: true,
+  company_name: '',
+  legal_representative: '',
+  address: '',
+  email: '',
+  phone: '',
+  vat_id: '',
+  privacy_contact_email: '',
 }
 
 export default function SetupWizard() {
   const navigate = useNavigate()
   const { login } = useAuth()
+  const { t } = useTranslation()
   const [step, setStep] = useState(0) // Start with token verification step
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -60,6 +91,7 @@ export default function SetupWizard() {
   const [systemConfig, setSystemConfig] = useState<SystemConfig>({
     auth_mode: 'free',
     max_concurrent_jobs: 3,
+    legal: { ...DEFAULT_LEGAL },
     smtp: {
       enabled: false,
       host: 'smtp.gmail.com',
@@ -231,7 +263,7 @@ export default function SetupWizard() {
   }
 
   const handleNext = () => {
-    if (step < 3) {
+    if (step < 4) {
       setStep(step + 1)
     }
   }
@@ -255,12 +287,30 @@ export default function SetupWizard() {
     }
     
     const config = useCaseConfigs[selectedUseCase]
-    if (config) {
-      setSystemConfig({
-        ...systemConfig,
-        ...config,
-      })
-    }
+    const needsLegal = ['public_web', 'network_intern', 'enterprise'].includes(selectedUseCase)
+    setSystemConfig((prev) => ({
+      ...prev,
+      ...(config || {}),
+      legal: {
+        ...(prev.legal || DEFAULT_LEGAL),
+        enabled: needsLegal,
+        locale: 'de',
+        cookie_notice_enabled: true,
+        terms_enabled: true,
+      },
+    }))
+  }
+
+  const handleLegalChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target
+    const checked = (e.target as HTMLInputElement).checked
+    setSystemConfig({
+      ...systemConfig,
+      legal: {
+        ...(systemConfig.legal || DEFAULT_LEGAL),
+        [name]: type === 'checkbox' ? checked : value,
+      },
+    })
   }
 
   const handleBack = () => {
@@ -360,6 +410,7 @@ export default function SetupWizard() {
           system_config: {
             ...systemConfig,
             use_case: useCase,
+            legal: systemConfig.legal,
           }
         })
       })
@@ -775,6 +826,118 @@ export default function SetupWizard() {
       
       <div className="step-actions">
         <button onClick={handleBack}>Back</button>
+        <button className="primary" onClick={handleNext}>
+          Next
+        </button>
+      </div>
+    </div>
+  )
+
+  const renderStep4 = () => (
+    <div className="setup-step">
+      <h3>{t('legal.setupStepTitle')}</h3>
+      <p>{t('legal.setupIntro')}</p>
+
+      <div className="form-group">
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            name="enabled"
+            checked={systemConfig.legal?.enabled ?? false}
+            onChange={handleLegalChange}
+          />
+          <span>{t('legal.setupEnable')}</span>
+        </label>
+        <small className="form-help-text info" style={{ display: 'block', marginTop: '0.25rem' }}>
+          {t('legal.setupEnableHint')}
+        </small>
+      </div>
+
+      {systemConfig.legal?.enabled && (
+        <>
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                name="cookie_notice_enabled"
+                checked={systemConfig.legal?.cookie_notice_enabled ?? true}
+                onChange={handleLegalChange}
+              />
+              <span>{t('legal.setupCookie')}</span>
+            </label>
+          </div>
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                name="terms_enabled"
+                checked={systemConfig.legal?.terms_enabled ?? true}
+                onChange={handleLegalChange}
+              />
+              <span>{t('legal.setupTerms')}</span>
+            </label>
+          </div>
+          <div className="form-group">
+            <label>{t('legal.adminCompanyName')}</label>
+            <input
+              name="company_name"
+              value={systemConfig.legal?.company_name ?? ''}
+              onChange={handleLegalChange}
+            />
+          </div>
+          <div className="form-group">
+            <label>{t('legal.adminRepresentative')}</label>
+            <input
+              name="legal_representative"
+              value={systemConfig.legal?.legal_representative ?? ''}
+              onChange={handleLegalChange}
+            />
+          </div>
+          <div className="form-group">
+            <label>{t('legal.adminAddress')}</label>
+            <textarea
+              name="address"
+              value={systemConfig.legal?.address ?? ''}
+              onChange={handleLegalChange}
+              rows={2}
+            />
+          </div>
+          <div className="form-group">
+            <label>{t('legal.adminEmail')}</label>
+            <input
+              type="email"
+              name="email"
+              value={systemConfig.legal?.email ?? ''}
+              onChange={handleLegalChange}
+              placeholder={adminUser.email || undefined}
+            />
+          </div>
+          <div className="form-group">
+            <label>{t('legal.adminPhone')}</label>
+            <input name="phone" value={systemConfig.legal?.phone ?? ''} onChange={handleLegalChange} />
+          </div>
+        </>
+      )}
+
+      <div
+        style={{
+          marginTop: '2rem',
+          padding: '1.5rem',
+          backgroundColor: 'var(--glass-bg-light)',
+          borderRadius: '8px',
+        }}
+      >
+        <h4 style={{ marginTop: 0 }}>Summary</h4>
+        <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.9rem' }}>
+          <div>Use Case: <strong>{useCases[useCase]?.name || useCase}</strong></div>
+          <div>{t('legal.setupSummaryLegal')}: <strong>{systemConfig.legal?.enabled ? t('legal.setupOn') : t('legal.setupOff')}</strong></div>
+          <div>{t('legal.setupSummaryTerms')}: <strong>{systemConfig.legal?.terms_enabled ? t('legal.setupOn') : t('legal.setupOff')}</strong></div>
+          <div>Worker parallel scans: <strong>{systemConfig.max_concurrent_jobs}</strong></div>
+        </div>
+      </div>
+
+      <div className="step-actions">
+        <button onClick={handleBack}>Back</button>
         <button className="primary" onClick={handleInitializeSetup} disabled={loading}>
           {loading ? 'Setting up...' : 'Complete Setup'}
         </button>
@@ -788,6 +951,7 @@ export default function SetupWizard() {
       case 1: return renderStep1()
       case 2: return renderStep2()
       case 3: return renderStep3()
+      case 4: return renderStep4()
       default: return renderStep0()
     }
   }
@@ -832,6 +996,11 @@ export default function SetupWizard() {
           <div className={`progress-step ${step > 3 ? 'completed' : step === 3 ? 'active' : ''}`}>
             <div className="step-number">{step > 3 ? '✓' : '3'}</div>
             <div className="step-label">Configuration</div>
+          </div>
+          <div className="progress-line"></div>
+          <div className={`progress-step ${step > 4 ? 'completed' : step === 4 ? 'active' : ''}`}>
+            <div className="step-number">{step > 4 ? '✓' : '4'}</div>
+            <div className="step-label">Legal</div>
           </div>
         </div>
 

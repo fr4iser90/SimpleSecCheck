@@ -93,6 +93,10 @@ class FrontendConfigResponse(BaseModel):
         default_factory=list,
         description="Profiles discovered from scanner manifests",
     )
+    legal: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Public legal pages config (enabled, cookie notice, footer links)",
+    )
 
 
 class RoleCapabilitiesSnapshot(BaseModel):
@@ -549,6 +553,20 @@ async def get_frontend_config(
             catalog = ["standard"]
         scan_profile_order = resolve_profile_order(scan_defaults, catalog=catalog)
         access_mode = getattr(settings, "ACCESS_MODE", "public")
+        legal_public: Optional[Dict[str, Any]] = None
+        try:
+            from domain.services.legal_content_service import (
+                build_public_legal_response,
+                legal_config_from_system_state,
+            )
+            st = await system_state_repo.get_singleton()
+            state_config = st.config if st else None
+            legal_public = build_public_legal_response(
+                legal_config_from_system_state(state_config),
+                state_config=state_config,
+            )
+        except Exception:
+            legal_public = {"enabled": False, "footer_links": [], "cookie_notice_enabled": False}
         return FrontendConfigResponse(
             auth_mode=settings.AUTH_MODE.lower(),
             access_mode=access_mode,
@@ -563,6 +581,7 @@ async def get_frontend_config(
             scan_defaults=scan_defaults,
             scan_profile_order=scan_profile_order,
             scan_profiles_catalog=catalog,
+            legal=legal_public,
         )
         
     except Exception as e:

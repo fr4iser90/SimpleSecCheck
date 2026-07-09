@@ -1,28 +1,42 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useConfig } from '../hooks/useConfig'
+import { useTranslation } from '../i18n'
 import { apiFetch } from '../utils/apiClient'
 
 export default function SignUpPage() {
   const navigate = useNavigate()
   const { config } = useConfig()
+  const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  const requireTerms = Boolean(config?.legal?.require_terms_acceptance)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setSuccess(null)
+    if (requireTerms && !acceptedTerms) {
+      setError(t('legal.signupTermsRequired'))
+      return
+    }
     setLoading(true)
     try {
       const response = await apiFetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, username, password }),
+        body: JSON.stringify({
+          email,
+          username,
+          password,
+          accepted_terms: acceptedTerms || !requireTerms,
+        }),
       }, false)
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -41,8 +55,8 @@ export default function SignUpPage() {
       if (!data.requires_approval) {
         setTimeout(() => navigate('/login'), 2000)
       }
-    } catch (err: any) {
-      setError(err.message || 'Registration failed')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Registration failed')
     } finally {
       setLoading(false)
     }
@@ -128,9 +142,44 @@ export default function SignUpPage() {
             </small>
           </div>
 
+          {requireTerms && (
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '0.5rem',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  lineHeight: 1.4,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  required
+                  style={{ marginTop: '0.2rem' }}
+                  disabled={!!success}
+                />
+                <span>
+                  {t('legal.signupAcceptPrefix')}{' '}
+                  <Link to="/legal/terms" target="_blank" rel="noopener noreferrer">
+                    {t('legal.signupTermsLink')}
+                  </Link>{' '}
+                  {t('legal.signupAcceptMiddle')}{' '}
+                  <Link to="/legal/privacy" target="_blank" rel="noopener noreferrer">
+                    {t('legal.signupPrivacyLink')}
+                  </Link>
+                  {t('legal.signupAcceptSuffix')}
+                </span>
+              </label>
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={loading || !!success}
+            disabled={loading || !!success || (requireTerms && !acceptedTerms)}
             className="login-button"
           >
             {loading ? 'Creating account...' : 'Sign Up'}

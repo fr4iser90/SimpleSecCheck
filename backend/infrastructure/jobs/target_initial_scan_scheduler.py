@@ -56,6 +56,8 @@ class TargetInitialScanScheduler:
     async def _tick(self):
         state_repo = get_system_state_repository()
         state = await state_repo.get_singleton()
+        if state is None:
+            return
         limits = (state.config or {}).get("execution_limits") or {}
         delay_seconds = limits.get("initial_scan_delay_seconds")
         if delay_seconds is None:

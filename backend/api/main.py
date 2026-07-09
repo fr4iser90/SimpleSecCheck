@@ -15,7 +15,7 @@ import asyncio
 import logging
 import time
 
-from api.routes import scans, auth, setup, scanners, admin, queue, git, uploads, results, events
+from api.routes import scans, auth, setup, scanners, admin, queue, git, uploads, results, events, legal
 from api import health as health_module
 from api.middleware.auth_middleware import (
     AuthMiddleware, SecurityHeadersMiddleware
@@ -147,6 +147,7 @@ def create_app() -> FastAPI:
             "/api/setup/health",
             "/api/setup/initialize",
             "/api/setup/skip",
+            "/api/legal",
         ],
         admin_paths=[],
     )
@@ -168,6 +169,7 @@ def create_app() -> FastAPI:
     app.include_router(uploads.router)
     app.include_router(results.router)
     app.include_router(health_module.router)
+    app.include_router(legal.router)
     
     # User routes
     from api.routes import user as user_routes

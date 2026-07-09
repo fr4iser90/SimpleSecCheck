@@ -54,7 +54,7 @@ class SetupMiddleware(BaseHTTPMiddleware):
                 return await call_next(request)
             
             # Skip setup check for health checks and frontend config
-            if request.url.path in ["/api/health", "/api/info", "/metrics", "/api/config", "/api/config/capabilities"]:
+            if request.url.path in ["/api/health", "/api/info", "/metrics", "/api/config", "/api/config/capabilities", "/api/legal"]:
                 return await call_next(request)
             
             # Check if setup is required

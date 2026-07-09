@@ -85,6 +85,10 @@ class RegisterRequest(BaseModel):
     email: EmailStr = Field(description="User email address")
     username: str = Field(min_length=2, max_length=100, description="Username")
     password: str = Field(min_length=8, max_length=128, description="Password")
+    accepted_terms: bool = Field(
+        default=False,
+        description="User accepted Nutzungsbedingungen & Datenschutz when required by instance legal config",
+    )
 
 
 class RegisterResponse(BaseModel):
@@ -243,6 +247,23 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Self-registration is disabled. Contact an administrator.",
+        )
+    from infrastructure.container import get_system_state_repository
+    from domain.services.legal_content_service import (
+        build_public_legal_response,
+        legal_config_from_system_state,
+    )
+
+    state = await get_system_state_repository().get_singleton()
+    state_config = state.config if state else None
+    legal = build_public_legal_response(
+        legal_config_from_system_state(state_config),
+        state_config=state_config,
+    )
+    if legal.get("require_terms_acceptance") and not body.accepted_terms:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You must accept the terms of service and privacy policy.",
         )
     if await user_service.get_by_email(body.email, active_only=False):
         raise HTTPException(

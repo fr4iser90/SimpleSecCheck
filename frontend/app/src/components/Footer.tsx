@@ -1,7 +1,11 @@
+import LegalFooterLinks, { useLegalConfig } from './Legal'
+
 const REPO = 'https://github.com/fr4iser90/SimpleSecCheck'
 const LICENSE = `${REPO}/blob/main/LICENSE`
 
 export default function Footer() {
+  const legal = useLegalConfig()
+
   return (
     <footer className="app-footer-minimal">
       <span>© {new Date().getFullYear()} Fr4iser</span>
@@ -17,6 +21,7 @@ export default function Footer() {
       <a href={REPO} target="_blank" rel="noopener noreferrer">
         GitHub <span aria-hidden>→</span>
       </a>
+      <LegalFooterLinks legal={legal} />
     </footer>
   )
 }

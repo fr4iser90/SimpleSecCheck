@@ -2,6 +2,31 @@
 
 SimpleSecCheck performs **active security scans**. You must have explicit authorization for every target.
 
+## Website legal pages (DE/EU hosting)
+
+When you operate a **publicly reachable** instance (especially in Germany/EU), you typically need:
+
+- **Impressum** (§ 5 TMG) — operator contact details
+- **Datenschutzerklärung** (GDPR Art. 13/14) — when processing personal data (login, sessions, logs)
+- **Cookie notice** — for auth-only cookies (`refresh_token`, `session_id`) a short informational banner is usually sufficient; no marketing tracker consent required
+
+SimpleSecCheck supports this **optionally**:
+
+1. **Setup Wizard → Step 4 (Legal)** — auto-suggested for `public_web`, `network_intern`, `enterprise`
+2. **Admin → Legal & Compliance** — edit Impressum/Datenschutz anytime
+3. **Footer links** — `/legal/impressum`, `/legal/privacy`, `/legal/terms` (AGB) when enabled
+4. **Sign-up** — checkbox for AGB + Datenschutz when legal pages are on and accounts exist
+
+| Phase | Impressum | Datenschutz | AGB | AVV / Löschung |
+|-------|-----------|-------------|-----|----------------|
+| Lokal / privat | ❌ | ❌ | ❌ | ❌ |
+| Öffentliche Demo (DE) | ✅ | ✅ | optional | ❌ |
+| Echte Accounts + Login | ✅ | ✅ | ✅ (Registrierung) | Hosting/E-Mail in Admin |
+
+Templates are starting points only — verify with your legal advisor. Use custom Markdown fields to override generated text.
+
+For **solo/internal** deployments, leave legal pages disabled.
+
 ## Allowed Use (Examples)
 
 - ✅ Systems you own or operate

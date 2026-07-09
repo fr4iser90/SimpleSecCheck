@@ -34,6 +34,9 @@ import ProfilePage from './pages/ProfilePage'
 import APIKeysPage from './pages/APIKeysPage'
 import MyTargetsPage from './pages/MyTargetsPage'
 import Footer from './components/Footer'
+import { CookieNotice, useLegalConfig } from './components/Legal'
+import LegalPage from './pages/LegalPage'
+import AdminLegalSettingsPage from './pages/AdminLegalSettingsPage'
 import './App.css'
 
 /**
@@ -98,6 +101,7 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
           </div>
         }
       />
+      <Route path="/legal/:slug" element={<LegalPage />} />
       <Route path="/" element={
         <ProtectedRoute>
           <MainLayout>
@@ -173,6 +177,13 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
         <AdminRoute>
           <MainLayout>
             <AuthSettingsPage />
+          </MainLayout>
+        </AdminRoute>
+      } />
+      <Route path="/admin/legal" element={
+        <AdminRoute>
+          <MainLayout>
+            <AdminLegalSettingsPage />
           </MainLayout>
         </AdminRoute>
       } />
@@ -310,12 +321,22 @@ function AppContent() {
             <div className="app__body">
               <AppRoutes setupStatus={setupStatus} />
             </div>
-            {setupStatus.setup_complete ? <Footer /> : null}
+            {setupStatus.setup_complete ? (
+              <>
+                <Footer />
+                <LegalCookieNotice />
+              </>
+            ) : null}
           </div>
         </BrowserRouter>
       )}
     </BootstrapLoader>
   )
+}
+
+function LegalCookieNotice() {
+  const legal = useLegalConfig()
+  return <CookieNotice legal={legal} />
 }
 
 /**
