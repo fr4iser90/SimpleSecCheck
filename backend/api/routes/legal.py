@@ -14,7 +14,7 @@ from domain.services.legal_content_service import (
     upgrade_legal_terms_for_accounts,
     validate_legal_config,
 )
-from infrastructure.container import get_system_state_repository_dependency
+from api.routes.admin import get_system_state_repository_dependency
 from domain.repositories.system_state_repository import SystemStateRepository
 
 router = APIRouter(prefix="/api", tags=["legal"])
