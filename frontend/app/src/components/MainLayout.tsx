@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
+import { useGlobalSse } from '../hooks/useGlobalSse'
 import AppSidebar from './AppSidebar'
 import AppTopbar from './AppTopbar'
 
 const WIDE_PATHS = /^\/(scan|bulk|queue)(\/|$)/
 
 export default function MainLayout({ children }: { children: ReactNode }) {
+  useGlobalSse()
   const { pathname } = useLocation()
   const wide = WIDE_PATHS.test(pathname)
 

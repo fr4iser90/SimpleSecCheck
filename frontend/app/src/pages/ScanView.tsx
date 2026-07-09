@@ -146,6 +146,14 @@ export default function ScanView() {
     }
   }, [])
 
+  const syncScanFromServer = useCallback(
+    async (scanId: string) => {
+      await fetchAndApplyScanStatus(scanId)
+      await fetchQueueStatusOnce(scanId)
+    },
+    [fetchAndApplyScanStatus, fetchQueueStatusOnce],
+  )
+
   // Restore scan from ?scan_id= (refresh / deep link)
   useEffect(() => {
     const params = new URLSearchParams(location.search)
@@ -174,13 +182,13 @@ export default function ScanView() {
     })
   }, [status.scan_id, status.status, location.pathname, location.search, navigate, status])
 
-  // Queue position: one REST fetch on pending + SSE push (no polling)
+  // Queue position: initial fetch while pending
   useEffect(() => {
     if (!status.scan_id || status.status !== 'pending') return
-    void fetchQueueStatusOnce(status.scan_id)
-  }, [status.scan_id, status.status, fetchQueueStatusOnce])
+    void syncScanFromServer(status.scan_id)
+  }, [status.scan_id, status.status, syncScanFromServer])
 
-  // SSE: scan lifecycle + queue hints (all sessions — guest session_id cookie or user JWT)
+  // SSE primary; DB sync on every matching event (authoritative status)
   useEffect(() => {
     const scanId = status.scan_id
     if (!scanId) return
@@ -194,7 +202,7 @@ export default function ScanView() {
       if (env.type === 'queue_update') {
         const affected = payload.scan_id
         if (affected == null || String(affected) === scanId) {
-          void fetchQueueStatusOnce(scanId)
+          void syncScanFromServer(scanId)
         }
         return
       }
@@ -203,21 +211,23 @@ export default function ScanView() {
 
       const eventScanId = String(payload.scan_id ?? '')
       if (eventScanId !== scanId) return
-
-      const st = String(payload.status ?? '')
-      if (st === 'completed' || st === 'failed' || st === 'cancelled') {
-        void fetchAndApplyScanStatus(scanId)
-      } else if (st === 'running') {
-        setStatus((prev) => ({ ...prev, status: 'running' as ScanRunStatus }))
-      } else if (st === 'pending') {
-        setStatus((prev) => ({ ...prev, status: 'pending' }))
-        void fetchQueueStatusOnce(scanId)
-      }
+      void syncScanFromServer(scanId)
     }
 
     window.addEventListener(SSE_ENVELOPE_EVENT, onSse)
     return () => window.removeEventListener(SSE_ENVELOPE_EVENT, onSse)
-  }, [status.scan_id, fetchAndApplyScanStatus, fetchQueueStatusOnce])
+  }, [status.scan_id, syncScanFromServer])
+
+  // Pending-only safety sync if SSE/Redis bridge misses an event (queue → running)
+  useEffect(() => {
+    if (status.status !== 'pending' || !status.scan_id) return
+    const scanId = status.scan_id
+    void syncScanFromServer(scanId)
+    const intervalId = window.setInterval(() => {
+      void syncScanFromServer(scanId)
+    }, 8000)
+    return () => window.clearInterval(intervalId)
+  }, [status.status, status.scan_id, syncScanFromServer])
 
   useEffect(() => {
     if (status.status !== 'running') return

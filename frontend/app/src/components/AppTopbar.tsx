@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { useGlobalSse } from '../hooks/useGlobalSse'
 import { useHeaderScanStatus } from '../hooks/useHeaderScanStatus'
 import type { ScanRunStatus } from '../types/scanStatus'
 import AppIcon from './AppIcon'
@@ -67,7 +66,6 @@ function scanPillMeta(status: ScanRunStatus): { text: string; className: string;
 }
 
 export default function AppTopbar() {
-  useGlobalSse()
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { isAuthenticated, user, logout } = useAuth()
