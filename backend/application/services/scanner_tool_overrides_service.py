@@ -39,6 +39,21 @@ def execution_timeout_from_meta(meta: Dict[str, Any]) -> int:
     return 900
 
 
+def standard_profile_timeout_from_meta(meta: Dict[str, Any]) -> int:
+    """scan_profiles.standard.timeout from manifest metadata, else execution.timeout."""
+    sp = meta.get("scan_profiles")
+    if isinstance(sp, dict):
+        standard = sp.get("standard")
+        if isinstance(standard, dict) and standard.get("timeout") is not None:
+            try:
+                t = int(standard["timeout"])
+                if 30 <= t <= 86400:
+                    return t
+            except (TypeError, ValueError):
+                pass
+    return execution_timeout_from_meta(meta)
+
+
 def build_env_from_config(config: Optional[Dict[str, Any]]) -> Dict[str, str]:
     env: Dict[str, str] = {}
     if not config or not isinstance(config, dict):

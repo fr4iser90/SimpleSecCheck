@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import AdminPageShell from '../components/AdminPageShell'
 import { apiFetch } from '../utils/apiClient'
 import { useTranslation } from '../i18n'
 
@@ -135,34 +136,33 @@ export default function AdminLegalSettingsPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="admin-settings-page">
-        <div className="admin-settings-container">
-          <div className="loading">{t('common.loading')}</div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="admin-settings-page">
+    <AdminPageShell
+      title={t('legal.adminTitle')}
+      subtitle="Impressum, privacy policy, and terms for public instances."
+      calloutTitle="Quick reference"
+      callout={
+        <dl className="page-kv-list">
+          <div>
+            <dt>Footer links</dt>
+            <dd>Shown in the app shell when legal pages are enabled. Labels follow the UI language.</dd>
+          </div>
+          <div>
+            <dt>Document language</dt>
+            <dd>Legal page content uses the locale below — independent of the UI language.</dd>
+          </div>
+          <div>
+            <dt>Cookie notice</dt>
+            <dd>Essential session cookies only; text follows the user&apos;s UI language.</dd>
+          </div>
+        </dl>
+      }
+      error={error}
+      success={success}
+      loading={loading}
+      loadingText={t('common.loading')}
+    >
       <div className="admin-settings-container">
-        <h2>{t('legal.adminTitle')}</h2>
-        <p className="section-description" style={{ marginBottom: '1.25rem' }}>
-          {t('legal.adminIntro')}
-        </p>
-
-        {error && (
-          <div className="error-message" role="alert">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="success-message" role="alert">
-            {success}
-          </div>
-        )}
         {warnings.length > 0 && (
           <div className="form-info-box warning" style={{ marginBottom: '1.25rem' }}>
             <strong>{t('legal.adminWarnings')}</strong>
@@ -398,6 +398,6 @@ export default function AdminLegalSettingsPage() {
           </div>
         </form>
       </div>
-    </div>
+    </AdminPageShell>
   )
 }

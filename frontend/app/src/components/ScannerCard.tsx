@@ -1,3 +1,5 @@
+import AppIcon from './AppIcon'
+
 interface ScannerCardProps {
   name: string
   description: string
@@ -18,37 +20,32 @@ export default function ScannerCard({
   enabled,
   selected,
   requiresCondition,
-  onToggle
+  onToggle,
 }: ScannerCardProps) {
   return (
     <div
+      role="button"
+      tabIndex={enabled ? 0 : -1}
       onClick={() => enabled && onToggle(name)}
-      className={`glass scanner-card ${selected ? 'selected' : ''} ${!enabled ? 'disabled' : ''}`}
+      onKeyDown={(e) => {
+        if (enabled && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault()
+          onToggle(name)
+        }
+      }}
+      className={`scanner-card ${selected ? 'selected' : ''} ${!enabled ? 'disabled' : ''}`}
     >
-      {/* Checkbox in top-right corner */}
-      <div className="scanner-card-checkbox">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => {}} // Handled by parent onClick
-          disabled={!enabled}
-        />
-      </div>
+      <span className="scanner-card-check" aria-hidden>
+        {selected ? <AppIcon name="check" size={10} /> : null}
+      </span>
 
-      {/* Icon and Name */}
       <div className="scanner-card-header">
         <span className="scanner-card-icon">{icon}</span>
-        <h3 className={`scanner-card-name ${!enabled ? 'disabled' : ''}`}>
-          {name}
-        </h3>
+        <h3 className={`scanner-card-name ${!enabled ? 'disabled' : ''}`}>{name}</h3>
       </div>
 
-      {/* Description */}
-      <p className="scanner-card-description">
-        {description}
-      </p>
+      <p className="scanner-card-description">{description}</p>
 
-      {/* Categories */}
       <div className="scanner-card-categories">
         {categories.map((category, idx) => (
           <span key={idx} className="scanner-card-category">
@@ -57,18 +54,8 @@ export default function ScannerCard({
         ))}
       </div>
 
-      {/* Requires Condition */}
       {requiresCondition && (
-        <div className="scanner-card-requires">
-          ⚠️ Requires: {requiresCondition}
-        </div>
-      )}
-
-      {/* Selected Badge */}
-      {selected && (
-        <div className="scanner-card-selected-badge">
-          ✓ Selected
-        </div>
+        <div className="scanner-card-requires">Requires: {requiresCondition}</div>
       )}
     </div>
   )

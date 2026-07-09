@@ -1,81 +1,90 @@
 import { ReactNode, useState } from 'react'
 import { useAutoScroll } from '../hooks/useAutoScroll'
+import AppIcon from './AppIcon'
 
 interface ScanStepProps {
   id: string
   title: string
+  description?: string
   children: ReactNode
-  trigger?: any // Value that triggers auto-scroll when changed
+  trigger?: unknown
   autoScroll?: boolean
   expanded?: boolean
   completed?: boolean
   required?: boolean
-  /** When true, step header is clickable to expand/collapse; initial state from `expanded` */
   collapsible?: boolean
+  stepNumber?: string
 }
 
 export default function ScanStep({
   id,
   title,
+  description,
   children,
   trigger,
   autoScroll = false,
   expanded = true,
   completed = false,
   required = false,
-  collapsible = false
+  collapsible = false,
+  stepNumber,
 }: ScanStepProps) {
   const [isExpanded, setIsExpanded] = useState(expanded)
   const showContent = collapsible ? isExpanded : expanded
+  const num = stepNumber || id.split('-')[1] || '•'
 
   const setScrollTarget = useAutoScroll({
     trigger: autoScroll ? trigger : undefined,
     enabled: autoScroll && showContent,
     delay: 400,
-    offset: 100
+    offset: 100,
   })
 
-  return (
-    <div
-      ref={setScrollTarget}
-      id={id}
-      className={`glass scan-step ${completed ? 'completed' : ''} ${collapsible ? 'scan-step-collapsible' : ''}`}
-    >
-      {/* Step Header */}
-      <div
-        className="scan-step-header"
-        style={{ marginBottom: showContent ? '1rem' : 0 }}
-        onClick={collapsible ? () => setIsExpanded((e) => !e) : undefined}
-        role={collapsible ? 'button' : undefined}
-        tabIndex={collapsible ? 0 : undefined}
-        onKeyDown={collapsible ? (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setIsExpanded((e) => !e); } } : undefined}
-        aria-expanded={collapsible ? isExpanded : undefined}
-      >
-        <div className={`scan-step-number ${completed ? 'completed' : 'pending'}`}>
-          {completed ? '✓' : id.split('-')[1] || '•'}
-        </div>
-        <h2 className="scan-step-title">
+  const titleRow = (
+    <div className="panel__title-row" style={{ width: '100%' }}>
+      <span className={`step-dot${completed ? ' step-dot--done' : showContent ? ' step-dot--active' : ''}`}>
+        {completed ? <AppIcon name="check" size={10} /> : num}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <h2 className="panel__title">
           {title}
-          {required && <span className="scan-step-required">*</span>}
+          {required ? <span style={{ color: 'var(--ds-error)', marginLeft: '0.2rem' }}>*</span> : null}
         </h2>
-        {collapsible && (
-          <span className="scan-step-chevron" aria-hidden>
-            {isExpanded ? '▼' : '▶'}
-          </span>
-        )}
-        {completed && (
-          <span className="scan-step-completed-badge">
-            Completed
-          </span>
-        )}
       </div>
+      {completed && !collapsible ? <span className="step-badge">Completed</span> : null}
+      {collapsible ? (
+        <>
+          {!isExpanded ? <span className="form-label-hint" style={{ marginLeft: 'auto' }}>Optional</span> : null}
+          <AppIcon name="chevron" size={16} className={isExpanded ? 'panel__collapse-toggle--open' : ''} />
+        </>
+      ) : null}
+    </div>
+  )
 
-      {/* Step Content */}
-      {showContent && (
-        <div className="scan-step-content">
-          {children}
+  return (
+    <section ref={setScrollTarget} id={id} className="panel scan-panel">
+      {collapsible ? (
+        <button
+          type="button"
+          className={`panel__collapse-toggle${isExpanded ? ' panel__collapse-toggle--open' : ''}`}
+          onClick={() => setIsExpanded((e) => !e)}
+          aria-expanded={isExpanded}
+        >
+          {titleRow}
+        </button>
+      ) : (
+        <div className="panel__header">
+          {titleRow}
+          {description ? <p className="panel__desc">{description}</p> : null}
         </div>
       )}
-    </div>
+
+      {showContent ? (
+        <div className="panel__body">
+          {collapsible && description ? <p className="panel__desc" style={{ marginTop: 0 }}>{description}</p> : null}
+          {children}
+        </div>
+      ) : null}
+    </section>
   )
 }

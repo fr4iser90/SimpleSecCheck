@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
+import AdminPageShell from '../components/AdminPageShell'
+import AdminPanel from '../components/AdminPanel'
 import { apiFetch } from '../utils/apiClient'
 
 interface FeatureFlags {
@@ -169,87 +172,45 @@ export default function FeatureFlagsPage() {
   }
 
   return (
-    <div className="container" style={{ padding: '2rem' }}>
-      <div style={{ marginBottom: '2rem' }}>
-        <h1>Feature Flags</h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-          Allowed targets depend on this policy. Toggle individual target types or use a preset below.
-        </p>
-      </div>
-
-      {message && (
-        <div style={{
-          padding: '1rem',
-          marginBottom: '1.5rem',
-          borderRadius: '8px',
-          background: message.type === 'success' ? 'rgba(40, 167, 69, 0.2)' : 'rgba(220, 53, 69, 0.2)',
-          border: `1px solid ${message.type === 'success' ? 'var(--color-pass)' : 'var(--color-critical)'}`,
-          color: message.type === 'success' ? 'var(--color-pass)' : 'var(--color-critical)'
-        }}>
-          {message.text}
-        </div>
-      )}
-
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div>
-      ) : (
-        <div style={{
-          background: 'var(--glass-bg-main)',
-          padding: '2rem',
-          borderRadius: '8px',
-          border: '1px solid var(--glass-border-main)'
-        }}>
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '0.75rem',
-            marginBottom: '1.5rem',
-            paddingBottom: '1.5rem',
-            borderBottom: '1px solid var(--glass-border-main)'
-          }}>
-            <span style={{ color: 'var(--text-secondary)', alignSelf: 'center', marginRight: '0.5rem' }}>Policy presets:</span>
-            <button
-              type="button"
-              onClick={allowAllTargets}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '6px',
-                border: '1px solid var(--glass-border-main)',
-                background: 'rgba(255, 255, 255, 0.05)',
-                color: 'var(--text-main)',
-                cursor: 'pointer'
-              }}
-            >
+    <AdminPageShell
+      title="Feature Flags"
+      subtitle="Control which scan target types users may submit on this instance."
+      calloutTitle="Quick reference"
+      callout={
+        <dl className="page-kv-list">
+          <div>
+            <dt>Policy</dt>
+            <dd>Each flag maps to a target type (Git, ZIP, websites, local paths, …).</dd>
+          </div>
+          <div>
+            <dt>Presets</dt>
+            <dd>Use “Allow all” or “Safe targets only” as a starting point, then fine-tune.</dd>
+          </div>
+          <div>
+            <dt>Auth</dt>
+            <dd>Who may sign in is configured under <Link to="/admin/auth">Auth settings</Link>.</dd>
+          </div>
+        </dl>
+      }
+      error={message?.type === 'error' ? message.text : null}
+      success={message?.type === 'success' ? message.text : null}
+      loading={loading}
+    >
+      <AdminPanel title="Target policy">
+          <div className="flag-presets">
+            <span className="flag-presets__label">Policy presets:</span>
+            <button type="button" className="btn-secondary" onClick={allowAllTargets}>
               Allow all targets
             </button>
-            <button
-              type="button"
-              onClick={safeTargetsOnly}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '6px',
-                border: '1px solid var(--glass-border-main)',
-                background: 'rgba(255, 255, 255, 0.05)',
-                color: 'var(--text-main)',
-                cursor: 'pointer'
-              }}
-            >
+            <button type="button" className="btn-secondary" onClick={safeTargetsOnly}>
               Safe targets only (Git + ZIP)
             </button>
           </div>
           {FEATURE_FLAG_ORDER.map((key) => (
             <div
               key={key}
-              style={{
-                padding: '1.5rem',
-                marginBottom: '1rem',
-                background: 'rgba(255, 255, 255, 0.02)',
-                borderRadius: '8px',
-                border: '1px solid var(--glass-border-main)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}
+              className="flag-row"
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}
             >
               <div style={{ flex: 1 }}>
                 <h3 style={{ margin: 0, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -308,18 +269,12 @@ export default function FeatureFlagsPage() {
             </div>
           ))}
 
-          <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              className="primary"
-              onClick={handleSave}
-              disabled={saving}
-              style={{ minWidth: '150px' }}
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
+          <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+            <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ minWidth: '150px' }}>
+              {saving ? 'Saving…' : 'Save Changes'}
             </button>
           </div>
-        </div>
-      )}
-    </div>
+      </AdminPanel>
+    </AdminPageShell>
   )
 }

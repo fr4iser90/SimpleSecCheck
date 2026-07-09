@@ -1,4 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import PageHeader from '../components/PageHeader'
+import RefreshToolbar from '../components/RefreshToolbar'
+import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { POLL_STATISTICS_MS } from '../constants/polling'
 import { apiFetch } from '../utils/apiClient'
 
 /** Matches backend ScanStatisticsSchema (/api/v1/scans/statistics) */
@@ -178,37 +182,50 @@ function formatDateLabel(date: string, granularity: ChartGranularity): string {
 
 export default function StatisticsPage() {
   const [statistics, setStatistics] = useState<Statistics | null>(null)
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [chartMode, setChartMode] = useState<ChartMode>('all')
   const [chartView, setChartView] = useState<ChartView>('cumulative')
   const [statsScope, setStatsScope] = useState<StatsScope>('global')
+  const statsRequestId = useRef(0)
 
-  useEffect(() => {
-    const fetchStatistics = async () => {
-      setLoading(true)
-      try {
-        const response = await apiFetch(`${STATS_API}?scope=${statsScope}`)
-        if (response.status === 404) {
-          // No stats yet (e.g. route not mounted or no data) — show empty state, not error
-          setStatistics(null)
-          setError(null)
-          return
-        }
-        if (!response.ok) {
-          throw new Error('Failed to fetch statistics')
-        }
-        const data = await response.json()
-        setStatistics(data)
+  const loadStatistics = useCallback(async ({ silent }: { silent: boolean }) => {
+    const requestId = ++statsRequestId.current
+    try {
+      const response = await apiFetch(`${STATS_API}?scope=${statsScope}`)
+      if (requestId !== statsRequestId.current) return
+      if (response.status === 404) {
+        setStatistics(null)
         setError(null)
-      } catch (err) {
+        return
+      }
+      if (!response.ok) {
+        throw new Error('Failed to fetch statistics')
+      }
+      const data = await response.json()
+      if (requestId !== statsRequestId.current) return
+      setStatistics(data)
+      setError(null)
+    } catch (err) {
+      if (requestId !== statsRequestId.current) return
+      if (!silent) {
         setError(err instanceof Error ? err.message : 'Unknown error')
-      } finally {
-        setLoading(false)
       }
     }
+  }, [statsScope])
 
-    fetchStatistics()
+  const { autoRefresh, setAutoRefresh, refresh, isRefreshing, lastUpdated, initialLoad } = useAutoRefresh(loadStatistics, {
+    intervalMs: POLL_STATISTICS_MS,
+  })
+
+  const isFirstScopeRender = useRef(true)
+  useEffect(() => {
+    if (isFirstScopeRender.current) {
+      isFirstScopeRender.current = false
+      return
+    }
+    void refresh()
+    // refresh is stable; reload only when scope tab changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statsScope])
 
   const severityEntries = statistics
@@ -300,35 +317,45 @@ export default function StatisticsPage() {
 
   return (
     <div className="container statistics-page">
+      <PageHeader
+        title="Statistics"
+        subtitle={
+          statsScope === 'global'
+            ? 'Global statistics across all scans on this instance'
+            : 'Your own statistics (account or current guest session)'
+        }
+      >
+        <RefreshToolbar
+          autoRefresh={autoRefresh}
+          onAutoRefreshChange={setAutoRefresh}
+          onRefresh={refresh}
+          isRefreshing={isRefreshing}
+          lastUpdated={lastUpdated}
+          intervalMs={POLL_STATISTICS_MS}
+        />
+      </PageHeader>
+
       <div className="card statistics-card">
-        <header className="statistics-header">
-          <h2>Statistics</h2>
-          <div className="statistics-scope-tabs" role="tablist" aria-label="Statistics scope">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={statsScope === 'global'}
-              className={`statistics-scope-tab ${statsScope === 'global' ? 'statistics-scope-tab--active' : ''}`}
-              onClick={() => setStatsScope('global')}
-            >
-              Global
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={statsScope === 'own'}
-              className={`statistics-scope-tab ${statsScope === 'own' ? 'statistics-scope-tab--active' : ''}`}
-              onClick={() => setStatsScope('own')}
-            >
-              Own
-            </button>
-          </div>
-          <p className="statistics-subtitle">
-            {statsScope === 'global'
-              ? 'Global statistics across all scans on this instance'
-              : 'Your own statistics (account or current guest session)'}
-          </p>
-        </header>
+        <div className="statistics-scope-tabs" role="tablist" aria-label="Statistics scope">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={statsScope === 'global'}
+            className={`statistics-scope-tab ${statsScope === 'global' ? 'statistics-scope-tab--active' : ''}`}
+            onClick={() => setStatsScope('global')}
+          >
+            Global
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={statsScope === 'own'}
+            className={`statistics-scope-tab ${statsScope === 'own' ? 'statistics-scope-tab--active' : ''}`}
+            onClick={() => setStatsScope('own')}
+          >
+            Own
+          </button>
+        </div>
 
         {error && (
           <div className="statistics-error">
@@ -336,7 +363,7 @@ export default function StatisticsPage() {
           </div>
         )}
 
-        {loading ? (
+        {initialLoad ? (
           <div className="statistics-loading">
             Loading statistics…
           </div>

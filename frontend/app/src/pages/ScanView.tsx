@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import ReportViewer from '../components/ReportViewer'
 import StepsSidebar from '../components/StepsSidebar'
 import AIPromptModal from '../components/AIPromptModal'
+import PageHeader from '../components/PageHeader'
 import { SubstepSlot } from '../components/SubstepSlot'
 import { useWebSocket } from '../services/websocketService'
 import { formatDuration, formatEstimatedTime, parseStepInstantMs } from '../utils/timeUtils'
@@ -602,15 +603,8 @@ export default function ScanView() {
                   key={step.number}
                   className={`scan-step-card ${expanded ? 'scan-step-card-expanded' : ''}`}
                   style={{
-                    padding: '1rem 1.25rem',
-                    background: 'var(--glass-bg-main)',
-                    border: `2px solid ${borderColor}`,
-                    borderRadius: '12px',
-                    transition: 'border-color 0.2s ease, opacity 0.2s ease',
+                    borderColor,
                     opacity: step.status === 'pending' ? 0.65 : 1,
-                    minHeight: expanded ? undefined : 220,
-                    display: 'flex',
-                    flexDirection: 'column',
                   }}
                 >
                   <div
@@ -981,29 +975,29 @@ export default function ScanView() {
 
   // Default: No scan
   return (
-    <div style={{ 
+    <div style={{
       flex: 1,
       minHeight: 0,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
     }}>
-      <div style={{ textAlign: 'center' }}>
-        <h2>No active scan</h2>
-        <button
-          onClick={() => navigate('/')}
-          style={{
-            marginTop: '1rem',
-            padding: '0.75rem 1.5rem',
-            background: 'var(--glass-bg-main)',
-            border: '1px solid var(--glass-border-main)',
-            borderRadius: '8px',
-            color: 'var(--text-main)',
-            cursor: 'pointer',
-          }}
-        >
-          Start New Scan
-        </button>
+      <div className="container" style={{ width: '100%' }}>
+        <PageHeader
+          title="Scan progress"
+          subtitle="Monitor the status of your current security scan."
+        />
+        <div className="panel">
+          <div className="panel__body" style={{ textAlign: 'center', padding: '2.5rem 1.5rem' }}>
+            <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.125rem', fontWeight: 600 }}>No active scan</h2>
+            <p style={{ margin: '0 0 1.25rem', color: 'var(--ds-text-secondary)' }}>
+              Start a new scan from the home page to see progress here.
+            </p>
+            <button type="button" className="btn-primary" onClick={() => navigate('/')}>
+              Start New Scan
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

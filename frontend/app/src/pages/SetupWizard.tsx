@@ -513,7 +513,7 @@ export default function SetupWizard() {
       )}
       
       {/* Security Mode Explanation (from backend) */}
-      <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
+      <div className="use-case-grid">
         {Object.values(useCases).length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
             Loading use cases...
@@ -535,7 +535,7 @@ export default function SetupWizard() {
                 <h4>{uc.name}</h4>
                 <p>{uc.description}</p>
                 <small>Auth: {authModeLabel}</small>
-                <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                <div className="use-case-card__features">
                   {featuresText}
                 </div>
               </div>

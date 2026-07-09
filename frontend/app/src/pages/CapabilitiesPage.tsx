@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import PageHeader from '../components/PageHeader'
 import { apiFetch } from '../utils/apiClient'
+import './CapabilitiesPage.css'
 
 interface RoleSnapshot {
   allowed_scan_targets: string[]
@@ -21,13 +23,20 @@ interface CapabilitiesPayload {
   help: string
 }
 
-function Row({ label, guest, user }: { label: string; guest: React.ReactNode; user: React.ReactNode }) {
+function scannerLabel(access: string): string {
+  return access === 'all_enabled' ? 'All enabled scanners on this instance' : 'Limited set (admin-configured)'
+}
+
+function TargetList({ items }: { items: string[] }) {
+  if (!items.length) {
+    return <span className="capabilities-page__empty">None enabled for this role on this instance</span>
+  }
   return (
-    <tr style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
-      <th style={{ padding: '0.85rem 1rem', textAlign: 'left', verticalAlign: 'top', width: '28%' }}>{label}</th>
-      <td style={{ padding: '0.85rem 1rem', verticalAlign: 'top' }}>{guest}</td>
-      <td style={{ padding: '0.85rem 1rem', verticalAlign: 'top' }}>{user}</td>
-    </tr>
+    <ul className="capabilities-page__list">
+      {items.map((t) => (
+        <li key={t}>{t}</li>
+      ))}
+    </ul>
   )
 }
 
@@ -55,98 +64,109 @@ export default function CapabilitiesPage() {
     load()
   }, [])
 
-  const scannerLabel = (access: string) =>
-    access === 'all_enabled' ? 'All enabled scanners on this instance' : 'Limited set (admin-configured)'
+  const rows = data
+    ? [
+        {
+          label: 'Scan target types',
+          guest: <TargetList items={data.guest.allowed_scan_targets} />,
+          user: <TargetList items={data.user.allowed_scan_targets} />,
+        },
+        {
+          label: 'My Targets',
+          guest: data.guest.my_targets ? 'Yes' : 'No',
+          user: data.user.my_targets ? 'Yes' : 'No',
+        },
+        {
+          label: 'Bulk scan tab',
+          guest: data.guest.bulk_scan ? 'Yes' : 'No',
+          user: data.user.bulk_scan ? 'Yes' : 'No',
+        },
+        {
+          label: 'Scanners',
+          guest: scannerLabel(data.guest.scanner_access),
+          user: scannerLabel(data.user.scanner_access),
+        },
+      ]
+    : []
 
   return (
-    <div className="container" style={{ padding: '2rem', maxWidth: '960px', margin: '0 auto' }}>
-      <h1 style={{ marginBottom: '0.5rem' }}>Guest vs account</h1>
-      <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-        What you get without signing in vs with an account — from the live server configuration.
-      </p>
+    <div className="container capabilities-page">
+      <PageHeader
+        title="Guest vs account"
+        subtitle="What you get without signing in vs with an account — from the live server configuration."
+      />
 
-      {loading && <p>Loading…</p>}
-      {error && <div className="error-message" role="alert">{error}</div>}
+      {loading && <p className="capabilities-page__loading">Loading…</p>}
+      {error && (
+        <div className="error-message" role="alert">
+          {error}
+        </div>
+      )}
 
       {data && (
         <>
-          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
-            {data.help}
-          </p>
+          <p className="capabilities-page__help">{data.help}</p>
 
-          <div style={{
-            background: 'var(--glass-bg-main)',
-            borderRadius: '8px',
-            border: '1px solid var(--glass-border-main)',
-            overflow: 'auto',
-          }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="capabilities-page__table-wrap">
+            <table className="capabilities-page__table">
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
-                  <th style={{ padding: '1rem', textAlign: 'left' }}>Capability</th>
-                  <th style={{ padding: '1rem', textAlign: 'left' }}>Guest (no account)</th>
-                  <th style={{ padding: '1rem', textAlign: 'left' }}>Signed-in user</th>
+                <tr>
+                  <th scope="col">Capability</th>
+                  <th scope="col">Guest (no account)</th>
+                  <th scope="col">Signed-in user</th>
                 </tr>
               </thead>
               <tbody>
-                <Row
-                  label="Scan target types"
-                  guest={
-                    data.guest.allowed_scan_targets.length ? (
-                      <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
-                        {data.guest.allowed_scan_targets.map((t) => (
-                          <li key={t}>{t}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <span style={{ opacity: 0.75 }}>None enabled for this role on this instance</span>
-                    )
-                  }
-                  user={
-                    data.user.allowed_scan_targets.length ? (
-                      <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
-                        {data.user.allowed_scan_targets.map((t) => (
-                          <li key={t}>{t}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <span style={{ opacity: 0.75 }}>None enabled for this role on this instance</span>
-                    )
-                  }
-                />
-                <Row
-                  label="My Targets"
-                  guest={data.guest.my_targets ? 'Yes' : 'No'}
-                  user={data.user.my_targets ? 'Yes' : 'No'}
-                />
-                <Row
-                  label="Bulk scan tab"
-                  guest={data.guest.bulk_scan ? 'Yes' : 'No'}
-                  user={data.user.bulk_scan ? 'Yes' : 'No'}
-                />
-                <Row
-                  label="Scanners"
-                  guest={scannerLabel(data.guest.scanner_access)}
-                  user={scannerLabel(data.user.scanner_access)}
-                />
+                {rows.map((row) => (
+                  <tr key={row.label}>
+                    <th scope="row">{row.label}</th>
+                    <td>{row.guest}</td>
+                    <td>{row.user}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
 
-          <h2 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.1rem' }}>Access &amp; registration</h2>
-          <ul style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            <li>Access mode: <strong style={{ color: 'var(--text-main)' }}>{data.auth.access_mode}</strong></li>
-            <li>Login required for scans: <strong style={{ color: 'var(--text-main)' }}>{data.auth.login_required ? 'Yes' : 'No'}</strong></li>
-            <li>Auth mode: <strong style={{ color: 'var(--text-main)' }}>{data.auth.auth_mode}</strong></li>
-            <li>Self-registration: <strong style={{ color: 'var(--text-main)' }}>{data.auth.allow_self_registration ? 'Open' : 'Admin-created accounts only'}</strong></li>
-          </ul>
+          <div className="capabilities-page__cards" aria-label="Capability comparison">
+            {rows.map((row) => (
+              <article key={row.label} className="capabilities-page__card">
+                <h2 className="capabilities-page__card-title">{row.label}</h2>
+                <div className="capabilities-page__card-row">
+                  <span className="capabilities-page__card-label">Guest</span>
+                  <div className="capabilities-page__card-value">{row.guest}</div>
+                </div>
+                <div className="capabilities-page__card-row">
+                  <span className="capabilities-page__card-label">Signed-in</span>
+                  <div className="capabilities-page__card-value">{row.user}</div>
+                </div>
+              </article>
+            ))}
+          </div>
 
-          <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <Link to="/" style={{ color: 'var(--accent)' }}>← Home / Start scan</Link>
-            <Link to="/login" style={{ color: 'var(--accent)' }}>Sign in</Link>
-            {data.auth.allow_self_registration && (
-              <Link to="/signup" style={{ color: 'var(--accent)' }}>Create account</Link>
-            )}
+          <section className="capabilities-page__auth">
+            <h2 className="capabilities-page__auth-title">Access &amp; registration</h2>
+            <ul className="capabilities-page__auth-list">
+              <li>
+                Access mode: <strong>{data.auth.access_mode}</strong>
+              </li>
+              <li>
+                Login required for scans: <strong>{data.auth.login_required ? 'Yes' : 'No'}</strong>
+              </li>
+              <li>
+                Auth mode: <strong>{data.auth.auth_mode}</strong>
+              </li>
+              <li>
+                Self-registration:{' '}
+                <strong>{data.auth.allow_self_registration ? 'Open' : 'Admin-created accounts only'}</strong>
+              </li>
+            </ul>
+          </section>
+
+          <div className="capabilities-page__links">
+            <Link to="/">← Home / Start scan</Link>
+            <Link to="/login">Sign in</Link>
+            {data.auth.allow_self_registration && <Link to="/signup">Create account</Link>}
           </div>
         </>
       )}

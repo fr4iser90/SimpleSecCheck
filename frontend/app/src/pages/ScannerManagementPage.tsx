@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import AdminPageShell from '../components/AdminPageShell'
+import AdminPanel from '../components/AdminPanel'
+import { POLL_ADMIN_SCANNER_MS } from '../constants/polling'
 import { apiFetch } from '../utils/apiClient'
 
 interface RegistryScanner {
@@ -33,8 +36,8 @@ export default function ScannerManagementPage() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
-  const loadStatus = async () => {
-    setLoading(true)
+  const loadStatus = async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const response = await apiFetch('/api/admin/scanner')
       if (response.ok) {
@@ -44,7 +47,7 @@ export default function ScannerManagementPage() {
     } catch (error) {
       console.error('Failed to load scanner status:', error)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -61,9 +64,9 @@ export default function ScannerManagementPage() {
   }
 
   useEffect(() => {
-    loadStatus()
+    void loadStatus(false)
     void loadRegistry()
-    const interval = setInterval(loadStatus, 5000) // Refresh every 5 seconds
+    const interval = setInterval(() => void loadStatus(true), POLL_ADMIN_SCANNER_MS)
     return () => clearInterval(interval)
   }, [])
 
@@ -96,215 +99,165 @@ export default function ScannerManagementPage() {
   }
 
   return (
-    <div className="container" style={{ padding: '2rem' }}>
-      <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1>Scan Engine</h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-            Workers, queue snapshot, and registered scanners. Tool timeouts &amp; tokens:{' '}
-            <Link to="/admin/tool-settings">Tool settings</Link>.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+    <AdminPageShell
+      title="Scan Engine"
+      subtitle="Worker status, queue snapshot, and registered scanner tools."
+      calloutTitle="Quick reference"
+      callout={
+        <dl className="page-kv-list">
+          <div>
+            <dt>Workers</dt>
+            <dd>Pause or resume the scan worker without restarting the whole stack.</dd>
+          </div>
+          <div>
+            <dt>Queue</dt>
+            <dd>Live pending jobs — ordering and concurrency: <Link to="/admin/execution">Execution</Link>.</dd>
+          </div>
+          <div>
+            <dt>Tools</dt>
+            <dd>Per-scanner timeouts and tokens: <Link to="/admin/tool-settings">Tool settings</Link>.</dd>
+          </div>
+        </dl>
+      }
+      loading={loading && !status}
+      actions={
+        <div className="admin-page-actions">
           <button
+            type="button"
+            className="btn-secondary"
             onClick={() => handleAction('pause')}
             disabled={actionLoading !== null}
-            style={{ background: 'var(--color-high)' }}
           >
-            {actionLoading === 'pause' ? 'Pausing...' : 'Pause'}
+            {actionLoading === 'pause' ? 'Pausing…' : 'Pause'}
           </button>
           <button
+            type="button"
+            className="btn-primary"
             onClick={() => handleAction('resume')}
             disabled={actionLoading !== null}
-            style={{ background: 'var(--color-pass)' }}
           >
-            {actionLoading === 'resume' ? 'Resuming...' : 'Resume'}
+            {actionLoading === 'resume' ? 'Resuming…' : 'Resume'}
           </button>
         </div>
-      </div>
-
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div>
-      ) : status ? (
+      }
+    >
+      {status ? (
         <>
-          {/* Status Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-            <div style={{
-              background: 'var(--glass-bg-main)',
-              padding: '1.5rem',
-              borderRadius: '8px',
-              border: '1px solid var(--glass-border-main)'
-            }}>
-              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-pass)' }}>
-                {status.workers_running}
-              </div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Workers Running</div>
+          <div className="admin-metrics">
+            <div className="admin-metric">
+              <div className="admin-metric__value admin-metric__value--pass">{status.workers_running}</div>
+              <div className="admin-metric__label">Workers Running</div>
             </div>
-            <div style={{
-              background: 'var(--glass-bg-main)',
-              padding: '1.5rem',
-              borderRadius: '8px',
-              border: '1px solid var(--glass-border-main)'
-            }}>
-              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-medium)' }}>
-                {status.queue_size}
-              </div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Queue Size</div>
+            <div className="admin-metric">
+              <div className="admin-metric__value admin-metric__value--high">{status.queue_size}</div>
+              <div className="admin-metric__label">Queue Size</div>
             </div>
-            <div style={{
-              background: 'var(--glass-bg-main)',
-              padding: '1.5rem',
-              borderRadius: '8px',
-              border: '1px solid var(--glass-border-main)'
-            }}>
-              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-info)' }}>
-                {status.active_scans}
-              </div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Active Scans</div>
+            <div className="admin-metric">
+              <div className="admin-metric__value admin-metric__value--info">{status.active_scans}</div>
+              <div className="admin-metric__label">Active Scans</div>
             </div>
-            <div style={{
-              background: 'var(--glass-bg-main)',
-              padding: '1.5rem',
-              borderRadius: '8px',
-              border: '1px solid var(--glass-border-main)'
-            }}>
-              <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-main)' }}>
-                {formatTime(status.average_scan_time)}
-              </div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Avg Scan Time</div>
+            <div className="admin-metric">
+              <div className="admin-metric__value admin-metric__value--neutral">{formatTime(status.average_scan_time)}</div>
+              <div className="admin-metric__label">Avg Scan Time</div>
             </div>
           </div>
 
-          {/* Today's Metrics */}
-          <div style={{ marginBottom: '2rem' }}>
-            <h2 style={{ marginBottom: '1rem' }}>Today's Metrics</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-              <div style={{
-                background: 'var(--glass-bg-main)',
-                padding: '1.5rem',
-                borderRadius: '8px',
-                border: '1px solid var(--glass-border-main)'
-              }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-pass)' }}>
-                  {status.scans_completed_today}
-                </div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Completed</div>
+          <AdminPanel title="Today's metrics">
+            <div className="admin-metrics" style={{ marginBottom: 0 }}>
+              <div className="admin-metric">
+                <div className="admin-metric__value admin-metric__value--pass">{status.scans_completed_today}</div>
+                <div className="admin-metric__label">Completed</div>
               </div>
-              <div style={{
-                background: 'var(--glass-bg-main)',
-                padding: '1.5rem',
-                borderRadius: '8px',
-                border: '1px solid var(--glass-border-main)'
-              }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-critical)' }}>
-                  {status.errors_today}
-                </div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Errors</div>
+              <div className="admin-metric">
+                <div className="admin-metric__value admin-metric__value--critical">{status.errors_today}</div>
+                <div className="admin-metric__label">Errors</div>
               </div>
-              <div style={{
-                background: 'var(--glass-bg-main)',
-                padding: '1.5rem',
-                borderRadius: '8px',
-                border: '1px solid var(--glass-border-main)'
-              }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-high)' }}>
-                  {status.timeouts_today}
-                </div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Timeouts</div>
+              <div className="admin-metric">
+                <div className="admin-metric__value admin-metric__value--high">{status.timeouts_today}</div>
+                <div className="admin-metric__label">Timeouts</div>
               </div>
             </div>
-          </div>
+          </AdminPanel>
 
-          <div style={{ marginBottom: '2rem' }}>
-            <h2 style={{ marginBottom: '1rem' }}>Scanner registry ({registry.length})</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
-              Tools discovered in the scanner image (DB snapshot). Binary versions are resolved when each tool
-              runs; use refresh on this page to sync after image updates.
-            </p>
+          <AdminPanel
+            title={`Scanner registry (${registry.length})`}
+            description="Tools discovered in the scanner image (DB snapshot). Binary versions are resolved when each tool runs; use refresh on this page to sync after image updates."
+            flush
+          >
             {registry.length === 0 ? (
-              <div style={{ padding: '1rem', color: 'var(--text-secondary)' }}>No scanners in DB yet.</div>
+              <div style={{ padding: '1.5rem', color: 'var(--ds-text-secondary)' }}>No scanners in DB yet.</div>
             ) : (
-              <div style={{ overflowX: 'auto', border: '1px solid var(--glass-border-main)', borderRadius: 8 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+              <div className="data-table-wrap">
+                <table className="data-table">
                   <thead>
-                    <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
-                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Scanner</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Types</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Priority</th>
-                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Enabled</th>
+                    <tr>
+                      <th>Scanner</th>
+                      <th>Types</th>
+                      <th>Priority</th>
+                      <th>Enabled</th>
                     </tr>
                   </thead>
                   <tbody>
                     {registry.map((s) => (
-                      <tr key={s.name} style={{ borderTop: '1px solid var(--glass-border-main)' }}>
-                        <td style={{ padding: '0.75rem' }}>{s.name}</td>
-                        <td style={{ padding: '0.75rem' }}>{(s.scan_types || []).join(', ') || '—'}</td>
-                        <td style={{ padding: '0.75rem' }}>{s.priority ?? '—'}</td>
-                        <td style={{ padding: '0.75rem' }}>{s.enabled !== false ? 'Yes' : 'No'}</td>
+                      <tr key={s.name}>
+                        <td>{s.name}</td>
+                        <td>{(s.scan_types || []).join(', ') || '—'}</td>
+                        <td>{s.priority ?? '—'}</td>
+                        <td>{s.enabled !== false ? 'Yes' : 'No'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </div>
+          </AdminPanel>
 
-          {/* Queue Items */}
-          <div>
-            <h2 style={{ marginBottom: '1rem' }}>Queue (next 10 pending)</h2>
-            <div style={{
-              background: 'var(--glass-bg-main)',
-              borderRadius: '8px',
-              overflow: 'hidden',
-              border: '1px solid var(--glass-border-main)'
-            }}>
-              {status.queue_items.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                  Queue is empty
-                </div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <AdminPanel title="Queue (next 10 pending)" flush>
+            {status.queue_items.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--ds-text-secondary)' }}>
+                Queue is empty
+              </div>
+            ) : (
+              <div className="data-table-wrap">
+                <table className="data-table">
                   <thead>
-                    <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Scan Name</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Target</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Priority</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Created</th>
+                    <tr>
+                      <th>Scan Name</th>
+                      <th>Target</th>
+                      <th>Priority</th>
+                      <th>Created</th>
                     </tr>
                   </thead>
                   <tbody>
                     {status.queue_items.map((item) => (
-                      <tr key={item.scan_id} style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{item.name}</td>
-                        <td style={{ padding: '1rem', fontSize: '0.85rem', fontFamily: 'monospace' }}>
+                      <tr key={item.scan_id}>
+                        <td>{item.name}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
                           {item.target.length > 50 ? `${item.target.substring(0, 50)}...` : item.target}
                         </td>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
-                          <span style={{
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: '4px',
-                            background: item.priority > 0 ? 'rgba(255, 193, 7, 0.2)' : 'rgba(108, 117, 125, 0.2)',
-                            color: item.priority > 0 ? 'var(--color-medium)' : 'var(--text-secondary)'
-                          }}>
+                        <td>
+                          <span className={`status-pill${item.priority > 0 ? ' status-pill--pending' : ''}`}>
                             {item.priority}
                           </span>
                         </td>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
-                          {item.created_at ? new Date(item.created_at).toLocaleString() : 'N/A'}
-                        </td>
+                        <td>{item.created_at ? new Date(item.created_at).toLocaleString() : 'N/A'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              )}
-            </div>
-          </div>
+              </div>
+            )}
+          </AdminPanel>
         </>
       ) : (
-        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-          Failed to load scanner status
-        </div>
+        !loading && (
+          <AdminPanel>
+            <p style={{ textAlign: 'center', color: 'var(--ds-text-secondary)', margin: 0 }}>
+              Failed to load scanner status
+            </p>
+          </AdminPanel>
+        )
       )}
-    </div>
+    </AdminPageShell>
   )
 }

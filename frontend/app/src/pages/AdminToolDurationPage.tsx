@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import AdminPageShell from '../components/AdminPageShell'
+import AdminPanel from '../components/AdminPanel'
 import { apiFetch } from '../utils/apiClient'
 
 interface ScannerDurationStat {
@@ -43,71 +44,44 @@ export default function AdminToolDurationPage() {
   }, [])
 
   return (
-    <div className="admin-settings-page">
-      <div className="admin-settings-container">
-        <div style={{ marginBottom: '1.5rem' }}>
-          <Link to="/admin" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>
-            ← Admin Dashboard
-          </Link>
-        </div>
-        <header className="statistics-header" style={{ marginBottom: '1.5rem' }}>
-          <h1>Tool duration (exact time per scanner)</h1>
-          <p className="statistics-subtitle" style={{ opacity: 0.8, marginTop: '0.5rem' }}>
-            Admin-only: real per-tool run times used for queue estimates. No fake defaults.
+    <AdminPageShell
+      title="Tool duration"
+      subtitle="Admin-only: real per-tool run times used for queue estimates. No fake defaults."
+      error={error}
+      loading={loading}
+    >
+      {stats.length === 0 ? (
+        <AdminPanel>
+          <p style={{ textAlign: 'center', color: 'var(--ds-text-secondary)', margin: 0 }}>
+            No scanner duration data yet. Run some scans so per-tool durations are recorded; then they will appear
+            here.
           </p>
-        </header>
-
-        {error && (
-          <div className="statistics-error" style={{ marginBottom: '1rem' }}>
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <div>Loading…</div>
-        ) : stats.length === 0 ? (
-          <div className="statistics-empty" style={{ padding: '2rem', textAlign: 'center' }}>
-            No scanner duration data yet. Run some scans so per-tool durations are recorded; then they will appear here.
-          </div>
-        ) : (
-          <section className="statistics-section">
-            <div className="statistics-grid statistics-grid--duration" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
-              {stats.map((s) => (
-                <div
-                  key={s.scanner_name}
-                  className="stat-card stat-card--neutral"
-                  style={{
-                    padding: '1rem',
-                    background: 'var(--glass-bg-main)',
-                    border: '1px solid var(--glass-border-main)',
-                    borderRadius: '12px',
-                  }}
-                >
-                  <span className="stat-value" style={{ display: 'block', fontSize: '1.5rem' }}>
-                    {formatDuration(s.avg_duration_seconds)}
-                  </span>
-                  <span className="stat-label" style={{ display: 'block', marginTop: '0.25rem' }}>
-                    {s.scanner_name}
-                  </span>
-                  {(s.min_duration_seconds != null || s.max_duration_seconds != null) && (
-                    <span style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginTop: '0.5rem' }}>
-                      {s.min_duration_seconds != null && formatDuration(s.min_duration_seconds)}
-                      {s.min_duration_seconds != null && s.max_duration_seconds != null && ' – '}
-                      {s.max_duration_seconds != null && formatDuration(s.max_duration_seconds)}
-                      {s.sample_count > 0 && ` (${s.sample_count} runs)`}
-                    </span>
-                  )}
-                  {s.min_duration_seconds == null && s.max_duration_seconds == null && s.sample_count > 0 && (
-                    <span style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginTop: '0.5rem' }}>
-                      {s.sample_count} runs
-                    </span>
-                  )}
+        </AdminPanel>
+      ) : (
+        <div className="admin-metrics">
+          {stats.map((s) => (
+            <div key={s.scanner_name} className="admin-metric">
+              <div className="admin-metric__value admin-metric__value--info">
+                {formatDuration(s.avg_duration_seconds)}
+              </div>
+              <div className="admin-metric__label">{s.scanner_name}</div>
+              {(s.min_duration_seconds != null || s.max_duration_seconds != null) && (
+                <div style={{ fontSize: '0.75rem', color: 'var(--ds-text-secondary)', marginTop: '0.5rem' }}>
+                  {s.min_duration_seconds != null && formatDuration(s.min_duration_seconds)}
+                  {s.min_duration_seconds != null && s.max_duration_seconds != null && ' – '}
+                  {s.max_duration_seconds != null && formatDuration(s.max_duration_seconds)}
+                  {s.sample_count > 0 && ` (${s.sample_count} runs)`}
                 </div>
-              ))}
+              )}
+              {s.min_duration_seconds == null && s.max_duration_seconds == null && s.sample_count > 0 && (
+                <div style={{ fontSize: '0.75rem', color: 'var(--ds-text-secondary)', marginTop: '0.5rem' }}>
+                  {s.sample_count} runs
+                </div>
+              )}
             </div>
-          </section>
-        )}
-      </div>
-    </div>
+          ))}
+        </div>
+      )}
+    </AdminPageShell>
   )
 }

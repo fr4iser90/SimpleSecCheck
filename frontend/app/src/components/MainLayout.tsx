@@ -1,14 +1,23 @@
 import type { ReactNode } from 'react'
-import Header from './Header'
+import { useLocation } from 'react-router-dom'
+import AppSidebar from './AppSidebar'
+import AppTopbar from './AppTopbar'
 
-/**
- * Main content area of the app shell (header + this scroll region); pages use `.container` inside.
- */
+const WIDE_PATHS = /^\/(scan|bulk|queue)(\/|$)/
+
 export default function MainLayout({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  const wide = WIDE_PATHS.test(pathname)
+
   return (
-    <>
-      <Header />
-      <div className="shell-content">{children}</div>
-    </>
+    <div className="app-shell">
+      <AppSidebar />
+      <div className="app-shell__main">
+        <AppTopbar />
+        <div className="app-shell__content shell-content">
+          <div className={`app-shell__page${wide ? ' app-shell__page--wide' : ''}`}>{children}</div>
+        </div>
+      </div>
+    </div>
   )
 }

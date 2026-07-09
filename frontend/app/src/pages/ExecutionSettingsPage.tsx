@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import AdminPageShell from '../components/AdminPageShell'
+import AppIcon from '../components/AppIcon'
+import { POLL_ADMIN_EXECUTION_MS } from '../constants/polling'
 import { apiFetch } from '../utils/apiClient'
 
 interface QueueOverviewItem {
@@ -185,7 +188,7 @@ export default function ExecutionSettingsPage() {
 
   useEffect(() => {
     void loadOverview()
-    const t = setInterval(loadOverview, 10000)
+    const t = setInterval(loadOverview, POLL_ADMIN_EXECUTION_MS)
     return () => clearInterval(t)
   }, [loadOverview])
 
@@ -352,39 +355,55 @@ export default function ExecutionSettingsPage() {
 
   if (loading) {
     return (
-      <div className="admin-settings-page">
-        <div className="admin-settings-container">
-          <div className="loading">Loading execution settings…</div>
-        </div>
-      </div>
+      <AdminPageShell
+        title="Execution"
+        subtitle="Control how many scans run at once and how the queue is ordered."
+        loading
+        loadingText="Loading execution settings…"
+      />
     )
   }
 
   return (
-    <div className="admin-settings-page">
+    <AdminPageShell
+      title="Execution"
+      subtitle="Concurrency limits, queue ordering, and live job overview."
+      calloutTitle="Quick reference"
+      callout={
+        <dl className="page-kv-list">
+          <div>
+            <dt>Concurrency</dt>
+            <dd>How many scans may run in parallel on this instance.</dd>
+          </div>
+          <div>
+            <dt>Priority</dt>
+            <dd>Higher-priority jobs are dequeued first when workers are busy.</dd>
+          </div>
+          <div>
+            <dt>Related</dt>
+            <dd>
+              Tool timeouts: <Link to="/admin/tool-settings">Tool settings</Link> · Workers:{' '}
+              <Link to="/admin/scanner">Scan Engine</Link>.
+            </dd>
+          </div>
+        </dl>
+      }
+      error={error}
+    >
       <div className="admin-settings-container">
-        <h2>Execution</h2>
-        <p className="section-description" style={{ marginBottom: '1rem' }}>
-          Control <strong>how many scans run at once</strong> and <strong>how the queue is ordered</strong>.
-          Per-tool timeouts: <Link to="/admin/tool-settings">Tool settings</Link>. Workers &amp; assets:{' '}
-          <Link to="/admin/scanner">Scan Engine</Link>.
-        </p>
-
-        <div
-          className="settings-section"
-          style={{
-            marginBottom: '2rem',
-            padding: '1.25rem',
-            border: '1px solid var(--glass-border-main)',
-            borderRadius: 12,
-            background: 'var(--glass-bg-main)',
-          }}
-        >
-          <h3 style={{ marginTop: 0 }}>Live queue</h3>
-          <p className="section-description" style={{ marginBottom: '0.75rem' }}>
-            Running jobs, next pending (by priority → created time). Redis length = worker job queue. Updates
-            every 10s.
-          </p>
+        <div className="settings-section">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+            <div>
+              <h3 style={{ marginTop: 0, marginBottom: '0.35rem' }}>Live queue</h3>
+              <p className="section-description" style={{ margin: 0 }}>
+                Running jobs, next pending (by priority → created time). Redis length = worker job queue.
+              </p>
+            </div>
+            <button type="button" className="btn-secondary refresh-toolbar__btn" onClick={() => void loadOverview()} title={`Auto-refresh every ${POLL_ADMIN_EXECUTION_MS / 1000}s`}>
+              <AppIcon name="refresh" size={15} />
+              <span>Refresh queue</span>
+            </button>
+          </div>
           {overviewError && <div className="error-message" style={{ marginBottom: '0.5rem' }}>{overviewError}</div>}
           {overview && (
             <>
@@ -473,18 +492,9 @@ export default function ExecutionSettingsPage() {
                   </table>
                 </div>
               )}
-              <button type="button" className="btn-secondary" style={{ marginTop: '0.75rem' }} onClick={() => void loadOverview()}>
-                Refresh queue
-              </button>
             </>
           )}
         </div>
-
-        {error && (
-          <div className="error-message" role="alert">
-            {error}
-          </div>
-        )}
 
         <form onSubmit={saveJobs} className="settings-form" style={{ marginBottom: '2.5rem' }}>
           <div className="settings-section">
@@ -613,16 +623,7 @@ export default function ExecutionSettingsPage() {
           </div>
         </form>
 
-        <div
-          className="settings-section"
-          style={{
-            marginTop: '2rem',
-            padding: '1.25rem',
-            border: '1px solid var(--glass-border-main)',
-            borderRadius: 12,
-            background: 'var(--glass-bg-main)',
-          }}
-        >
+        <div className="settings-section">
           <h3 style={{ marginTop: 0 }}>Enforced limits</h3>
           <p className="section-description" style={{ marginBottom: '1rem' }}>
             Hard limits on <strong>new</strong> scans (API). Empty = no limit. Admins are exempt from rate limits
@@ -753,16 +754,7 @@ export default function ExecutionSettingsPage() {
           )}
         </div>
 
-        <div
-          className="settings-section"
-          style={{
-            marginTop: '2rem',
-            padding: '1.25rem',
-            border: '1px solid var(--glass-border-main)',
-            borderRadius: 12,
-            background: 'var(--glass-bg-main)',
-          }}
-        >
+        <div className="settings-section">
           <h3 style={{ marginTop: 0 }}>Scan form defaults (Policy + Profile)</h3>
           <p className="section-description" style={{ marginBottom: '1rem' }}>
             When users start a scan, the &quot;Finding Policy (optional)&quot; field can be pre-filled so the policy
@@ -933,6 +925,6 @@ export default function ExecutionSettingsPage() {
           )}
         </div>
       </div>
-    </div>
+    </AdminPageShell>
   )
 }

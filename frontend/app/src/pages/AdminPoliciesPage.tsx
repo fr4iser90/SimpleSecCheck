@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import AdminPageShell from '../components/AdminPageShell'
+import AdminPanel from '../components/AdminPanel'
 import { apiFetch } from '../utils/apiClient'
 
 export default function AdminPoliciesPage() {
@@ -74,85 +76,63 @@ export default function AdminPoliciesPage() {
   }
 
   return (
-    <div className="admin-settings-page">
-      <div className="admin-settings-container">
-        <p style={{ marginBottom: '1rem' }}>
-          <Link to="/admin">← Admin</Link>
-        </p>
-        <h2>Security policies</h2>
-        <p className="section-description">
+    <AdminPageShell
+      title="Security policies"
+      subtitle={
+        <>
           Rules enforced on <strong>every new scan</strong> (403 if blocked). Rate limits and max scan duration:{' '}
           <Link to="/admin/execution">Execution</Link>.
-        </p>
-
-        {loading ? (
-          <p style={{ marginTop: '1rem' }}>Loading…</p>
-        ) : (
-          <form
-            onSubmit={save}
-            className="settings-form"
-            style={{
-              marginTop: '1.5rem',
-              padding: '1.25rem',
-              border: '1px solid var(--glass-border-main)',
-              borderRadius: 12,
-              background: 'var(--glass-bg-main)',
-            }}
-          >
-            {error && (
-              <div className="error-message" role="alert" style={{ marginBottom: '1rem' }}>
-                {error}
-              </div>
-            )}
-            <div className="form-group">
-              <label>Blocked target patterns (one per line)</label>
-              <textarea
-                rows={6}
-                value={blockedPatterns}
-                onChange={(e) => setBlockedPatterns(e.target.value)}
-                placeholder={`file://*\n*.corp.internal\nregex:https?://10\\\\.`}
-                style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.9rem' }}
-              />
-              <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
-                Glob match against target URL, or prefix with <code>regex:</code> for a Python regex.
-              </small>
-            </div>
-            <div className="form-group">
-              <label>Blocked scan types</label>
-              <input
-                type="text"
-                value={blockedScanTypes}
-                onChange={(e) => setBlockedScanTypes(e.target.value)}
-                placeholder="code, container, website, network"
-                style={{ width: '100%' }}
-              />
-              <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
-                Comma-separated: <code>code</code>, <code>container</code>, <code>website</code>,{' '}
-                <code>network</code>.
-              </small>
-            </div>
-            <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <input
-                id="req_git"
-                type="checkbox"
-                checked={requireAuthForGit}
-                onChange={(e) => setRequireAuthForGit(e.target.checked)}
-              />
-              <label htmlFor="req_git" style={{ margin: 0 }}>
-                Require login for Git repository scans (block guest git scans)
-              </label>
-            </div>
-            {success && (
-              <div className="success-message" role="status" style={{ marginBottom: '1rem' }}>
-                {success}
-              </div>
-            )}
-            <button type="submit" className="btn-primary" disabled={saving}>
-              {saving ? 'Saving…' : 'Save policies'}
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
+        </>
+      }
+      error={error}
+      success={success}
+      loading={loading}
+    >
+      <AdminPanel title="Scan enforcement rules">
+        <form onSubmit={save} className="settings-form">
+          <div className="form-group">
+            <label>Blocked target patterns (one per line)</label>
+            <textarea
+              rows={6}
+              value={blockedPatterns}
+              onChange={(e) => setBlockedPatterns(e.target.value)}
+              placeholder={`file://*\n*.corp.internal\nregex:https?://10\\\\.`}
+              style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.9rem' }}
+            />
+            <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
+              Glob match against target URL, or prefix with <code>regex:</code> for a Python regex.
+            </small>
+          </div>
+          <div className="form-group">
+            <label>Blocked scan types</label>
+            <input
+              type="text"
+              value={blockedScanTypes}
+              onChange={(e) => setBlockedScanTypes(e.target.value)}
+              placeholder="code, container, website, network"
+              style={{ width: '100%' }}
+            />
+            <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
+              Comma-separated: <code>code</code>, <code>container</code>, <code>website</code>,{' '}
+              <code>network</code>.
+            </small>
+          </div>
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <input
+              id="req_git"
+              type="checkbox"
+              checked={requireAuthForGit}
+              onChange={(e) => setRequireAuthForGit(e.target.checked)}
+            />
+            <label htmlFor="req_git" style={{ margin: 0 }}>
+              Require login for Git repository scans (block guest git scans)
+            </label>
+          </div>
+          <button type="submit" className="btn-primary" disabled={saving}>
+            {saving ? 'Saving…' : 'Save policies'}
+          </button>
+        </form>
+      </AdminPanel>
+    </AdminPageShell>
   )
 }

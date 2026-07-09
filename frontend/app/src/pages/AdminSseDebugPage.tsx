@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import AdminPageShell from '../components/AdminPageShell'
+import AdminPanel from '../components/AdminPanel'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
 import type { SseEnvelope } from '../hooks/useGlobalSse'
 
@@ -50,57 +51,49 @@ export default function AdminSseDebugPage() {
   }, [])
 
   return (
-    <div className="admin-settings-page">
-      <div className="admin-settings-container">
-        <p style={{ marginBottom: '1rem' }}>
-          <Link to="/admin">← Admin</Link>
-        </p>
-        <h2>Live SSE events</h2>
-        <p className="section-description" style={{ marginBottom: '1rem' }}>
-          Raw <code style={{ fontSize: '0.9em' }}>event: ssc</code> envelopes for your session (newest first). Admin-only
-          debug; closes when you leave this page.
-        </p>
-        <p style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>
-          Stream:{' '}
-          <span
-            style={{
-              fontWeight: 600,
-              color: connected ? 'var(--color-pass, #22c55e)' : 'var(--color-critical, #ef4444)',
-            }}
-          >
-            {connected ? 'connected' : 'disconnected / reconnecting'}
+    <AdminPageShell
+      title="Live SSE events"
+      subtitle={
+        <>
+          Raw <code>event: ssc</code> envelopes for your session (newest first). Admin-only debug; closes when you
+          leave this page.
+        </>
+      }
+      actions={
+        <button type="button" className="btn-secondary" onClick={clear}>
+          Clear
+        </button>
+      }
+    >
+      <AdminPanel
+        title="Event stream"
+        description={
+          <span>
+            Stream:{' '}
+            <span
+              style={{
+                fontWeight: 600,
+                color: connected ? 'var(--ds-success)' : 'var(--ds-error)',
+              }}
+            >
+              {connected ? 'connected' : 'disconnected / reconnecting'}
+            </span>
           </span>
-          {' · '}
-          <button type="button" className="btn-secondary" onClick={clear}>
-            Clear
-          </button>
-        </p>
-        <div
-          style={{
-            maxHeight: '70vh',
-            overflow: 'auto',
-            fontFamily: 'ui-monospace, monospace',
-            fontSize: '0.75rem',
-            lineHeight: 1.45,
-            background: 'var(--color-surface-muted, rgba(0,0,0,0.04))',
-            borderRadius: 8,
-            padding: '0.75rem',
-          }}
-        >
+        }
+        flush
+      >
+        <div className="code-stream">
           {rows.length === 0 ? (
             <span style={{ opacity: 0.7 }}>Waiting for events…</span>
           ) : (
             rows.map((r, i) => (
-              <pre
-                key={`${i}-${r.type}-${JSON.stringify(r.payload).slice(0, 40)}`}
-                style={{ margin: '0 0 0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-              >
+              <pre key={`${i}-${r.type}-${JSON.stringify(r.payload).slice(0, 40)}`}>
                 {JSON.stringify(r, null, 2)}
               </pre>
             ))
           )}
         </div>
-      </div>
-    </div>
+      </AdminPanel>
+    </AdminPageShell>
   )
 }

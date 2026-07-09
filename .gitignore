@@ -136,6 +136,11 @@ dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+frontend/app/e2e/visual-audit/output/
+frontend/app/e2e/visual-audit/.setup-token
+frontend/app/e2e/.auth/
+frontend/app/playwright-report/
+frontend/app/test-results/
 
 # IDE / Editor specific
 .vscode/

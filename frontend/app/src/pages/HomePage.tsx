@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import ScanForm from '../components/ScanForm'
 import BulkScanForm from '../components/BulkScanForm'
 import ScannerDataUpdate from '../components/ScannerDataUpdate'
+import PageHeader from '../components/PageHeader'
 import { useConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
 
@@ -16,7 +17,6 @@ export default function HomePage() {
   const { token } = useAuth()
   const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single')
   const isAuthenticated = !!token
-  // Bulk scan: logged-in users always see tab when feature is on; guests only when admin enabled bulk_scan_allow_guests
   const showBulkScan = (config?.features.bulk_scan ?? true) && (isAuthenticated || (config?.features.bulk_scan_allow_guests ?? false))
 
   const handleScanStart = (scanStatus: ScanStatusData) => {
@@ -29,70 +29,58 @@ export default function HomePage() {
 
   return (
     <div className="container">
-      <div className="card">
-        <h2>Start New Scan</h2>
-        <p style={{ marginBottom: '2rem', opacity: 0.8 }}>
-          Single-shot security scanner. Each scan is independent. No history is stored.
-        </p>
-
-        {/* Tab Navigation - Only show if bulk scan is enabled */}
-        {showBulkScan && (
-          <div style={{
-            display: 'flex',
-            gap: '0.5rem',
-            marginBottom: '2rem',
-            borderBottom: '1px solid var(--glass-border-main)'
-          }}>
+      <PageHeader
+        title="Start New Scan"
+        subtitle="Configure a security scan for a repository, container, or target."
+      >
+        {showBulkScan ? (
+          <div className="segmented-tabs">
             <button
               type="button"
+              className={`segmented-tab${activeTab === 'single' ? ' segmented-tab--active' : ''}`}
               onClick={() => setActiveTab('single')}
-              style={{
-                padding: '0.75rem 1.5rem',
-                border: 'none',
-                background: 'transparent',
-                borderBottom: activeTab === 'single' ? '2px solid var(--accent)' : '2px solid transparent',
-                color: activeTab === 'single' ? 'var(--accent)' : 'var(--text-secondary)',
-                fontWeight: activeTab === 'single' ? 'bold' : 'normal',
-                cursor: 'pointer',
-                marginBottom: '-2px'
-              }}
             >
-              Single Repository
+              Single target
             </button>
             <button
               type="button"
+              className={`segmented-tab${activeTab === 'bulk' ? ' segmented-tab--active' : ''}`}
               onClick={() => setActiveTab('bulk')}
-              style={{
-                padding: '0.75rem 1.5rem',
-                border: 'none',
-                background: 'transparent',
-                borderBottom: activeTab === 'bulk' ? '2px solid var(--accent)' : '2px solid transparent',
-                color: activeTab === 'bulk' ? 'var(--accent)' : 'var(--text-secondary)',
-                fontWeight: activeTab === 'bulk' ? 'bold' : 'normal',
-                cursor: 'pointer',
-                marginBottom: '-2px'
-              }}
             >
-              Bulk Scan (Multiple Repos)
+              Bulk scan
             </button>
           </div>
-        )}
+        ) : null}
+      </PageHeader>
 
-        {/* Tab Content */}
-        {loading ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-            Loading configuration...
+      {loading ? (
+        <div className="panel">
+          <div className="panel__body" style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+            Loading configuration…
           </div>
-        ) : showBulkScan && activeTab === 'bulk' ? (
-          <BulkScanForm onBatchStart={handleBatchStart} />
-        ) : (
-          <ScanForm onScanStart={handleScanStart} config={config} />
-        )}
-      </div>
+        </div>
+      ) : showBulkScan && activeTab === 'bulk' ? (
+        <div className="panel">
+          <div className="panel__header">
+            <h2 className="panel__title">Bulk scan</h2>
+            <p className="panel__desc">Scan multiple repositories in one batch.</p>
+          </div>
+          <div className="panel__body">
+            <BulkScanForm onBatchStart={handleBatchStart} />
+          </div>
+        </div>
+      ) : (
+        <ScanForm onScanStart={handleScanStart} config={config} />
+      )}
 
-      {/* Scanner Asset Updates */}
-      <div className="card" style={{ marginTop: '2rem' }}>
-        <ScannerDataUpdate />
+      <div className="panel">
+        <div className="panel__header">
+          <h2 className="panel__title">Scanner assets</h2>
+          <p className="panel__desc">Vulnerability databases and rule bundles.</p>
+        </div>
+        <div className="panel__body">
+          <ScannerDataUpdate />
+        </div>
       </div>
     </div>
   )

@@ -1,0 +1,201 @@
+/* Target card (My Targets) */
+.target-card {
+  background: var(--ds-surface);
+  padding: 1.25rem 1.375rem;
+  border-radius: var(--ds-radius-lg);
+  border: 1px solid var(--ds-border);
+  box-shadow: var(--ds-shadow-xs);
+}
+
+.target-card__head {
+  margin-bottom: 0.875rem;
+}
+
+.target-card__title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.target-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ds-text);
+  line-height: 1.35;
+}
+
+.target-card__type-badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--ds-bg-subtle);
+  border: 1px solid var(--ds-border);
+  color: var(--ds-text-secondary);
+}
+
+.target-card__source {
+  color: var(--ds-text-secondary);
+  font-size: 0.8125rem;
+  word-break: break-all;
+  line-height: 1.45;
+}
+
+.target-card__meta {
+  font-size: 0.8125rem;
+  color: var(--ds-text-secondary);
+  margin-top: 0.25rem;
+}
+
+.target-card__callout {
+  margin-top: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: var(--ds-radius);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.target-card__callout--info {
+  background: var(--ds-accent-soft);
+  border: 1px solid var(--ds-accent-border);
+  color: var(--ds-text-secondary);
+}
+
+.target-card__callout--active {
+  background: var(--ds-info-soft);
+  border: 1px solid var(--ds-info-border);
+  color: var(--ds-text-secondary);
+}
+
+.target-card__callout--last {
+  background: var(--ds-bg-subtle);
+  border: 1px solid var(--ds-border);
+  color: var(--ds-text-secondary);
+}
+
+.target-card__status-pill {
+  display: inline-block;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.target-card__status-pill--paused {
+  background: var(--ds-bg-subtle);
+  border: 1px solid var(--ds-border-strong);
+  color: var(--ds-text-secondary);
+}
+
+.target-card__status-pill--queued {
+  background: var(--ds-success-soft);
+  border: 1px solid var(--ds-success-border);
+  color: var(--ds-success);
+}
+
+.target-card__status-pill--pending {
+  background: var(--ds-accent-soft);
+  border: 1px solid var(--ds-accent-border);
+  color: var(--ds-accent);
+}
+
+.target-card__status-pill--due {
+  background: var(--ds-warning-soft);
+  border: 1px solid var(--ds-warning-border);
+  color: var(--ds-warning);
+}
+
+.target-card__status-pill--running {
+  background: var(--ds-success-soft);
+  border: 1px solid var(--ds-success-border);
+  color: var(--ds-success);
+}
+
+.target-card__status-pill--scan-queued {
+  background: var(--ds-warning-soft);
+  border: 1px solid var(--ds-warning-border);
+  color: var(--ds-warning);
+}
+
+.target-card__findings {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+.target-card__findings-critical { color: var(--ds-error); }
+.target-card__findings-high { color: var(--color-high); }
+.target-card__findings-medium { color: var(--color-medium); }
+.target-card__findings-low { color: var(--ds-text-secondary); }
+
+.target-card__link {
+  color: var(--ds-accent);
+  font-weight: 500;
+  font-size: 0.8125rem;
+  text-decoration: none;
+}
+
+.target-card__link:hover {
+  text-decoration: underline;
+}
+
+.target-card__inline-btn {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.target-card__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.target-card__actions .primary {
+  min-width: 7.5rem;
+}
+
+.target-card__btn-danger {
+  color: var(--ds-error);
+}
+
+.target-card__active-scan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.target-card__checkbox {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.2rem;
+  accent-color: var(--ds-accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.my-targets-page .page-header {
+  margin-bottom: 1rem;
+}
+
+.my-targets-overview {
+  margin-bottom: 1.5rem;
+}
+
+.my-targets-overview__stats {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--ds-text-secondary);
+}

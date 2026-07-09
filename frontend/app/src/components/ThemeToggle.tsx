@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
+import AppIcon from './AppIcon'
 
-type ThemeMode = 'dark' | 'light'
+type ThemeMode = 'light' | 'dark'
 
 const STORAGE_KEY = 'ssc-theme-mode'
 
 function getInitialTheme(): ThemeMode {
   const stored = window.localStorage.getItem(STORAGE_KEY)
   if (stored === 'dark' || stored === 'light') return stored
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+  return 'light'
 }
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<ThemeMode>('dark')
+  const [theme, setTheme] = useState<ThemeMode>('light')
 
   useEffect(() => {
     const initialTheme = getInitialTheme()
@@ -34,8 +35,7 @@ export default function ThemeToggle() {
       title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
     >
-      <span aria-hidden>{isDark ? '🌙' : '☀️'}</span>
-      <span>{isDark ? 'Dark' : 'Light'}</span>
+      <AppIcon name={isDark ? 'moon' : 'sun'} size={16} />
     </button>
   )
 }

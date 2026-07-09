@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import PageHeader from '../components/PageHeader'
 import { resolveApiUrl } from '../utils/resolveApiUrl'
 import { legalDocumentLanguage, t as translate } from '../i18n'
 import './LegalPage.css'
@@ -7,6 +8,21 @@ import './LegalPage.css'
 interface LegalPageContent {
   title: string
   content: string
+}
+
+const EMAIL_SPLIT_RE = /([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/gi
+
+function renderInlineText(text: string, keyPrefix: string): JSX.Element[] {
+  const parts = text.split(EMAIL_SPLIT_RE)
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <a key={`${keyPrefix}-mail-${i}`} href={`mailto:${part}`} className="legal-page__mailto">
+        {part}
+      </a>
+    ) : (
+      <span key={`${keyPrefix}-t-${i}`}>{part}</span>
+    ),
+  )
 }
 
 function renderMarkdownSimple(text: string): JSX.Element[] {
@@ -19,7 +35,7 @@ function renderMarkdownSimple(text: string): JSX.Element[] {
     elements.push(
       <ul key={key}>
         {listItems.map((item, i) => (
-          <li key={i}>{item}</li>
+          <li key={i}>{renderInlineText(item, `li-${key}-${i}`)}</li>
         ))}
       </ul>
     )
@@ -58,7 +74,7 @@ function renderMarkdownSimple(text: string): JSX.Element[] {
       )
       return
     }
-    elements.push(<p key={`p-${idx}`}>{trimmed}</p>)
+    elements.push(<p key={`p-${idx}`}>{renderInlineText(trimmed, `p-${idx}`)}</p>)
   })
   flushList('list-end')
   return elements
@@ -107,21 +123,34 @@ export default function LegalPage() {
   const legalLang = legalDocumentLanguage(legalLocale)
   const legalT = (key: string) => translate(key, undefined, legalLang)
 
+  const backLink = (
+    <Link to="/" className="legal-page__back-link">
+      {legalT('legal.backHome')}
+    </Link>
+  )
+
   if (loading) {
     return (
-      <div className="legal-page shell-content">
-        <div className="card legal-page__card">{legalT('legal.pageLoading')}</div>
+      <div className="container legal-page">
+        <PageHeader title={legalT('legal.pageLoading')} />
+        <div className="panel">
+          <div className="panel__body">
+            <div className="loading">{legalT('legal.pageLoading')}</div>
+          </div>
+        </div>
       </div>
     )
   }
 
   if (!enabled) {
     return (
-      <div className="legal-page shell-content">
-        <div className="card legal-page__card">
-          <h1>{legalT('legal.pageDisabledTitle')}</h1>
-          <p>{legalT('legal.pageDisabledBody')}</p>
-          <Link to="/">{legalT('legal.backHome')}</Link>
+      <div className="container legal-page">
+        <PageHeader title={legalT('legal.pageDisabledTitle')} />
+        <div className="panel">
+          <div className="panel__body">
+            <p className="legal-page__lead">{legalT('legal.pageDisabledBody')}</p>
+            {backLink}
+          </div>
         </div>
       </div>
     )
@@ -129,23 +158,25 @@ export default function LegalPage() {
 
   if (error || !page) {
     return (
-      <div className="legal-page shell-content">
-        <div className="card legal-page__card">
-          <h1>{error === 'not_found' ? legalT('legal.pageNotFound') : legalT('legal.pageLoadFailed')}</h1>
-          <Link to="/">{legalT('legal.backHome')}</Link>
+      <div className="container legal-page">
+        <PageHeader
+          title={error === 'not_found' ? legalT('legal.pageNotFound') : legalT('legal.pageLoadFailed')}
+        />
+        <div className="panel">
+          <div className="panel__body">{backLink}</div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="legal-page shell-content">
-      <article className="card legal-page__card">
-        <h1>{page.title}</h1>
-        <div className="legal-page__body">{renderMarkdownSimple(page.content)}</div>
-        <p className="legal-page__back">
-          <Link to="/">{legalT('legal.backHome')}</Link>
-        </p>
+    <div className="container legal-page">
+      <PageHeader title={page.title} />
+      <article className="panel legal-page__article">
+        <div className="panel__body legal-page__body">
+          {renderMarkdownSimple(page.content)}
+          <div className="legal-page__footer">{backLink}</div>
+        </div>
       </article>
     </div>
   )

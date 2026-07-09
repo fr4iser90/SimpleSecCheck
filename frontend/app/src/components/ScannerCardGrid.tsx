@@ -29,95 +29,82 @@ export default function ScannerCardGrid({
   onSelectAll,
   onDeselectAll,
   loading,
-  error
+  error,
 }: ScannerCardGridProps) {
-  const [cardsExpanded, setCardsExpanded] = useState(false)
+  const [search, setSearch] = useState('')
 
   if (loading) {
-    return (
-      <div className="scanner-grid-loading">
-        🔄 Loading scanners...
-      </div>
-    )
+    return <div className="scanner-grid-loading">Loading scanners…</div>
   }
 
   if (error) {
-    return (
-      <div className="glass scanner-grid-error">
-        ⚠️ {error}
-      </div>
-    )
+    return <div className="scanner-grid-error">{error}</div>
   }
 
   if (scanners.length === 0) {
-    return (
-      <div className="scanner-grid-empty">
-        No scanners available for this scan type.
-      </div>
-    )
+    return <div className="scanner-grid-empty">No scanners available for this scan type.</div>
   }
 
-  // Sort scanners by priority
   const sortedScanners = [...scanners].sort((a, b) => a.priority - b.priority)
+  const q = search.trim().toLowerCase()
+  const filtered = q
+    ? sortedScanners.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          (s.description || '').toLowerCase().includes(q) ||
+          (s.categories || []).some((c) => c.toLowerCase().includes(q)),
+      )
+    : sortedScanners
 
   return (
-    <div>
-      {/* Action Buttons - always visible */}
-      <div className="scanner-grid-actions">
-        <button
-          type="button"
-          onClick={onSelectAll}
-          className="scanner-grid-button"
-        >
-          Select All
+    <div className="panel__body--flush" style={{ margin: '-1.25rem' }}>
+      <div className="panel__toolbar">
+        <input
+          type="search"
+          placeholder="Filter scanners…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            flex: 1,
+            minWidth: 160,
+            maxWidth: 260,
+            padding: '0.4375rem 0.625rem',
+            fontSize: '0.8125rem',
+            border: '1px solid var(--ds-border)',
+            borderRadius: 'var(--ds-radius-sm)',
+            fontFamily: 'inherit',
+          }}
+        />
+        <button type="button" onClick={onSelectAll} className="scanner-grid-button">
+          Select all
         </button>
-        <button
-          type="button"
-          onClick={onDeselectAll}
-          className="scanner-grid-button"
-        >
-          Deselect All
+        <button type="button" onClick={onDeselectAll} className="scanner-grid-button">
+          Clear
         </button>
-        <button
-          type="button"
-          onClick={() => setCardsExpanded((e) => !e)}
-          className="scanner-grid-button"
-          title={cardsExpanded ? 'Hide scanner list' : 'Show scanner list'}
-        >
-          {cardsExpanded ? '▼ Hide list' : '▶ Show list'}
-        </button>
-        {selectedScanners.length > 0 && (
-          <div className="glass scanner-grid-selection-count">
-            ✓ {selectedScanners.length} scanner{selectedScanners.length !== 1 ? 's' : ''} selected
-          </div>
-        )}
+        <span className="panel__toolbar-count">
+          <em>{selectedScanners.length}</em> of {scanners.length} selected
+        </span>
       </div>
 
-      {/* Scanner Cards Grid - collapsed by default */}
-      {cardsExpanded && (
-        <div className="scanner-grid-cards">
-          {sortedScanners.map(scanner => (
-            <ScannerCard
-              key={scanner.name}
-              name={scanner.name}
-              description={scanner.description || `Security scanner: ${scanner.name}`}
-              categories={scanner.categories || ['Security Scanning']}
-              icon={scanner.icon || '🔧'}
-              priority={scanner.priority}
-              enabled={scanner.enabled}
-              selected={selectedScanners.includes(scanner.name)}
-              requiresCondition={scanner.requires_condition}
-              onToggle={onToggle}
-            />
-          ))}
-        </div>
-      )}
+      <div className="scanner-grid-cards">
+        {filtered.map((scanner) => (
+          <ScannerCard
+            key={scanner.name}
+            name={scanner.name}
+            description={scanner.description || `Security scanner: ${scanner.name}`}
+            categories={scanner.categories || ['Security']}
+            icon={scanner.icon || '🔧'}
+            priority={scanner.priority}
+            enabled={scanner.enabled}
+            selected={selectedScanners.includes(scanner.name)}
+            requiresCondition={scanner.requires_condition}
+            onToggle={onToggle}
+          />
+        ))}
+      </div>
 
-      {/* Selection Status */}
       {selectedScanners.length === 0 && (
-        <div className="glass scanner-grid-warning">
-          ⚠️ Please select at least one scanner to start the scan.
-        </div>
+        <div className="scanner-grid-warning">Select at least one scanner to start the scan.</div>
       )}
     </div>
   )

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import AdminPageShell from '../components/AdminPageShell'
+import AdminPanel from '../components/AdminPanel'
 import { apiFetch } from '../utils/apiClient'
 
 interface BlockedIP {
@@ -25,7 +27,7 @@ export default function IPControlPage() {
   const [blockForm, setBlockForm] = useState({
     ip_address: '',
     reason: 'manual',
-    expires_at: ''
+    expires_at: '',
   })
 
   const loadData = async () => {
@@ -47,7 +49,7 @@ export default function IPControlPage() {
 
   useEffect(() => {
     loadData()
-    const interval = setInterval(loadData, 30000) // Refresh every 30 seconds
+    const interval = setInterval(loadData, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -57,7 +59,7 @@ export default function IPControlPage() {
       const response = await apiFetch('/api/admin/security/ip-control/block', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(blockForm)
+        body: JSON.stringify(blockForm),
       })
       if (response.ok) {
         setShowBlockModal(false)
@@ -77,7 +79,7 @@ export default function IPControlPage() {
     if (!confirm(`Are you sure you want to unblock ${ip}?`)) return
     try {
       const response = await apiFetch(`/api/admin/security/ip-control/unblock?ip_address=${encodeURIComponent(ip)}`, {
-        method: 'POST'
+        method: 'POST',
       })
       if (response.ok) {
         loadData()
@@ -92,192 +94,124 @@ export default function IPControlPage() {
   }
 
   return (
-    <div className="container" style={{ padding: '2rem' }}>
-      <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1>IP & Abuse Protection</h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-            Monitor and protect against abuse, brute force, and suspicious activity
-          </p>
-        </div>
-        <button className="primary" onClick={() => setShowBlockModal(true)}>
+    <AdminPageShell
+      title="IP & Abuse Protection"
+      subtitle="Monitor and protect against abuse, brute force, and suspicious activity"
+      loading={loading}
+      actions={
+        <button type="button" className="btn-primary" onClick={() => setShowBlockModal(true)}>
           + Block IP
         </button>
-      </div>
-
-      {/* Statistics */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-        <div style={{
-          background: 'var(--glass-bg-main)',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          border: '1px solid var(--glass-border-main)'
-        }}>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-critical)' }}>
-            {statistics.total_blocked}
-          </div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Blocked IPs</div>
+      }
+    >
+      <div className="admin-metrics">
+        <div className="admin-metric">
+          <div className="admin-metric__value admin-metric__value--critical">{statistics.total_blocked}</div>
+          <div className="admin-metric__label">Blocked IPs</div>
         </div>
-        <div style={{
-          background: 'var(--glass-bg-main)',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          border: '1px solid var(--glass-border-main)'
-        }}>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-high)' }}>
-            {statistics.total_activity_24h}
-          </div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Activity Events (24h)</div>
+        <div className="admin-metric">
+          <div className="admin-metric__value admin-metric__value--high">{statistics.total_activity_24h}</div>
+          <div className="admin-metric__label">Activity Events (24h)</div>
         </div>
       </div>
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div>
-      ) : (
-        <>
-          {/* Blocked IPs */}
-          <div style={{ marginBottom: '2rem' }}>
-            <h2 style={{ marginBottom: '1rem' }}>Blocked IPs</h2>
-            <div style={{
-              background: 'var(--glass-bg-main)',
-              borderRadius: '8px',
-              overflow: 'hidden',
-              border: '1px solid var(--glass-border-main)'
-            }}>
-              {blockedIPs.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                  No blocked IPs
-                </div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>IP Address</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Reason</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Blocked At</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Expires</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {blockedIPs.map((ip) => (
-                      <tr key={ip.id} style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem', fontFamily: 'monospace' }}>{ip.ip_address}</td>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{ip.reason}</td>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
-                          {new Date(ip.blocked_at).toLocaleString()}
-                        </td>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
-                          {ip.expires_at ? new Date(ip.expires_at).toLocaleString() : 'Permanent'}
-                        </td>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
-                          <button
-                            onClick={() => handleUnblock(ip.ip_address)}
-                            style={{ fontSize: '0.85rem', padding: '0.25rem 0.5rem' }}
-                          >
-                            Unblock
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+      <AdminPanel title="Blocked IPs" flush>
+        {blockedIPs.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--ds-text-secondary)' }}>No blocked IPs</div>
+        ) : (
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>IP Address</th>
+                  <th>Reason</th>
+                  <th>Blocked At</th>
+                  <th>Expires</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {blockedIPs.map((ip) => (
+                  <tr key={ip.id}>
+                    <td style={{ fontFamily: 'monospace' }}>{ip.ip_address}</td>
+                    <td>{ip.reason}</td>
+                    <td>{new Date(ip.blocked_at).toLocaleString()}</td>
+                    <td>{ip.expires_at ? new Date(ip.expires_at).toLocaleString() : 'Permanent'}</td>
+                    <td>
+                      <button type="button" className="btn-secondary" onClick={() => handleUnblock(ip.ip_address)}>
+                        Unblock
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        )}
+      </AdminPanel>
 
-          {/* Suspicious Activity */}
-          <div>
-            <h2 style={{ marginBottom: '1rem' }}>Suspicious Activity (Last 24h)</h2>
-            <div style={{
-              background: 'var(--glass-bg-main)',
-              borderRadius: '8px',
-              overflow: 'hidden',
-              border: '1px solid var(--glass-border-main)'
-            }}>
-              {suspicious.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                  No suspicious activity detected
-                </div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>IP Address</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Event Type</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Count</th>
-                      <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid var(--glass-border-main)' }}>Window Start</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {suspicious.map((activity, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid var(--glass-border-main)' }}>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem', fontFamily: 'monospace' }}>{activity.ip_address}</td>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>{activity.event_type}</td>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
-                          <span style={{
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: '4px',
-                            background: activity.count > 10 ? 'rgba(220, 53, 69, 0.2)' : 'rgba(255, 193, 7, 0.2)',
-                            color: activity.count > 10 ? 'var(--color-critical)' : 'var(--color-medium)'
-                          }}>
-                            {activity.count}
-                          </span>
-                        </td>
-                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
-                          {new Date(activity.window_start).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+      <AdminPanel title="Suspicious Activity (Last 24h)" flush>
+        {suspicious.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--ds-text-secondary)' }}>
+            No suspicious activity detected
           </div>
-        </>
-      )}
+        ) : (
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>IP Address</th>
+                  <th>Event Type</th>
+                  <th>Count</th>
+                  <th>Window Start</th>
+                </tr>
+              </thead>
+              <tbody>
+                {suspicious.map((activity, idx) => (
+                  <tr key={idx}>
+                    <td style={{ fontFamily: 'monospace' }}>{activity.ip_address}</td>
+                    <td>{activity.event_type}</td>
+                    <td>
+                      <span
+                        className="status-pill"
+                        style={
+                          activity.count > 10
+                            ? { background: 'var(--ds-error-soft)', color: 'var(--ds-error)' }
+                            : { background: 'var(--ds-warning-soft)', color: 'var(--ds-warning)' }
+                        }
+                      >
+                        {activity.count}
+                      </span>
+                    </td>
+                    <td>{new Date(activity.window_start).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </AdminPanel>
 
-      {/* Block Modal */}
       {showBlockModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'var(--glass-bg-main)',
-            padding: '2rem',
-            borderRadius: '8px',
-            width: '90%',
-            maxWidth: '500px',
-            border: '1px solid var(--glass-border-main)'
-          }}>
-            <h2 style={{ marginTop: 0 }}>Block IP Address</h2>
+        <div className="ui-modal-overlay">
+          <div className="ui-modal">
+            <h2 className="ui-modal__title">Block IP Address</h2>
             <form onSubmit={handleBlock}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>IP Address</label>
+              <div className="form-group">
+                <label>IP Address</label>
                 <input
                   type="text"
                   required
                   placeholder="192.168.1.100"
                   value={blockForm.ip_address}
                   onChange={(e) => setBlockForm({ ...blockForm, ip_address: e.target.value })}
-                  style={{ width: '100%' }}
                 />
               </div>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Reason</label>
+              <div className="form-group">
+                <label>Reason</label>
                 <select
                   value={blockForm.reason}
                   onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
-                  style={{ width: '100%' }}
                 >
                   <option value="manual">Manual</option>
                   <option value="brute_force">Brute Force</option>
@@ -285,26 +219,29 @@ export default function IPControlPage() {
                   <option value="suspicious_activity">Suspicious Activity</option>
                 </select>
               </div>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Expires At (Optional)</label>
+              <div className="form-group">
+                <label>Expires At (Optional)</label>
                 <input
                   type="datetime-local"
                   value={blockForm.expires_at}
                   onChange={(e) => setBlockForm({ ...blockForm, expires_at: e.target.value })}
-                  style={{ width: '100%' }}
                 />
-                <small style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                <small style={{ color: 'var(--ds-text-secondary)', fontSize: '0.85rem' }}>
                   Leave empty for permanent block
                 </small>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => setShowBlockModal(false)}>Cancel</button>
-                <button type="submit" className="primary">Block IP</button>
+              <div className="ui-modal__actions">
+                <button type="button" className="btn-secondary" onClick={() => setShowBlockModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  Block IP
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
-    </div>
+    </AdminPageShell>
   )
 }

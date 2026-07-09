@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import AdminPageShell from '../components/AdminPageShell'
 import { apiFetch } from '../utils/apiClient'
 
 interface AuthConfig {
@@ -75,28 +76,37 @@ export default function AuthSettingsPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="admin-settings-page">
-        <div className="admin-settings-container">
-          <div className="loading">Loading auth configuration...</div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="admin-settings-page">
+    <AdminPageShell
+      title="Auth settings"
+      subtitle="Control how users sign in, who may use the app without an account, and registration rules."
+      calloutTitle="Quick reference"
+      callout={
+        <dl className="page-kv-list">
+          <div>
+            <dt>AUTH_MODE</dt>
+            <dd>Login mechanism — free (no accounts), basic (password), or JWT.</dd>
+          </div>
+          <div>
+            <dt>ACCESS_MODE</dt>
+            <dd>Who may use scans and insights — public, mixed, or private.</dd>
+          </div>
+          <div>
+            <dt>Feature flags</dt>
+            <dd>Separate setting — controls which scan targets are allowed.</dd>
+          </div>
+        </dl>
+      }
+      error={error}
+      success={success}
+      loading={loading}
+      loadingText="Loading auth configuration…"
+    >
       <div className="admin-settings-container">
-        <h2>Auth Settings</h2>
-        <p className="section-description" style={{ marginBottom: '1.5rem' }}>
-          AUTH_MODE = how users log in. ACCESS_MODE = who may use the system (public / mixed / private). Self-registration is separate. Not Feature Flags (those control scan targets).
-        </p>
-        {error && <div className="error-message" role="alert">{error}</div>}
-        {success && <div className="success-message" role="alert">{success}</div>}
         <form onSubmit={handleSave} className="settings-form">
           <div className="settings-section">
-            <h3>Login mechanism (AUTH_MODE)</h3>
+            <h3>Login mechanism</h3>
+            <p className="settings-section__lead">AUTH_MODE — defines how users authenticate.</p>
             <div className="form-group">
               <label htmlFor="auth_mode">How users log in</label>
               <select
@@ -109,13 +119,15 @@ export default function AuthSettingsPage() {
                 <option value="basic">Basic — Username/password</option>
                 <option value="jwt">JWT — Token / SSO</option>
               </select>
-              <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
-                Only defines the mechanism. Who may access is controlled by Access mode below.
-              </small>
+              <p className="form-help-text">
+                Only defines the mechanism. Who may access is controlled by access mode below.
+              </p>
             </div>
           </div>
+
           <div className="settings-section">
-            <h3>Who may use the system (ACCESS_MODE)</h3>
+            <h3>Access mode</h3>
+            <p className="settings-section__lead">ACCESS_MODE — who may use the system without signing in.</p>
             <div className="form-group">
               <label htmlFor="access_mode">Access mode</label>
               <select
@@ -125,33 +137,34 @@ export default function AuthSettingsPage() {
                 onChange={handleChange}
               >
                 <option value="public">Public — All areas open (no login required)</option>
-                <option value="mixed">Mixed — Scan, queue, stats public; dashboard / profile require login</option>
-                <option value="private">Private — Login required for scans, queue, stats, and everything else</option>
+                <option value="mixed">Mixed — Scan, queue, stats public; profile requires login</option>
+                <option value="private">Private — Login required everywhere</option>
               </select>
-              <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
-                Public/Mixed = guests can start scans. Private = only logged-in users.
-              </small>
+              <p className="form-help-text">
+                Public and mixed allow guests to start scans. Private requires a signed-in user.
+              </p>
             </div>
           </div>
+
           <div className="settings-section">
             <h3>Registration</h3>
+            <p className="settings-section__lead">Self-service sign-up and email verification.</p>
             <div className="form-group">
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <label className="form-check">
                 <input
                   type="checkbox"
                   name="allow_self_registration"
                   checked={config.allow_self_registration}
                   onChange={handleChange}
-                  style={{ cursor: 'pointer' }}
                 />
-                Allow self-registration (sign up)
+                <span>Allow self-registration (sign up)</span>
               </label>
-              <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
-                Users can create their own account. If off, only admins can create users. SMTP is used for password reset and (optional) verification emails.
-              </small>
+              <p className="form-help-text">
+                When off, only admins can create users. SMTP is used for password reset and verification emails.
+              </p>
             </div>
             {config.allow_self_registration && (
-              <div className="form-group" style={{ marginTop: '1rem' }}>
+              <div className="form-group">
                 <label htmlFor="registration_approval">New user approval</label>
                 <select
                   id="registration_approval"
@@ -159,55 +172,56 @@ export default function AuthSettingsPage() {
                   value={config.registration_approval ?? 'auto'}
                   onChange={handleChange}
                 >
-                  <option value="auto">Auto accept — New users can log in immediately</option>
-                  <option value="admin_approval">Admin approval only — New users wait in User Management until you activate them</option>
+                  <option value="auto">Auto accept — users can log in immediately</option>
+                  <option value="admin_approval">Admin approval — pending until you activate them</option>
                 </select>
-                <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
-                  With “Admin approval only”, new sign-ups appear under User Management → Pending approval. Use Accept to activate them.
-                </small>
+                <p className="form-help-text">
+                  Pending users appear under User Management until you accept them.
+                </p>
               </div>
             )}
-            <div className="form-group" style={{ marginTop: '1rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <div className="form-group">
+              <label className="form-check">
                 <input
                   type="checkbox"
                   name="require_email_verification"
                   checked={config.require_email_verification ?? false}
                   onChange={handleChange}
-                  style={{ cursor: 'pointer' }}
                 />
-                Require email verification to log in
+                <span>Require email verification before login</span>
               </label>
-              <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
-                When enabled, users must click the verification link from the sign-up email before they can sign in. Only applies if you send verification emails (SMTP configured).
-              </small>
+              <p className="form-help-text">
+                Requires SMTP so verification emails can be sent after sign-up.
+              </p>
             </div>
           </div>
+
           <div className="settings-section">
-            <h3>Bulk scan (override)</h3>
+            <h3>Bulk scan</h3>
+            <p className="settings-section__lead">Optional override for the bulk-scan tab on the home page.</p>
             <div className="form-group">
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <label className="form-check">
                 <input
                   type="checkbox"
                   name="bulk_scan_allow_guests"
                   checked={config.bulk_scan_allow_guests ?? false}
                   onChange={handleChange}
-                  style={{ cursor: 'pointer' }}
                 />
-                Allow guest bulk scan
+                <span>Allow guest bulk scan</span>
               </label>
-              <small style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
-                By default only logged-in users can use the bulk scan tab. Enable this to allow guests to use bulk scan as well.
-              </small>
+              <p className="form-help-text">
+                By default only logged-in users can use bulk scan. Enable to allow guests as well.
+              </p>
             </div>
           </div>
-          <div style={{ marginTop: '1.5rem' }}>
-            <button type="submit" className="primary" disabled={saving}>
-              {saving ? 'Saving...' : 'Save auth configuration'}
+
+          <div className="form-actions">
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? 'Saving…' : 'Save auth configuration'}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </AdminPageShell>
   )
 }

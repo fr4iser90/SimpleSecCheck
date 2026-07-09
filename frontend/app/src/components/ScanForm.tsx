@@ -3,6 +3,7 @@ import { FrontendConfig } from '../hooks/useConfig'
 import { useAuth } from '../hooks/useAuth'
 import ScanStep from './ScanStep'
 import ScannerCardGrid from './ScannerCardGrid'
+import StepProgress from './StepProgress'
 import { apiFetch } from '../utils/apiClient'
 import { formatEstimatedTime } from '../utils/timeUtils'
 
@@ -508,33 +509,58 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="scan-form">
-      {/* Step 1: Target (FIRST - most important!) */}
+      <StepProgress
+        steps={[
+          {
+            id: '1',
+            label: 'Target',
+            status: targetTypeInfo && target.trim() ? 'done' : 'active',
+          },
+          {
+            id: '2',
+            label: 'Scanners',
+            status: !scanType
+              ? 'pending'
+              : selectedScanners.length > 0
+              ? 'done'
+              : 'active',
+          },
+          {
+            id: '3',
+            label: 'Options',
+            status: selectedScanners.length > 0 ? 'active' : 'pending',
+          },
+        ]}
+      />
+
       <ScanStep
         id="step-1"
-        title="Target"
+        title="Scan target"
+        description="Git URL, container image, local path, website URL, or network host."
         trigger={targetTypeInfo ? targetTypeInfo.target_type : target}
         autoScroll={false}
         expanded={true}
         completed={!!targetTypeInfo && target.trim().length > 0}
         required={true}
+        stepNumber="1"
       >
         <div className="form-group">
-          <label htmlFor="target">
-            Target (Git URL, Container Image, Local Path, Website URL, or Network Host)
-          </label>
+          <div className="form-label-row">
+            <label className="form-label" htmlFor="target">Repository or target URL</label>
+            <span className="form-label-hint">Required</span>
+          </div>
           <input
             id="target"
             type="text"
             value={target}
             onChange={(e) => {
               setTarget(e.target.value)
-              setScanTypeDetected(false) // Reset detection flag when user types
+              setScanTypeDetected(false)
             }}
             onBlur={(e) => setTarget(e.target.value.trim())}
-            placeholder="https://github.com/user/repo, nginx:latest, /path/to/project, https://example.com, or 192.168.1.1, or upload a ZIP below"
+            placeholder="https://github.com/user/repo, nginx:latest, /path/to/project…"
             required
-            style={{ fontSize: '1.1rem', padding: '1rem' }}
-            className={isGitRepo || isImageTarget ? 'input-border-success' : (isLocalPath && !localPathsAllowed) || isLocalPathRestrictedByRole || isLocalContainerRestrictedByRole ? 'input-border-error' : ''}
+            className={`input-lg${isGitRepo || isImageTarget ? ' input-border-success' : (isLocalPath && !localPathsAllowed) || isLocalPathRestrictedByRole || isLocalContainerRestrictedByRole ? ' input-border-error' : ''}`}
           />
           {scanType === 'code' && zipUploadAllowed && (
             <div className="form-group" style={{ marginTop: '0.75rem' }}>
@@ -582,34 +608,24 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
             </div>
           )}
           {loadingTargetType && target.trim() && (
-            <div className="glass form-info-box loading" style={{ marginTop: '0.75rem' }}>
+            <div className="form-info-box loading" style={{ marginTop: '0.75rem' }}>
               <div className="form-info-box-header">
-                <span>🔄</span>
-                <span>Analyzing target...</span>
+                <span>Analyzing target…</span>
               </div>
             </div>
           )}
           {targetTypeInfo && !loadingTargetType && (
-            <div className="glass form-info-box success" style={{ marginTop: '0.75rem' }}>
-              <div className="form-info-box-header">
-                <span>{targetTypeInfo.icon}</span>
-                <span>Target detected: {targetTypeInfo.display_name}</span>
-                {scanTypeDetected && (
-                  <span style={{ marginLeft: 'auto', fontSize: '0.875rem', color: 'var(--color-info)' }}>
-                    Scan Type: {scanType}
-                  </span>
-                )}
+            <div className="detect-banner">
+              <div className="detect-banner__icon">{targetTypeInfo.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="detect-banner__title">Target detected: {targetTypeInfo.display_name}</div>
+                <div className="detect-banner__url">{targetTypeInfo.target_url}</div>
+                <div className="detect-banner__meta">
+                  <span className="ui-chip">{targetTypeInfo.target_type}</span>
+                  <span className="ui-chip">{targetTypeInfo.action}</span>
+                  {scanTypeDetected && <span className="ui-chip ui-chip--accent">scan: {scanType}</span>}
+                </div>
               </div>
-              <div className="form-target-url">
-                {targetTypeInfo.target_url}
-              </div>
-              <ul className="form-info-box-list">
-                <li>Type: {targetTypeInfo.target_type}</li>
-                <li>Action: {targetTypeInfo.action}</li>
-                {targetTypeInfo.cleanup && (
-                  <li>Cleanup: {targetTypeInfo.cleanup}</li>
-                )}
-              </ul>
             </div>
           )}
         </div>
@@ -647,27 +663,68 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
         )}
 
         {scanType && (
-          <div className="form-group" style={{ marginTop: '1rem' }}>
-            <label htmlFor="scan-profile">Scan Profile</label>
-            <select
-              id="scan-profile"
-              value={scanProfile}
-              disabled={allowedScanProfiles.length === 0}
-              onChange={(e) => setScanProfile(e.target.value as ScanProfile)}
-            >
-              {allowedScanProfiles.map((p) => (
-                <option key={p} value={p}>
-                  {p.charAt(0).toUpperCase() + p.slice(1)}
-                </option>
-              ))}
-            </select>
-            <small className="form-help-text info">
-              Default: <strong>{roleDefaultScanProfile}</strong>, max allowed: <strong>{roleMaxAllowedScanProfile}</strong>.
-            </small>
-            {allowedScanProfiles.length === 0 && (
-              <small className="form-help-text error">
-                No scan profiles available from backend catalog. Check scanner manifests/discovery.
+          <div className="form-field-row" style={{ marginTop: '1rem' }}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="scan-profile">Scan profile</label>
+              <select
+                id="scan-profile"
+                value={scanProfile}
+                disabled={allowedScanProfiles.length === 0}
+                onChange={(e) => setScanProfile(e.target.value as ScanProfile)}
+              >
+                {allowedScanProfiles.map((p) => (
+                  <option key={p} value={p}>
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  </option>
+                ))}
+              </select>
+              <small className="form-help-text info">
+                Default <span className="ui-chip ui-chip--accent">{roleDefaultScanProfile}</span>
+                {' · '}max <strong>{roleMaxAllowedScanProfile}</strong>
               </small>
+              {allowedScanProfiles.length === 0 && (
+                <small className="form-help-text error">
+                  No scan profiles available from backend catalog.
+                </small>
+              )}
+            </div>
+            {isGitRepo ? (
+              <div className="form-group">
+                <label className="form-label" htmlFor="git-branch">
+                  Git branch {availableBranches.length > 0 ? '(auto-detected)' : '(optional)'}
+                </label>
+                {loadingBranches ? (
+                  <div className="form-loading-text">Loading branches…</div>
+                ) : availableBranches.length > 0 ? (
+                  <select
+                    id="git-branch"
+                    value={gitBranch}
+                    onChange={(e) => setGitBranch(e.target.value)}
+                  >
+                    {availableBranches.map((branch) => (
+                      <option key={branch} value={branch}>
+                        {branch}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <>
+                    <input
+                      id="git-branch"
+                      type="text"
+                      value={gitBranch}
+                      onChange={(e) => setGitBranch(e.target.value)}
+                      onBlur={(e) => setGitBranch(e.target.value.trim())}
+                      placeholder="main, master, develop…"
+                    />
+                    {branchError && (
+                      <small className="form-help-text warning">⚠️ {branchError}</small>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : (
+              <div />
             )}
           </div>
         )}
@@ -697,66 +754,19 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
             ❌ Network scans are not allowed. Enable "Network" in allowed targets.
           </small>
         )}
-
-        {isGitRepo && (
-          <>
-            <div className="form-group" style={{ marginTop: '0.75rem' }}>
-              <label htmlFor="git-branch">
-                Git Branch {availableBranches.length > 0 ? '(auto-detected)' : '(optional)'}
-              </label>
-              {loadingBranches ? (
-                <div className="form-loading-text">
-                  🔄 Loading branches...
-                </div>
-              ) : availableBranches.length > 0 ? (
-                <select
-                  id="git-branch"
-                  value={gitBranch}
-                  onChange={(e) => setGitBranch(e.target.value)}
-                >
-                  {availableBranches.map((branch) => (
-                    <option key={branch} value={branch}>
-                      {branch}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <>
-                  <input
-                    id="git-branch"
-                    type="text"
-                    value={gitBranch}
-                    onChange={(e) => setGitBranch(e.target.value)}
-                    onBlur={(e) => setGitBranch(e.target.value.trim())}
-                    placeholder="main, master, develop, etc. (leer = Standard-Branch)"
-                  />
-                  {branchError && (
-                    <small className="form-help-text warning">
-                      ⚠️ {branchError}
-                    </small>
-                  )}
-                </>
-              )}
-              <small className="form-help-text info">
-                {availableBranches.length > 0 
-                  ? 'Default branch is automatically selected. You can choose a different branch.'
-                  : 'Leave empty for default branch (usually "main" or "master")'}
-              </small>
-            </div>
-          </>
-        )}
       </ScanStep>
 
-      {/* Step 2: Scanner Selection */}
-      {scanType && (
+      {scanType ? (
         <ScanStep
           id="step-2"
-          title="Scanner Selection"
+          title="Scanner selection"
+          description="Choose tools to include in this scan run."
           trigger={targetTypeInfo ? targetTypeInfo.target_type : undefined}
           autoScroll={!!targetTypeInfo && target.trim().length > 0}
           expanded={true}
           completed={selectedScanners.length > 0}
           required={true}
+          stepNumber="2"
         >
           <ScannerCardGrid
             scanners={scanners}
@@ -768,30 +778,47 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
             error={scannerError}
           />
           {selectedScanners.length > 0 && loadingEstimate && (
-            <p className="form-help-text info" style={{ marginTop: '1rem', opacity: 0.85 }}>
+            <p className="form-help-text info estimate-bar" style={{ marginTop: 0 }}>
               Calculating estimated duration…
             </p>
           )}
           {selectedScanners.length > 0 && !loadingEstimate && estimatedSeconds != null && estimatedSeconds > 0 && (
-            <p className="form-help-text info" style={{ marginTop: '1rem' }}>
-              Estimated scan duration:{' '}
+            <div className="estimate-bar">
+              <span>Estimated duration</span>
               <strong>{formatEstimatedTime(estimatedSeconds)}</strong>
-              <span style={{ opacity: 0.85 }}> (measured avg, last ~100 runs per tool)</span>
-            </p>
+              <span style={{ color: 'var(--ds-text-muted)' }}>avg. last ~100 runs per tool</span>
+            </div>
           )}
+        </ScanStep>
+      ) : (
+        <ScanStep
+          id="step-2"
+          title="Scanner selection"
+          description="Choose tools to include in this scan run."
+          trigger={undefined}
+          autoScroll={false}
+          expanded={false}
+          completed={false}
+          required={true}
+          stepNumber="2"
+        >
+          <p className="form-help-text" style={{ margin: 0 }}>
+            Enter a valid target above to load available scanners for this scan type.
+          </p>
         </ScanStep>
       )}
 
-      {/* Step 3: Advanced Options */}
       <ScanStep
         id="step-3"
-        title="Advanced Options"
+        title="Advanced options"
+        description="Finding policy and optional metadata collection."
         trigger={undefined}
         autoScroll={false}
         expanded={false}
         completed={false}
         required={false}
         collapsible
+        stepNumber="3"
       >
         <div className="form-group">
           <label htmlFor="finding-policy">Finding Policy (optional)</label>
@@ -827,22 +854,35 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
         )}
       </ScanStep>
 
-      {/* Error Display */}
       {error && (
-        <div className="glass form-info-box error">
+        <div className="form-info-box error" role="alert">
           {error}
         </div>
       )}
 
-      {/* Fixed Action Bar */}
-      <div className="glass action-bar">
+      <div className="scan-form__action-bar">
+        <div className="scan-form__summary">
+          <span><strong>{selectedScanners.length}</strong> scanners</span>
+          {scanProfile ? (
+            <>
+              <span className="scan-form__summary-sep" />
+              <span>Profile <strong>{scanProfile}</strong></span>
+            </>
+          ) : null}
+          {estimatedSeconds != null && estimatedSeconds > 0 ? (
+            <>
+              <span className="scan-form__summary-sep" />
+              <span>~<strong>{formatEstimatedTime(estimatedSeconds)}</strong></span>
+            </>
+          ) : null}
+        </div>
         <span title={scanDisabledReason} className="scan-form-submit-wrapper">
-          <button 
-            type="submit" 
-            className="primary scan-form-submit-button" 
+          <button
+            type="submit"
+            className="primary scan-form-submit-button"
             disabled={isScanDisabled}
           >
-            {loading ? '🔄 Starting Scan...' : '🚀 Start Scan'}
+            {loading ? 'Starting scan…' : 'Start scan'}
           </button>
         </span>
       </div>

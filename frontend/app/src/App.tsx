@@ -33,7 +33,6 @@ import AdminScannerToolSettingsPage from './pages/AdminScannerToolSettingsPage'
 import ProfilePage from './pages/ProfilePage'
 import APIKeysPage from './pages/APIKeysPage'
 import MyTargetsPage from './pages/MyTargetsPage'
-import Footer from './components/Footer'
 import { CookieNotice, useLegalConfig } from './components/Legal'
 import LegalPage from './pages/LegalPage'
 import AdminLegalSettingsPage from './pages/AdminLegalSettingsPage'
@@ -51,7 +50,7 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
         <Route
           path="/setup"
           element={
-            <div className="shell-content">
+            <div className="auth-shell">
               <SetupWizard />
             </div>
           }
@@ -67,7 +66,7 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
       <Route
         path="/login"
         element={
-          <div className="shell-content">
+          <div className="auth-shell">
             <LoginPage />
           </div>
         }
@@ -75,7 +74,7 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
       <Route
         path="/signup"
         element={
-          <div className="shell-content">
+          <div className="auth-shell">
             <SignUpPage />
           </div>
         }
@@ -83,7 +82,7 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
       <Route
         path="/verify-email"
         element={
-          <div className="shell-content">
+          <div className="auth-shell">
             <VerifyEmailPage />
           </div>
         }
@@ -96,7 +95,7 @@ function AppRoutes({ setupStatus }: { setupStatus: SetupStatus }) {
       <Route
         path="/password-reset"
         element={
-          <div className="shell-content">
+          <div className="auth-shell">
             <PasswordResetPage />
           </div>
         }
@@ -321,12 +320,7 @@ function AppContent() {
             <div className="app__body">
               <AppRoutes setupStatus={setupStatus} />
             </div>
-            {setupStatus.setup_complete ? (
-              <>
-                <Footer />
-                <LegalCookieNotice />
-              </>
-            ) : null}
+            {setupStatus.setup_complete ? <LegalCookieNotice /> : null}
           </div>
         </BrowserRouter>
       )}

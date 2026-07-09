@@ -1,0 +1,141 @@
+/* SimpleSecCheck design system — light default, dark via [data-theme='dark'] */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --ds-bg: #f4f6f9;
+  --ds-bg-subtle: #eef1f6;
+  --ds-surface: #ffffff;
+  --ds-surface-raised: #ffffff;
+  --ds-border: #e4e8ef;
+  --ds-border-subtle: #edf0f5;
+  --ds-border-strong: #cdd5e0;
+  --ds-text: #0b1220;
+  --ds-text-secondary: #5c6578;
+  --ds-text-muted: #8b95a8;
+  --ds-accent: #1d5bd6;
+  --ds-accent-hover: #1648b0;
+  --ds-accent-soft: #e8f0fe;
+  --ds-accent-border: #c7dafb;
+  --ds-primary: #0b1220;
+  --ds-primary-hover: #1a2332;
+  --ds-success: #0f7a3d;
+  --ds-success-soft: #e8f6ee;
+  --ds-success-border: #b8e6cc;
+  --ds-warning: #b45309;
+  --ds-warning-soft: #fef6e8;
+  --ds-warning-border: #f5d9a8;
+  --ds-error: #c62828;
+  --ds-error-soft: #fef2f2;
+  --ds-error-border: #f5c6c6;
+  --ds-info: #0b6e99;
+  --ds-info-soft: #e8f4fa;
+  --ds-info-border: #b8dff0;
+  --ds-radius-sm: 6px;
+  --ds-radius: 8px;
+  --ds-radius-lg: 12px;
+  --ds-radius-xl: 16px;
+  --ds-shadow-xs: 0 1px 2px rgba(11, 18, 32, 0.04);
+  --ds-shadow-sm: 0 1px 3px rgba(11, 18, 32, 0.06), 0 1px 2px rgba(11, 18, 32, 0.03);
+  --ds-shadow-md: 0 4px 12px rgba(11, 18, 32, 0.06);
+  --ds-shadow-lg: 0 8px 24px rgba(11, 18, 32, 0.08);
+  --ds-focus-ring: 0 0 0 3px rgba(29, 91, 214, 0.18);
+  --ds-sidebar-width: 252px;
+
+  /* Legacy aliases — keep existing components working */
+  --color-critical: var(--ds-error);
+  --color-high: #d97706;
+  --color-medium: #ca8a04;
+  --color-low: var(--ds-info);
+  --color-info: var(--ds-text-muted);
+  --color-pass: var(--ds-success);
+
+  --bg-main: var(--ds-bg);
+  --text-main: var(--ds-text);
+  --text-secondary: var(--ds-text-secondary);
+  --text-muted: var(--ds-text-muted);
+  --accent: var(--ds-accent);
+  --accent-gradient: var(--ds-accent);
+  --focus-ring: rgba(29, 91, 214, 0.18);
+
+  --glass-bg-main: var(--ds-surface);
+  --glass-border-main: var(--ds-border);
+  --surface-elevated: var(--ds-surface-raised);
+  --border-subtle: var(--ds-border-subtle);
+  --border-strong: var(--ds-border-strong);
+  --interactive-hover: var(--ds-bg-subtle);
+  --interactive-active: #e2e8f0;
+
+  --border-radius: var(--ds-radius-xl);
+  --radius-sm: var(--ds-radius-sm);
+  --radius-md: var(--ds-radius);
+  --radius-lg: var(--ds-radius-lg);
+
+  --shadow-main: var(--ds-shadow-md);
+  --shadow-sm: var(--ds-shadow-xs);
+  --shadow-md: var(--ds-shadow-sm);
+  --shadow-lg: var(--ds-shadow-lg);
+
+  --modal-overlay-bg: rgba(11, 18, 32, 0.42);
+  --modal-content-bg: var(--ds-surface);
+  --code-bg: var(--ds-bg-subtle);
+  --code-text: var(--ds-text);
+  --surface-muted: var(--ds-bg-subtle);
+
+  --color-success: var(--ds-success);
+  --color-warning: var(--ds-warning);
+  --color-error: var(--ds-error);
+  --color-info-ui: var(--ds-info);
+  --color-success-bg: var(--ds-success-soft);
+  --color-warning-bg: var(--ds-warning-soft);
+  --color-error-bg: var(--ds-error-soft);
+  --color-info-bg: var(--ds-info-soft);
+
+  --chart-1: #1d5bd6;
+  --chart-2: #0f7a3d;
+  --chart-3: #0b6e99;
+  --chart-4: #b45309;
+  --chart-5: #d97706;
+  --chart-6: #c62828;
+}
+
+[data-theme='dark'] {
+  --ds-bg: #0c111b;
+  --ds-bg-subtle: #141b28;
+  --ds-surface: #161d2a;
+  --ds-surface-raised: #1a2332;
+  --ds-border: #243044;
+  --ds-border-subtle: #1e2838;
+  --ds-border-strong: #334155;
+  --ds-text: #eef2f7;
+  --ds-text-secondary: #94a3b8;
+  --ds-text-muted: #64748b;
+  --ds-accent: #3b82f6;
+  --ds-accent-hover: #2563eb;
+  --ds-accent-soft: rgba(59, 130, 246, 0.12);
+  --ds-accent-border: rgba(59, 130, 246, 0.28);
+  --ds-primary: #eef2f7;
+  --ds-primary-hover: #ffffff;
+  --ds-success: #34d399;
+  --ds-success-soft: rgba(52, 211, 153, 0.1);
+  --ds-success-border: rgba(52, 211, 153, 0.25);
+  --ds-warning: #fbbf24;
+  --ds-warning-soft: rgba(251, 191, 36, 0.1);
+  --ds-warning-border: rgba(251, 191, 36, 0.25);
+  --ds-error: #f87171;
+  --ds-error-soft: rgba(248, 113, 113, 0.1);
+  --ds-error-border: rgba(248, 113, 113, 0.25);
+  --ds-info: #38bdf8;
+  --ds-info-soft: rgba(56, 189, 248, 0.1);
+  --ds-info-border: rgba(56, 189, 248, 0.25);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --ds-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --ds-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28);
+  --ds-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --ds-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --ds-focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.22);
+
+  --modal-overlay-bg: rgba(0, 0, 0, 0.62);
+  --interactive-active: #243044;
+}

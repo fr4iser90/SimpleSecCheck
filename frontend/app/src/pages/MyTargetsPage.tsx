@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import MessageBanner from '../components/MessageBanner'
+import PageHeader from '../components/PageHeader'
 import TargetCard, { TARGET_TYPE_LABELS } from '../components/TargetCard'
 import TargetSectionRow from '../components/TargetSectionRow'
 import MyTargetsTable from '../components/MyTargetsTable'
@@ -489,17 +490,14 @@ export default function MyTargetsPage() {
   }
 
   return (
-    <div className="container" style={{ padding: '2rem' }}>
-      <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ margin: 0 }}>
-          <span aria-hidden>🛡️ </span>My Targets
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-          Manage your scan targets and automatic scanning. Add Git repos, container images, or local paths.
-        </p>
+    <div className="container my-targets-page">
+      <PageHeader
+        title="My Targets"
+        subtitle="Manage scan targets and automatic scanning — Git repos, containers, or local paths."
+      />
         {!loading && targets.length > 0 && (
-          <>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
+          <div className="my-targets-overview">
+            <p className="my-targets-overview__stats">
               <strong>{targets.length}</strong> target{targets.length !== 1 ? 's' : ''}
               {withFinishedScan > 0 && (
                 <>
@@ -649,9 +647,8 @@ export default function MyTargetsPage() {
                 finish.
               </p>
             </div>
-          </>
+          </div>
         )}
-      </div>
 
       {message && <MessageBanner type={message.type} text={message.text} />}
 
@@ -714,34 +711,19 @@ export default function MyTargetsPage() {
                   <option value="oldest">Last scan (oldest)</option>
                 </select>
               </label>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Layout</span>
-              <div style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid var(--glass-border-main)', overflow: 'hidden' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-secondary)' }}>Layout</span>
+              <div className="segmented-tabs">
                 <button
                   type="button"
                   onClick={() => setLayoutMode('cards')}
-                  style={{
-                    padding: '0.35rem 0.65rem',
-                    fontSize: '0.85rem',
-                    border: 'none',
-                    background: layoutMode === 'cards' ? 'var(--accent, #0d6efd)' : 'transparent',
-                    color: layoutMode === 'cards' ? '#fff' : 'var(--text-main)',
-                    cursor: 'pointer',
-                  }}
+                  className={`segmented-tab${layoutMode === 'cards' ? ' segmented-tab--active' : ''}`}
                 >
                   Cards
                 </button>
                 <button
                   type="button"
                   onClick={() => setLayoutMode('table')}
-                  style={{
-                    padding: '0.35rem 0.65rem',
-                    fontSize: '0.85rem',
-                    border: 'none',
-                    borderLeft: '1px solid var(--glass-border-main)',
-                    background: layoutMode === 'table' ? 'var(--accent, #0d6efd)' : 'transparent',
-                    color: layoutMode === 'table' ? '#fff' : 'var(--text-main)',
-                    cursor: 'pointer',
-                  }}
+                  className={`segmented-tab${layoutMode === 'table' ? ' segmented-tab--active' : ''}`}
                 >
                   Table
                 </button>
