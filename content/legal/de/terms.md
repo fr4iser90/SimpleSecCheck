@@ -56,7 +56,3 @@ Es gilt die Datenschutzerklärung auf dieser Website (`/legal/privacy`).
 ### 10. Schlussbestimmungen
 
 Es gilt deutsches Recht. Gerichtsstand ist — soweit zulässig — der Sitz des Betreibers.
-
----
-
-_Vorlage — für produktiven Betrieb mit echten Nutzern rechtlich prüfen lassen._

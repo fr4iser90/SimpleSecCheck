@@ -50,6 +50,7 @@ interface Statistics {
 const STATS_API = '/api/v1/scans/statistics'
 type ChartMode = 'all' | 'repository' | 'container' | 'infrastructure' | 'web'
 type ChartView = 'cumulative' | 'period'
+type ChartRange = 'all' | '30d'
 type ChartPoint = { date: string, value: number }
 type StatsScope = 'own' | 'global'
 
@@ -180,11 +181,42 @@ function formatDateLabel(date: string, granularity: ChartGranularity): string {
   return date.slice(0, 7)
 }
 
+function formatChartTooltipDate(date: string, granularity: ChartGranularity): string {
+  if (granularity === 'month') return date
+  if (granularity === 'week') return `Week of ${date}`
+  return date
+}
+
+function niceChartMax(value: number): number {
+  if (value <= 0) return 1
+  const magnitude = 10 ** Math.floor(Math.log10(value))
+  const normalized = value / magnitude
+  const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10
+  return niceNormalized * magnitude
+}
+
+function buildYTickValues(maxValue: number, steps = 4): number[] {
+  const niceMax = niceChartMax(maxValue)
+  return Array.from({ length: steps + 1 }, (_, i) => Math.round((niceMax * i) / steps))
+}
+
+function filterSeriesByRange(points: DailySeriesPoint[], range: ChartRange): DailySeriesPoint[] {
+  if (range === 'all' || points.length === 0) return points
+
+  const now = new Date()
+  const cutoff = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  cutoff.setUTCDate(cutoff.getUTCDate() - 29)
+  const cutoffStr = isoDayUTC(cutoff)
+  return points.filter((point) => point.date >= cutoffStr)
+}
+
 export default function StatisticsPage() {
   const [statistics, setStatistics] = useState<Statistics | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [chartMode, setChartMode] = useState<ChartMode>('all')
   const [chartView, setChartView] = useState<ChartView>('cumulative')
+  const [chartRange, setChartRange] = useState<ChartRange>('all')
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [statsScope, setStatsScope] = useState<StatsScope>('global')
   const statsRequestId = useRef(0)
 
@@ -228,6 +260,10 @@ export default function StatisticsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statsScope])
 
+  useEffect(() => {
+    setHoveredIndex(null)
+  }, [chartMode, chartView, chartRange, statsScope])
+
   const severityEntries = statistics
     ? [
         { label: 'Critical', value: statistics.critical_vulnerabilities, key: 'critical' },
@@ -249,7 +285,8 @@ export default function StatisticsPage() {
   }
 
   const denseDailySeries = densifyDailySeries(statistics?.daily_scan_counts ?? [])
-  const { granularity, data: displaySeries } = aggregateSeries(denseDailySeries)
+  const rangedDailySeries = filterSeriesByRange(denseDailySeries, chartRange)
+  const { granularity, data: displaySeries } = aggregateSeries(rangedDailySeries)
   const baseChartPoints = displaySeries.map((d) => {
     let value = d.total_scans
     if (chartMode === 'repository') value = d.repository_scans
@@ -270,20 +307,24 @@ export default function StatisticsPage() {
       ? [{ date: chartPoints[0].date, value: 0 }, ...chartPoints]
       : chartPoints
   )
-  const chartMax = Math.max(1, chartPoints.reduce((max, point) => Math.max(max, point.value), 0))
+  const chartMax = niceChartMax(Math.max(1, ...chartPoints.map((point) => point.value)))
   const currentCount = chartPoints[chartPoints.length - 1]?.value ?? 0
+  const lastIndex = chartPoints.length - 1
+  const activeIndex = hoveredIndex ?? (lastIndex >= 0 ? lastIndex : null)
+  const activePoint = activeIndex != null ? chartPoints[activeIndex] : null
 
   const chartLabel = (() => {
     switch (chartMode) {
-      case 'repository': return 'Repository scan-runs'
-      case 'container': return 'Container scan-runs'
-      case 'infrastructure': return 'Infrastructure scan-runs'
-      case 'web': return 'Web scan-runs'
-      default: return 'All scan-runs'
+      case 'repository': return 'Completed repository scans'
+      case 'container': return 'Completed container scans'
+      case 'infrastructure': return 'Completed infrastructure scans'
+      case 'web': return 'Completed web scans'
+      default: return 'Completed scans'
     }
   })()
   const periodLabel = granularity === 'day' ? 'daily' : (granularity === 'week' ? 'weekly' : 'monthly')
   const viewLabel = chartView === 'cumulative' ? 'cumulative' : 'per period'
+  const rangeLabel = chartRange === '30d' ? 'last 30 days' : 'all time'
 
   const svgWidth = 900
   const svgHeight = 280
@@ -300,20 +341,29 @@ export default function StatisticsPage() {
       : paddingLeft + (stepX * index)
   )
   const toY = (value: number) => paddingTop + innerHeight - (value / chartMax) * innerHeight
+  const pointRenderIndex = (index: number) => (
+    chartView === 'cumulative' && renderPoints.length > chartPoints.length ? index + 1 : index
+  )
+  const toPointX = (index: number) => toX(pointRenderIndex(index))
 
-  const linePoints = renderPoints.map((point, index) => `${toX(index)},${toY(point.value)}`).join(' ')
-  const areaPath = renderPoints.length > 0
+  const linePoints = chartView === 'cumulative'
+    ? renderPoints.map((point, index) => `${toX(index)},${toY(point.value)}`).join(' ')
+    : ''
+  const areaPath = chartView === 'cumulative' && renderPoints.length > 0
     ? `M ${toX(0)} ${paddingTop + innerHeight} L ${linePoints} L ${toX(renderPoints.length - 1)} ${paddingTop + innerHeight} Z`
     : ''
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
-    y: paddingTop + innerHeight - (ratio * innerHeight),
-    value: Math.round(chartMax * ratio),
+  const yTickValues = buildYTickValues(chartMax)
+  const yTicks = yTickValues.map((value) => ({
+    y: toY(value),
+    value,
   }))
-  const xTickCount = Math.min(6, Math.max(2, renderPoints.length))
+  const xTickCount = Math.min(6, Math.max(2, chartPoints.length))
   const xTickIndices = Array.from({ length: xTickCount }, (_, i) => {
     if (xTickCount === 1) return 0
-    return Math.round((i / (xTickCount - 1)) * (renderPoints.length - 1))
+    return Math.round((i / (xTickCount - 1)) * (chartPoints.length - 1))
   })
+  const barSlotWidth = chartPoints.length > 0 ? innerWidth / chartPoints.length : innerWidth
+  const barWidth = Math.min(28, Math.max(4, barSlotWidth * 0.62))
 
   return (
     <div className="container statistics-page">
@@ -374,24 +424,29 @@ export default function StatisticsPage() {
               <h3 className="statistics-section-title">Overview</h3>
               <div className="statistics-grid statistics-grid--overview">
                 <div className="stat-card stat-card--primary">
-                  <span className="stat-value">{statistics.total_scans}</span>
-                  <span className="stat-label">Total Scans</span>
+                  <span className="stat-value">{statistics.completed_scans}</span>
+                  <span className="stat-label">Completed Scans</span>
                 </div>
                 <div className="stat-card stat-card--danger">
                   <span className="stat-value">{statistics.total_vulnerabilities}</span>
                   <span className="stat-label">Total Findings</span>
-                </div>
-                <div className="stat-card stat-card--success">
-                  <span className="stat-value">{statistics.completed_scans}</span>
-                  <span className="stat-label">Completed</span>
+                  <span className="stat-sublabel">From completed scans</span>
                 </div>
                 <div className="stat-card stat-card--neutral">
                   <span className="stat-value">{statistics.pending_scans + statistics.running_scans}</span>
                   <span className="stat-label">Pending / Running</span>
                 </div>
                 <div className="stat-card stat-card--neutral">
+                  <span className="stat-value">{statistics.failed_scans}</span>
+                  <span className="stat-label">Failed</span>
+                </div>
+                <div className="stat-card stat-card--neutral">
                   <span className="stat-value">{statistics.cancelled_scans}</span>
                   <span className="stat-label">Cancelled</span>
+                </div>
+                <div className="stat-card stat-card--neutral">
+                  <span className="stat-value">{statistics.total_scans}</span>
+                  <span className="stat-label">All Attempts</span>
                 </div>
               </div>
             </section>
@@ -417,7 +472,7 @@ export default function StatisticsPage() {
 
             {/* Scan types */}
             <section className="statistics-section">
-              <h3 className="statistics-section-title">Scans by Type</h3>
+              <h3 className="statistics-section-title">Completed Scans by Type</h3>
               <div className="statistics-grid statistics-grid--types">
                 <div className="stat-card stat-card--type">
                   <span className="stat-value">{statistics.repository_scans}</span>
@@ -461,63 +516,105 @@ export default function StatisticsPage() {
             <section className="statistics-section">
               <h3 className="statistics-section-title">Trend Since Start</h3>
               <div className="statistics-chart-toolbar">
-                <button
-                  type="button"
-                  className={`statistics-chip ${chartMode === 'all' ? 'statistics-chip--active' : ''}`}
-                  onClick={() => setChartMode('all')}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  className={`statistics-chip ${chartMode === 'repository' ? 'statistics-chip--active' : ''}`}
-                  onClick={() => setChartMode('repository')}
-                >
-                  Repo
-                </button>
-                <button
-                  type="button"
-                  className={`statistics-chip ${chartMode === 'container' ? 'statistics-chip--active' : ''}`}
-                  onClick={() => setChartMode('container')}
-                >
-                  Container
-                </button>
-                <button
-                  type="button"
-                  className={`statistics-chip ${chartMode === 'infrastructure' ? 'statistics-chip--active' : ''}`}
-                  onClick={() => setChartMode('infrastructure')}
-                >
-                  Infrastructure
-                </button>
-                <button
-                  type="button"
-                  className={`statistics-chip ${chartMode === 'web' ? 'statistics-chip--active' : ''}`}
-                  onClick={() => setChartMode('web')}
-                >
-                  Web
-                </button>
-                <button
-                  type="button"
-                  className={`statistics-chip ${chartView === 'cumulative' ? 'statistics-chip--active' : ''}`}
-                  onClick={() => setChartView('cumulative')}
-                >
-                  Cumulative
-                </button>
-                <button
-                  type="button"
-                  className={`statistics-chip ${chartView === 'period' ? 'statistics-chip--active' : ''}`}
-                  onClick={() => setChartView('period')}
-                >
-                  Per Period
-                </button>
+                <div className="statistics-chart-toolbar-group" role="group" aria-label="Scan type">
+                  <span className="statistics-chart-toolbar-label">Type</span>
+                  <button
+                    type="button"
+                    className={`statistics-chip ${chartMode === 'all' ? 'statistics-chip--active' : ''}`}
+                    onClick={() => setChartMode('all')}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    className={`statistics-chip ${chartMode === 'repository' ? 'statistics-chip--active' : ''}`}
+                    onClick={() => setChartMode('repository')}
+                  >
+                    Repo
+                  </button>
+                  <button
+                    type="button"
+                    className={`statistics-chip ${chartMode === 'container' ? 'statistics-chip--active' : ''}`}
+                    onClick={() => setChartMode('container')}
+                  >
+                    Container
+                  </button>
+                  <button
+                    type="button"
+                    className={`statistics-chip ${chartMode === 'infrastructure' ? 'statistics-chip--active' : ''}`}
+                    onClick={() => setChartMode('infrastructure')}
+                  >
+                    Infrastructure
+                  </button>
+                  <button
+                    type="button"
+                    className={`statistics-chip ${chartMode === 'web' ? 'statistics-chip--active' : ''}`}
+                    onClick={() => setChartMode('web')}
+                  >
+                    Web
+                  </button>
+                </div>
+                <div className="statistics-chart-toolbar-group" role="group" aria-label="Chart view">
+                  <span className="statistics-chart-toolbar-label">View</span>
+                  <button
+                    type="button"
+                    className={`statistics-chip ${chartView === 'cumulative' ? 'statistics-chip--active' : ''}`}
+                    onClick={() => setChartView('cumulative')}
+                  >
+                    Cumulative
+                  </button>
+                  <button
+                    type="button"
+                    className={`statistics-chip ${chartView === 'period' ? 'statistics-chip--active' : ''}`}
+                    onClick={() => setChartView('period')}
+                  >
+                    Per Period
+                  </button>
+                </div>
+                <div className="statistics-chart-toolbar-group" role="group" aria-label="Time range">
+                  <span className="statistics-chart-toolbar-label">Range</span>
+                  <button
+                    type="button"
+                    className={`statistics-chip ${chartRange === 'all' ? 'statistics-chip--active' : ''}`}
+                    onClick={() => setChartRange('all')}
+                  >
+                    All time
+                  </button>
+                  <button
+                    type="button"
+                    className={`statistics-chip ${chartRange === '30d' ? 'statistics-chip--active' : ''}`}
+                    onClick={() => setChartRange('30d')}
+                  >
+                    Last 30 days
+                  </button>
+                </div>
               </div>
 
               {chartPoints.length > 0 ? (
                 <div className="statistics-chart-card">
-                  <div className="statistics-linechart" aria-label={chartLabel}>
+                  <div className="statistics-chart-summary">
+                    <div className="statistics-chart-summary-main">
+                      <span className="statistics-chart-summary-value">
+                        {activePoint ? formatCountCompact(activePoint.value) : formatCountCompact(currentCount)}
+                      </span>
+                      <span className="statistics-chart-summary-label">{chartLabel}</span>
+                    </div>
+                    <div className="statistics-chart-summary-meta">
+                      <span>{rangeLabel} · {periodLabel} · {viewLabel}</span>
+                      {activePoint && (
+                        <span>{formatChartTooltipDate(activePoint.date, granularity)}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div
+                    className="statistics-linechart"
+                    aria-label={chartLabel}
+                    onMouseLeave={() => setHoveredIndex(null)}
+                  >
                     <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} role="img" aria-label={chartLabel}>
-                      {yTicks.map((tick, tickIndex) => (
-                        <g key={`y-${tickIndex}`}>
+                      {yTicks.map((tick) => (
+                        <g key={`y-${tick.value}`}>
                           <line
                             x1={paddingLeft}
                             x2={paddingLeft + innerWidth}
@@ -551,26 +648,87 @@ export default function StatisticsPage() {
                         className="statistics-linechart-axis"
                       />
 
-                      {areaPath && <path d={areaPath} className="statistics-linechart-area" />}
-                      {linePoints && <polyline points={linePoints} className="statistics-linechart-line" />}
+                      {chartView === 'period' && chartPoints.map((point, index) => {
+                        const x = paddingLeft + (index + 0.5) * barSlotWidth - barWidth / 2
+                        const height = point.value > 0 ? (point.value / chartMax) * innerHeight : 0
+                        const y = paddingTop + innerHeight - height
+                        const isActive = activeIndex === index
+                        return (
+                          <rect
+                            key={`bar-${point.date}`}
+                            x={x}
+                            y={y}
+                            width={barWidth}
+                            height={height}
+                            rx={3}
+                            className={`statistics-linechart-bar ${isActive ? 'statistics-linechart-bar--active' : ''}`}
+                          />
+                        )
+                      })}
+
+                      {chartView === 'cumulative' && areaPath && (
+                        <path d={areaPath} className="statistics-linechart-area" />
+                      )}
+                      {chartView === 'cumulative' && linePoints && (
+                        <polyline points={linePoints} className="statistics-linechart-line" />
+                      )}
+
+                      {activeIndex != null && chartPoints[activeIndex] && (
+                        <line
+                          x1={toPointX(activeIndex)}
+                          x2={toPointX(activeIndex)}
+                          y1={paddingTop}
+                          y2={paddingTop + innerHeight}
+                          className="statistics-linechart-crosshair"
+                        />
+                      )}
+
+                      {chartPoints.map((point, index) => {
+                        const cx = chartView === 'period'
+                          ? paddingLeft + (index + 0.5) * barSlotWidth
+                          : toPointX(index)
+                        const cy = toY(point.value)
+                        const isActive = activeIndex === index
+                        const hitSize = chartView === 'period' ? Math.max(barWidth, 12) : 16
+                        return (
+                          <g key={`point-${point.date}`}>
+                            {chartView === 'cumulative' && (
+                              <circle
+                                cx={cx}
+                                cy={cy}
+                                r={isActive ? 5 : 3}
+                                className={`statistics-linechart-dot ${isActive ? 'statistics-linechart-dot--active' : ''}`}
+                              />
+                            )}
+                            <rect
+                              x={cx - hitSize / 2}
+                              y={paddingTop}
+                              width={hitSize}
+                              height={innerHeight}
+                              fill="transparent"
+                              className="statistics-linechart-hit"
+                              onMouseEnter={() => setHoveredIndex(index)}
+                            />
+                          </g>
+                        )
+                      })}
 
                       {xTickIndices.map((index, tickIndex) => (
                         <text
                           key={`x-${tickIndex}-${index}`}
-                          x={toX(index)}
+                          x={toPointX(index)}
                           y={svgHeight - 8}
                           className="statistics-linechart-xlabel"
                           textAnchor="middle"
                         >
-                          {formatDateLabel(renderPoints[index]?.date ?? '', granularity)}
+                          {formatDateLabel(chartPoints[index]?.date ?? '', granularity)}
                         </text>
                       ))}
                     </svg>
                   </div>
-                  <p className="statistics-chart-caption">{chartLabel} ({periodLabel}, {viewLabel}) - Current: {currentCount}</p>
                 </div>
               ) : (
-                <div className="statistics-empty">No daily scan data yet.</div>
+                <div className="statistics-empty">No completed scan data yet.</div>
               )}
             </section>
 
@@ -604,7 +762,7 @@ export default function StatisticsPage() {
 
             {/* Duration (whole-scan aggregates; optional) */}
             <section className="statistics-section">
-              <h3 className="statistics-section-title">Scan duration (all scans)</h3>
+              <h3 className="statistics-section-title">Scan duration (completed scans)</h3>
               <div className="statistics-grid statistics-grid--duration">
                 <div className="stat-card stat-card--neutral">
                   <span className="stat-value">{formatDuration(statistics.average_scan_duration)}</span>
@@ -622,7 +780,7 @@ export default function StatisticsPage() {
             </section>
 
             <p className="statistics-note">
-              Counts reflect scans and findings stored in the system. Failed/cancelled scans are included in totals.
+              Trend, findings, and type counts include completed scans only. Failed and cancelled runs appear in Overview. Coverage counts all scan attempts.
             </p>
           </>
         ) : (

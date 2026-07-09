@@ -4,6 +4,7 @@ import ReportViewer from '../components/ReportViewer'
 import StepsSidebar from '../components/StepsSidebar'
 import AIPromptModal from '../components/AIPromptModal'
 import PageHeader from '../components/PageHeader'
+import ScanProgressAside from '../components/ScanProgressAside'
 import { SubstepSlot } from '../components/SubstepSlot'
 import { useWebSocket } from '../services/websocketService'
 import { formatDuration, formatEstimatedTime, parseStepInstantMs } from '../utils/timeUtils'
@@ -366,113 +367,89 @@ export default function ScanView() {
     }
 
     return (
-      <div style={{ 
-        flex: 1,
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '2rem',
-        padding: '2rem',
-      }}>
-        <div style={{ textAlign: 'center', maxWidth: '600px' }}>
-          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>⏳</div>
-          <h2>Waiting in Queue</h2>
-          <p style={{ opacity: 0.7, marginTop: '0.5rem', fontSize: '1.1rem' }}>
-            Your scan is queued and will start automatically
-          </p>
-          
-          {queueStatus ? (
-            <>
-              <div style={{
-                marginTop: '2rem',
-                padding: '1.5rem',
-                background: 'var(--glass-bg-main)',
-                border: '1px solid var(--glass-border-main)',
-                borderRadius: '12px',
-                width: '100%',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                  <span style={{ opacity: 0.8 }}>Position in Queue:</span>
-                  <strong style={{ fontSize: '1.5rem' }}>#{queueStatus.position || '?'}</strong>
-                </div>
-                {estimatedWaitSeconds != null && estimatedWaitSeconds > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                    <span style={{ opacity: 0.8 }}>Estimated Wait:</span>
-                    <strong>{formatWait(estimatedWaitSeconds)}</strong>
+      <div className="scan-progress-layout">
+        <div className="scan-progress-layout__main">
+          <div className="scan-progress-header">
+            <div className="scan-progress-header__icon">⏳</div>
+            <h2>Waiting in Queue</h2>
+            <p className="scan-progress-header__meta">
+              Your scan is queued and will start automatically
+            </p>
+
+            {queueStatus ? (
+              <div className="panel" style={{ marginTop: '1.5rem', textAlign: 'left' }}>
+                <div className="panel__body">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                    <span style={{ color: 'var(--ds-text-secondary)' }}>Position in Queue:</span>
+                    <strong style={{ fontSize: '1.25rem' }}>#{queueStatus.position || '?'}</strong>
                   </div>
-                )}
-                {queueStatus.position === 1 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                    <span style={{ opacity: 0.8 }}>Estimated Wait:</span>
-                    <strong>Next in line</strong>
+                  {estimatedWaitSeconds != null && estimatedWaitSeconds > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                      <span style={{ color: 'var(--ds-text-secondary)' }}>Estimated Wait:</span>
+                      <strong>{formatWait(estimatedWaitSeconds)}</strong>
+                    </div>
+                  )}
+                  {queueStatus.position === 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                      <span style={{ color: 'var(--ds-text-secondary)' }}>Estimated Wait:</span>
+                      <strong>Next in line</strong>
+                    </div>
+                  )}
+                  {estimatedScanSeconds != null && estimatedScanSeconds > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                      <span style={{ color: 'var(--ds-text-secondary)' }}>Estimated Scan Duration:</span>
+                      <strong>{formatEstimatedTime(estimatedScanSeconds)}</strong>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--ds-text-secondary)' }}>Repository:</span>
+                    <strong>{queueStatus.repository_name}</strong>
                   </div>
-                )}
-                {estimatedScanSeconds != null && estimatedScanSeconds > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                    <span style={{ opacity: 0.8 }}>Estimated Scan Duration:</span>
-                    <strong>{formatEstimatedTime(estimatedScanSeconds)}</strong>
-                  </div>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ opacity: '0.8' }}>Repository:</span>
-                  <strong>{queueStatus.repository_name}</strong>
                 </div>
               </div>
-            </>
-          ) : (
-            <div style={{
-              marginTop: '2rem',
-              padding: '1.5rem',
-              background: 'var(--glass-bg-main)',
-              border: '1px solid var(--glass-border-main)',
-              borderRadius: '12px',
-              width: '100%',
-            }}>
-              <div style={{ opacity: 0.7 }}>Loading queue information...</div>
-            </div>
-          )}
+            ) : (
+              <div className="panel" style={{ marginTop: '1.5rem' }}>
+                <div className="panel__body">Loading queue information…</div>
+              </div>
+            )}
 
-          <div style={{
-            marginTop: '2rem',
-            width: '100%',
-            maxWidth: '600px',
-            background: 'var(--glass-bg-main)',
-            border: '1px solid var(--glass-border-main)',
-            borderRadius: '8px',
-            padding: '1rem',
-          }}>
-            <div style={{ marginBottom: '0.5rem', fontSize: '0.9rem', opacity: 0.8 }}>
-              Waiting for your turn...
+            <div className="panel" style={{ marginTop: '1rem' }}>
+              <div className="panel__body">
+                <div style={{ marginBottom: '0.5rem', fontSize: '0.875rem', color: 'var(--ds-text-secondary)' }}>
+                  Waiting for your turn…
+                </div>
+                <div className="scan-progress-bar">
+                  <div
+                    className="scan-progress-bar__fill"
+                    style={{
+                      width: '100%',
+                      background: 'linear-gradient(90deg, #007bff, #0056b3)',
+                      animation: 'pulse 2s ease-in-out infinite',
+                    }}
+                  />
+                </div>
+              </div>
             </div>
-            <div style={{
-              width: '100%',
-              height: '8px',
-              background: 'var(--surface-muted)',
-              borderRadius: '4px',
-              overflow: 'hidden',
-            }}>
-              <div style={{
-                width: '100%',
-                height: '100%',
-                background: 'linear-gradient(90deg, #007bff, #0056b3)',
-                animation: 'pulse 2s ease-in-out infinite',
-              }} />
-            </div>
+
+            {status.scan_id && (
+              <div style={{ textAlign: 'center', marginTop: '1.25rem' }}>
+                <button type="button" onClick={handleCancelScan} disabled={cancelLoading} style={cancelButtonStyle}>
+                  {cancelLoading ? 'Cancelling…' : 'Cancel scan (leave queue)'}
+                </button>
+                {cancelError && (
+                  <div style={{ marginTop: '0.75rem', color: '#dc3545', fontSize: '0.875rem' }}>{cancelError}</div>
+                )}
+              </div>
+            )}
           </div>
-
-          {status.scan_id && (
-            <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-              <button type="button" onClick={handleCancelScan} disabled={cancelLoading} style={cancelButtonStyle}>
-                {cancelLoading ? 'Cancelling…' : 'Cancel scan (leave queue)'}
-              </button>
-              {cancelError && (
-                <div style={{ marginTop: '0.75rem', color: '#dc3545', fontSize: '0.875rem' }}>{cancelError}</div>
-              )}
-            </div>
-          )}
         </div>
+        <aside className="scan-progress-layout__aside">
+          <ScanProgressAside
+            mode="pending"
+            queueStatus={queueStatus}
+            scanId={status.scan_id}
+          />
+        </aside>
       </div>
     )
   }
@@ -481,23 +458,16 @@ export default function ScanView() {
   if (status.status === 'running' || (status.status === 'completed' && !status.results_dir)) {
     
     return (
-      <div style={{ 
-        flex: 1,
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '2rem',
-        gap: '2rem',
-      }}>
-        {/* Header with Progress */}
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔄</div>
+      <div className="scan-progress-layout">
+        <div className="scan-progress-layout__main">
+        <div className="scan-progress-header">
+          <div className="scan-progress-header__icon">🔄</div>
           <h2>Scan in Progress...</h2>
-          <p style={{ opacity: 0.7, marginTop: '0.5rem' }}>
+          <p className="scan-progress-header__meta">
             Scan ID: {status.scan_id}
           </p>
           {queueStatus?.estimated_time_seconds != null && queueStatus.estimated_time_seconds > 0 && (
-            <p style={{ opacity: 0.75, marginTop: '0.35rem', fontSize: '0.95rem' }}>
+            <p className="scan-progress-header__meta">
               Estimated duration: {formatEstimatedTime(queueStatus.estimated_time_seconds)}
             </p>
           )}
@@ -512,36 +482,19 @@ export default function ScanView() {
             </div>
           )}
 
-          {/* Progress Bar */}
           {steps.length > 0 && (
-            <div style={{
-              marginTop: '2rem',
-              maxWidth: '800px',
-              margin: '2rem auto 0',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.9rem', opacity: 0.8 }}>Progress</span>
-                <strong style={{ fontSize: '1.1rem' }}>{progress}%</strong>
+            <div className="scan-progress-bar-wrap" style={{ marginTop: '1.5rem' }}>
+              <div className="scan-progress-bar-wrap__labels">
+                <span>Progress</span>
+                <strong>{progress}%</strong>
               </div>
-              <div style={{
-                width: '100%',
-                height: '12px',
-                background: 'var(--surface-muted)',
-                borderRadius: '6px',
-                overflow: 'hidden',
-              }}>
-                <div style={{
-                  width: `${progress}%`,
-                  height: '100%',
-                  background: 'linear-gradient(90deg, #28a745, #20c997)',
-                  transition: 'width 0.3s ease',
-                }} />
+              <div className="scan-progress-bar">
+                <div className="scan-progress-bar__fill" style={{ width: `${progress}%` }} />
               </div>
             </div>
           )}
         </div>
 
-        {/* Steps Cards */}
         {steps.length > 0 && (
           <div className="scan-step-card-grid">
             {steps.map((step) => {
@@ -739,7 +692,16 @@ export default function ScanView() {
           </div>
         )}
 
-        {/* Logs Section removed - Backend sends logs: [] for security, no need to display */}
+        </div>
+        <aside className="scan-progress-layout__aside">
+          <ScanProgressAside
+            mode="running"
+            progress={progress}
+            steps={steps}
+            queueStatus={queueStatus}
+            scanId={status.scan_id}
+          />
+        </aside>
       </div>
     )
   }

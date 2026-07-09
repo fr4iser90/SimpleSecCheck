@@ -505,6 +505,13 @@ input:focus, select:focus, textarea:focus {
   color: var(--text-secondary);
 }
 
+.stat-sublabel {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  opacity: 0.85;
+  line-height: 1.3;
+}
+
 .stat-card--primary .stat-value { color: var(--accent); }
 .stat-card--primary { border-color: rgba(102, 126, 234, 0.35); }
 
@@ -536,12 +543,29 @@ input:focus, select:focus, textarea:focus {
 .statistics-chart-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.75rem 1rem;
   margin-bottom: 1rem;
+}
+
+.statistics-chart-toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
   padding: 0.25rem;
   background: var(--ds-bg-subtle);
   border: 1px solid var(--ds-border);
   border-radius: var(--ds-radius-lg);
+}
+
+.statistics-chart-toolbar-label {
+  padding: 0 0.35rem 0 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ds-text-muted);
 }
 
 .statistics-chip {
@@ -575,8 +599,49 @@ input:focus, select:focus, textarea:focus {
   background: var(--surface-muted);
 }
 
+.statistics-chart-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--ds-border-subtle);
+}
+
+.statistics-chart-summary-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.statistics-chart-summary-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ds-accent);
+}
+
+.statistics-chart-summary-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.statistics-chart-summary-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
 .statistics-linechart {
   width: 100%;
+  position: relative;
 }
 
 .statistics-linechart svg {
@@ -597,14 +662,46 @@ input:focus, select:focus, textarea:focus {
 
 .statistics-linechart-line {
   fill: none;
-  stroke: #ff6b7a;
+  stroke: var(--ds-accent);
   stroke-width: 2.4;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .statistics-linechart-area {
-  fill: color-mix(in srgb, #ff6b7a 24%, transparent);
+  fill: color-mix(in srgb, var(--ds-accent) 18%, transparent);
+}
+
+.statistics-linechart-bar {
+  fill: color-mix(in srgb, var(--ds-accent) 55%, transparent);
+  transition: fill 0.15s ease;
+}
+
+.statistics-linechart-bar--active {
+  fill: var(--ds-accent);
+}
+
+.statistics-linechart-dot {
+  fill: var(--ds-surface);
+  stroke: var(--ds-accent);
+  stroke-width: 2;
+}
+
+.statistics-linechart-dot--active {
+  fill: var(--ds-accent);
+  stroke: var(--ds-surface);
+  stroke-width: 2;
+}
+
+.statistics-linechart-crosshair {
+  stroke: color-mix(in srgb, var(--ds-accent) 35%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.statistics-linechart-hit {
+  cursor: crosshair;
 }
 
 .statistics-linechart-ylabel,
@@ -618,6 +715,13 @@ input:focus, select:focus, textarea:focus {
   margin-top: 0.75rem;
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+.statistics-chart-caption-note {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  opacity: 0.85;
 }
 
 /* Form */
@@ -2048,8 +2152,7 @@ input:focus, select:focus, textarea:focus {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr));
   gap: 0.625rem;
-  max-width: 1100px;
-  margin: 0 auto;
+  margin: 0;
   width: 100%;
   align-items: start;
 }

@@ -55,7 +55,3 @@ und Widerspruch. Beschwerden kannst du bei einer Datenschutz-Aufsichtsbehörde e
 ### 9. Hosting
 
 Diese Instanz wird vom Betreiber selbst gehostet. Details im Impressum.
-
----
-
-_Vorlage — passe den Text an deinen konkreten Betrieb an (z. B. SMTP-Anbieter, Analytics)._

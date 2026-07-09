@@ -355,7 +355,7 @@
 }
 
 .app-shell__page--wide {
-  max-width: 1280px;
+  max-width: none;
 }
 
 /* Auth / setup full-viewport shells (no sidebar) */

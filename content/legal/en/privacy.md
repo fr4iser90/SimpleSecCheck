@@ -53,7 +53,3 @@ objection. You may lodge a complaint with a supervisory authority.
 ### 9. Hosting
 
 This instance is operated by the provider named in the legal notice.
-
----
-
-_Template — adapt to your hosting, email provider, and jurisdiction._

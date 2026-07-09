@@ -55,7 +55,3 @@ The privacy policy at `/legal/privacy` applies.
 
 Applicable law is that of the operator's jurisdiction unless mandatory consumer
 protections require otherwise.
-
----
-
-_Template — have terms reviewed before production use with real users._

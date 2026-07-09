@@ -582,11 +582,34 @@ class DatabaseScanRepository(ScanRepository):
                                 return owner or None, None
                     return None, None
                 
+                def _increment_type_counts(bucket: Dict[str, int], scan_type: str) -> None:
+                    if scan_type in ("code", "repository", "repo"):
+                        bucket["repository_scans"] += 1
+                    elif scan_type in ("image", "container"):
+                        bucket["container_scans"] += 1
+                    elif scan_type in ("infrastructure", "infra", "terraform"):
+                        bucket["infrastructure_scans"] += 1
+                    elif scan_type in ("web", "web_application"):
+                        bucket["web_application_scans"] += 1
+
                 for scan in scans:
                     status = (scan.status or "pending").lower()
                     by_status[status] = by_status.get(status, 0) + 1
                     st = (scan.scan_type or "code").lower()
                     by_type[st] = by_type.get(st, 0) + 1
+                    if scan.target_url:
+                        distinct_targets.add(f"{(scan.target_type or '').lower()}::{scan.target_url.strip().lower()}")
+                    if st in ("code", "repository", "repo"):
+                        owner, slug = _extract_repo_owner_and_slug(scan.target_url or "")
+                        if owner:
+                            distinct_repo_owners.add(owner)
+                        if slug:
+                            distinct_repositories.add(slug)
+
+                    is_completed = status == "completed"
+                    if not is_completed:
+                        continue
+
                     total_vuln += scan.total_vulnerabilities or 0
                     critical += scan.critical_vulnerabilities or 0
                     high += scan.high_vulnerabilities or 0
@@ -595,15 +618,8 @@ class DatabaseScanRepository(ScanRepository):
                     info += scan.info_vulnerabilities or 0
                     if getattr(scan, "duration", None) is not None:
                         durations.append(float(scan.duration))
-                    if scan.target_url:
-                        distinct_targets.add(f"{(scan.target_type or '').lower()}::{scan.target_url.strip().lower()}")
                     if st in ("code", "repository", "repo"):
                         repo_scans += 1
-                        owner, slug = _extract_repo_owner_and_slug(scan.target_url or "")
-                        if owner:
-                            distinct_repo_owners.add(owner)
-                        if slug:
-                            distinct_repositories.add(slug)
                     elif st in ("image", "container"):
                         container_scans += 1
                     elif st in ("infrastructure", "infra", "terraform"):
@@ -623,14 +639,7 @@ class DatabaseScanRepository(ScanRepository):
                             }
                         day_bucket = daily_rollup[day_key]
                         day_bucket["total_scans"] += 1
-                        if st in ("code", "repository", "repo"):
-                            day_bucket["repository_scans"] += 1
-                        elif st in ("image", "container"):
-                            day_bucket["container_scans"] += 1
-                        elif st in ("infrastructure", "infra", "terraform"):
-                            day_bucket["infrastructure_scans"] += 1
-                        elif st in ("web", "web_application"):
-                            day_bucket["web_application_scans"] += 1
+                        _increment_type_counts(day_bucket, st)
                 
                 total = len(scans)
                 avg_dur = sum(durations) / len(durations) if durations else 0.0

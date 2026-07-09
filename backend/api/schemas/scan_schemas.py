@@ -281,36 +281,36 @@ class ScannerDurationStatSchema(BaseModel):
 
 
 class DailyScanCountSchema(BaseModel):
-    """Schema for daily scan counts (overall + by type)."""
+    """Schema for daily completed scan counts (overall + by type)."""
     date: str = Field(description="UTC date in YYYY-MM-DD format")
-    total_scans: int = Field(ge=0, description="Total scans for that day")
-    repository_scans: int = Field(ge=0, description="Repository scans for that day")
-    container_scans: int = Field(ge=0, description="Container scans for that day")
-    infrastructure_scans: int = Field(ge=0, description="Infrastructure scans for that day")
-    web_application_scans: int = Field(ge=0, description="Web application scans for that day")
+    total_scans: int = Field(ge=0, description="Completed scans for that day")
+    repository_scans: int = Field(ge=0, description="Completed repository scans for that day")
+    container_scans: int = Field(ge=0, description="Completed container scans for that day")
+    infrastructure_scans: int = Field(ge=0, description="Completed infrastructure scans for that day")
+    web_application_scans: int = Field(ge=0, description="Completed web application scans for that day")
 
 
 class ScanStatisticsSchema(BaseModel):
     """Schema for scan statistics."""
     
-    total_scans: int = Field(ge=0, description="Total number of scans")
+    total_scans: int = Field(ge=0, description="Total scan attempts (all statuses)")
     pending_scans: int = Field(ge=0, description="Number of pending scans")
     running_scans: int = Field(ge=0, description="Number of running scans")
     completed_scans: int = Field(ge=0, description="Number of completed scans")
     failed_scans: int = Field(ge=0, description="Number of failed scans")
     cancelled_scans: int = Field(ge=0, description="Number of cancelled scans")
     
-    total_vulnerabilities: int = Field(ge=0, description="Total vulnerabilities found")
-    critical_vulnerabilities: int = Field(ge=0, description="Critical vulnerabilities")
-    high_vulnerabilities: int = Field(ge=0, description="High vulnerabilities")
-    medium_vulnerabilities: int = Field(ge=0, description="Medium vulnerabilities")
-    low_vulnerabilities: int = Field(ge=0, description="Low vulnerabilities")
-    info_vulnerabilities: int = Field(ge=0, description="Info vulnerabilities")
+    total_vulnerabilities: int = Field(ge=0, description="Total vulnerabilities from completed scans")
+    critical_vulnerabilities: int = Field(ge=0, description="Critical vulnerabilities from completed scans")
+    high_vulnerabilities: int = Field(ge=0, description="High vulnerabilities from completed scans")
+    medium_vulnerabilities: int = Field(ge=0, description="Medium vulnerabilities from completed scans")
+    low_vulnerabilities: int = Field(ge=0, description="Low vulnerabilities from completed scans")
+    info_vulnerabilities: int = Field(ge=0, description="Info vulnerabilities from completed scans")
     
-    repository_scans: int = Field(ge=0, description="Repository scans")
-    container_scans: int = Field(ge=0, description="Container scans")
-    infrastructure_scans: int = Field(ge=0, description="Infrastructure scans")
-    web_application_scans: int = Field(ge=0, description="Web application scans")
+    repository_scans: int = Field(ge=0, description="Completed repository scans")
+    container_scans: int = Field(ge=0, description="Completed container scans")
+    infrastructure_scans: int = Field(ge=0, description="Completed infrastructure scans")
+    web_application_scans: int = Field(ge=0, description="Completed web application scans")
     distinct_targets_scanned: int = Field(ge=0, description="Distinct target URLs scanned")
     distinct_repositories_scanned: int = Field(ge=0, description="Distinct repositories scanned")
     distinct_repo_owners_scanned: int = Field(ge=0, description="Distinct repo owners/orgs scanned")
@@ -324,7 +324,7 @@ class ScanStatisticsSchema(BaseModel):
     )
     daily_scan_counts: List[DailyScanCountSchema] = Field(
         default_factory=list,
-        description="Daily scan counts (overall + by type) for trend charts",
+        description="Daily completed scan counts (overall + by type) for trend charts",
     )
 
 

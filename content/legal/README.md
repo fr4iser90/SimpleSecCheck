@@ -8,3 +8,5 @@ Markdown templates for Impressum, privacy policy, and terms of service.
 - **Loader:** `backend/domain/services/legal_content_service.py` reads these files at runtime.
 
 Edit the `.md` files here — not Python strings — when updating boilerplate legal text.
+
+**Note:** Do not add developer-only disclaimers (e.g. “check with your lawyer”) to these templates — they are rendered on public legal pages. Keep maintainer notes in this README only.
