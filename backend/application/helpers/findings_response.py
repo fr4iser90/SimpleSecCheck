@@ -21,7 +21,7 @@ from application.helpers.findings_pagination import (
 
 
 def finding_item_from_dict(raw: Dict[str, Any]) -> ScanFindingItemSchema:
-    from scanner.output.ai_normalizer_utils import normalize_finding_fields
+    from shared.finding_normalize import normalize_finding_fields
 
     fields = normalize_finding_fields(raw) if isinstance(raw, dict) else {}
     cwe = raw.get("cwe") or raw.get("CWE") or raw.get("cwe_id")

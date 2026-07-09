@@ -1511,9 +1511,27 @@ async def websocket_scan_stream(websocket: WebSocket, scan_id: str):
     await websocket.accept()
     
     try:
+        from infrastructure.container import get_scan_repository
+
+        scan_repo = get_scan_repository()
         last_steps_hash = None
+        last_status_sent: Optional[str] = None
         
         while True:
+            scan = await scan_repo.get_by_id(scan_id)
+            if scan:
+                raw = getattr(getattr(scan, "status", None), "value", getattr(scan, "status", None))
+                st = str(raw or "").lower()
+                if st in ("completed", "failed", "cancelled", "interrupted") and st != last_status_sent:
+                    await websocket.send_json(
+                        {
+                            "type": "scan_status",
+                            "scan_id": scan_id,
+                            "status": st,
+                        }
+                    )
+                    last_status_sent = st
+
             # Read and deduplicate steps (sync file I/O — must not block the asyncio event loop)
             steps, total_steps, completed_steps = await asyncio.to_thread(
                 _read_deduplicated_steps, scan_id

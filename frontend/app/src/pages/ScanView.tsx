@@ -8,6 +8,7 @@ import ScanProgressAside from '../components/ScanProgressAside'
 import { SubstepSlot } from '../components/SubstepSlot'
 import { useWebSocket } from '../services/websocketService'
 import { SSE_ENVELOPE_EVENT, type SseEnvelope } from '../hooks/useGlobalSse'
+import { SCAN_STATUS_REFRESH_EVENT } from '../hooks/useHeaderScanStatus'
 import { formatDuration, formatEstimatedTime, parseStepInstantMs } from '../utils/timeUtils'
 import type { ScanRunStatus, ScanStatusState } from '../types/scanStatus'
 
@@ -62,6 +63,7 @@ interface WebSocketMessage {
   progress_percentage?: number
   total_steps?: number
   scan_id?: string
+  status?: string
   timestamp?: number
 }
 
@@ -111,6 +113,9 @@ export default function ScanView() {
             ? prev.results_dir || data.scan_id || scanId
             : prev.results_dir,
       }))
+      if (TERMINAL_SCAN_STATUSES.has(st) || st === 'running' || st === 'pending') {
+        window.dispatchEvent(new CustomEvent(SCAN_STATUS_REFRESH_EVENT))
+      }
       return TERMINAL_SCAN_STATUSES.has(st)
     } catch (error) {
       console.error('Failed to fetch scan status:', error)
@@ -229,6 +234,32 @@ export default function ScanView() {
     return () => window.clearInterval(intervalId)
   }, [status.status, status.scan_id, syncScanFromServer])
 
+  // Running: SSE + WebSocket scan_status; safety DB sync while worker finishes report
+  useEffect(() => {
+    if (status.status !== 'running' || !status.scan_id) return
+    const scanId = status.scan_id
+    const intervalId = window.setInterval(() => {
+      void fetchAndApplyScanStatus(scanId)
+    }, 10000)
+    return () => window.clearInterval(intervalId)
+  }, [status.status, status.scan_id, fetchAndApplyScanStatus])
+
+  // Steps at 100% but DB may still be running (report generation) — sync faster
+  useEffect(() => {
+    if (status.status !== 'running' || !status.scan_id || steps.length === 0) return
+    const allDone = steps.every(
+      (s) => s.status === 'completed' || s.status === 'failed',
+    )
+    if (!allDone && progress < 85) return
+
+    const scanId = status.scan_id
+    void fetchAndApplyScanStatus(scanId)
+    const intervalId = window.setInterval(() => {
+      void fetchAndApplyScanStatus(scanId)
+    }, 3000)
+    return () => window.clearInterval(intervalId)
+  }, [steps, progress, status.status, status.scan_id, fetchAndApplyScanStatus])
+
   useEffect(() => {
     if (status.status !== 'running') return
     const id = window.setInterval(() => setLiveTick((n) => n + 1), 1000)
@@ -286,6 +317,10 @@ export default function ScanView() {
     if (!service) return
 
     const handleMessage = (data: WebSocketMessage) => {
+      if (data.type === 'scan_status' && data.status && status.scan_id) {
+        void fetchAndApplyScanStatus(status.scan_id)
+        return
+      }
       if (data.type === 'step_update' && data.steps) {
         setSteps(data.steps)
         if (data.progress_percentage !== undefined) {
@@ -308,9 +343,9 @@ export default function ScanView() {
         service.onMessage(() => {}) // Clear handler
       }
     }
-  }, [service])
+  }, [service, status.scan_id, fetchAndApplyScanStatus])
 
-  // Listen for messages from iframe (HTML Report)
+  // Listen for messages from iframe (HTML Report) — legacy export page only
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin && !event.origin.includes('localhost:8080')) {
@@ -823,20 +858,8 @@ export default function ScanView() {
 
   if (status.status === 'completed' && status.scan_id) {
     return (
-      <div style={{ 
-        position: 'relative',
-        flex: 1,
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
-        <div style={{ 
-          flex: 1,
-          overflow: 'hidden',
-          position: 'relative',
-        }}>
-          <ReportViewer scanId={status.scan_id} />
-        </div>
+      <div className="scan-report-page">
+        <ReportViewer scanId={status.scan_id} />
 
         {/* Floating Action Buttons — sit above global app footer (~3.5rem) so they don’t cover it */}
         <div style={{
