@@ -15,8 +15,10 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.0"
+    "react-router-dom": "^6.30.4"
   },
+  "overrides": {
+    "@babel/core": "^7.29.6"
   "devDependencies": {
     "@playwright/test": "^1.52.0",
     "@types/react": "^18.2.43",

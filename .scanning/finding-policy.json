@@ -350,6 +350,18 @@
                 "path_regex": "postcss:8\\.5\\.[0-9]+",
                 "message_regex": "XSS|</style>",
                 "reason": "PostCSS is a transitive dev/build dependency. XSS requires parsing untrusted CSS and embedding stringified output inside HTML <style> tags; this app does not expose that pattern. Vite bundles CSS; no user-controlled CSS re-stringify path in production."
+            },
+            {
+                "rule_id": "GHSA-4x5r-pxfx-6jf8",
+                "path_regex": "@babel/core:7\\.29\\.[0-9]+",
+                "message_regex": "source map|maliciously crafted",
+                "reason": "Transitive dev/build dependency. @babel/core compiles only trusted application source during Vite build; advisory requires attacker-controlled input source maps, which does not apply to production builds."
+            },
+            {
+                "rule_id": "GHSA-g7r4-m6w7-qqqr",
+                "path_regex": "esbuild:0\\.27\\.[0-9]+",
+                "message_regex": "path traversal|Windows",
+                "reason": "esbuild dev-server path traversal affects Windows only when running --servedir. Production deploys Linux containers with static nginx; esbuild is build-time only and not exposed to end users."
             }
         ]
     },
@@ -394,6 +406,24 @@
                 "path_regex": ".*/frontend/app/src/components/ScanForm\\.tsx$",
                 "message_regex": "Unsafe Regular Expression",
                 "reason": "CONTAINER_REGISTRY_PATTERN validates user-entered image references with bounded quantifiers on short strings (form input), not unbounded backtracking on attacker-sized input. ReDoS risk is negligible for typical image ref lengths."
+            },
+            {
+                "rule_id": "security/detect-non-literal-fs-filename",
+                "path_regex": ".*/frontend/app/e2e/.*",
+                "message_regex": "mkdirSync|non literal",
+                "reason": "Playwright visual-audit harness only. Output directories are derived from fixed route fixture names under e2e/visual-audit/output, not from user or network input."
+            },
+            {
+                "rule_id": "security/detect-object-injection",
+                "path_regex": ".*/frontend/app/e2e/visual-audit/seed-demo-data\\.ts$",
+                "message_regex": "Object Injection",
+                "reason": "DEMO_TARGETS is a static string array; loop index selects fixed demo Git URLs for screenshot seeding, not attacker-controlled property names."
+            },
+            {
+                "rule_id": "react-hooks/exhaustive-deps",
+                "path_regex": ".*/frontend/app/src/.*\\.tsx$",
+                "message_regex": "exhaustive-deps|rule.*was not found",
+                "reason": "Scanner ESLint toolchain uses eslint-plugin-security only (no eslint-plugin-react-hooks). Reports reference a rule that is not loaded in the scan config; not a runtime security issue."
             }
         ]
     }

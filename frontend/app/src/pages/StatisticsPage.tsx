@@ -256,8 +256,6 @@ export default function StatisticsPage() {
       return
     }
     void refresh()
-    // refresh is stable; reload only when scope tab changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statsScope])
 
   useEffect(() => {

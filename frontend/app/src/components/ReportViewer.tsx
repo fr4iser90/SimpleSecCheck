@@ -280,7 +280,7 @@ export default function ReportViewer({ scanId }: ReportViewerProps) {
   useEffect(() => {
     if (!scanId) return
     void loadFindings(false)
-  }, [scanId, severityFilter, toolFilter, pathSearch]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scanId, severityFilter, toolFilter, pathSearch])
 
   const handleShareLink = async () => {
     if (!scanId) return
