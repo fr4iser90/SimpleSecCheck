@@ -19,6 +19,7 @@
   },
   "overrides": {
     "@babel/core": "^7.29.6"
+  },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
     "@types/react": "^18.2.43",
