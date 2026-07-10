@@ -201,33 +201,37 @@ async def _get_scanners_from_database() -> List[Dict[str, Any]]:
         )
 
 
-async def _ensure_scanners_loaded() -> None:
-    """
-    Ensure scanners are loaded in database.
-    
-    Validates database is ready, then loads scanners once correctly.
-    Raises exception if database is not ready or loading fails.
-    """
+async def _require_database_ready() -> None:
+    """Wait until the database is reachable (raises 503 if not)."""
     if not _database_adapter:
         raise HTTPException(status_code=503, detail="Database adapter not initialized")
-    
-    # Wait for database to be ready
+
     db_ready = await _wait_for_database_ready(max_wait_seconds=30)
     if not db_ready:
         raise HTTPException(
             status_code=503,
-            detail="Database not ready after waiting. Please check database connection."
+            detail="Database not ready after waiting. Please check database connection.",
         )
-    
+
+
+async def _ensure_scanners_loaded() -> None:
+    """
+    Ensure scanners are loaded in database (first-time bootstrap only).
+
+    If the scanners table is empty, runs discovery via scanner container.
+    Does not re-sync when rows already exist — use refresh_scanners() for that.
+    """
+    await _require_database_ready()
+
     # Check if scanners already exist
     async with _database_adapter.get_session() as session:
         result = await session.execute(text("SELECT COUNT(*) FROM scanners"))
         count = result.scalar() or 0
-        
+
         if count > 0:
             logger.info(f"Scanners already loaded ({count} scanners found)")
             return
-    
+
     # Load scanners from container
     logger.info("Loading scanners from container...")
     await _refresh_scanners_from_container()
@@ -435,13 +439,14 @@ async def get_scanners(scan_type: Optional[str] = None) -> Dict[str, List[Dict[s
 
 @router.post("/refresh")
 async def refresh_scanners() -> Dict[str, Any]:
-    """Manually refresh scanner list by triggering scanner container to update database."""
+    """Refresh scanner list from the scanner image and update the database."""
     global _scanner_cache, _cache_timestamp
     
     try:
         async with _cache_lock:
-            logger.info("Manually refreshing scanner list - triggering scanner container")
-            await _ensure_scanners_loaded()
+            logger.info("Refreshing scanner list - triggering scanner container")
+            await _require_database_ready()
+            await _refresh_scanners_from_container()
             # Reload from database after refresh
             _scanner_cache = await _get_scanners_from_database()
             _cache_timestamp = time.time()

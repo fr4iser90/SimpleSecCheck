@@ -1265,6 +1265,33 @@
   border-left-width: 3px;
 }
 
+button.queue-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.queue-card--mine {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.queue-card--mine:hover,
+.queue-card--mine:focus-visible {
+  border-color: var(--ds-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ds-accent) 35%, transparent);
+  outline: none;
+}
+
+.queue-card__action-hint {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ds-accent);
+}
+
 .queue-card--pending {
   border-left-color: var(--ds-warning);
 }

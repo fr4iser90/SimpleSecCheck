@@ -874,7 +874,9 @@ class DatabaseScanRepository(ScanRepository):
             try:
                 query = select(ScanModel)
                 if status_filter:
-                    query = query.where(ScanModel.status.ilike(f"%{status_filter}%"))
+                    query = query.where(
+                        ScanModel.status == cast(status_filter.lower(), ScanStatusEnumType)
+                    )
                 else:
                     query = query.where(ScanModel.status.in_(["pending", "running"]))
                 query = (
@@ -1004,7 +1006,9 @@ class DatabaseScanRepository(ScanRepository):
                 else:
                     return []
                 if status_filter:
-                    query = query.where(ScanModel.status.ilike(f"%{status_filter}%"))
+                    query = query.where(
+                        ScanModel.status == cast(status_filter.lower(), ScanStatusEnumType)
+                    )
                 query = (
                     query.order_by(ScanModel.priority.desc(), ScanModel.created_at.desc())
                     .limit(limit)

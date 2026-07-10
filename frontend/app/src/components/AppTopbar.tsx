@@ -48,18 +48,27 @@ function getBreadcrumb(pathname: string): { parent?: { label: string; to: string
   return { current: 'SimpleSecCheck' }
 }
 
-function scanPillMeta(status: ScanRunStatus): { text: string; className: string; to?: string } | null {
+function scanPillMeta(
+  status: ScanRunStatus,
+  scanId: string | null,
+): { text: string; className: string; to?: string } | null {
+  const scanPath = scanId ? `/scan?scan_id=${encodeURIComponent(scanId)}` : '/scan'
+
   switch (status) {
     case 'running':
-      return { text: 'Scan running', className: '', to: '/scan' }
+      return { text: 'Scan running', className: '', to: scanPath }
     case 'pending':
-      return { text: 'Scan queued', className: '', to: '/queue' }
+      return {
+        text: 'Scan queued',
+        className: '',
+        to: scanId ? scanPath : '/queue',
+      }
     case 'completed':
-      return { text: 'Scan completed', className: ' app-shell__scan-pill--done', to: '/scan' }
+      return { text: 'Scan completed', className: ' app-shell__scan-pill--done', to: scanPath }
     case 'failed':
     case 'cancelled':
     case 'interrupted':
-      return { text: 'Scan failed', className: ' app-shell__scan-pill--error', to: '/scan' }
+      return { text: 'Scan failed', className: ' app-shell__scan-pill--error', to: scanPath }
     default:
       return null
   }
@@ -74,7 +83,7 @@ export default function AppTopbar() {
   const userMenuRef = useRef<HTMLDivElement>(null)
 
   const crumb = getBreadcrumb(pathname)
-  const pill = scanPillMeta(scanStatus.status)
+  const pill = scanPillMeta(scanStatus.status, scanStatus.scan_id)
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import RefreshToolbar from '../components/RefreshToolbar'
 import { useConfig } from '../hooks/useConfig'
@@ -21,6 +21,13 @@ interface QueueData {
   items: QueueItem[]
   queue_length: number
   max_queue_length: number
+}
+
+interface MyScanRef {
+  queue_id: string
+  scan_id?: string
+  status: QueueItem['status']
+  started_at?: string
 }
 
 function statusClass(status: string): string {
@@ -55,15 +62,24 @@ function statusLabel(status: string): string {
 
 export default function QueueView() {
   useConfig()
+  const navigate = useNavigate()
   const [queueData, setQueueData] = useState<QueueData | null>(null)
+  const [myScans, setMyScans] = useState<MyScanRef[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const fetchQueue = useCallback(async ({ silent }: { silent: boolean }) => {
     try {
-      const response = await fetch(resolveApiUrl('/api/queue/?limit=100'))
-      if (!response.ok) throw new Error('Failed to fetch queue')
-      const data = await response.json()
+      const [queueRes, myScansRes] = await Promise.all([
+        fetch(resolveApiUrl('/api/queue/?limit=100')),
+        fetch(resolveApiUrl('/api/queue/my-scans')),
+      ])
+      if (!queueRes.ok) throw new Error('Failed to fetch queue')
+      const data = await queueRes.json()
       setQueueData(data)
+      if (myScansRes.ok) {
+        const mine = await myScansRes.json()
+        setMyScans(Array.isArray(mine.scans) ? mine.scans : [])
+      }
       setError(null)
     } catch (err) {
       if (!silent) {
@@ -71,6 +87,31 @@ export default function QueueView() {
       }
     }
   }, [])
+
+  const myScanByQueueId = useMemo(() => {
+    const map = new Map<string, MyScanRef>()
+    for (const scan of myScans) {
+      map.set(scan.queue_id, scan)
+      if (scan.scan_id) map.set(scan.scan_id, scan)
+    }
+    return map
+  }, [myScans])
+
+  const openMyScan = useCallback(
+    (item: QueueItem) => {
+      const mine = myScanByQueueId.get(item.queue_id)
+      const scanId = mine?.scan_id || item.queue_id
+      navigate(`/scan?scan_id=${encodeURIComponent(scanId)}`, {
+        state: {
+          status: item.status,
+          scan_id: scanId,
+          results_dir: item.status === 'completed' ? scanId : null,
+          started_at: mine?.started_at || null,
+        },
+      })
+    },
+    [myScanByQueueId, navigate],
+  )
 
   const [autoRefresh] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -102,8 +143,8 @@ export default function QueueView() {
         title="Queue"
         subtitle={
           <>
-            Anonymized view of scans waiting to run. To cancel your own scan, open{' '}
-            <Link to="/my-scans">My Scans</Link> or the scan progress page.
+            Anonymized view of scans waiting to run. Click your own scan to open progress, or use{' '}
+            <Link to="/my-scans">My Scans</Link> to cancel.
           </>
         }
       >
@@ -145,45 +186,99 @@ export default function QueueView() {
             <div className="queue-grid">
               {queueData.items.map((item) => {
                 const positionLabel = formatQueuePosition(item.position, item.status)
-                return (
-                <article key={item.queue_id} className={`queue-card ${statusClass(item.status)}`}>
-                  <div className="queue-card__header">
-                    <div>
-                      {positionLabel !== '—' && (
-                        <div className="queue-card__position">{positionLabel}</div>
-                      )}
-                      <div className="queue-card__meta">{new Date(item.created_at).toLocaleString()}</div>
-                    </div>
-                    <span className={`status-pill status-pill--${item.status === 'running' ? 'active' : item.status === 'pending' ? 'pending' : 'inactive'}`}>
-                      {statusLabel(item.status)}
-                    </span>
-                  </div>
+                const isMine = myScanByQueueId.has(item.queue_id)
+                const cardClass = `queue-card ${statusClass(item.status)}${isMine ? ' queue-card--mine' : ''}`
 
-                  <div className="queue-card__section">
-                    <div className="queue-card__label">Repository</div>
-                    <div className="queue-card__value queue-card__value--mono">{item.repository_name}</div>
-                  </div>
-
-                  {item.branch && (
-                    <div className="queue-card__section">
-                      <div className="queue-card__label">Branch</div>
-                      <div className="queue-card__value">{item.branch}</div>
-                    </div>
-                  )}
-
-                  {item.scanners && item.scanners.length > 0 && (
-                    <div className="queue-card__section">
-                      <div className="queue-card__label">Scanners ({item.scanners.length})</div>
-                      <div className="queue-card__chips">
-                        {item.scanners.map((scanner) => (
-                          <span key={scanner} className="ui-chip ui-chip--accent">
-                            {scanner}
-                          </span>
-                        ))}
+                if (isMine) {
+                  return (
+                    <button
+                      key={item.queue_id}
+                      type="button"
+                      className={cardClass}
+                      onClick={() => openMyScan(item)}
+                      title="Open scan progress"
+                    >
+                      <div className="queue-card__header">
+                        <div>
+                          {positionLabel !== '—' && (
+                            <div className="queue-card__position">{positionLabel}</div>
+                          )}
+                          <div className="queue-card__meta">{new Date(item.created_at).toLocaleString()}</div>
+                        </div>
+                        <span className={`status-pill status-pill--${item.status === 'running' ? 'active' : item.status === 'pending' ? 'pending' : 'inactive'}`}>
+                          {statusLabel(item.status)}
+                        </span>
                       </div>
+
+                      <div className="queue-card__section">
+                        <div className="queue-card__label">Repository</div>
+                        <div className="queue-card__value queue-card__value--mono">{item.repository_name}</div>
+                      </div>
+
+                      {item.branch && (
+                        <div className="queue-card__section">
+                          <div className="queue-card__label">Branch</div>
+                          <div className="queue-card__value">{item.branch}</div>
+                        </div>
+                      )}
+
+                      {item.scanners && item.scanners.length > 0 && (
+                        <div className="queue-card__section">
+                          <div className="queue-card__label">Scanners ({item.scanners.length})</div>
+                          <div className="queue-card__chips">
+                            {item.scanners.map((scanner) => (
+                              <span key={scanner} className="ui-chip ui-chip--accent">
+                                {scanner}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="queue-card__action-hint">Your scan — open progress</div>
+                    </button>
+                  )
+                }
+
+                return (
+                  <article key={item.queue_id} className={cardClass}>
+                    <div className="queue-card__header">
+                      <div>
+                        {positionLabel !== '—' && (
+                          <div className="queue-card__position">{positionLabel}</div>
+                        )}
+                        <div className="queue-card__meta">{new Date(item.created_at).toLocaleString()}</div>
+                      </div>
+                      <span className={`status-pill status-pill--${item.status === 'running' ? 'active' : item.status === 'pending' ? 'pending' : 'inactive'}`}>
+                        {statusLabel(item.status)}
+                      </span>
                     </div>
-                  )}
-                </article>
+
+                    <div className="queue-card__section">
+                      <div className="queue-card__label">Repository</div>
+                      <div className="queue-card__value queue-card__value--mono">{item.repository_name}</div>
+                    </div>
+
+                    {item.branch && (
+                      <div className="queue-card__section">
+                        <div className="queue-card__label">Branch</div>
+                        <div className="queue-card__value">{item.branch}</div>
+                      </div>
+                    )}
+
+                    {item.scanners && item.scanners.length > 0 && (
+                      <div className="queue-card__section">
+                        <div className="queue-card__label">Scanners ({item.scanners.length})</div>
+                        <div className="queue-card__chips">
+                          {item.scanners.map((scanner) => (
+                            <span key={scanner} className="ui-chip ui-chip--accent">
+                              {scanner}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </article>
                 )
               })}
             </div>
