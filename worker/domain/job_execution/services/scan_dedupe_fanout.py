@@ -46,18 +46,6 @@ def _commit_from_meta(meta: Any) -> Optional[str]:
     return None
 
 
-def _branch_from_config(config: Any) -> str:
-    if isinstance(config, str):
-        try:
-            config = json.loads(config)
-        except json.JSONDecodeError:
-            return ""
-    if not isinstance(config, dict):
-        return ""
-    b = config.get("git_branch") or config.get("branch") or ""
-    return str(b).strip().lower()
-
-
 def _symlink_results(winner_id: str, sibling_id: str) -> None:
     """Point sibling results dir at winner so /api/results/{sibling}/report works."""
     base = Path(os.environ.get("RESULTS_DIR", "/app/results"))
@@ -110,7 +98,6 @@ async def fanout_completed_scan_to_siblings(
         user_id = winner["user_id"]
         target_url = winner.get("target_url") or ""
         winner_commit = _commit_from_meta(winner.get("scan_metadata"))
-        winner_branch = _branch_from_config(winner.get("config"))
 
         siblings = await session.execute(
             text(
@@ -149,20 +136,17 @@ async def fanout_completed_scan_to_siblings(
 
         awaits = str(meta.get("awaits_results_from_scan_id") or "").strip()
         sib_commit = _commit_from_meta(meta)
-        sib_branch = _branch_from_config(sib.get("config"))
 
         linked = awaits == str(winner_scan_id)
-        commit_ok = bool(winner_commit and sib_commit and _commits_match(winner_commit, sib_commit))
-        branch_ok = (
-            not winner_commit
-            and not sib_commit
-            and winner_branch == sib_branch
+        commit_ok = bool(
+            winner_commit and sib_commit and _commits_match(winner_commit, sib_commit)
         )
-        # Pending/running same commit, or cancelled waiting on winner
+        # Pending/running: only same commit. Cancelled: only if explicitly awaiting this winner.
+        # Never promote on "same URL / same branch without commit" (caused scan spam loops).
         status = str(sib.get("status") or "").lower()
         if status == "cancelled" and not linked:
             continue
-        if not (linked or commit_ok or branch_ok):
+        if not (linked or commit_ok):
             continue
 
         meta = dict(meta)
@@ -296,6 +280,15 @@ async def try_short_circuit_duplicate_job(
             return False
 
         my_commit = _commit_from_meta(meta)
+        # Without a commit SHA we must not clone "latest completed for URL" — that
+        # combined with interval auto-scan created thousands of fake completions.
+        if not my_commit:
+            logger.info(
+                "No short-circuit for scan %s: missing commit_hash (will run or stay queued)",
+                scan_id,
+            )
+            return False
+
         winner = await session.execute(
             text(
                 """
@@ -319,17 +312,10 @@ async def try_short_circuit_duplicate_job(
         )
         for w in winner.mappings().all():
             w_commit = _commit_from_meta(w.get("scan_metadata"))
-            if my_commit and w_commit and not _commits_match(my_commit, w_commit):
+            if not w_commit or not _commits_match(my_commit, w_commit):
                 continue
-            if my_commit and not w_commit:
-                continue
-            if not my_commit and w_commit:
-                # Accept latest completed same URL when we have no commit yet
-                pass
-            elif not my_commit and not w_commit:
-                pass
 
-            # Found a reusable completed scan
+            # Found a reusable completed scan for the same commit
             wid = str(w["id"])
             new_meta = dict(meta)
             new_meta["results_from_scan_id"] = wid
@@ -381,7 +367,12 @@ async def try_short_circuit_duplicate_job(
                 guest_session_id=new_meta.get("session_id"),
                 logger=logger,
             )
-            logger.info("Short-circuit scan %s → results from %s", scan_id, wid)
+            logger.info(
+                "Short-circuit scan %s → results from %s (commit %s)",
+                scan_id,
+                wid,
+                my_commit[:8],
+            )
             return True
 
     return False

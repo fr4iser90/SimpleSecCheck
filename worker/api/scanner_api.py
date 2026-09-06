@@ -8,6 +8,7 @@ import json
 import asyncio
 import time
 import os
+import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
@@ -32,6 +33,19 @@ _cache_lock = asyncio.Lock()  # Lock to prevent race conditions when fetching sc
 
 # Cache TTL in seconds (default: 1 hour, configurable via env var)
 CACHE_TTL_SECONDS = int(os.getenv("SCANNER_CACHE_TTL_SECONDS", "3600"))  # 1 hour default
+
+
+def _docker_safe_name(*parts: str, prefix: str = "asset-update", max_len: int = 63) -> str:
+    """Docker container names: [a-zA-Z0-9][a-zA-Z0-9_.-]* , max 63 chars."""
+    raw = "-".join(str(p) for p in parts if p)
+    cleaned = re.sub(r"[^a-zA-Z0-9_.-]+", "-", raw).strip(".-")
+    if not cleaned:
+        cleaned = "job"
+    if cleaned[0] in "_.-":
+        cleaned = f"x{cleaned}"
+    name = f"{prefix}-{cleaned}-{int(time.time())}"
+    name = re.sub(r"-{2,}", "-", name)
+    return name[:max_len].rstrip(".-") or f"{prefix}-{int(time.time())}"
 
 
 def init_router(database_adapter: PostgreSQLAdapter) -> APIRouter:
@@ -555,7 +569,18 @@ async def run_scanner_asset_update(scanner_name: str, asset_id: str) -> Dict[str
         )
     host_project_root = os.path.dirname(results_dir_host)
     asset_host_path = os.path.join(host_project_root, host_subpath)
-    os.makedirs(asset_host_path, exist_ok=True)
+    # RESULTS_DIR_HOST is a *host* path used for Docker bind mounts. The worker
+    # container usually cannot mkdir that tree (e.g. /home/docker/...), so failure
+    # is non-fatal — the Docker daemon resolves/creates the bind on the host.
+    try:
+        os.makedirs(asset_host_path, exist_ok=True)
+    except OSError as e:
+        logger.warning(
+            "Could not mkdir asset path inside worker (%s): %s — continuing; "
+            "ensure the dir exists on the host or let Docker create the bind",
+            asset_host_path,
+            e,
+        )
 
     env_map = dict(update.get("env") or {})
     environment = {
@@ -569,7 +594,7 @@ async def run_scanner_asset_update(scanner_name: str, asset_id: str) -> Dict[str
         raise HTTPException(status_code=400, detail="Invalid update command")
 
     scanner_image = os.environ.get("SCANNER_IMAGE", "simpleseccheck-scanner:latest")
-    container_name = f"asset-update-{scanner_name}-{asset_id}-{int(time.time())}"[:63]
+    container_name = _docker_safe_name(scanner_name, asset_id)
 
     logger.info(
         "Starting asset update %s/%s → %s (cmd=%s)",

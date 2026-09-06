@@ -1,6 +1,5 @@
 /* SimpleSecCheck design system — light default, dark via [data-theme='dark'] */
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Fonts: system stack only (no third-party CDN — keeps CSP strict). */
 
 :root {
   --ds-bg: #f4f6f9;

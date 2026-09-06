@@ -114,6 +114,38 @@ async def find_reusable_scan_for_commit(
     return scan
 
 
+async def find_reusable_completed_for_target(
+    scan_repository: Any,
+    *,
+    user_id: str,
+    target_url: str,
+) -> Optional[Scan]:
+    """
+    When commit cannot be resolved: reuse latest *completed* scan for this target
+    (with findings) so interval schedulers do not enqueue endless new jobs.
+    """
+    last = await scan_repository.find_latest_finished_scan_by_user_and_target(
+        user_id, target_url
+    )
+    if not last:
+        return None
+    status = getattr(last.status, "value", last.status)
+    if str(status).lower() != ScanStatus.COMPLETED.value:
+        return None
+    # Prefer not to reuse short-circuit clones as the "canonical" row when possible,
+    # but accepting them still stops the spam loop.
+    if not completed_scan_has_reusable_results(str(last.id)):
+        # Follow results_from_scan_id symlink/redirect if present
+        meta = getattr(last, "scan_metadata", None) or getattr(last, "metadata", None) or {}
+        from_id = None
+        if isinstance(meta, dict):
+            from_id = meta.get("results_from_scan_id")
+        if from_id and completed_scan_has_reusable_results(str(from_id)):
+            return last
+        return None
+    return last
+
+
 async def find_active_scan_for_target(
     scan_repository: Any,
     *,

@@ -39,6 +39,37 @@ function assetKey(scanner: string, assetId: string) {
   return `${scanner}:${assetId}`
 }
 
+/** FastAPI `detail` may be string, list of validation errors, or object. */
+function formatApiDetail(body: unknown, fallback: string, status?: number): string {
+  if (!body || typeof body !== 'object') {
+    return status ? `${fallback} (HTTP ${status})` : fallback
+  }
+  const detail = (body as { detail?: unknown }).detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === 'string') return item
+        if (item && typeof item === 'object' && 'msg' in item) {
+          return String((item as { msg: unknown }).msg)
+        }
+        return JSON.stringify(item)
+      })
+      .filter(Boolean)
+    if (parts.length) return parts.join('; ')
+  }
+  if (detail && typeof detail === 'object') {
+    try {
+      return JSON.stringify(detail)
+    } catch {
+      /* ignore */
+    }
+  }
+  const message = (body as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) return message
+  return status ? `${fallback} (HTTP ${status})` : fallback
+}
+
 const badgeBase: CSSProperties = {
   display: 'inline-block',
   fontSize: '0.7rem',
@@ -105,6 +136,10 @@ export default function ScannerDataUpdate() {
           if (data.status === 'done' || data.status === 'error') {
             void refreshAssets()
           }
+          if (data.status === 'error' && data.error_message) {
+            // Surface worker/job failure (post-start) once status flips to error
+            console.warn('[ScannerDataUpdate] Update job error:', data.error_message)
+          }
         }
       } catch (err) {
         console.error('[ScannerDataUpdate] Error fetching status:', err)
@@ -145,8 +180,8 @@ export default function ScannerDataUpdate() {
       )
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        const detail = (error as { detail?: string }).detail || 'Unknown error'
-        toast.error(`Failed to start update: ${detail}`)
+        const detail = formatApiDetail(error, 'Unknown error', response.status)
+        toast.error(`Failed to start update for ${scannerName}/${assetId}: ${detail}`)
         setLocalBusy(false)
         setStatus(prev => ({
           ...prev,
@@ -204,6 +239,10 @@ export default function ScannerDataUpdate() {
           { method: 'POST' },
         )
         if (!response.ok) {
+          const error = await response.json().catch(() => ({}))
+          const detail = formatApiDetail(error, 'Unknown error', response.status)
+          console.error(`[ScannerDataUpdate] Failed to update ${item.scanner}/${item.asset.id}:`, detail)
+          toast.error(`${item.scanner}/${item.asset.id}: ${detail}`)
           failCount++
           continue
         }

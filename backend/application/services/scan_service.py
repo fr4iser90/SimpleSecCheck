@@ -147,6 +147,7 @@ class ScanService:
         """
         from application.helpers.commit_scan_cache import (
             find_active_scan_for_target,
+            find_reusable_completed_for_target,
             find_reusable_scan_for_commit,
             is_git_repo_scan_request,
             resolve_commit_for_git_request,
@@ -199,6 +200,24 @@ class ScanService:
             return ScanDTO.from_entity(active)
 
         if not commit:
+            # No remote SHA: still reuse latest completed for this target to stop
+            # interval auto-scan from creating endless new rows.
+            cached_any = await find_reusable_completed_for_target(
+                self.scan_repository,
+                user_id=request.user_id,
+                target_url=request.target_url,
+            )
+            if cached_any:
+                logger.info(
+                    "Reusing completed scan %s for target %s (no commit resolved)",
+                    cached_any.id,
+                    (request.target_url or "")[:80],
+                )
+                dto = ScanDTO.from_entity(cached_any)
+                dto.metadata = dict(dto.metadata or {})
+                dto.metadata["commit_cache_hit"] = True
+                dto.metadata["commit_cache_reason"] = "no_commit_latest_completed"
+                return dto
             return None
 
         cached = await find_reusable_scan_for_commit(

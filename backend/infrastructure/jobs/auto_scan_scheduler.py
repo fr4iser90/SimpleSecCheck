@@ -37,6 +37,8 @@ class AutoScanScheduler:
         self.check_interval_seconds = check_interval_seconds
         self._running = False
         self._task: Optional[asyncio.Task] = None
+        # Cache-hit creates do not bump completed_at; pin cooldown per target in-memory.
+        self._last_target_schedule_at: dict[str, datetime] = {}
 
     async def start(self):
         if self._running:
@@ -180,14 +182,30 @@ class AutoScanScheduler:
             target_repo = get_scan_target_repository()
             scan_repo = get_scan_repository()
 
+            # Floor: prevent accidental "every 30s" spam from tiny intervals.
+            MIN_INTERVAL_SECONDS = 3600
+
             targets = await target_repo.list_with_auto_scan_interval()
             for target in targets:
                 interval_sec = target.auto_scan.interval_seconds
                 if not interval_sec or int(interval_sec) <= 0:
                     continue
                 interval_sec = int(interval_sec)
+                if interval_sec < MIN_INTERVAL_SECONDS:
+                    logger.warning(
+                        "Target %s auto_scan interval %ss clamped to %ss",
+                        target.id,
+                        interval_sec,
+                        MIN_INTERVAL_SECONDS,
+                    )
+                    interval_sec = MIN_INTERVAL_SECONDS
 
                 if await scan_repo.find_active_scan_by_user_and_target(target.user_id, target.source):
+                    continue
+
+                tid = str(target.id)
+                last_attempt = self._last_target_schedule_at.get(tid)
+                if last_attempt and (datetime.utcnow() - last_attempt).total_seconds() < interval_sec:
                     continue
 
                 last_scan = await scan_repo.find_latest_finished_scan_by_user_and_target(
@@ -204,8 +222,16 @@ class AutoScanScheduler:
                     metadata_extra={"trigger": "auto_scan_scheduler", "interval_seconds": interval_sec},
                     enforcement_mode="full",
                 )
+                self._last_target_schedule_at[tid] = datetime.utcnow()
                 if scan_id:
-                    logger.info("Scan %s created for target %s", scan_id, target.id)
+                    if last_scan and str(last_scan.id) == str(scan_id):
+                        logger.info(
+                            "Auto-scan reuse for target %s → existing scan %s (no new job)",
+                            target.id,
+                            scan_id,
+                        )
+                    else:
+                        logger.info("Scan %s created for target %s", scan_id, target.id)
                 else:
                     logger.error("Failed to create scan for target %s", target.id)
         except Exception as e:

@@ -99,15 +99,23 @@ export class WebSocketService {
 
           this.callbacks.onClose?.()
 
-          // Auto-reconnect if not manually closed and within max attempts
+          // Auto-reconnect with backoff; stop quietly when max attempts hit
+          // (common after scan ends / backend restart — not a Trivy/update failure).
           if (!this.intentionalClose && this.reconnectAttempts < 10) {
             this.reconnectAttempts++
-            console.log(`[WebSocketService] Reconnecting in 3000ms (attempt ${this.reconnectAttempts}/10)`)
+            const delayMs = Math.min(3000 * this.reconnectAttempts, 15000)
+            console.warn(
+              `[WebSocketService] Reconnecting in ${delayMs}ms (attempt ${this.reconnectAttempts}/10)`,
+            )
             this.reconnectTimer = window.setTimeout(() => {
-              this.connect(scanId).catch(console.error)
-            }, 3000)
-          } else {
-            console.error('[WebSocketService] Max reconnection attempts reached')
+              this.connect(scanId).catch(() => {
+                /* next onclose will retry or stop */
+              })
+            }, delayMs)
+          } else if (!this.intentionalClose) {
+            console.warn(
+              '[WebSocketService] Gave up reconnecting — live updates paused; refresh or reopen the scan view',
+            )
           }
         }
       } catch (error) {
