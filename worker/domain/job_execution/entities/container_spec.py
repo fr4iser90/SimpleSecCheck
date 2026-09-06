@@ -381,15 +381,32 @@ class ContainerSpec:
                 container_path = asset_volume.get("container_path")
                 if host_subpath and container_path:
                     asset_host_path = os.path.join(host_project_root, host_subpath)
-                    # Validate that the path exists before trying to mount
+                    # Create missing host dirs so shared vuln DBs persist across ephemeral scans.
                     if not os.path.exists(asset_host_path):
-                        import logging
-                        logger = logging.getLogger(__name__)
-                        logger.warning(
-                            f"Asset volume path does not exist on host: {asset_host_path}. "
-                            f"Skipping mount for {container_path}"
-                        )
-                        continue
+                        try:
+                            # Config assets may be files; only mkdir for directory-style data caches.
+                            if asset_host_path.endswith((".yaml", ".yml", ".json", ".toml", ".conf")):
+                                parent = os.path.dirname(asset_host_path)
+                                if parent:
+                                    os.makedirs(parent, exist_ok=True)
+                                import logging
+                                logging.getLogger(__name__).warning(
+                                    "Asset file missing on host (skip mount): %s", asset_host_path
+                                )
+                                continue
+                            os.makedirs(asset_host_path, exist_ok=True)
+                            import logging
+                            logging.getLogger(__name__).info(
+                                "Created scanner asset cache dir on host: %s", asset_host_path
+                            )
+                        except OSError as e:
+                            import logging
+                            logging.getLogger(__name__).warning(
+                                "Could not create asset path %s: %s — skipping mount",
+                                asset_host_path,
+                                e,
+                            )
+                            continue
                     
                     # Docker limitation: Cannot mount a file if the path already exists in the image
                     # If the file exists in the image, we need to mount the parent directory instead
@@ -408,7 +425,14 @@ class ContainerSpec:
                     else:
                         # For directories, mount normally
                         spec.add_volume(asset_host_path, container_path, read_only=False)
-        
+
+                    # Apply asset update.env (e.g. TRIVY_CACHE_DIR={container_path}) into scan container.
+                    env_map = asset_volume.get("env") or {}
+                    if isinstance(env_map, dict):
+                        for ek, ev in env_map.items():
+                            if ek and ev is not None:
+                                val = str(ev).replace("{container_path}", str(container_path))
+                                spec.add_environment(str(ek), val)        
         # For local_mount, mount target from host (read-only)
         # For git_repo, /target is tmpfs (writable for Git Clone)
         if target_mount_path:

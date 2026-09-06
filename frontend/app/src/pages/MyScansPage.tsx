@@ -412,7 +412,7 @@ export default function MyScansPage() {
               <thead>
                 <tr>
                   <SortTh col="repository" label="Repository" title="Sort by repository name" />
-                  <SortTh col="branch" label="Branch" title="Sort by branch" />
+                  <SortTh col="branch" label="Branch / Commit" title="Sort by branch" />
                   <SortTh col="scanners" label="Scanners" title="Sort by number of scanners" />
                   <SortTh col="status" label="Status" title="Sort by status" />
                   <SortTh col="position" label="Position" title="Sort by queue position" />
@@ -435,7 +435,22 @@ export default function MyScansPage() {
                           </div>
                         )}
                       </td>
-                      <td style={{ color: 'var(--ds-text-secondary)' }}>{item.branch || '—'}</td>
+                      <td style={{ color: 'var(--ds-text-secondary)' }}>
+                        <div>{item.branch || '—'}</div>
+                        {item.commit_hash ? (
+                          <div
+                            style={{
+                              fontFamily: 'ui-monospace, monospace',
+                              fontSize: '0.75rem',
+                              marginTop: '0.2rem',
+                              opacity: 0.85,
+                            }}
+                            title={item.commit_hash}
+                          >
+                            {item.commit_hash.slice(0, 8)}
+                          </div>
+                        ) : null}
+                      </td>
                       <td>
                         {item.scanners && item.scanners.length > 0 ? (
                           <div className="queue-card__chips">
@@ -455,7 +470,7 @@ export default function MyScansPage() {
                         </span>
                       </td>
                       <td style={{ color: 'var(--ds-text-secondary)' }}>
-                        {item.position !== undefined ? `#${item.position}` : '—'}
+                        {formatQueuePosition(item.position, item.status)}
                       </td>
                       <td style={{ color: 'var(--ds-text-secondary)', fontSize: '0.8125rem' }}>
                         {item.status === 'pending' || item.status === 'running' ? (
@@ -511,6 +526,18 @@ export default function MyScansPage() {
                       <span className="mobile-data-card__label">Branch</span>
                       <span className="mobile-data-card__value">{item.branch || '—'}</span>
                     </div>
+                    {item.commit_hash ? (
+                      <div className="mobile-data-card__row">
+                        <span className="mobile-data-card__label">Commit</span>
+                        <span
+                          className="mobile-data-card__value"
+                          style={{ fontFamily: 'ui-monospace, monospace' }}
+                          title={item.commit_hash}
+                        >
+                          {item.commit_hash.slice(0, 8)}
+                        </span>
+                      </div>
+                    ) : null}
                     <div className="mobile-data-card__row">
                       <span className="mobile-data-card__label">Position</span>
                       <span className="mobile-data-card__value">

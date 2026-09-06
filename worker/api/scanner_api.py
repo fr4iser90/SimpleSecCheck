@@ -511,3 +511,113 @@ async def get_scanner_assets() -> Dict[str, List[Dict[str, Any]]]:
     except Exception as e:
         logger.error(f"Failed to get scanner assets: {e}", exc_info=True)
         return {"assets": []}
+
+
+@router.post("/assets/{scanner_name}/{asset_id}/update")
+async def run_scanner_asset_update(scanner_name: str, asset_id: str) -> Dict[str, Any]:
+    """
+    Run a one-off Docker job to refresh a scanner asset cache (e.g. Trivy vuln DB).
+
+    Mounts host_subpath → container_path, applies update.env, runs update.command.
+    """
+    docker_adapter = DockerAdapter()
+    if not docker_adapter.client:
+        raise HTTPException(status_code=503, detail="Docker not available")
+
+    assets_payload = await get_scanner_assets()
+    asset_found = None
+    for item in assets_payload.get("assets") or []:
+        if (
+            str(item.get("scanner") or "").lower() == scanner_name.lower()
+            and str((item.get("asset") or {}).get("id") or "") == asset_id
+        ):
+            asset_found = item.get("asset")
+            break
+
+    if not asset_found:
+        raise HTTPException(status_code=404, detail=f"Asset {asset_id} not found for {scanner_name}")
+
+    update = asset_found.get("update") or {}
+    if not update.get("enabled") or not update.get("command"):
+        raise HTTPException(status_code=400, detail=f"Asset {asset_id} does not support updates")
+
+    mount = asset_found.get("mount") or {}
+    host_subpath = mount.get("host_subpath")
+    container_path = mount.get("container_path")
+    if not host_subpath or not container_path:
+        raise HTTPException(status_code=400, detail="Asset mount paths missing")
+
+    results_dir_host = os.environ.get("RESULTS_DIR_HOST")
+    if not results_dir_host:
+        raise HTTPException(
+            status_code=503,
+            detail="RESULTS_DIR_HOST required to resolve asset host paths",
+        )
+    host_project_root = os.path.dirname(results_dir_host)
+    asset_host_path = os.path.join(host_project_root, host_subpath)
+    os.makedirs(asset_host_path, exist_ok=True)
+
+    env_map = dict(update.get("env") or {})
+    environment = {
+        k: str(v).replace("{container_path}", str(container_path))
+        for k, v in env_map.items()
+        if k and v is not None
+    }
+
+    command = list(update["command"])
+    if not isinstance(command, list) or not command:
+        raise HTTPException(status_code=400, detail="Invalid update command")
+
+    scanner_image = os.environ.get("SCANNER_IMAGE", "simpleseccheck-scanner:latest")
+    container_name = f"asset-update-{scanner_name}-{asset_id}-{int(time.time())}"[:63]
+
+    logger.info(
+        "Starting asset update %s/%s → %s (cmd=%s)",
+        scanner_name,
+        asset_id,
+        asset_host_path,
+        command,
+    )
+
+    try:
+        container = await asyncio.to_thread(
+            docker_adapter.client.containers.create,
+            image=scanner_image,
+            command=command,
+            name=container_name,
+            detach=True,
+            auto_remove=False,
+            environment=environment or None,
+            volumes={
+                asset_host_path: {"bind": container_path, "mode": "rw"},
+            },
+        )
+        await asyncio.to_thread(container.start)
+        result = await asyncio.to_thread(container.wait, timeout=1800)
+        exit_code = (
+            result.get("StatusCode", 1) if isinstance(result, dict) else int(result or 1)
+        )
+        logs_text = ""
+        try:
+            logs = await asyncio.to_thread(container.logs, stdout=True, stderr=True, tail=80)
+            logs_text = logs.decode("utf-8", errors="replace") if logs else ""
+        except Exception:
+            pass
+        try:
+            await asyncio.to_thread(container.remove, force=True)
+        except Exception:
+            pass
+
+        ok = exit_code == 0
+        return {
+            "ok": ok,
+            "exit_code": exit_code,
+            "scanner": scanner_name,
+            "asset_id": asset_id,
+            "error_message": None if ok else (logs_text[-2000:] or f"exit {exit_code}"),
+        }
+    except docker.errors.ImageNotFound:
+        raise HTTPException(status_code=503, detail=f"Scanner image not found: {scanner_image}")
+    except Exception as e:
+        logger.error("Asset update failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Asset update failed: {e}")

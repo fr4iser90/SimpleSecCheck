@@ -102,12 +102,17 @@ export function formatDetailedDuration(seconds: number | null | undefined): stri
  * @param avgDurationSeconds - Average duration per scan in seconds
  * @returns Estimated wait time in seconds
  */
-/** Human-readable queue position; completed scans show an em dash. */
+/** Human-readable queue position; finished scans and missing positions show an em dash. */
 export function formatQueuePosition(
   position: number | null | undefined,
   status?: string,
 ): string {
-  if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+  if (
+    status === 'completed' ||
+    status === 'failed' ||
+    status === 'cancelled' ||
+    status === 'interrupted'
+  ) {
     return '—'
   }
   if (typeof position === 'number' && !Number.isNaN(position) && position > 0) {

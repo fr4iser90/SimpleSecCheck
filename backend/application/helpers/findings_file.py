@@ -16,6 +16,29 @@ def findings_json_path(scan_id: str) -> Path:
     return base / scan_id / "summary" / "findings.json"
 
 
+def resolve_results_scan_id(scan_id: str, *, max_hops: int = 5) -> str:
+    """
+    Follow results/{scan_id} symlinks (dedupe fanout) to the scan that owns the files.
+    """
+    current = str(scan_id)
+    seen = {current}
+    s = get_settings()
+    base = Path(s.RESULTS_DIR_HOST if hasattr(s, "RESULTS_DIR_HOST") else "/app/results")
+    for _ in range(max_hops):
+        path = base / current
+        if not path.is_symlink():
+            break
+        try:
+            target = path.resolve().name
+        except OSError:
+            break
+        if not target or target in seen:
+            break
+        seen.add(target)
+        current = target
+    return current
+
+
 def _extract_findings_from_report_html(html_path: Path) -> List[Dict[str, Any]]:
     try:
         text = html_path.read_text(encoding="utf-8", errors="replace")
@@ -40,14 +63,21 @@ def _extract_findings_from_report_html(html_path: Path) -> List[Dict[str, Any]]:
     return []
 
 
-def load_findings_payload(scan_id: str) -> Tuple[Optional[Dict[str, Any]], str]:
+def load_findings_payload(
+    scan_id: str,
+    *,
+    results_from_scan_id: Optional[str] = None,
+) -> Tuple[Optional[Dict[str, Any]], str]:
     """
     Load findings document for a scan.
 
     Returns (payload, source) where source is 'file', 'html', or 'missing'.
     payload keys: generated_at, findings, summary (summary optional).
+
+    Dedupe: follows results_from_scan_id and/or results-dir symlinks.
     """
-    path = findings_json_path(scan_id)
+    effective_id = (results_from_scan_id or "").strip() or resolve_results_scan_id(scan_id)
+    path = findings_json_path(effective_id)
     if path.is_file():
         try:
             data = json.loads(path.read_text(encoding="utf-8"))

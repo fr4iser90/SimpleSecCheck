@@ -292,18 +292,16 @@ async def get_scanner_assets():
 
 @router.get("/assets/update/status", response_model=UpdateStatusResponse)
 async def get_update_status():
-    """
-    Get status of scanner asset updates.
-    
-    TODO: Implement actual update status tracking (Redis/DB).
-    """
-    # For now, return idle status
+    """Get status of scanner asset updates (Redis-backed)."""
+    from application.helpers.asset_update_status import get_asset_update_status
+
+    data = await get_asset_update_status()
     return UpdateStatusResponse(
-        status="idle",
-        started_at=None,
-        finished_at=None,
-        error_message=None,
-        exit_code=None
+        status=data.get("status") or "idle",
+        started_at=data.get("started_at"),
+        finished_at=data.get("finished_at"),
+        error_message=data.get("error_message"),
+        exit_code=data.get("exit_code"),
     )
 
 
@@ -315,14 +313,33 @@ async def start_asset_update(
 ):
     """
     Start update for a specific scanner asset. Admin only.
-    
-    Verifies asset exists via worker API, then queues update job to worker.
+
+    Sets Redis status to running (buttons stay disabled), then asks the worker
+    to run a one-off Docker update into the shared host cache directory.
     """
     if actor_context.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only administrators may trigger scanner asset updates",
         )
+
+    from application.helpers.asset_update_status import (
+        get_asset_update_status,
+        mark_asset_update_finished,
+        mark_asset_update_running,
+    )
+    import asyncio
+
+    current = await get_asset_update_status()
+    if current.get("status") == "running":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"An asset update is already running "
+                f"({current.get('scanner')}/{current.get('asset_id')})"
+            ),
+        )
+
     # Verify asset exists via worker API
     worker_url = os.getenv("WORKER_API_URL", "http://worker:8081")
     try:
@@ -361,17 +378,56 @@ async def start_asset_update(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Worker API not available"
         )
-    
-    # TODO: Queue update job to worker
-    # For now, return running status
+
+    running = await mark_asset_update_running(scanner=scanner_name, asset_id=asset_id)
+
+    async def _run_update_job() -> None:
+        try:
+            async with httpx.AsyncClient(timeout=1900.0) as client:
+                resp = await client.post(
+                    f"{worker_url}/api/scanners/assets/{scanner_name}/{asset_id}/update"
+                )
+            if resp.status_code >= 400:
+                detail = None
+                try:
+                    detail = resp.json().get("detail")
+                except Exception:
+                    detail = resp.text
+                await mark_asset_update_finished(
+                    ok=False,
+                    exit_code=resp.status_code,
+                    error_message=str(detail or "Worker update failed"),
+                    scanner=scanner_name,
+                    asset_id=asset_id,
+                )
+                return
+            body = resp.json()
+            await mark_asset_update_finished(
+                ok=bool(body.get("ok")),
+                exit_code=body.get("exit_code"),
+                error_message=body.get("error_message"),
+                scanner=scanner_name,
+                asset_id=asset_id,
+            )
+        except Exception as e:
+            logger.error("Asset update background job failed: %s", e, exc_info=True)
+            await mark_asset_update_finished(
+                ok=False,
+                exit_code=1,
+                error_message=str(e),
+                scanner=scanner_name,
+                asset_id=asset_id,
+            )
+
+    asyncio.create_task(_run_update_job())
+
     return UpdateStatusResponse(
-        status="running",
-        started_at=None,
+        status=running.get("status") or "running",
+        started_at=running.get("started_at"),
         finished_at=None,
         error_message=None,
-        exit_code=None
+        exit_code=None,
     )
-
 
 def _default_scan_defaults_for_config() -> Dict[str, Any]:
     out = dict(default_scan_defaults())

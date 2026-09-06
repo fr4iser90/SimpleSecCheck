@@ -36,9 +36,12 @@ router = APIRouter(
 
 
 def _report_path(scan_id: str) -> Path:
+    from application.helpers.findings_file import resolve_results_scan_id
+
     s = get_settings()
     base = Path(s.RESULTS_DIR_HOST if hasattr(s, "RESULTS_DIR_HOST") else "/app/results")
-    return base / scan_id / "summary" / "summary.html"
+    effective = resolve_results_scan_id(scan_id)
+    return base / effective / "summary" / "summary.html"
 
 
 def _extract_findings_json_from_html_text(text: str) -> List[Dict[str, Any]]:

@@ -232,19 +232,37 @@ class TrivyScanner(BaseScanner):
         except Exception as e:
             self.complete_substep("Environment Check", f"Environment check completed: {e}")
         
-        # PREPARE: Download Vulnerability Database (retry + persistent cache)
-        self.substep_prepare("Download Vulnerability Database", "Checking/downloading vulnerability database...")
+        # PREPARE: Vulnerability Database (reuse shared cache; download only if missing)
+        cache_dir = os.getenv("TRIVY_CACHE_DIR", "").strip()
+        cache_hit = trivy_db_usable(cache_dir)
+        if cache_hit:
+            self.substep_prepare(
+                "Vulnerability Database",
+                "Using shared cached vulnerability database…",
+            )
+        else:
+            self.substep_prepare(
+                "Vulnerability Database",
+                "Cache miss — downloading vulnerability database (one-time / shared)…",
+            )
         if not self._ensure_vuln_db():
-            self.fail_substep("Download Vulnerability Database", "Vulnerability database unavailable")
+            self.fail_substep("Vulnerability Database", "Vulnerability database unavailable")
             return False
-        self.complete_substep(
-            "Download Vulnerability Database",
-            "Using cached database (--skip-db-update on scan steps)",
-        )
+        if self._skip_db_update:
+            self.complete_substep(
+                "Vulnerability Database",
+                "Cached DB ready (--skip-db-update on scan steps)",
+            )
+        else:
+            self.complete_substep(
+                "Vulnerability Database",
+                "Database prepared",
+            )
         
-        # PREPARE: Updating DB
-        self.start_substep("Updating DB", "Updating vulnerability database...", SubStepType.ACTION)
-        self.complete_substep("Updating DB", "Database up to date")
+        # Skip redundant "Updating DB" noise when we already use --skip-db-update
+        if not self._skip_db_update:
+            self.start_substep("Updating DB", "Updating vulnerability database...", SubStepType.ACTION)
+            self.complete_substep("Updating DB", "Database up to date")
         
         # PREPARE: Detecting Project Type
         self.start_substep("Detecting Project Type", "Detecting project type and dependencies...", SubStepType.ACTION)

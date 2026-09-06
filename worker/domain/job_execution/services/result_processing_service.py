@@ -347,6 +347,13 @@ class ResultProcessingService:
             True if processing succeeded, False otherwise
         """
         try:
+            if result.structured_results.get("_dedupe_short_circuit"):
+                self.logger.info(
+                    "Skipping result processing for dedupe short-circuit scan %s",
+                    result.scan_id,
+                )
+                return True
+
             # Save structured results
             await self._save_structured_results(result)
             
@@ -584,6 +591,31 @@ class ResultProcessingService:
                 guest_session_id=guest_session_id,
                 logger=self.logger,
             )
+
+            if status == "completed":
+                try:
+                    from worker.domain.job_execution.services.scan_dedupe_fanout import (
+                        fanout_completed_scan_to_siblings,
+                    )
+
+                    n = await fanout_completed_scan_to_siblings(
+                        self.database_adapter,
+                        winner_scan_id=scan_id,
+                        vuln_counts=vuln_counts,
+                        duration_seconds=duration_seconds,
+                        results_json=results_json,
+                        publish_events=_publish_scan_events,
+                    )
+                    if n:
+                        self.logger.info(
+                            "Dedupe fanout promoted %s sibling scan(s) for %s",
+                            n,
+                            scan_id,
+                        )
+                except Exception as fanout_err:
+                    self.logger.warning(
+                        "Dedupe fanout after complete failed: %s", fanout_err
+                    )
             
         except Exception as e:
             self.logger.error(f"Error updating scan status: {e}")

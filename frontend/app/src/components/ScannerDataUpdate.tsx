@@ -60,6 +60,8 @@ export default function ScannerDataUpdate() {
     started_at: null,
     finished_at: null,
   })
+  /** Optimistic lock so buttons gray out immediately (before Redis poll catches up). */
+  const [localBusy, setLocalBusy] = useState(false)
   const [assets, setAssets] = useState<ScannerAssetItem[]>([])
   const shouldShowButton = isAdmin && !config?.features?.scanner_assets_auto_update_enabled
 
@@ -96,6 +98,14 @@ export default function ScannerDataUpdate() {
         }
         const data = await response.json()
         setStatus(data)
+        if (data.status === 'running') {
+          setLocalBusy(true)
+        } else if (data.status === 'done' || data.status === 'error' || data.status === 'idle') {
+          setLocalBusy(false)
+          if (data.status === 'done' || data.status === 'error') {
+            void refreshAssets()
+          }
+        }
       } catch (err) {
         console.error('[ScannerDataUpdate] Error fetching status:', err)
       }
@@ -104,19 +114,30 @@ export default function ScannerDataUpdate() {
     void fetchStatus()
     pollInterval = window.setInterval(() => {
       void fetchStatus()
-    }, 500)
+    }, 1000)
 
     return () => {
       if (pollInterval) clearInterval(pollInterval)
     }
-  }, [isAdmin])
+  }, [isAdmin, refreshAssets])
 
   const updatableAssets = useMemo(
     () => assets.filter(item => item.asset?.update?.enabled),
     [assets],
   )
 
+  const busy = localBusy || status.status === 'running'
+
   const handleUpdateOne = async (scannerName: string, assetId: string) => {
+    if (busy) return
+    setLocalBusy(true)
+    setStatus(prev => ({
+      ...prev,
+      status: 'running',
+      started_at: new Date().toISOString(),
+      finished_at: null,
+      error_message: null,
+    }))
     try {
       const response = await fetch(
         resolveApiUrl(`/api/scanners/${scannerName}/assets/${assetId}/update`),
@@ -124,50 +145,96 @@ export default function ScannerDataUpdate() {
       )
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(`Failed to start update: ${(error as { detail?: string }).detail || 'Unknown error'}`)
+        const detail = (error as { detail?: string }).detail || 'Unknown error'
+        toast.error(`Failed to start update: ${detail}`)
+        setLocalBusy(false)
+        setStatus(prev => ({
+          ...prev,
+          status: 'error',
+          finished_at: new Date().toISOString(),
+          error_message: detail,
+        }))
         return
       }
       const data = await response.json()
       setStatus(data)
-      toast.success('Asset update started')
+      toast.success('Asset update started — buttons stay locked until it finishes')
     } catch (err) {
       console.error('[ScannerDataUpdate] Error starting update:', err)
       toast.error('Failed to start update. Check console for details.')
+      setLocalBusy(false)
+      setStatus(prev => ({
+        ...prev,
+        status: 'error',
+        finished_at: new Date().toISOString(),
+        error_message: 'Request failed',
+      }))
     }
   }
 
   const handleUpdateAll = async () => {
-    if (updatableAssets.length === 0) return
-    const updatePromises = updatableAssets.map(async item => {
+    if (busy || updatableAssets.length === 0) return
+    // Sequential: one global lock; backend rejects parallel updates with 409.
+    setLocalBusy(true)
+    setStatus(prev => ({
+      ...prev,
+      status: 'running',
+      started_at: new Date().toISOString(),
+      finished_at: null,
+      error_message: null,
+    }))
+    toast.success(`Starting updates for ${updatableAssets.length} asset(s) one-by-one…`)
+
+    let successCount = 0
+    let failCount = 0
+    for (const item of updatableAssets) {
       try {
+        // Wait until previous job is no longer running
+        for (let i = 0; i < 3600; i++) {
+          const st = await fetch(resolveApiUrl('/api/scanners/assets/update/status'))
+          if (st.ok) {
+            const data = await st.json()
+            setStatus(data)
+            if (data.status !== 'running') break
+          }
+          await new Promise(r => setTimeout(r, 1000))
+        }
         const response = await fetch(
           resolveApiUrl(`/api/scanners/${item.scanner}/assets/${item.asset.id}/update`),
           { method: 'POST' },
         )
         if (!response.ok) {
-          const error = await response.json().catch(() => ({}))
-          console.error(
-            `Failed to update ${item.scanner}/${item.asset.id}:`,
-            (error as { detail?: string }).detail,
-          )
-          return { success: false, scanner: item.scanner, asset: item.asset.id }
+          failCount++
+          continue
         }
-        return { success: true, scanner: item.scanner, asset: item.asset.id }
-      } catch (err) {
-        console.error(`[ScannerDataUpdate] Error updating ${item.scanner}/${item.asset.id}:`, err)
-        return { success: false, scanner: item.scanner, asset: item.asset.id }
+        successCount++
+        const data = await response.json()
+        setStatus(data)
+      } catch {
+        failCount++
       }
-    })
+    }
 
-    const results = await Promise.all(updatePromises)
-    const successCount = results.filter(r => r.success).length
-    const failCount = results.filter(r => !r.success).length
+    // Wait for last job
+    for (let i = 0; i < 3600; i++) {
+      const st = await fetch(resolveApiUrl('/api/scanners/assets/update/status'))
+      if (st.ok) {
+        const data = await st.json()
+        setStatus(data)
+        if (data.status !== 'running') {
+          setLocalBusy(false)
+          break
+        }
+      }
+      await new Promise(r => setTimeout(r, 1000))
+    }
 
     if (failCount === 0) {
-      toast.success(`Started ${successCount} asset update(s).`)
+      toast.success(`Finished queueing ${successCount} asset update(s).`)
     } else {
-      toast.error(`Started ${successCount} update(s), ${failCount} failed. Check console.`)
+      toast.error(`Started ${successCount}, ${failCount} failed. Check status panel.`)
     }
+    void refreshAssets()
   }
 
   const getStatusColor = () => {
@@ -186,7 +253,7 @@ export default function ScannerDataUpdate() {
   const getStatusText = () => {
     switch (status.status) {
       case 'running':
-        return '🔄 Updating…'
+        return '🔄 Updating… (all buttons locked)'
       case 'done':
         return '✅ Last job completed'
       case 'error':
@@ -199,8 +266,6 @@ export default function ScannerDataUpdate() {
   if (!isAdmin) {
     return null
   }
-
-  const busy = status.status === 'running'
 
   const typeBadge = (type: string) => {
     const t = (type || 'unknown').toLowerCase()
@@ -215,14 +280,16 @@ export default function ScannerDataUpdate() {
 
   const btnPrimary: React.CSSProperties = {
     padding: '0.45rem 0.85rem',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    background: busy
+      ? 'linear-gradient(135deg, #6c757d 0%, #495057 100%)'
+      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     color: 'white',
     border: 'none',
     borderRadius: '6px',
     cursor: busy ? 'not-allowed' : 'pointer',
     fontWeight: 600,
     fontSize: '0.85rem',
-    opacity: busy ? 0.6 : 1,
+    opacity: busy ? 0.55 : 1,
   }
 
   const cardStyle: CSSProperties = {
@@ -242,13 +309,13 @@ export default function ScannerDataUpdate() {
         <div>
           <h3 style={{ margin: 0, marginBottom: '0.5rem' }}>Scanner assets</h3>
           <p style={{ margin: 0, opacity: 0.8, fontSize: '0.9rem', maxWidth: '42rem' }}>
-            Mounted data and config from plugin manifests. Assets with an update command can refresh local caches (e.g. vulnerability DBs).
+            Shared host caches (vuln DBs). Update once here — scans reuse the cache instead of downloading every time.
           </p>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
           {shouldShowButton && updatableAssets.length > 1 && (
             <button type="button" style={btnPrimary} disabled={busy} onClick={() => void handleUpdateAll()}>
-              🔄 Update all ({updatableAssets.length})
+              {busy ? 'Updating…' : `🔄 Update all (${updatableAssets.length})`}
             </button>
           )}
           {!shouldShowButton && (
@@ -334,9 +401,11 @@ export default function ScannerDataUpdate() {
                     type="button"
                     style={{ ...btnPrimary, alignSelf: 'flex-start', marginTop: '0.25rem' }}
                     disabled={busy}
+                    aria-disabled={busy}
+                    title={busy ? 'An update is already running' : 'Refresh shared cache'}
                     onClick={() => void handleUpdateOne(item.scanner, item.asset.id)}
                   >
-                    🔄 Update
+                    {busy ? 'Locked…' : '🔄 Update'}
                   </button>
                 )}
               </div>

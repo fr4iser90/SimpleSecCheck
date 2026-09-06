@@ -529,6 +529,34 @@ async def _re_enqueue_pending_scans():
             logger.info("No pending or running scans to process")
             return
 
+        # Collapse duplicate repo+commit jobs before re-enqueueing.
+        try:
+            from application.helpers.scan_dedupe import collapse_all_active_duplicates_for_user
+            from collections import defaultdict
+
+            by_user = defaultdict(list)
+            for s in pending_scans + running_before:
+                uid = getattr(s, "user_id", None)
+                if uid:
+                    by_user[str(uid)].append(s)
+            total_cancelled = 0
+            for uid in by_user:
+                total_cancelled += await collapse_all_active_duplicates_for_user(
+                    scan_repository=scan_repository,
+                    queue_service=queue_service,
+                    user_id=uid,
+                )
+            if total_cancelled:
+                logger.info(
+                    "Queue recovery dedupe cancelled %s duplicate scan(s)",
+                    total_cancelled,
+                )
+                pending_scans = await scan_repository.get_by_status(
+                    ScanStatus.PENDING, limit=1000
+                )
+        except Exception as dedupe_err:
+            logger.warning("Queue recovery dedupe failed: %s", dedupe_err)
+
         enqueued_pending = 0
         failed_pending = 0
         for scan in pending_scans:

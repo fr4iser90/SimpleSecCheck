@@ -109,6 +109,28 @@ class ScanService:
             
             # Add to queue for processing
             await self.queue_service.enqueue_scan(saved_scan)
+
+            # Race-safe: if another pending/running for same repo+commit appeared, collapse.
+            if request.user_id:
+                try:
+                    from application.helpers.commit_scan_cache import is_git_repo_scan_request
+                    from application.helpers.scan_dedupe import (
+                        collapse_active_duplicates_for_target,
+                    )
+
+                    if is_git_repo_scan_request(
+                        target_type=request.target_type,
+                        target_url=request.target_url,
+                    ):
+                        await collapse_active_duplicates_for_target(
+                            scan_repository=self.scan_repository,
+                            queue_service=self.queue_service,
+                            user_id=request.user_id,
+                            target_url=request.target_url,
+                            keep_scan_id=str(saved_scan.id),
+                        )
+                except Exception as dedupe_err:
+                    logger.warning("Post-create dedupe failed: %s", dedupe_err)
             
             # Convert back to DTO
             return ScanDTO.from_entity(saved_scan)
@@ -152,6 +174,23 @@ class ScanService:
             target_url=request.target_url,
         )
         if active:
+            # Collapse any other pending/running duplicates for this repo/commit.
+            try:
+                from application.helpers.scan_dedupe import (
+                    collapse_active_duplicates_for_target,
+                )
+
+                winner = await collapse_active_duplicates_for_target(
+                    scan_repository=self.scan_repository,
+                    queue_service=self.queue_service,
+                    user_id=request.user_id,
+                    target_url=request.target_url,
+                    keep_scan_id=str(active.id),
+                )
+                if winner:
+                    active = winner
+            except Exception as dedupe_err:
+                logger.warning("Commit/target dedupe on reuse failed: %s", dedupe_err)
             logger.info(
                 "Reusing active scan %s for target %s (no new enqueue)",
                 active.id,

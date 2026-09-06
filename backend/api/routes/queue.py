@@ -131,9 +131,17 @@ async def _scan_to_my_scan_item(scan: Any, position: Optional[int] = None) -> Di
     commit_hash = None
     metadata = getattr(scan, "scan_metadata", None) or {}
     if metadata:
-        commit_hash = metadata.get("commit_hash") or metadata.get("commit")
+        commit_hash = (
+            metadata.get("commit_hash")
+            or metadata.get("commit_sha")
+            or metadata.get("commit")
+        )
     if not commit_hash and config:
-        commit_hash = config.get("commit_hash") or config.get("commit")
+        commit_hash = (
+            config.get("commit_hash")
+            or config.get("commit_sha")
+            or config.get("commit")
+        )
     
     queue_status = {"pending": "pending", "running": "running", "completed": "completed", "failed": "failed", "cancelled": "failed"}.get(_scan_status_str(scan), _scan_status_str(scan))
     scanners = getattr(scan, "scanners", None) or []
@@ -252,6 +260,25 @@ async def get_my_scans(
             guest_session_id = actor_context.session_id
         else:
             return {"scans": []}
+
+        # Drop duplicate pending/running rows for same repo+commit before listing.
+        if user_id:
+            try:
+                from application.helpers.scan_dedupe import (
+                    collapse_all_active_duplicates_for_user,
+                )
+                from infrastructure.services.queue_service import QueueService
+
+                n = await collapse_all_active_duplicates_for_user(
+                    scan_repository=scan_repository,
+                    queue_service=QueueService(),
+                    user_id=user_id,
+                )
+                if n:
+                    logger.info("my-scans dedupe cancelled %s duplicate scan(s)", n)
+            except Exception as dedupe_err:
+                logger.warning("my-scans dedupe failed: %s", dedupe_err)
+
         scans = await scan_repository.list_scans_for_actor(
             user_id=user_id,
             guest_session_id=guest_session_id,
@@ -260,6 +287,16 @@ async def get_my_scans(
         )
         items = []
         for scan in scans:
+            meta = getattr(scan, "scan_metadata", None) or {}
+            status_s = str(getattr(getattr(scan, "status", None), "value", getattr(scan, "status", "")) or "").lower()
+            # Hide cancelled duplicates until winner finishes and fanout promotes them.
+            if (
+                status_s == "cancelled"
+                and isinstance(meta, dict)
+                and meta.get("deduped_as_duplicate")
+                and meta.get("awaits_results_from_scan_id")
+            ):
+                continue
             position = await scan_repository.get_position_in_queue(scan.id)
             items.append(await _scan_to_my_scan_item(scan, position))
         return {"scans": items}

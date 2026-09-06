@@ -761,13 +761,37 @@ class DatabaseScanRepository(ScanRepository):
                             ScanModel.target_url.contains(target_url_contains),
                         )
                     )
-                    .order_by(ScanModel.created_at.desc())
+                    .order_by(ScanModel.created_at.asc())
                     .limit(1)
                 )
                 model = result.scalar_one_or_none()
                 return await self._model_to_entity(model) if model else None
             except Exception as e:
                 logger.error(f"find_active_scan_by_user_and_target failed: {e}")
+                raise
+
+    async def find_active_scans_by_user_and_target(
+        self, user_id: str, target_url: str
+    ) -> List[Scan]:
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(ScanModel)
+                    .where(
+                        and_(
+                            ScanModel.user_id == UUID(user_id),
+                            ScanModel.status.in_(["pending", "running"]),
+                            ScanModel.target_url.contains(target_url),
+                        )
+                    )
+                    .order_by(ScanModel.created_at.asc())
+                    .limit(100)
+                )
+                models = result.scalars().all()
+                return [await self._model_to_entity(m) for m in models]
+            except Exception as e:
+                logger.error("find_active_scans_by_user_and_target failed: %s", e)
                 raise
 
     async def find_latest_finished_scan_by_user_and_target(

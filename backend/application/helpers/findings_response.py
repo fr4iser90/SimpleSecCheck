@@ -85,7 +85,14 @@ def build_findings_response(
     rule_id: Optional[str] = None,
 ) -> Optional[ScanFindingsResponseSchema]:
     """Return findings response if report data exists; else None."""
-    payload, source = load_findings_payload(scan_id)
+    meta = getattr(scan_dto, "metadata", None) or {}
+    results_from = None
+    if isinstance(meta, dict):
+        results_from = meta.get("results_from_scan_id")
+    payload, source = load_findings_payload(
+        scan_id,
+        results_from_scan_id=str(results_from).strip() if results_from else None,
+    )
     if payload is None:
         return None
 

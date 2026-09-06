@@ -49,6 +49,41 @@ class DockerJobExecutor:
             # Start execution
             job_execution.start_execution()
             self.logger.info(f"Starting job execution: {job_execution.id}")
+
+            # Skip docker work if this is a cancelled duplicate or commit already scanned.
+            if hasattr(self, "database_adapter") and self.database_adapter:
+                try:
+                    from worker.domain.job_execution.services.result_processing_service import (
+                        _publish_scan_events,
+                    )
+                    from worker.domain.job_execution.services.scan_dedupe_fanout import (
+                        try_short_circuit_duplicate_job,
+                    )
+
+                    skipped = await try_short_circuit_duplicate_job(
+                        self.database_adapter,
+                        str(job_execution.scan_id),
+                        publish_events=_publish_scan_events,
+                    )
+                    if skipped:
+                        self.logger.info(
+                            "Skipped docker for scan %s (dedupe / already completed)",
+                            job_execution.scan_id,
+                        )
+                        job_execution.complete_execution(True, None)
+                        return ExecutionResult(
+                            job_execution_id=job_execution.id,
+                            scan_id=job_execution.scan_id,
+                            success=True,
+                            error_message=None,
+                            execution_time_seconds=0,
+                            structured_results={"_dedupe_short_circuit": True},
+                            file_results={},
+                            container_logs=[],
+                            metadata={"dedupe_short_circuit": True},
+                        )
+                except Exception as sc_err:
+                    self.logger.warning("Dedupe short-circuit check failed: %s", sc_err)
             
             # Update scan status to running in database
             try:

@@ -74,10 +74,23 @@ class QueueService:
                                     asset = asset_item.get("asset", {})
                                     mount = asset.get("mount", {})
                                     if mount.get("host_subpath") and mount.get("container_path"):
-                                        asset_volumes.append({
+                                        entry = {
                                             "host_subpath": mount["host_subpath"],
-                                            "container_path": mount["container_path"]
-                                        })
+                                            "container_path": mount["container_path"],
+                                        }
+                                        # Pass update.env so scan containers set TRIVY_CACHE_DIR etc.
+                                        upd = asset.get("update") or {}
+                                        env = upd.get("env") if isinstance(upd, dict) else None
+                                        if isinstance(env, dict) and env:
+                                            entry["env"] = dict(env)
+                                        elif (
+                                            scanner_name == "trivy"
+                                            and str(asset.get("id") or "").lower() == "cache"
+                                        ):
+                                            entry["env"] = {
+                                                "TRIVY_CACHE_DIR": mount["container_path"]
+                                            }
+                                        asset_volumes.append(entry)
                     except Exception as e:
                         logger.debug(f"Could not fetch scanner assets for volumes: {e}")
             except Exception as e:

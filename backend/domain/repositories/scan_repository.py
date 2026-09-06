@@ -153,6 +153,13 @@ class ScanRepository(ABC):
         pass
 
     @abstractmethod
+    async def find_active_scans_by_user_and_target(
+        self, user_id: str, target_url: str
+    ) -> List[Scan]:
+        """All active (pending/running) scans for user with exact or containing target_url."""
+        pass
+
+    @abstractmethod
     async def find_latest_finished_scan_by_user_and_target(
         self, user_id: str, target_url: str
     ) -> Optional[Scan]:
