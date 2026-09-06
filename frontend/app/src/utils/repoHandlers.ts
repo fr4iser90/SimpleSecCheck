@@ -59,14 +59,22 @@ export async function removeRepo(repoId: string): Promise<{ success: boolean; er
   }
 }
 
-export async function triggerScan(repoId: string): Promise<{ success: boolean; error?: string }> {
+export async function triggerScan(
+  repoId: string
+): Promise<{ success: boolean; error?: string; message?: string; reused?: boolean; scan_id?: string }> {
   try {
     const response = await apiFetch(`/api/user/github/repos/${repoId}/scan`, {
       method: 'POST'
     })
     
     if (response.ok) {
-      return { success: true }
+      const data = await response.json().catch(() => ({}))
+      return {
+        success: true,
+        message: typeof data.message === 'string' ? data.message : undefined,
+        reused: Boolean(data.reused),
+        scan_id: typeof data.scan_id === 'string' ? data.scan_id : undefined,
+      }
     } else {
       const error = await response.json()
       return { success: false, error: error.detail || 'Failed to trigger scan' }

@@ -798,6 +798,51 @@ class DatabaseScanRepository(ScanRepository):
                 )
                 raise
 
+    async def find_completed_scan_by_user_target_and_commit(
+        self,
+        user_id: str,
+        target_url: str,
+        commit_sha: str,
+        *,
+        limit: int = 50,
+    ) -> Optional[Scan]:
+        from application.helpers.periodic_repo_scan import (
+            commit_hash_from_scan_metadata,
+            commits_match,
+        )
+
+        wanted = (commit_sha or "").strip()
+        if not wanted:
+            return None
+
+        await self.db_adapter.ensure_initialized()
+        async with self.db_adapter.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(ScanModel)
+                    .where(
+                        and_(
+                            ScanModel.user_id == UUID(user_id),
+                            ScanModel.target_url == target_url,
+                            ScanModel.status == "completed",
+                        )
+                    )
+                    .order_by(ScanModel.created_at.desc())
+                    .limit(max(1, min(limit, 200)))
+                )
+                models = result.scalars().all()
+                for model in models:
+                    meta = model.scan_metadata or {}
+                    stored = commit_hash_from_scan_metadata(meta)
+                    if commits_match(wanted, stored):
+                        return await self._model_to_entity(model)
+                return None
+            except Exception as e:
+                logger.error(
+                    "find_completed_scan_by_user_target_and_commit failed: %s", e
+                )
+                raise
+
     async def get_target_scan_history_page(
         self,
         user_id: str,

@@ -160,6 +160,18 @@ class ScanRepository(ABC):
         pass
 
     @abstractmethod
+    async def find_completed_scan_by_user_target_and_commit(
+        self,
+        user_id: str,
+        target_url: str,
+        commit_sha: str,
+        *,
+        limit: int = 50,
+    ) -> Optional[Scan]:
+        """Latest completed scan for user+exact target_url whose metadata commit matches commit_sha."""
+        pass
+
+    @abstractmethod
     async def get_target_scan_history_page(
         self,
         user_id: str,

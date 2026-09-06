@@ -65,18 +65,49 @@ def cooldown_blocks_scan(
 
 
 def commit_hash_from_scan_metadata(metadata: Optional[Dict[str, Any]]) -> Optional[str]:
-    """Extract last known commit from scan metadata (repo scans / webhooks)."""
+    """Extract last known commit from scan metadata (repo scans / webhooks / agents)."""
     if not isinstance(metadata, dict):
         return None
-    raw = metadata.get("commit_hash") or metadata.get("commit")
+    raw = (
+        metadata.get("commit_hash")
+        or metadata.get("commit_sha")
+        or metadata.get("commit")
+    )
     if raw:
         return str(raw).strip() or None
     git_info = metadata.get("git_info")
     if isinstance(git_info, dict):
-        gh = git_info.get("commit_hash") or git_info.get("commit")
+        gh = (
+            git_info.get("commit_hash")
+            or git_info.get("commit_sha")
+            or git_info.get("commit")
+        )
         if gh:
             return str(gh).strip() or None
     return None
+
+
+def commits_match(a: Optional[str], b: Optional[str], *, min_prefix_len: int = 7) -> bool:
+    """
+    True when two SHAs refer to the same commit (exact or prefix, e.g. full vs short).
+    """
+    left = (a or "").strip().lower()
+    right = (b or "").strip().lower()
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    shorter, longer = (left, right) if len(left) <= len(right) else (right, left)
+    return len(shorter) >= min_prefix_len and longer.startswith(shorter)
+
+
+def scan_metadata_dict(scan: Any) -> Dict[str, Any]:
+    """Read scan_metadata from entity/DTO (handles legacy .metadata attribute)."""
+    meta = getattr(scan, "scan_metadata", None)
+    if isinstance(meta, dict):
+        return meta
+    meta = getattr(scan, "metadata", None)
+    return meta if isinstance(meta, dict) else {}
 
 
 def history_entry_from_scan(
@@ -118,7 +149,7 @@ def commit_unchanged(
         head_sha = resolve_branch_head_sha(repo.repo_url, repo.branch)
     if not head_sha:
         return False
-    return head_sha.strip().lower() == last_sha.lower()
+    return commits_match(head_sha, last_sha)
 
 
 def evaluate_periodic_repo_scan(

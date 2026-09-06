@@ -63,7 +63,9 @@ class AutoScanService:
                                 scan_id=str(last_scan.id),
                                 branch=repo.branch,
                                 commit_hash=commit_hash_from_scan_metadata(
-                                    last_scan.metadata or {}
+                                    getattr(last_scan, "scan_metadata", None)
+                                    or getattr(last_scan, "metadata", None)
+                                    or {}
                                 ),
                                 created_at=finished_at,
                             )

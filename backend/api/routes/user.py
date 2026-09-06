@@ -869,11 +869,32 @@ async def trigger_repo_scan(
                 ip_address=request.client.host if request.client else None,
                 user_agent=request.headers.get("User-Agent")
             )
+            scan_status = "queued"
+            reused = False
+            try:
+                from infrastructure.container import get_scan_repository
+                existing = await get_scan_repository().get_by_id(scan_id)
+                if existing:
+                    scan_status = str(
+                        getattr(existing.status, "value", existing.status) or "queued"
+                    ).lower()
+                    reused = scan_status in ("completed", "running")
+            except Exception:
+                pass
             return {
-                "message": "Scan triggered successfully",
+                "message": (
+                    "Existing scan results for this commit"
+                    if scan_status == "completed"
+                    else (
+                        "Scan already in progress"
+                        if scan_status == "running"
+                        else "Scan triggered successfully"
+                    )
+                ),
                 "repo_id": repo.id,
                 "scan_id": scan_id,
-                "status": "queued"
+                "status": scan_status,
+                "reused": reused,
             }
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1736,8 +1757,38 @@ async def trigger_scan_target(
         actor_context.user_id, None, scan_target_service, scan_repository
     )
     list_rev = compute_targets_revision(rows)
-    await sse_notify_scan(actor_context.user_id, scan_id, "pending", list_revision=list_rev)
-    return {"scan_id": scan_id}
+
+    scan_status = "pending"
+    reused = False
+    try:
+        existing = await scan_repository.get_by_id(scan_id)
+        if existing:
+            scan_status = str(
+                getattr(existing.status, "value", existing.status) or "pending"
+            ).lower()
+            # completed = commit cache; running = joined in-flight (not a new job)
+            reused = scan_status in ("completed", "running")
+    except Exception:
+        pass
+
+    await sse_notify_scan(
+        actor_context.user_id,
+        scan_id,
+        scan_status,
+        list_revision=list_rev,
+    )
+    if scan_status == "completed":
+        message = "Existing scan results for this commit"
+    elif scan_status == "running":
+        message = "Scan already in progress"
+    else:
+        message = "Scan queued"
+    return {
+        "scan_id": scan_id,
+        "status": scan_status,
+        "reused": reused,
+        "message": message,
+    }
 
 
 @router.post(
@@ -1790,6 +1841,7 @@ async def external_agent_target_callback(
     if body.pr_url:
         callback_meta["pr_url"] = body.pr_url
     if body.commit_sha:
+        callback_meta["commit_hash"] = body.commit_sha
         callback_meta["commit_sha"] = body.commit_sha
     if isinstance(body.metadata, dict) and body.metadata:
         # Avoid huge payload amplification in scan metadata.

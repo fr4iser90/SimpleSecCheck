@@ -40,11 +40,16 @@ class ResolveScanRequestSchema(BaseModel):
     )
     check_commit: bool = Field(
         default=True,
-        description="If true, compare remote HEAD to last scan commit before returning findings",
+        description="If true, resolve remote HEAD via git ls-remote when commit_sha is omitted",
+    )
+    commit_sha: Optional[str] = Field(
+        None,
+        max_length=64,
+        description="Optional commit SHA (preferred). Same commit reuses cached findings.",
     )
     force_scan: bool = Field(
         default=False,
-        description="If true, always enqueue a new scan (ignore existing findings)",
+        description="Deprecated and ignored. Same-commit scans always reuse cached results.",
     )
     findings_limit: Optional[int] = Field(
         None,
@@ -98,10 +103,11 @@ def _resolve_service() -> ResolveScanService:
     response_model=ResolveScanResponseSchema,
     summary="Resolve repo scan for agents",
     description=(
-        "Single entry for automation: if the latest completed scan matches the current "
-        "branch HEAD (git ls-remote), returns findings immediately. Otherwise starts a "
-        "new scan and returns scan_id — poll status_poll_path until completed, then "
-        "findings_poll_path. Requires API key or user JWT."
+        "Single entry for automation: if a completed scan already exists for the "
+        "current commit (client commit_sha or git ls-remote HEAD), returns findings "
+        "immediately. Otherwise starts a new scan and returns scan_id — poll "
+        "status_poll_path until completed, then findings_poll_path. Requires API key "
+        "or user JWT. force_scan is ignored."
     ),
     responses={
         200: {"description": "Findings ready (status=ready) or scan already running (status=scanning)"},
@@ -126,7 +132,7 @@ async def resolve_scan(
             body.repo_url,
             branch=body.branch,
             check_commit=body.check_commit,
-            force_scan=body.force_scan,
+            commit_sha=body.commit_sha,
             actor_role=actor_context.role or "user",
             findings_limit=body.findings_limit,
             findings_offset=body.findings_offset,

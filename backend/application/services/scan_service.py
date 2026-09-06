@@ -78,13 +78,18 @@ class ScanService:
         guest_session_id: Optional[str] = None,
         enforcement_mode: str = "full",
     ) -> ScanDTO:
-        """Create and start a new scan."""
+        """Create and start a new scan (or reuse a completed same-commit git scan)."""
         try:
             raw_target = (request.target_url or "").strip()
             normalized = normalize_repo_url_for_target_type(request.target_type, request.target_url or "")
             if normalized != raw_target:
                 logger.info("Normalized git target URL: %s -> %s", raw_target, normalized)
             request.target_url = normalized
+
+            reused = await self._try_reuse_git_commit_scan(request)
+            if reused is not None:
+                return reused
+
             await self._apply_default_finding_policy(request)
             await self._apply_default_scan_profile(request, actor_role=actor_role)
             await self._enforce_scan_profile_permissions(request, actor_role=actor_role)
@@ -112,6 +117,70 @@ class ScanService:
             raise e
         except Exception as e:
             raise ScanValidationException(f"Failed to create scan: {str(e)}")
+
+    async def _try_reuse_git_commit_scan(self, request: ScanRequestDTO) -> Optional[ScanDTO]:
+        """
+        For git targets: attach commit SHA, join active scan, or return completed
+        scan for the same commit. No force bypass — same commit always reuses.
+        """
+        from application.helpers.commit_scan_cache import (
+            find_active_scan_for_target,
+            find_reusable_scan_for_commit,
+            is_git_repo_scan_request,
+            resolve_commit_for_git_request,
+        )
+
+        if not request.user_id:
+            return None
+        if not is_git_repo_scan_request(
+            target_type=request.target_type,
+            target_url=request.target_url,
+        ):
+            return None
+
+        commit, meta = resolve_commit_for_git_request(
+            target_url=request.target_url,
+            config=request.config,
+            metadata=request.metadata,
+            check_remote=True,
+        )
+        request.metadata = meta
+
+        active = await find_active_scan_for_target(
+            self.scan_repository,
+            user_id=request.user_id,
+            target_url=request.target_url,
+        )
+        if active:
+            logger.info(
+                "Reusing active scan %s for target %s (no new enqueue)",
+                active.id,
+                (request.target_url or "")[:80],
+            )
+            return ScanDTO.from_entity(active)
+
+        if not commit:
+            return None
+
+        cached = await find_reusable_scan_for_commit(
+            self.scan_repository,
+            user_id=request.user_id,
+            target_url=request.target_url,
+            commit_sha=commit,
+        )
+        if not cached:
+            return None
+
+        logger.info(
+            "Reusing completed scan %s for commit %s (commit cache hit)",
+            cached.id,
+            commit[:8],
+        )
+        dto = ScanDTO.from_entity(cached)
+        # Ephemeral flag for API/UI (not persisted).
+        dto.metadata = dict(dto.metadata or {})
+        dto.metadata["commit_cache_hit"] = True
+        return dto
 
     async def _apply_default_finding_policy(self, request: ScanRequestDTO) -> None:
         """

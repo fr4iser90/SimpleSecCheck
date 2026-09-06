@@ -183,14 +183,29 @@ export function useTargets(targetType?: string | null) {
     return () => clearInterval(t)
   }, [isAuthenticated, loadTargets])
 
-  const triggerScan = async (targetId: string): Promise<{ success: boolean; scan_id?: string; error?: string }> => {
+  const triggerScan = async (
+    targetId: string
+  ): Promise<{
+    success: boolean
+    scan_id?: string
+    reused?: boolean
+    status?: string
+    message?: string
+    error?: string
+  }> => {
     try {
       const response = await apiFetch(`/api/user/targets/${targetId}/scan`, {
         method: 'POST',
       })
       if (response.ok) {
         const data = await response.json()
-        return { success: true, scan_id: data.scan_id }
+        return {
+          success: true,
+          scan_id: data.scan_id,
+          reused: Boolean(data.reused),
+          status: typeof data.status === 'string' ? data.status : undefined,
+          message: typeof data.message === 'string' ? data.message : undefined,
+        }
       }
       const err = await response.json().catch(() => ({}))
       return { success: false, error: err.detail || 'Failed to start scan' }

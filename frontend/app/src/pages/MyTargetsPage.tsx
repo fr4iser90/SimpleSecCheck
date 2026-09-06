@@ -219,9 +219,14 @@ export default function MyTargetsPage() {
     const result = await triggerScan(targetId)
     setScanNowTargetId(null)
     if (result.success) {
+      const short = result.scan_id ? ` (${result.scan_id.slice(0, 8)}…)` : ''
       showMessage(
         'success',
-        result.scan_id ? `Scan started (${result.scan_id.slice(0, 8)}…)` : 'Scan started'
+        result.message
+          ? `${result.message}${short}`
+          : result.reused
+            ? `Using existing scan results${short}`
+            : `Scan started${short}`
       )
       await loadTargets({ silent: true })
     } else {

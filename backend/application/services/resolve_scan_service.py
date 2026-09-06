@@ -1,5 +1,6 @@
 """
-Resolve scan for automation: return findings when repo HEAD matches last scan, else enqueue scan.
+Resolve scan for automation: return findings when repo HEAD matches a completed
+scan (via shared commit cache in ScanService.create_scan), else enqueue scan.
 """
 from __future__ import annotations
 
@@ -49,7 +50,7 @@ def _branch_from_target(target: ScanTarget, fallback: str) -> str:
 
 
 class ResolveScanService:
-    """Agent-oriented resolve: findings or start scan."""
+    """Agent-oriented resolve: findings or start scan (commit cache, no force)."""
 
     async def resolve(
         self,
@@ -58,7 +59,7 @@ class ResolveScanService:
         *,
         branch: Optional[str] = None,
         check_commit: bool = True,
-        force_scan: bool = False,
+        commit_sha: Optional[str] = None,
         actor_role: str = "user",
         findings_limit: Optional[int] = None,
         findings_offset: int = 0,
@@ -120,78 +121,20 @@ class ResolveScanService:
                 scan_id=sid,
                 repo_url=canonical_url,
                 branch=resolved_branch,
-                commit_sha=None,
+                commit_sha=commit_hash_from_scan_metadata(
+                    getattr(active, "scan_metadata", None)
+                    or getattr(active, "metadata", None)
+                    or {}
+                ),
                 target_id=target.id if target else None,
                 github_repo_id=gh_repo.id if gh_repo else None,
                 message="Scan already in progress",
                 progress=progress,
             )
 
-        head_sha: Optional[str] = None
-        if check_commit and not force_scan:
+        head_sha: Optional[str] = (commit_sha or "").strip() or None
+        if not head_sha and check_commit:
             head_sha = resolve_branch_head_sha(canonical_url, resolved_branch)
-
-        last = await scan_repo.find_latest_finished_scan_by_user_and_target(
-            user_id, canonical_url
-        )
-
-        if last and not force_scan:
-            last_status = _status_str(last)
-            if last_status == ScanStatus.COMPLETED.value:
-                last_commit = commit_hash_from_scan_metadata(
-                    getattr(last, "metadata", None) or {}
-                )
-                sha_matches = bool(
-                    head_sha
-                    and last_commit
-                    and head_sha.lower() == last_commit.lower()
-                )
-                sha_stale = bool(
-                    check_commit
-                    and head_sha
-                    and last_commit
-                    and not sha_matches
-                )
-                if sha_stale:
-                    logger.info(
-                        "Resolve: HEAD %s differs from last scan %s; starting new scan",
-                        head_sha[:8] if head_sha else "?",
-                        last_commit[:8] if last_commit else "?",
-                    )
-                else:
-                    dto = await scan_service.get_scan_by_id(str(last.id))
-                    findings = build_findings_response(
-                        str(last.id),
-                        dto,
-                        status_str=last_status,
-                        limit=findings_limit,
-                        offset=findings_offset,
-                        severity=findings_severity,
-                    )
-                    if findings:
-                        msg = "Findings are up to date for the current branch HEAD"
-                        if check_commit and not head_sha:
-                            msg = (
-                                "Returning latest findings (remote HEAD could not be resolved; "
-                                "commit check skipped)"
-                            )
-                        elif not check_commit:
-                            msg = "Returning latest completed scan findings"
-                        return ResolveScanResult(
-                            status="ready",
-                            scan_id=str(last.id),
-                            repo_url=canonical_url,
-                            branch=resolved_branch,
-                            commit_sha=head_sha or last_commit,
-                            target_id=target.id if target else None,
-                            github_repo_id=gh_repo.id if gh_repo else None,
-                            message=msg,
-                            findings_response=findings,
-                        )
-                    logger.info(
-                        "Resolve: completed scan %s has no findings file yet; starting new scan",
-                        last.id,
-                    )
 
         scan_id = await self._start_scan(
             user_id=user_id,
@@ -203,12 +146,71 @@ class ResolveScanService:
             actor_role=actor_role,
         )
 
+        dto = await scan_service.get_scan_by_id(scan_id)
+        status = _status_str(dto) if dto else "unknown"
+        meta_commit = commit_hash_from_scan_metadata(
+            getattr(dto, "metadata", None) or {}
+        ) if dto else None
+        resolved_commit = head_sha or meta_commit
+
+        if status == ScanStatus.COMPLETED.value:
+            findings = build_findings_response(
+                scan_id,
+                dto,
+                status_str=status,
+                limit=findings_limit,
+                offset=findings_offset,
+                severity=findings_severity,
+            )
+            if findings is not None:
+                return ResolveScanResult(
+                    status="ready",
+                    scan_id=scan_id,
+                    repo_url=canonical_url,
+                    branch=resolved_branch,
+                    commit_sha=resolved_commit,
+                    target_id=target.id if target else None,
+                    github_repo_id=gh_repo.id if gh_repo else None,
+                    message="Findings reused from a previous scan of this commit",
+                    findings_response=findings,
+                )
+            logger.info(
+                "Resolve: completed scan %s has no findings file; caller may poll",
+                scan_id,
+            )
+
+        if status in (ScanStatus.PENDING.value, ScanStatus.RUNNING.value):
+            # create_scan joined an active scan or just enqueued
+            progress = None
+            try:
+                st = await scan_service.get_scan_status(scan_id)
+                progress = st.get("progress")
+            except Exception:
+                pass
+            # Distinguishing brand-new vs joined active is optional; "started" vs "scanning"
+            return ResolveScanResult(
+                status="started" if status == ScanStatus.PENDING.value else "scanning",
+                scan_id=scan_id,
+                repo_url=canonical_url,
+                branch=resolved_branch,
+                commit_sha=resolved_commit,
+                target_id=target.id if target else None,
+                github_repo_id=gh_repo.id if gh_repo else None,
+                message=(
+                    "Scan queued; poll GET /api/v1/scans/{scan_id}/status until completed, "
+                    "then GET .../findings"
+                    if status == ScanStatus.PENDING.value
+                    else "Scan already in progress"
+                ),
+                progress=progress,
+            )
+
         return ResolveScanResult(
             status="started",
             scan_id=scan_id,
             repo_url=canonical_url,
             branch=resolved_branch,
-            commit_sha=head_sha,
+            commit_sha=resolved_commit,
             target_id=target.id if target else None,
             github_repo_id=gh_repo.id if gh_repo else None,
             message="Scan queued; poll GET /api/v1/scans/{scan_id}/status until completed, then GET .../findings",
@@ -234,8 +236,6 @@ class ResolveScanService:
 
         if target:
             if branch:
-                from application.helpers.target_scan_helper import create_scan_from_target
-
                 sid = await create_scan_from_target(
                     target,
                     metadata_extra=meta,

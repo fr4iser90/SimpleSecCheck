@@ -78,9 +78,10 @@ sequenceDiagram
 
 `POST /api/v1/resolve-scan` is the main entry point:
 
-- If the latest **completed** scan for this repo/branch matches the current **remote HEAD**, returns findings immediately (`status: ready`).
+- If a **completed** scan already exists for this repo’s current commit (`commit_sha` or remote HEAD), returns findings immediately (`status: ready`).
 - If a scan is already running → `status: scanning`.
 - Otherwise enqueues a scan → `status: started` (HTTP **202**).
+- Same-commit reuse applies to **all** scan start paths (API + web). There is no force bypass.
 
 **Request body:**
 
@@ -88,8 +89,9 @@ sequenceDiagram
 |-------|----------|---------|-------------|
 | `repo_url` | yes | — | Git URL (`https://github.com/org/repo` or `git@github.com:org/repo.git`) |
 | `branch` | no | target/`main` | Branch to scan |
-| `check_commit` | no | `true` | Compare `git ls-remote` HEAD to last scan commit |
-| `force_scan` | no | `false` | Always start a new scan |
+| `commit_sha` | no | — | Preferred: client-known commit. Enables cache without `ls-remote` |
+| `check_commit` | no | `true` | If `commit_sha` omitted, resolve remote HEAD via `git ls-remote` |
+| `force_scan` | no | `false` | **Deprecated / ignored** — same commit always reuses cached results |
 | `findings_limit` | no | all | Max findings in response (1–200) |
 | `findings_offset` | no | `0` | Pagination offset |
 | `findings_severity` | no | all | e.g. `CRITICAL,HIGH` |
@@ -106,6 +108,7 @@ curl -sS -X POST "$BASE/api/v1/resolve-scan" \
   -d '{
     "repo_url": "https://github.com/org/my-repo",
     "branch": "main",
+    "commit_sha": "abcdef0123456789abcdef0123456789abcdef01",
     "check_commit": true,
     "findings_limit": 50,
     "findings_offset": 0,
