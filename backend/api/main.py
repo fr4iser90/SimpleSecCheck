@@ -483,7 +483,6 @@ async def startup_event():
     # A backend restart during an asset update leaves Redis on "running", which locks
     # every Update button in the admin UI until the key's TTL expires. Reconcile.
     try:
-        import os
         from application.helpers.asset_update_status import (
             get_asset_update_status,
             mark_asset_update_finished,
