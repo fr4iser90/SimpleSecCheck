@@ -480,6 +480,33 @@ async def startup_event():
             logger.warning(f"Failed to pre-load scanners on startup: {e}")
         # Don't fail startup - scanners will be loaded on first request
     
+    # A backend restart during an asset update leaves Redis on "running", which locks
+    # every Update button in the admin UI until the key's TTL expires. Reconcile.
+    try:
+        import os
+        from application.helpers.asset_update_status import (
+            get_asset_update_status,
+            mark_asset_update_finished,
+        )
+        from api.routes.scanners import _worker_has_active_asset_update
+
+        asset_update_state = await get_asset_update_status()
+        if asset_update_state.get("status") == "running" and not await _worker_has_active_asset_update(
+            os.getenv("WORKER_API_URL", "http://worker:8081")
+        ):
+            await mark_asset_update_finished(
+                ok=False,
+                exit_code=None,
+                error_message="Backend restarted while this update was tracked as running",
+                scanner=asset_update_state.get("scanner"),
+                asset_id=asset_update_state.get("asset_id"),
+            )
+            if setup_complete:
+                logger.warning("Cleared stale scanner asset update status on startup")
+    except Exception as e:
+        if setup_complete:
+            logger.warning("Failed to reconcile scanner asset update status", error=str(e))
+
     # Start auto-scan scheduler for new repositories
     try:
         from infrastructure.jobs.auto_scan_scheduler import AutoScanScheduler

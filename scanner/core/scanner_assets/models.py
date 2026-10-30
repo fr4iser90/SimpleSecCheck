@@ -17,6 +17,8 @@ class AssetUpdate:
     enabled: bool
     command: List[str]
     env: Optional[Dict[str, str]] = None
+    env_from_host: Optional[List[str]] = None
+    timeout_seconds: Optional[int] = None
 
 
 @dataclass

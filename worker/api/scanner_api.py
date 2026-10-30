@@ -9,6 +9,7 @@ import asyncio
 import time
 import os
 import re
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
@@ -34,8 +35,69 @@ _cache_lock = asyncio.Lock()  # Lock to prevent race conditions when fetching sc
 # Cache TTL in seconds (default: 1 hour, configurable via env var)
 CACHE_TTL_SECONDS = int(os.getenv("SCANNER_CACHE_TTL_SECONDS", "3600"))  # 1 hour default
 
+ASSET_UPDATE_PREFIX = "asset-update"
+CONTAINER_PATH_PLACEHOLDER = "{container_path}"
+ASSET_UPDATE_DEFAULT_TIMEOUT_SECONDS = 1800
 
-def _docker_safe_name(*parts: str, prefix: str = "asset-update", max_len: int = 63) -> str:
+
+def _asset_update_timeout(update: Dict[str, Any]) -> int:
+    """Per-asset wait window; OWASP's NVD sync needs far more than the default."""
+    try:
+        seconds = int(update.get("timeout_seconds") or ASSET_UPDATE_DEFAULT_TIMEOUT_SECONDS)
+    except (TypeError, ValueError):
+        seconds = ASSET_UPDATE_DEFAULT_TIMEOUT_SECONDS
+    return max(60, min(7200, seconds))
+
+
+def _render_asset_update_command(command: List[Any], *, container_path: str) -> List[str]:
+    """Manifest commands carry {container_path}; the bind target is only known per job."""
+    return [
+        str(arg).replace(CONTAINER_PATH_PLACEHOLDER, str(container_path))
+        for arg in command
+    ]
+
+
+def _render_asset_update_env(
+    env_map: Optional[Dict[str, Any]],
+    *,
+    container_path: str,
+    env_from_host: Optional[List[str]],
+) -> Dict[str, str]:
+    rendered = {
+        str(k): str(v).replace(CONTAINER_PATH_PLACEHOLDER, str(container_path))
+        for k, v in (env_map or {}).items()
+        if k and v is not None
+    }
+    for name in env_from_host or []:
+        value = os.environ.get(str(name))
+        if value:
+            rendered[str(name)] = value
+    return rendered
+
+
+def _asset_update_log_path(container_name: str) -> str:
+    root = os.environ.get("RESULTS_DIR_CONTAINER", "/app/results")
+    return str(Path(root) / "asset-updates" / f"{container_name}.log")
+
+
+def _persist_asset_update_log(container_name: str, logs_text: str) -> None:
+    """Job containers are removed after the run — keep their output somewhere."""
+    log_path = _asset_update_log_path(container_name)
+    try:
+        Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(log_path).write_text(logs_text or "", encoding="utf-8", errors="replace")
+    except OSError as e:
+        logger.warning("Could not persist asset update log %s: %s", log_path, e)
+
+
+def _safe_remove_container(container) -> None:
+    try:
+        container.remove(force=True)
+    except Exception as e:
+        logger.warning("Could not remove asset update container: %s", e)
+
+
+def _docker_safe_name(*parts: str, prefix: str = ASSET_UPDATE_PREFIX, max_len: int = 63) -> str:
     """Docker container names: [a-zA-Z0-9][a-zA-Z0-9_.-]* , max 63 chars."""
     raw = "-".join(str(p) for p in parts if p)
     cleaned = re.sub(r"[^a-zA-Z0-9_.-]+", "-", raw).strip(".-")
@@ -527,6 +589,29 @@ async def get_scanner_assets() -> Dict[str, List[Dict[str, Any]]]:
         return {"assets": []}
 
 
+@router.get("/assets/update/active")
+async def list_active_asset_updates() -> Dict[str, Any]:
+    """
+    Report which asset-update job containers are actually running right now.
+
+    The backend uses this to tell a live job from a stale "running" status left
+    behind by a restarted backend — the flag alone cannot be trusted to lock UI.
+    """
+    docker_adapter = DockerAdapter()
+    if not docker_adapter.client:
+        return {"active": False, "containers": [], "docker_available": False}
+    try:
+        containers = await asyncio.to_thread(
+            docker_adapter.client.containers.list,
+            filters={"name": ASSET_UPDATE_PREFIX},
+        )
+        names = [c.name for c in containers]
+        return {"active": bool(names), "containers": names, "docker_available": True}
+    except Exception as e:
+        logger.error("Could not list asset update containers: %s", e, exc_info=True)
+        return {"active": False, "containers": [], "docker_available": False}
+
+
 @router.post("/assets/{scanner_name}/{asset_id}/update")
 async def run_scanner_asset_update(scanner_name: str, asset_id: str) -> Dict[str, Any]:
     """
@@ -582,26 +667,31 @@ async def run_scanner_asset_update(scanner_name: str, asset_id: str) -> Dict[str
             e,
         )
 
-    env_map = dict(update.get("env") or {})
-    environment = {
-        k: str(v).replace("{container_path}", str(container_path))
-        for k, v in env_map.items()
-        if k and v is not None
-    }
+    environment = _render_asset_update_env(
+        update.get("env"),
+        container_path=container_path,
+        env_from_host=update.get("env_from_host"),
+    )
 
-    command = list(update["command"])
-    if not isinstance(command, list) or not command:
+    raw_command = update.get("command")
+    if not isinstance(raw_command, list) or not raw_command:
         raise HTTPException(status_code=400, detail="Invalid update command")
+    command = _render_asset_update_command(raw_command, container_path=container_path)
+    if any(CONTAINER_PATH_PLACEHOLDER in arg for arg in command):
+        raise HTTPException(status_code=400, detail="Unresolved {container_path} in update command")
 
+    wait_timeout = _asset_update_timeout(update)
     scanner_image = os.environ.get("SCANNER_IMAGE", "simpleseccheck-scanner:latest")
     container_name = _docker_safe_name(scanner_name, asset_id)
 
     logger.info(
-        "Starting asset update %s/%s → %s (cmd=%s)",
+        "Starting asset update %s/%s → %s (cmd=%s, env=%s, timeout=%ss)",
         scanner_name,
         asset_id,
         asset_host_path,
         command,
+        sorted(environment.keys()),
+        wait_timeout,
     )
 
     try:
@@ -618,31 +708,73 @@ async def run_scanner_asset_update(scanner_name: str, asset_id: str) -> Dict[str
             },
         )
         await asyncio.to_thread(container.start)
-        result = await asyncio.to_thread(container.wait, timeout=1800)
+    except docker.errors.ImageNotFound:
+        raise HTTPException(status_code=503, detail=f"Scanner image not found: {scanner_image}")
+    except Exception as e:
+        logger.error("Asset update could not start: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Asset update failed: {e}")
+
+    try:
+        try:
+            result = await asyncio.to_thread(container.wait, timeout=wait_timeout)
+        except Exception as e:
+            # A job that outlives its window must not linger: it keeps writing to the
+            # shared cache dir and holds its lock file against every later run.
+            logger.error(
+                "Asset update %s/%s did not finish within %ss (%s)",
+                scanner_name,
+                asset_id,
+                wait_timeout,
+                e,
+            )
+            timed_out_logs = ""
+            try:
+                raw = await asyncio.to_thread(container.logs, stdout=True, stderr=True, tail=500)
+                timed_out_logs = raw.decode("utf-8", errors="replace") if raw else ""
+            except Exception:
+                pass
+            _persist_asset_update_log(container_name, timed_out_logs)
+            await asyncio.to_thread(_safe_remove_container, container)
+            raise HTTPException(
+                status_code=504,
+                detail=(
+                    f"{scanner_name}/{asset_id} did not finish within {wait_timeout}s and was "
+                    f"stopped; log: {_asset_update_log_path(container_name)}"
+                ),
+            )
+
         exit_code = (
             result.get("StatusCode", 1) if isinstance(result, dict) else int(result or 1)
         )
         logs_text = ""
         try:
-            logs = await asyncio.to_thread(container.logs, stdout=True, stderr=True, tail=80)
+            logs = await asyncio.to_thread(container.logs, stdout=True, stderr=True, tail=500)
             logs_text = logs.decode("utf-8", errors="replace") if logs else ""
         except Exception:
             pass
-        try:
-            await asyncio.to_thread(container.remove, force=True)
-        except Exception:
-            pass
+        _persist_asset_update_log(container_name, logs_text)
+        await asyncio.to_thread(_safe_remove_container, container)
 
         ok = exit_code == 0
+        if not ok:
+            logger.error(
+                "Asset update %s/%s failed with exit %s — log: %s",
+                scanner_name,
+                asset_id,
+                exit_code,
+                _asset_update_log_path(container_name),
+            )
         return {
             "ok": ok,
             "exit_code": exit_code,
             "scanner": scanner_name,
             "asset_id": asset_id,
+            "log_file": _asset_update_log_path(container_name),
             "error_message": None if ok else (logs_text[-2000:] or f"exit {exit_code}"),
         }
-    except docker.errors.ImageNotFound:
-        raise HTTPException(status_code=503, detail=f"Scanner image not found: {scanner_image}")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Asset update failed: %s", e, exc_info=True)
+        await asyncio.to_thread(_safe_remove_container, container)
         raise HTTPException(status_code=500, detail=f"Asset update failed: {e}")

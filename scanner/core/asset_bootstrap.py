@@ -70,7 +70,8 @@ def run_bootstrap_assets(
                     env[str(k)] = _substitute(str(v), asset.mount)
 
             label = f"{manifest.id}/{asset.id}"
-            print(f"[bootstrap] {label}: {' '.join(cmd)}", flush=True)
+            step_timeout = upd.timeout_seconds or timeout_seconds
+            print(f"[bootstrap] {label}: {' '.join(cmd)} (timeout {step_timeout}s)", flush=True)
             ran += 1
             try:
                 result = subprocess.run(
@@ -78,11 +79,11 @@ def run_bootstrap_assets(
                     env=env,
                     capture_output=True,
                     text=True,
-                    timeout=timeout_seconds,
+                    timeout=step_timeout,
                 )
             except subprocess.TimeoutExpired:
                 print(
-                    f"[bootstrap] {label}: TIMEOUT after {timeout_seconds}s",
+                    f"[bootstrap] {label}: TIMEOUT after {step_timeout}s",
                     file=sys.stderr,
                 )
                 failures += 1

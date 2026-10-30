@@ -1236,6 +1236,9 @@ async def list_scanners():
                         asset_dict["update"] = {
                             "enabled": asset.update.enabled,
                             "command": asset.update.command,
+                            "env": asset.update.env,
+                            "env_from_host": asset.update.env_from_host,
+                            "timeout_seconds": asset.update.timeout_seconds,
                         }
                     else:
                         asset_dict["update"] = None

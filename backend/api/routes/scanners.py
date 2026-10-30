@@ -305,6 +305,25 @@ async def get_update_status():
     )
 
 
+async def _worker_has_active_asset_update(worker_url: str) -> bool:
+    """
+    Ask the worker whether an asset-update job container is really running.
+
+    Unknown counts as running: without the worker we cannot start a job either,
+    and guessing "idle" would let two jobs share one cache directory.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{worker_url}/api/scanners/assets/update/active")
+            if resp.status_code != 200:
+                logger.warning("Worker active-asset-update probe returned %s", resp.status_code)
+                return True
+            return bool(resp.json().get("active"))
+    except (httpx.RequestError, ValueError):
+        logger.warning("Worker active-asset-update probe unavailable")
+        return True
+
+
 @router.post("/{scanner_name}/assets/{asset_id}/update", response_model=UpdateStatusResponse)
 async def start_asset_update(
     scanner_name: str,
@@ -330,18 +349,33 @@ async def start_asset_update(
     )
     import asyncio
 
+    worker_url = os.getenv("WORKER_API_URL", "http://worker:8081")
+
     current = await get_asset_update_status()
     if current.get("status") == "running":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"An asset update is already running "
-                f"({current.get('scanner')}/{current.get('asset_id')})"
-            ),
+        if await _worker_has_active_asset_update(worker_url):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"An asset update is already running "
+                    f"({current.get('scanner')}/{current.get('asset_id')})"
+                ),
+            )
+        # The flag outlived its job (backend restart, killed container). Clearing it
+        # here is what keeps one dead job from locking every asset for its whole TTL.
+        logger.warning(
+            "Asset update status said 'running' for %s/%s but no job container exists — clearing",
+            current.get("scanner"),
+            current.get("asset_id"),
+        )
+        await mark_asset_update_finished(
+            ok=False,
+            exit_code=None,
+            error_message="Stale 'running' status cleared: no update job was active",
+            scanner=current.get("scanner"),
+            asset_id=current.get("asset_id"),
         )
 
-    # Verify asset exists via worker API
-    worker_url = os.getenv("WORKER_API_URL", "http://worker:8081")
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"{worker_url}/api/scanners/assets")
@@ -379,11 +413,19 @@ async def start_asset_update(
             detail="Worker API not available"
         )
 
+    # The worker clamps its own wait window; wait slightly longer so a worker-side
+    # timeout still reaches Redis as an error instead of stranding the flag on "running".
+    try:
+        asset_timeout = int((asset_found.get("update") or {}).get("timeout_seconds") or 1800)
+    except (TypeError, ValueError):
+        asset_timeout = 1800
+    job_timeout = float(max(120, min(7200, asset_timeout)) + 300)
+
     running = await mark_asset_update_running(scanner=scanner_name, asset_id=asset_id)
 
     async def _run_update_job() -> None:
         try:
-            async with httpx.AsyncClient(timeout=1900.0) as client:
+            async with httpx.AsyncClient(timeout=job_timeout) as client:
                 resp = await client.post(
                     f"{worker_url}/api/scanners/assets/{scanner_name}/{asset_id}/update"
                 )

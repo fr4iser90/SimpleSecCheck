@@ -39,6 +39,9 @@ function assetKey(scanner: string, assetId: string) {
   return `${scanner}:${assetId}`
 }
 
+/** Ceiling for waiting on the previous job; OWASP's NVD sync may run an hour. */
+const MAX_QUEUE_WAIT_SECONDS = 7500
+
 /** FastAPI `detail` may be string, list of validation errors, or object. */
 function formatApiDetail(body: unknown, fallback: string, status?: number): string {
   if (!body || typeof body !== 'object') {
@@ -225,7 +228,7 @@ export default function ScannerDataUpdate() {
     for (const item of updatableAssets) {
       try {
         // Wait until previous job is no longer running
-        for (let i = 0; i < 3600; i++) {
+        for (let i = 0; i < MAX_QUEUE_WAIT_SECONDS; i++) {
           const st = await fetch(resolveApiUrl('/api/scanners/assets/update/status'))
           if (st.ok) {
             const data = await st.json()
@@ -255,7 +258,7 @@ export default function ScannerDataUpdate() {
     }
 
     // Wait for last job
-    for (let i = 0; i < 3600; i++) {
+    for (let i = 0; i < MAX_QUEUE_WAIT_SECONDS; i++) {
       const st = await fetch(resolveApiUrl('/api/scanners/assets/update/status'))
       if (st.ok) {
         const data = await st.json()

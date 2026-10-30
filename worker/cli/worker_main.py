@@ -30,7 +30,7 @@ def setup_logging(level: str = "INFO") -> None:
         level: Logging level
     """
     from worker.infrastructure.logging_config import setup_logging as setup_worker_logging
-    setup_worker_logging()
+    setup_worker_logging(level)
 
 
 def parse_arguments() -> argparse.Namespace:

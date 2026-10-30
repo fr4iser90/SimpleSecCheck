@@ -14,8 +14,9 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FORMAT = os.getenv("LOG_FORMAT", "json")
 
 
-def setup_logging():
+def setup_logging(level: str | None = None):
     """Configure structured logging for worker."""
+    resolved_level = (level or LOG_LEVEL).upper()
     # Configure structlog processors
     processors = [
         structlog.stdlib.add_log_level,
@@ -41,11 +42,17 @@ def setup_logging():
     
     # Configure standard logging with clean format
     logging.basicConfig(
-        level=getattr(logging, LOG_LEVEL.upper()),
+        level=getattr(logging, resolved_level),
         format="%(message)s",
         stream=sys.stdout,
+        force=True,
     )
-    
+
+    # Startup pins root and "worker" to ERROR to stay quiet during setup; undo that
+    # here or every logger under "worker" keeps an explicit ERROR level of its own.
+    logging.getLogger().setLevel(getattr(logging, resolved_level))
+    logging.getLogger("worker").setLevel(getattr(logging, resolved_level))
+
     # Set Docker adapter log level to DEBUG to reduce verbosity
     logging.getLogger("worker.infrastructure.docker_adapter").setLevel(logging.DEBUG)
     

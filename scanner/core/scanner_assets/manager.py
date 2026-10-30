@@ -99,10 +99,23 @@ class ScannerAssetsManager:
                 raw_env = update_data.get("env")
                 if isinstance(raw_env, dict) and raw_env:
                     env_map = {str(k): str(v) for k, v in raw_env.items()}
+                env_from_host: Optional[List[str]] = None
+                raw_env_from_host = update_data.get("env_from_host")
+                if isinstance(raw_env_from_host, list) and raw_env_from_host:
+                    env_from_host = [str(n).strip() for n in raw_env_from_host if str(n).strip()]
+                timeout_seconds: Optional[int] = None
+                raw_timeout = update_data.get("timeout_seconds")
+                if raw_timeout is not None:
+                    try:
+                        timeout_seconds = int(raw_timeout)
+                    except (TypeError, ValueError):
+                        timeout_seconds = None
                 update = AssetUpdate(
                     enabled=bool(update_data.get("enabled", False)),
                     command=[str(x) for x in (update_data.get("command") or [])],
                     env=env_map,
+                    env_from_host=env_from_host,
+                    timeout_seconds=timeout_seconds,
                 )
             assets.append(
                 ScannerAsset(

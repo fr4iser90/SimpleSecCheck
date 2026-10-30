@@ -49,6 +49,10 @@ assets:
     container_path: /app/scanner/plugins/owasp/data
   update:
     enabled: true
+    # NVD throttles unauthenticated syncs to the point of a 30-90 min run.
+    env_from_host:
+    - NVD_API_KEY
+    timeout_seconds: 3600
     command:
     - dependency-check
     - --updateonly
