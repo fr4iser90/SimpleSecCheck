@@ -9,7 +9,10 @@
 poetry.lock
 
 # Node / NPM
-node_modules
+# ** is required: a plain "node_modules" only matches the context root, so a
+# host-side frontend/app/node_modules was copied over the `npm ci` result and the
+# image shipped whatever versions the developer machine happened to have.
+**/node_modules
 npm-debug.log
 yarn-error.log
 
