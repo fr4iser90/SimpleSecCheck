@@ -151,3 +151,4 @@ frontend/app/test-results/
 *.sublime-projectscan-all.sh
 
 test-shell.nix
+compose.traefik.yaml
