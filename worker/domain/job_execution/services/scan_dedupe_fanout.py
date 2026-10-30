@@ -146,6 +146,9 @@ async def fanout_completed_scan_to_siblings(
         status = str(sib.get("status") or "").lower()
         if status == "cancelled" and not linked:
             continue
+        if meta.get("forced_rescan") and not linked:
+            # An explicitly forced scan must produce its own results.
+            continue
         if not (linked or commit_ok):
             continue
 
@@ -275,6 +278,12 @@ async def try_short_circuit_duplicate_job(
 
         if status not in ("pending", "running"):
             return status in ("completed", "cancelled", "failed")
+
+        if meta.get("forced_rescan"):
+            logger.info(
+                "No short-circuit for scan %s: forced rescan (running for real)", scan_id
+            )
+            return False
 
         if not me.get("user_id") or not me.get("target_url"):
             return False
