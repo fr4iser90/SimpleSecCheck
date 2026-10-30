@@ -77,6 +77,7 @@ class ScanService:
         actor_role: str = "user",
         guest_session_id: Optional[str] = None,
         enforcement_mode: str = "full",
+        force: bool = False,
     ) -> ScanDTO:
         """Create and start a new scan (or reuse a completed same-commit git scan)."""
         try:
@@ -86,7 +87,7 @@ class ScanService:
                 logger.info("Normalized git target URL: %s -> %s", raw_target, normalized)
             request.target_url = normalized
 
-            reused = await self._try_reuse_git_commit_scan(request)
+            reused = await self._try_reuse_git_commit_scan(request, force=force)
             if reused is not None:
                 return reused
 
@@ -140,10 +141,16 @@ class ScanService:
         except Exception as e:
             raise ScanValidationException(f"Failed to create scan: {str(e)}")
 
-    async def _try_reuse_git_commit_scan(self, request: ScanRequestDTO) -> Optional[ScanDTO]:
+    async def _try_reuse_git_commit_scan(
+        self, request: ScanRequestDTO, *, force: bool = False
+    ) -> Optional[ScanDTO]:
         """
         For git targets: attach commit SHA, join active scan, or return completed
-        scan for the same commit. No force bypass — same commit always reuses.
+        scan for the same commit.
+
+        ``force`` skips the completed-scan reuse but still joins an in-flight scan:
+        a pending/running scan is already a fresh one, and enqueueing a second would
+        double-scan the same target.
         """
         from application.helpers.commit_scan_cache import (
             find_active_scan_for_target,
@@ -198,6 +205,14 @@ class ScanService:
                 (request.target_url or "")[:80],
             )
             return ScanDTO.from_entity(active)
+
+        if force:
+            logger.info(
+                "Force rescan for target %s (commit %s): skipping completed-scan reuse",
+                (request.target_url or "")[:80],
+                (commit or "unresolved")[:8],
+            )
+            return None
 
         if not commit:
             # No remote SHA: still reuse latest completed for this target to stop

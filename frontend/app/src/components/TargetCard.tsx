@@ -35,6 +35,7 @@ interface TargetCardProps {
   target: ScanTargetItem
   initialScanDelaySeconds?: number
   onScanNow: (targetId: string) => void
+  onForceRescan?: (targetId: string) => void
   onPauseInitialScan?: (targetId: string) => void
   onEdit: (target: ScanTargetItem) => void
   onRemove: (targetId: string, label: string) => void
@@ -63,6 +64,7 @@ export default function TargetCard({
   target,
   initialScanDelaySeconds = 300,
   onScanNow,
+  onForceRescan,
   onPauseInitialScan,
   onEdit,
   onRemove,
@@ -320,6 +322,17 @@ export default function TargetCard({
         >
           {scanLoading ? 'Starting…' : hasNoScanYet && target.initial_scan_paused ? 'Start first scan' : 'Scan now'}
         </button>
+        {onForceRescan && target.last_scan?.status === 'completed' && !activeScan && (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => onForceRescan(target.id)}
+            disabled={scanLoading}
+            title="Ignore the existing results for the current commit and scan again from scratch"
+          >
+            {scanLoading ? 'Starting…' : 'Force rescan'}
+          </button>
+        )}
         <button type="button" className="btn-secondary" onClick={() => onEdit(target)}>
           Edit
         </button>

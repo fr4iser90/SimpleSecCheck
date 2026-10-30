@@ -184,18 +184,23 @@ export function useTargets(targetType?: string | null) {
   }, [isAuthenticated, loadTargets])
 
   const triggerScan = async (
-    targetId: string
+    targetId: string,
+    opts?: { force?: boolean }
   ): Promise<{
     success: boolean
     scan_id?: string
     reused?: boolean
+    forced?: boolean
     status?: string
     message?: string
     error?: string
   }> => {
+    const force = Boolean(opts?.force)
     try {
       const response = await apiFetch(`/api/user/targets/${targetId}/scan`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
       })
       if (response.ok) {
         const data = await response.json()
@@ -203,6 +208,7 @@ export function useTargets(targetType?: string | null) {
           success: true,
           scan_id: data.scan_id,
           reused: Boolean(data.reused),
+          forced: Boolean(data.forced),
           status: typeof data.status === 'string' ? data.status : undefined,
           message: typeof data.message === 'string' ? data.message : undefined,
         }

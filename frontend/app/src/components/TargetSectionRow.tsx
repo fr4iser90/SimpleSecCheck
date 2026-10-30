@@ -13,6 +13,7 @@ interface TargetSectionRowProps {
   target: ScanTargetItem
   variant: 'needs_attention' | 'failed'
   onScanNow: (targetId: string) => void
+  onForceRescan?: (targetId: string) => void
   onOpenFix?: (target: ScanTargetItem) => void
   scanLoading?: boolean
 }
@@ -21,6 +22,7 @@ export default function TargetSectionRow({
   target,
   variant,
   onScanNow,
+  onForceRescan,
   onOpenFix,
   scanLoading,
 }: TargetSectionRowProps) {
@@ -114,6 +116,25 @@ export default function TargetSectionRow({
         >
           {scanLoading ? '…' : 'Rescan'}
         </button>
+        {onForceRescan && ls?.status === 'completed' && !target.active_scan && (
+          <button
+            type="button"
+            style={{
+              fontSize: '0.8rem',
+              padding: '0.25rem 0.6rem',
+              background: 'var(--glass-bg-main)',
+              border: '1px solid var(--glass-border-main)',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              color: 'var(--text-main)',
+            }}
+            onClick={() => onForceRescan(target.id)}
+            disabled={scanLoading}
+            title="Ignore the existing results for the current commit and scan again from scratch"
+          >
+            Force
+          </button>
+        )}
       </div>
     </div>
   )

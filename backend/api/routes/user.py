@@ -1702,10 +1702,24 @@ async def update_scan_target(
     return out
 
 
+class TargetScanRequest(BaseModel):
+    """Body for "Scan now". Omit the body entirely for the default (reuse-allowed) run."""
+
+    force: bool = Field(
+        default=False,
+        description=(
+            "Start a new scan even when reusable results already exist for the current "
+            "commit. An in-flight scan is still joined instead of duplicated. Still "
+            "subject to scan rate limits and policies."
+        ),
+    )
+
+
 @router.post("/targets/{target_id}/scan")
 async def trigger_scan_target(
     request: Request,
     target_id: str,
+    body: Optional[TargetScanRequest] = None,
     actor_context: ActorContext = Depends(get_authenticated_user),
     scan_target_service: ScanTargetService = Depends(get_scan_target_service_dependency),
     scan_repository: ScanRepository = Depends(get_scan_repository_dependency),
@@ -1713,12 +1727,14 @@ async def trigger_scan_target(
     """Trigger a scan for a saved target. Creates scan and enqueues it. Returns scan_id."""
     if not actor_context.user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    force = bool(body.force) if body else False
     try:
         scan_id = await scan_target_service.trigger_scan(
             target_id,
             actor_context.user_id,
             metadata_extra={"trigger": "user_scan_now"},
             enforcement_mode="full",
+            force=force,
         )
     except ScanExecutionRateLimitException as e:
         raise HTTPException(
@@ -1787,6 +1803,7 @@ async def trigger_scan_target(
         "scan_id": scan_id,
         "status": scan_status,
         "reused": reused,
+        "forced": force,
         "message": message,
     }
 

@@ -64,6 +64,7 @@ async def create_scan_from_target(
     metadata_extra: Optional[dict] = None,
     config_override: Optional[dict] = None,
     enforcement_mode: str = "full",
+    force: bool = False,
 ) -> str:
     handler = get_target_handler(target.type)
     if not handler:
@@ -104,6 +105,8 @@ async def create_scan_from_target(
         "target_type": target.type,
         **(metadata_extra or {}),
     }
+    if force:
+        scan_metadata["forced_rescan"] = True
 
     request = ScanRequestDTO(
         name=name,
@@ -125,6 +128,7 @@ async def create_scan_from_target(
             request,
             actor_role="user",
             enforcement_mode=enforcement_mode,
+            force=force,
         )
         logger.info("Created scan %s for target %s (%s: %s)", scan_dto.id, target.id, target.type, target.source[:50])
         return scan_dto.id

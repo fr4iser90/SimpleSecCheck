@@ -13,6 +13,7 @@ const SEV_COLOR: Record<string, string> = {
 interface MyTargetsTableProps {
   targets: ScanTargetItem[]
   onScanNow: (targetId: string) => void
+  onForceRescan?: (targetId: string) => void
   onEdit: (target: ScanTargetItem) => void
   onOpenFix?: (target: ScanTargetItem) => void
   scanLoadingId: string | null
@@ -23,6 +24,7 @@ interface MyTargetsTableProps {
 export default function MyTargetsTable({
   targets,
   onScanNow,
+  onForceRescan,
   onEdit,
   onOpenFix,
   scanLoadingId,
@@ -146,6 +148,17 @@ export default function MyTargetsTable({
                     >
                       {scanLoadingId === t.id ? '…' : 'Rescan'}
                     </button>
+                    {onForceRescan && ls?.status === 'completed' && !t.active_scan && (
+                      <button
+                        type="button"
+                        style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+                        onClick={() => onForceRescan(t.id)}
+                        disabled={scanLoadingId === t.id}
+                        title="Ignore the existing results for the current commit and scan again from scratch"
+                      >
+                        Force
+                      </button>
+                    )}
                     <button type="button" style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }} onClick={() => onEdit(t)}>
                       Edit
                     </button>

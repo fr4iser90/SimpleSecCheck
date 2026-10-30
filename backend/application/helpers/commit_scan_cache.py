@@ -2,7 +2,8 @@
 Commit-based scan reuse: same user + git target + commit → return existing scan.
 
 Used by ScanService.create_scan so API keys, resolve-scan, web "Scan now",
-webhooks, and schedulers all share one cache path. There is no force bypass.
+webhooks, and schedulers all share one cache path. Callers that pass
+``force=True`` to create_scan skip the completed-scan reuse (see ScanService).
 """
 from __future__ import annotations
 

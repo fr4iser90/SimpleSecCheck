@@ -139,9 +139,13 @@ class ScanTargetService:
         *,
         metadata_extra: Optional[Dict[str, Any]] = None,
         enforcement_mode: str = "full",
+        force: bool = False,
     ) -> Optional[str]:
         """
         Trigger a scan for a saved target. Returns scan_id or None on failure.
+
+        ``force=True`` starts a new scan even when reusable results already exist
+        for the current commit. An in-flight scan is still joined, not duplicated.
         """
         target = await self._repo.get_by_id(target_id, user_id)
         if not target:
@@ -150,4 +154,5 @@ class ScanTargetService:
             target,
             metadata_extra=metadata_extra or {},
             enforcement_mode=enforcement_mode,
+            force=force,
         )
