@@ -169,6 +169,14 @@ class ScanRequestSchema(BaseModel):
     scheduled_at: Optional[datetime] = Field(None, description="Scheduled start time")
     tags: List[str] = Field(default_factory=list, max_length=10, description="Scan tags")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    force: bool = Field(
+        default=False,
+        description=(
+            "Start a fresh scan even when reusable results already exist for the target's "
+            "current commit. Honored for signed-in users only; guests never hit the reuse "
+            "cache. An in-flight scan is still joined instead of duplicated."
+        ),
+    )
     
     @field_validator('tags')
     def validate_tags(cls, v):

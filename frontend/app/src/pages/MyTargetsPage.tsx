@@ -214,43 +214,25 @@ export default function MyTargetsPage() {
     }
   }
 
-  const handleScanNow = async (targetId: string, opts?: { force?: boolean }) => {
-    const force = Boolean(opts?.force)
-    if (force) {
-      const target = targets.find((t) => t.id === targetId)
-      const label = target?.display_name || target?.source || targetId
-      const ok = window.confirm(
-        `Force a new scan of “${label}”?\n\n` +
-          'Existing results for the current commit will be ignored and the target is scanned from scratch.\n' +
-          'This counts against your scan rate limits.'
-      )
-      if (!ok) return
-    }
+  const handleScanNow = async (targetId: string) => {
     setScanNowTargetId(targetId)
-    const result = await triggerScan(targetId, { force })
+    const result = await triggerScan(targetId)
     setScanNowTargetId(null)
     if (result.success) {
       const short = result.scan_id ? ` (${result.scan_id.slice(0, 8)}…)` : ''
-      const text = force
-        ? result.status === 'pending' || result.status === 'queued'
-          ? `Forced rescan queued${short}`
-          : `${result.message || 'Scan already in progress'}${short}`
-        : result.message
+      showMessage(
+        'success',
+        result.message
           ? `${result.message}${short}`
           : result.reused
             ? `Using existing scan results${short}`
             : `Scan started${short}`
-      showMessage('success', text)
+      )
       await loadTargets({ silent: true })
     } else {
       showMessage('error', result.error || 'Failed to start scan')
     }
   }
-
-  const handleForceRescan = (targetId: string) => handleScanNow(targetId, { force: true })
-  // Force only ever matters to signed-in users: the commit cache is keyed on user_id and
-  // /api/user/targets/{id}/scan requires auth, so guests never reach the reuse path at all.
-  const forceRescanHandler = isAuthenticated ? handleForceRescan : undefined
 
   const handleCancelActiveScan = async (scanId: string) => {
     if (!confirm('Cancel this scan? It will leave the queue or stop if running.')) return
@@ -488,7 +470,6 @@ export default function MyTargetsPage() {
           target={t}
           initialScanDelaySeconds={initialScanDelaySeconds}
           onScanNow={handleScanNow}
-          onForceRescan={forceRescanHandler}
           onPauseInitialScan={handlePauseInitialScan}
           onEdit={setEditingTarget}
           onRemove={handleRemoveTarget}
@@ -853,7 +834,6 @@ export default function MyTargetsPage() {
           <MyTargetsTable
             targets={sortedVisibleTargets}
             onScanNow={handleScanNow}
-            onForceRescan={forceRescanHandler}
             onEdit={setEditingTarget}
             onOpenFix={setFixModalTarget}
             scanLoadingId={scanNowTargetId}
@@ -883,7 +863,6 @@ export default function MyTargetsPage() {
                     target={t}
                     variant="failed"
                     onScanNow={handleScanNow}
-                    onForceRescan={forceRescanHandler}
                     onOpenFix={setFixModalTarget}
                     scanLoading={scanNowTargetId === t.id}
                   />
@@ -902,7 +881,6 @@ export default function MyTargetsPage() {
                     target={t}
                     variant="needs_attention"
                     onScanNow={handleScanNow}
-                    onForceRescan={forceRescanHandler}
                     onOpenFix={setFixModalTarget}
                     scanLoading={scanNowTargetId === t.id}
                   />

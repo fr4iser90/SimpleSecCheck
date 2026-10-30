@@ -423,6 +423,11 @@ async def create_scan(
         if not actor_context.is_authenticated and actor_context.session_id:
             # Store session_id in metadata for guest sessions
             metadata["session_id"] = actor_context.session_id
+
+        # Reuse cache is keyed on user_id, so forcing past it is a signed-in capability.
+        force_rescan = bool(scan_request.force) and bool(actor_context.user_id)
+        if force_rescan:
+            metadata["forced_rescan"] = True
         
         # Auto-determine target_type if not provided
         target_type = scan_request.target_type
@@ -470,6 +475,7 @@ async def create_scan(
             guest_session_id=(
                 actor_context.session_id if not actor_context.is_authenticated else None
             ),
+            force=force_rescan,
         )
 
         if actor_context.user_id or actor_context.session_id:

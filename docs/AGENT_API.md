@@ -81,9 +81,9 @@ sequenceDiagram
 - If a **completed** scan already exists for this repo’s current commit (`commit_sha` or remote HEAD), returns findings immediately (`status: ready`).
 - If a scan is already running → `status: scanning`.
 - Otherwise enqueues a scan → `status: started` (HTTP **202**).
-- Same-commit reuse applies to **all** scan start paths (API + web). The agent-facing
-  `resolve-scan` endpoint has no force bypass; only the signed-in web UI can override it
-  via `POST /api/user/targets/{id}/scan` with `{"force": true}`.
+- Same-commit reuse applies to **all** scan start paths (API + web). `resolve-scan` has no
+  force bypass at all; only a signed-in **New Scan** start can override reuse
+  (`POST /api/v1/scans/` with `"force": true`).
 
 **Request body:**
 
@@ -500,7 +500,7 @@ Legacy: `GET /api/results/{scan_id}/ai-prompt` still embeds the same schema as M
 | `GET` | `/api/user/github/repos/{repo_id}/history` | Paginated repo scan history → `scan_id` per row |
 | `GET` | `/api/v1/scans/{id}/findings` | JSON findings for a known `scan_id` |
 | `POST` | `/api/user/targets/{id}/scan` | Manual rescan; body `{"force": true}` (optional) ignores commit-cache reuse — signed-in users only |
-| `POST` | `/api/v1/scans/` | Start scan (lower-level than resolve-scan) |
+| `POST` | `/api/v1/scans/` | Start scan; `"force": true` (optional) ignores commit-cache reuse — signed-in users only |
 | `GET` | `/api/results/{scan_id}/report` | HTML report |
 | `GET` | `/api/results/{scan_id}/ai-prompt` | Text prompt for LLM (legacy; prefer JSON findings) |
 | `GET` | `/api/health` | Health check (no auth) |

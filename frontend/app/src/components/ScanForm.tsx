@@ -60,7 +60,7 @@ function isUploadId(value: string): boolean {
 }
 
 export default function ScanForm({ onScanStart, config }: ScanFormProps) {
-  const { user } = useAuth()
+  const { user, isAuthenticated } = useAuth()
   const isAdmin = user?.role === 'admin'
   const roleKey = isAdmin ? 'admin' : user ? 'user' : 'guest'
   const profileCatalog = (config?.scan_profiles_catalog && config.scan_profiles_catalog.length > 0)
@@ -123,6 +123,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
   const [findingPolicy, setFindingPolicy] = useState(applyFindingPolicyByDefault ? defaultFindingPolicyPath : '')
   const [scanProfile, setScanProfile] = useState<ScanProfile>(roleDefaultScanProfile)
   const [collectMetadata, setCollectMetadata] = useState(metadataCollection === 'always')
+  const [forceRescan, setForceRescan] = useState(false)
   const [selectedScanners, setSelectedScanners] = useState<string[]>([])
   const [scanners, setScanners] = useState<any[]>([])
   const [loadingScanners, setLoadingScanners] = useState(false)
@@ -452,6 +453,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
           scanners: selectedScanners.length > 0 ? selectedScanners : [],
           tags: [],
           metadata: collectMetadata ? { collect_metadata: true } : {},
+          force: forceRescan,
         }),
       })
 
@@ -811,7 +813,7 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
       <ScanStep
         id="step-3"
         title="Advanced options"
-        description="Finding policy and optional metadata collection."
+        description="Finding policy, rescan behaviour, and optional metadata collection."
         trigger={undefined}
         autoScroll={false}
         expanded={false}
@@ -831,6 +833,24 @@ export default function ScanForm({ onScanStart, config }: ScanFormProps) {
           placeholder={defaultFindingPolicyPath}
         />
       </div>
+
+        {isAuthenticated && (
+          <div className="form-group">
+            <label>
+              <input
+                type="checkbox"
+                checked={forceRescan}
+                onChange={(e) => setForceRescan(e.target.checked)}
+              />
+              Force new scan (ignore cached results)
+            </label>
+            <small className="form-help-text info">
+              Normally a target whose current commit was already scanned returns those results
+              instead of scanning again. Check this to scan from scratch anyway. A scan that is
+              already running is still reused, and your scan rate limits still apply.
+            </small>
+          </div>
+        )}
 
         {metadataCollection === 'optional' && (
         <div className="form-group">
